@@ -32,17 +32,17 @@ class TestDeleteOSDDeployment(ManageTest):
     def test_delete_rook_ceph_osd_deployment(self):
         osd_deployments = get_osd_deployments()
         deployment_obj = OCP(
-            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
         pod_obj = OCP(
-            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
         for osd_deployment in osd_deployments:
             # Get rook-ceph-osd pod name associated with the deployment
             osd_deployment_name = osd_deployment.name
             old_osd_pod = get_pod_name_by_pattern(
                 pattern=osd_deployment_name,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
 
             logger.info(f"Deleting OSD deployment: {osd_deployment_name}")
@@ -63,7 +63,7 @@ class TestDeleteOSDDeployment(ManageTest):
             # Check if a new OSD pod is created
             new_osd_pod = get_pod_name_by_pattern(
                 pattern=osd_deployment_name,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
             assert old_osd_pod != new_osd_pod, "New OSD pod not created"
 

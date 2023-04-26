@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud,
     skipif_managed_service,
 )
-from ocs_ci.ocs import defaults, constants, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 from ocs_ci.utility import version
 
@@ -37,7 +37,7 @@ class TestS3Routes:
             # Revert S3 route
             nb_s3_route_obj = ocp.OCP(
                 kind=constants.ROUTE,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name="s3",
             )
             if (
@@ -75,7 +75,7 @@ class TestS3Routes:
             if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
                 rgw_route_obj = ocp.OCP(
                     kind=constants.ROUTE,
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
                 assert rgw_route_obj.is_exist(
                     resource_name=constants.RGW_ROUTE_INTERNAL_MODE,
@@ -98,7 +98,7 @@ class TestS3Routes:
         # S3 route
         nb_s3_route_obj = ocp.OCP(
             kind=constants.ROUTE,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="s3",
         )
         s3_route_param = '{"spec":{"tls":{"insecureEdgeTerminationPolicy":"Redirect","termination":"reencrypt"}}}'
@@ -115,7 +115,7 @@ class TestS3Routes:
         if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
             rgw_route_obj = ocp.OCP(
                 kind=constants.ROUTE,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             storage_cluster_obj = get_storage_cluster()
             sc_param = '{"spec":{"managedResources":{"cephObjectStores":{"disableRoute":true}}}}'
@@ -140,7 +140,7 @@ class TestS3Routes:
         def finalizer():
             nb_obj = ocp.OCP(
                 kind=constants.NOOBAA_RESOURCE_NAME,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=constants.NOOBAA_RESOURCE_NAME,
             )
             try:
@@ -156,12 +156,12 @@ class TestS3Routes:
                 )
             nb_mgmt_svc_obj = ocp.OCP(
                 kind=constants.SERVICE,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name="noobaa-mgmt",
             )
             nb_s3_svc_obj = ocp.OCP(
                 kind=constants.SERVICE,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name="s3",
             )
             sleep(10)
@@ -180,7 +180,7 @@ class TestS3Routes:
                 ), f'Failed, s3 type: {nb_s3_svc_obj.data["spec"]["type"]}'
             nb_route_obj = ocp.OCP(
                 kind=constants.ROUTE,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             assert nb_route_obj.is_exist(resource_name="s3") and nb_route_obj.is_exist(
                 resource_name="noobaa-mgmt"
@@ -201,7 +201,7 @@ class TestS3Routes:
         """
         nb_obj = ocp.OCP(
             kind=constants.NOOBAA_RESOURCE_NAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.NOOBAA_RESOURCE_NAME,
         )
         lb_param = (
@@ -212,12 +212,12 @@ class TestS3Routes:
 
         nb_mgmt_svc_obj = ocp.OCP(
             kind=constants.SERVICE,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="noobaa-mgmt",
         )
         nb_s3_svc_obj = ocp.OCP(
             kind=constants.SERVICE,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="s3",
         )
         sleep(10)

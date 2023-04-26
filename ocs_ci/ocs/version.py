@@ -145,7 +145,7 @@ def get_ocs_version():
     #  * openshift-cluster-storage-operator
     #  * openshift-storage
     # TODO: how to do this in upstream where namespace is rook-ceph?
-    # TODO: should we use defaults.ROOK_CLUSTER_NAMESPACE somehow here?
+    # TODO: should we use config.ENV_DATA["cluster_namespace"] somehow here?
     storage_namespaces = []
     all_namespaces = OCP(kind="namespace").get()["items"]
     ns_re = re.compile("^openshift.*storage")

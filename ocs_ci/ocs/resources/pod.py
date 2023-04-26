@@ -922,7 +922,7 @@ def get_ocs_provider_server_pod(label=constants.PROVIDER_SERVER_LABEL, namespace
 
 def get_lvm_vg_manager_pod(
     label=constants.LVMO_POD_LABEL["default"]["vg-manager_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get vg manager pod in the lvm cluster
@@ -941,7 +941,7 @@ def get_lvm_vg_manager_pod(
 
 def get_lvm_operator_pod(
     label=constants.LVMO_POD_LABEL["default"]["controller_manager_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get lvm operator controller manager pod in the lvm cluster
@@ -960,7 +960,7 @@ def get_lvm_operator_pod(
 
 def get_topolvm_controller_pod(
     label=constants.LVMO_POD_LABEL["default"]["topolvm-controller_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get topolvm controller pod in the lvm cluster
@@ -979,7 +979,7 @@ def get_topolvm_controller_pod(
 
 def get_topolvm_node_pod(
     label=constants.LVMO_POD_LABEL["default"]["topolvm-node_label"],
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get topolvm node pod in the lvm cluster
@@ -1367,7 +1367,7 @@ def get_mds_pods(mds_label=constants.MDS_APP_LABEL, namespace=None):
         mds_label (str): label associated with mds pods
             (default: defaults.MDS_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : of mds pod objects
@@ -1386,7 +1386,7 @@ def get_mon_pods(mon_label=constants.MON_APP_LABEL, namespace=None):
         mon_label (str): label associated with mon pods
             (default: defaults.MON_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : of mon pod objects
@@ -1405,7 +1405,7 @@ def get_mgr_pods(mgr_label=constants.MGR_APP_LABEL, namespace=None):
         mgr_label (str): label associated with mgr pods
             (default: defaults.MGR_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : of mgr pod objects
@@ -1424,7 +1424,7 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
         osd_label (str): label associated with osd pods
             (default: defaults.OSD_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : of osd pod objects
@@ -1437,7 +1437,7 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
 
 def get_osd_prepare_pods(
     osd_prepare_label=constants.OSD_PREPARE_APP_LABEL,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Fetches info about osd prepare pods in the cluster
@@ -1446,7 +1446,7 @@ def get_osd_prepare_pods(
         osd_prepare_label (str): label associated with osd prepare pods
             (default: constants.OSD_PREPARE_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: OSD prepare pod objects
@@ -1465,7 +1465,7 @@ def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
         osd_label (str): label associated with osd deployments
             (default: defaults.OSD_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: OSD deployment OCS instances
@@ -1494,7 +1494,7 @@ def get_cephfsplugin_provisioner_pods(
             provisioner pods
             (default: defaults.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : csi-cephfsplugin-provisioner Pod objects
@@ -1517,7 +1517,7 @@ def get_rbdfsplugin_provisioner_pods(
             provisioner pods
             (default: defaults.CSI_RBDPLUGIN_PROVISIONER_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : csi-rbdplugin-provisioner Pod objects
@@ -1547,7 +1547,7 @@ def get_pod_obj(name, namespace=None):
 def get_pod_logs(
     pod_name,
     container=None,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     previous=False,
     all_containers=False,
 ):
@@ -1854,7 +1854,7 @@ def wait_for_storage_pods(timeout=200):
             state
 
     """
-    all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    all_pod_obj = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
 
     # Ignoring detect version pods
     labels_to_ignore = [
@@ -1950,7 +1950,7 @@ def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
         noobaa_label (str): label associated with osd pods
             (default: defaults.NOOBAA_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : of noobaa pod objects
@@ -2020,7 +2020,7 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
         logger.warning("None of the new osd pods reached the desired status")
 
 
-def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2044,7 +2044,7 @@ def get_pod_restarts_count(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 
 def check_pods_in_running_state(
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     pod_names=None,
     raise_pod_not_found_error=False,
     skip_for_status=None,
@@ -2055,7 +2055,7 @@ def check_pods_in_running_state(
     namespace openshift-storage. 'Completed' will be the expected state of such pods.
 
     Args:
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
         pod_names (list): List of the pod names to check.
             If not provided, it will check all the pods in the given namespace
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
@@ -2097,7 +2097,7 @@ def check_pods_in_running_state(
             if (
                 (status == constants.STATUS_COMPLETED)
                 and (not pod_names)
-                and (namespace == defaults.ROOK_CLUSTER_NAMESPACE)
+                and (namespace == config.ENV_DATA["cluster_namespace"])
             ):
                 logger.warning(
                     f"The pod {p.name} is not in {constants.STATUS_RUNNING} state, "
@@ -2112,7 +2112,7 @@ def check_pods_in_running_state(
     return ret_val
 
 
-def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_running_state_pods(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Checks the running state pods in a given namespace.
 
@@ -2132,7 +2132,7 @@ def get_running_state_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 
 def wait_for_pods_to_be_running(
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     pod_names=None,
     raise_pod_not_found_error=False,
     timeout=200,
@@ -2177,7 +2177,9 @@ def wait_for_pods_to_be_running(
         return False
 
 
-def list_of_nodes_running_pods(selector, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def list_of_nodes_running_pods(
+    selector, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     The function returns the list of nodes for the given selector
 
@@ -2251,7 +2253,7 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     """
 
     pod_objs = get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=[constants.TOOL_APP_LABEL],
         exclude_selector=True,
     )
@@ -2301,12 +2303,12 @@ def run_osd_removal_job(osd_ids=None):
         cmd_params += f" -p FAILED_OSD_ID={osd_ids_str}"
 
     logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
-    ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
     osd_removal_job_yaml = ocp_obj.exec_oc_cmd(
         f"process ocs-osd-removal {cmd_params} -o yaml"
     )
     # Add the namespace param, so that the ocs-osd-removal job will be created in the correct namespace
-    osd_removal_job_yaml["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+    osd_removal_job_yaml["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     osd_removal_job = OCS(**osd_removal_job_yaml)
     osd_removal_job.create(do_reload=False)
 
@@ -2350,7 +2352,7 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     logger.info("Getting the ocs-osd-removal pod name")
     osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
     osd_removal_pod_obj = get_pod_obj(
-        osd_removal_pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        osd_removal_pod_name, namespace=config.ENV_DATA["cluster_namespace"]
     )
 
     timeout = 300
@@ -2365,7 +2367,9 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     except TimeoutExpiredError:
         is_completed = False
 
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     osd_removal_pod_status = ocp_pod_obj.get_resource_status(osd_removal_pod_name)
 
     # Check if 'osd_removal_pod' is in status 'completed'
@@ -2434,7 +2438,9 @@ def delete_osd_removal_job(osd_id):
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
-    osd_removal_job = get_job_obj(job_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    osd_removal_job = get_job_obj(
+        job_name, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     osd_removal_job.delete()
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
@@ -2473,13 +2479,15 @@ def get_osd_pod_id(osd_pod):
     return osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
 
 
-def get_pods_in_statuses(status_options, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_pods_in_statuses(
+    status_options, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Get all the pods in specific statuses
 
     Args:
         status_options (list): The list of the status options.
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: All the pods that their status in the 'status_options' list.
@@ -2613,14 +2621,14 @@ def get_osd_pods_having_ids(osd_ids):
 def get_pod_objs(
     pod_names,
     raise_pod_not_found_error=False,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get the pod objects of the specified pod names
 
     Args:
         pod_names (list): The list of the pod names to get their pod objects
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             returns the pod objects of the rest of the pod names. The default value is False
@@ -2653,7 +2661,7 @@ def get_pod_objs(
 def wait_for_change_in_pods_statuses(
     pod_names,
     current_statuses=None,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     timeout=300,
     sleep=20,
 ):
@@ -2741,12 +2749,12 @@ def get_mon_pod_id(mon_pod):
     return mon_pod.get().get("metadata").get("labels").get("ceph_daemon_id")
 
 
-def delete_all_osd_removal_jobs(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def delete_all_osd_removal_jobs(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Delete all the osd removal jobs in a specific namespace
 
     Args:
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         bool: True, if all the jobs deleted successfully. False, otherwise
@@ -2777,7 +2785,7 @@ def get_crashcollector_pods(
         crashcollector_label (str): label associated with mon pods
             (default: defaults.CRASHCOLLECTOR_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list : of crashcollector pod objects
@@ -2791,7 +2799,7 @@ def get_crashcollector_pods(
 def check_pods_in_statuses(
     expected_statuses,
     pod_names=None,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     raise_pod_not_found_error=False,
 ):
     """
@@ -2801,7 +2809,7 @@ def check_pods_in_statuses(
         expected_statuses (list): The expected statuses of the pods
         pod_names (list): List of the pod names to check.
             If not provided, it will check all the pods in the given namespace
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             check the pod objects of the rest of the pod names. The default value is False
@@ -2840,7 +2848,7 @@ def check_pods_in_statuses(
 def wait_for_pods_to_be_in_statuses(
     expected_statuses,
     pod_names=None,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     raise_pod_not_found_error=False,
     timeout=180,
     sleep=10,
@@ -2852,7 +2860,7 @@ def wait_for_pods_to_be_in_statuses(
         expected_statuses (list): The expected statuses of the pods
         pod_names (list): List of the pod names to check.
             If not provided, it will check all the pods in the given namespace
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             check the pod objects of the rest of the pod names. The default value is False
@@ -2916,7 +2924,7 @@ def wait_for_osd_pods_having_ids(osd_ids, timeout=180, sleep=10):
 
 
 def pod_resource_utilization_raw_output_from_adm_top(
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Gets the pod's memory utilization using adm top command.
@@ -3033,14 +3041,14 @@ def exit_osd_maintenance_mode(osd_deployment):
 
 
 def restart_pods_in_statuses(
-    status_options, namespace=defaults.ROOK_CLUSTER_NAMESPACE, wait=True
+    status_options, namespace=config.ENV_DATA["cluster_namespace"], wait=True
 ):
     """
     Restart all the pods in specific statuses
 
     Args:
         status_options (list): The list of the status options.
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
         wait (bool): Determines if the delete command should wait for
             completion
 

@@ -115,7 +115,7 @@ def failover(failover_cluster, namespace):
     # WA for Bug 2007376, Scale down the RBD mirror daemon deployment on failover_cluster to 0
     config.switch_to_cluster_by_name(failover_cluster)
     rbd_mirror_deployment = get_deployments_having_label(
-        constants.RBD_MIRROR_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        constants.RBD_MIRROR_APP_LABEL, config.ENV_DATA["cluster_namespace"]
     )[0]
     logger.info(
         f"Scaling down RBD mirror daemon deployment {rbd_mirror_deployment.name} to 0"
@@ -179,7 +179,7 @@ def check_mirroring_status_ok(replaying_images=None):
     cbp_obj = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
         resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
@@ -544,7 +544,7 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
 
     # WA for Bug 2007376, Scale RBD mirror daemon deployment back to 1
     rbd_mirror_deployment = get_deployments_having_label(
-        constants.RBD_MIRROR_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        constants.RBD_MIRROR_APP_LABEL, config.ENV_DATA["cluster_namespace"]
     )[0]
     if rbd_mirror_deployment.replicas == 0:
         logger.info(

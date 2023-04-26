@@ -2,7 +2,7 @@ apiVersion: misf.ibm.com/v1alpha1
 kind: ManagedFusionOffering
 metadata:
   name: managedfusionoffering-sample
-  namespace: openshift-storage
+  namespace: {{ namespace }}
 spec:
   kind: DF
   release: "{{ ocp_version }}"
