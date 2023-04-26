@@ -2,7 +2,7 @@ import logging
 import time
 import random
 
-from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     bugzilla,
@@ -52,7 +52,7 @@ class TestMaintenancePod(E2ETest):
                 )
 
         debug_deployment = get_deployments_having_label(
-            label=label, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            label=label, namespace=config.ENV_DATA["cluster_namespace"]
         )
         if len(debug_deployment) == 0:
             assert False, "Debug deployment is not up!"
@@ -70,7 +70,7 @@ class TestMaintenancePod(E2ETest):
             pod.delete()
         new_operator_pod = get_pods_having_label(
             label="app=rook-ceph-operator",
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )[0]
         wait_for_pods_to_be_running(pod_names=[new_operator_pod["metadata"]["name"]])
         time.sleep(5)  # wait a few second
@@ -87,7 +87,7 @@ class TestMaintenancePod(E2ETest):
 
         # make sure the original deployment is scaled up and debug pod is removed
         debug_deployment = get_deployments_having_label(
-            label=label, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            label=label, namespace=config.ENV_DATA["cluster_namespace"]
         )
         if len(debug_deployment) != 0:
             assert False, "Debug deployment is still not down!"
@@ -100,7 +100,7 @@ class TestMaintenancePod(E2ETest):
                 )
             wait_for_pods_to_be_running(pod_names=[deployment.pods[0].name])
         logger.info("Original osd deployment is scaled up now!")
-        ceph_health_check(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=10)
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=10)
 
     def test_maintenance_pod_for_mons(self, ceph_monstore_factory):
         """
@@ -124,7 +124,7 @@ class TestMaintenancePod(E2ETest):
                 )
 
         debug_deployment = get_deployments_having_label(
-            label=label, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            label=label, namespace=config.ENV_DATA["cluster_namespace"]
         )
         if len(debug_deployment) == 0:
             assert False, "Debug deployment is not up!"
@@ -142,7 +142,7 @@ class TestMaintenancePod(E2ETest):
             pod.delete()
         new_operator_pod = get_pods_having_label(
             label="app=rook-ceph-operator",
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )[0]
         wait_for_pods_to_be_running(pod_names=[new_operator_pod["metadata"]["name"]])
 
@@ -162,7 +162,7 @@ class TestMaintenancePod(E2ETest):
 
         # make sure the original deployment is scaled up and debug pod is removed
         debug_deployment = get_deployments_having_label(
-            label=label, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            label=label, namespace=config.ENV_DATA["cluster_namespace"]
         )
         if len(debug_deployment) != 0:
             assert False, "Debug deployment is still not down!"
@@ -175,4 +175,4 @@ class TestMaintenancePod(E2ETest):
                 )
             wait_for_pods_to_be_running(pod_names=[deployment.pods[0].name])
         logger.info("Original mon deployment is scaled up now!")
-        ceph_health_check(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=10)
+        ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=10)

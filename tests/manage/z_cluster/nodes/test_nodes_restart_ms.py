@@ -301,7 +301,7 @@ class TestNodesRestartMS(ManageTest):
             managedocs_obj = OCP(
                 kind="managedocs",
                 resource_name="managedocs",
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             for component in {"alertmanager", "prometheus", "storageCluster"}:
                 assert (
@@ -312,7 +312,7 @@ class TestNodesRestartMS(ManageTest):
             # Verify the phase of ceph cluster
             logger.info("Verify the phase of ceph cluster")
             cephcluster = OCP(
-                kind="CephCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
             )
             cephcluster_yaml = cephcluster.get().get("items")[0]
             expected_phase = (

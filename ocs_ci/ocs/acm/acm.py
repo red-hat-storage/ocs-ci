@@ -5,8 +5,9 @@ import os
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
-
+from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
     ACM_MANAGED_CLUSTERS,
@@ -26,7 +27,11 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.base_ui import login_ui
 from ocs_ci.utility.version import compare_versions
-from ocs_ci.ocs.exceptions import ACMClusterImportException
+from ocs_ci.ocs.exceptions import (
+    ACMClusterImportException,
+    UnexpectedDeploymentConfiguration,
+)
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -49,14 +54,29 @@ class AcmAddClusters(AcmPageNavigator):
             kubeconfig_location (str): kubeconfig file location of imported cluster
 
         """
-        self.navigate_clusters_page()
+        # There is a modal dialog box which appears as soon as we login
+        # we need to click on close on that dialog box
+        try:
+            if self.check_element_presence(
+                (
+                    self.acm_page_nav["modal_dialog_close_button"][1],
+                    self.acm_page_nav["modal_dialog_close_button"][0],
+                ),
+                timeout=100,
+            ):
+                self.do_click(
+                    self.acm_page_nav["modal_dialog_close_button"], timeout=100
+                )
+        except Exception as e:
+            log.warning(f"Modal dialog not found: {e}")
+
         if not self.check_element_presence(
-            (By.ID, self.acm_page_nav["Import_cluster"][0]), timeout=100
+            (By.XPATH, self.acm_page_nav["Import_cluster"][0]), timeout=600
         ):
             raise ACMClusterImportException("Import button not found")
-        self.do_click(self.acm_page_nav["Import_cluster"])
+        self.do_click(self.acm_page_nav["Import_cluster"], timeout=1600)
         log.info("Clicked on Import cluster")
-        self.wait_for_endswith_url("import", timeout=300)
+        self.wait_for_endswith_url("import", timeout=600)
 
         self.do_send_keys(
             self.page_nav["Import_cluster_enter_name"], text=f"{cluster_name}"
@@ -105,16 +125,22 @@ class AcmAddClusters(AcmPageNavigator):
         ):
             if sample:
                 log.info(f"Cluster: {cluster_name} successfully imported")
+                self.navigate_clusters_page()
                 return
             else:
                 log.error(f"import of cluster: {cluster_name} failed")
 
-    def install_submariner_ui(self):
+    def install_submariner_ui(self, globalnet=True):
         """
         Installs the Submariner on the ACM Hub cluster and expects 2 OCP clusters to be already imported
         on the Hub Cluster to create a link between them
 
+        Args:
+            globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
+
         """
+        ocs_version = version.get_semantic_ocs_version_from_config()
+
         cluster_env = get_clusters_env()
         cluster_name_a = cluster_env.get("cluster_name_1")
         cluster_name_b = cluster_env.get("cluster_name_2")
@@ -174,6 +200,14 @@ class AcmAddClusters(AcmPageNavigator):
             ),
             enable_screenshot=True,
         )
+        if ocs_version >= version.VERSION_4_13 and globalnet:
+            log.info("Enabling globalnet")
+            element = self.find_an_element_by_xpath("//input[@id='globalist-enable']")
+            self.driver.execute_script("arguments[0].click();", element)
+        else:
+            log.error(
+                "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
+            )
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it")
@@ -194,22 +228,34 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["gateway-count-btn"])
         log.info("Click on Next button [2]")
         self.do_click(self.page_nav["next-btn"])
+        if ocs_version >= version.VERSION_4_13 and globalnet:
+            check_globalnet = self.get_element_text(self.page_nav["check-globalnet"])
+            assert (
+                check_globalnet == constants.GLOBALNET_STATUS
+            ), "Globalnet was not enabled"
+            log.info("Globalnet is enabled")
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
 
     def submariner_validation_ui(self):
         """
-        Checks available status of imported clusters after submariner creation
+        This function validates submariner status on ACM console which connects 2 managed OCP clusters.
+        This is a mandatory pre-check for Regional DR.
 
         """
-
         self.navigate_clusters_page()
-        self.page_has_loaded(retries=15, sleep_time=5)
-        self.do_click(locator=self.acm_page_nav["Clusters_page"])
-        log.info("Click on Cluster sets")
-        self.do_click(self.page_nav["cluster-sets"])
-        self.page_has_loaded(retries=15, sleep_time=5)
+        cluster_sets_page = self.wait_until_expected_text_is_found(
+            locator=self.page_nav["cluster-sets"],
+            expected_text="Cluster sets",
+            timeout=120,
+        )
+        if cluster_sets_page:
+            log.info("Click on Cluster sets")
+            self.do_click(self.page_nav["cluster-sets"])
+        else:
+            log.error("Couldn't navigate to Cluster sets page")
+            raise NoSuchElementException
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(
@@ -218,42 +264,42 @@ class AcmAddClusters(AcmPageNavigator):
             )
         )
         log.info("Click on 'Submariner add-ons' tab")
-        self.do_click(self.page_nav["submariner-tab"])
+        self.do_click(self.page_nav["submariner-tab"], enable_screenshot=True)
         log.info("Checking connection status of both the imported clusters")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
             expected_text="Healthy",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "Connection status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-2"],
             expected_text="Healthy",
             timeout=600,
-        )
+        ), "Connection status 2 is unhealthy for Submariner"
         log.info("Checking agent status of both the imported clusters")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "Agent status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
             timeout=600,
-        )
+        ), "Agent status 2 is unhealthy for Submariner"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
-        self.wait_until_expected_text_is_found(
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
             timeout=600,
-        )
-        self.wait_until_expected_text_is_found(
+        ), "First gateway node label check did not pass for Submariner"
+        assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
             timeout=600,
-        )
+        ), "Second gateway node label check did not pass for Submariner"
         self.take_screenshot()
-        log.info("Submariner add-ons creation is successful")
+        log.info("Submariner is healthy, check passed")
 
 
 def copy_kubeconfig(file):
@@ -315,6 +361,8 @@ def login_to_acm():
 
     """
     acm_version = ".".join(get_running_acm_version().split(".")[:2])
+    if not acm_version:
+        raise UnexpectedDeploymentConfiguration("ACM not found")
     cmp_str = f"{acm_version}>=2.7"
     if compare_versions(cmp_str):
         url = f"{get_ocp_url()}{ACM_2_7_MULTICLUSTER_URL}"
@@ -323,7 +371,8 @@ def login_to_acm():
     log.info(f"URL: {url}")
     driver = login_ui(url)
     page_nav = AcmPageNavigator(driver)
-    page_nav.navigate_from_ocp_to_acm_cluster_page()
+    if not compare_versions(cmp_str):
+        page_nav.navigate_from_ocp_to_acm_cluster_page()
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE

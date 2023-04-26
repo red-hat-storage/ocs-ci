@@ -728,7 +728,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             )
             fd.write(decoded_external_cluster_details)
         cmd = (
-            f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"oc set data secret/rook-ceph-external-cluster-details -n {config.ENV_DATA['cluster_namespace']} "
             f"--from-file=external_cluster_details={external_cluster_details.name}"
         )
         exec_cmd(cmd)

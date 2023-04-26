@@ -67,11 +67,12 @@ def deploy_odf():
     Create openshift-storage namespace and deploy managedFusionOffering CR there.
     """
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
-    ns_name = constants.OPENSHIFT_STORAGE_NAMESPACE
+    ns_name = config.ENV_DATA["cluster_namespace"]
     logger.info(f"Creating {ns_name} namespace")
     exec_cmd(["oc", "new-project", ns_name])
     logger.info("Creating the offering CR")
     offering_data = dict()
+    offering_data["namespace"] = ns_name
     offering_data["ocp_version"] = get_ocp_version()
     offering_data["size"] = config.ENV_DATA["size"]
     public_key = config.AUTH.get("managed_service", {}).get("public_key", "")

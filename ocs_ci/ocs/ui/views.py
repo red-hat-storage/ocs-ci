@@ -88,6 +88,11 @@ deployment = {
         'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
         By.CSS_SELECTOR,
     ),
+    "enable_in_transit_encryption": (
+        'input[data-test="in-transit-encryption-checkbox"]',
+        By.CSS_SELECTOR,
+    ),
+    "enable_nfs": ('input[id="enable-nfs"]', By.CSS_SELECTOR),
 }
 
 deployment_4_6 = {
@@ -508,7 +513,7 @@ acm_page_nav = {
     "Applications": ("Applications", By.LINK_TEXT),
     "Governance": ("Governance", By.LINK_TEXT),
     "Credentials": ("Credentials", By.LINK_TEXT),
-    "Import_cluster": ("importCluster", By.ID),
+    "Import_cluster": ("//*[text()='Import cluster']", By.XPATH),
     "Import_cluster_enter_name": ("clusterName", By.ID),
     "Import_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
@@ -551,6 +556,7 @@ acm_configuration = {
     "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
     "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
     "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
+    "check-globalnet": ("//div[normalize-space()='True']", By.XPATH),
     "install-btn": (".pf-c-button.pf-m-primary.pf-m-progress", By.CSS_SELECTOR),
     "connection-status-1": (
         "(//button[@type='button'][normalize-space()='Healthy'])[1]",
@@ -716,9 +722,55 @@ acm_configuration_4_11 = {
 }
 
 acm_configuration_4_12 = {
-    **acm_configuration_4_11,
     "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
     "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
+    "local-cluster": ("//h2[text()='local-cluster']", By.XPATH),
+    "cluster_status_check": ('//button[normalize-space()="{}"]', By.XPATH),
+    "cluster_name": ("//a[normalize-space()='{}']", By.XPATH),
+    "clusters-page": ("a[class='pf-c-breadcrumb__link']", By.CSS_SELECTOR),
+    "nodes-tab": ("//a[normalize-space()='Nodes']", By.XPATH),
+    "data-services": ("//button[normalize-space()='Data Services']", By.XPATH),
+    "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
+    "replication-policy": ("//td[@id='replicationPolicy']", By.XPATH),
+    "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
+    "workload-name": ('//*[text()="{}"]', By.XPATH),
+    "kebab-action": (
+        "(//button[@class='pf-c-dropdown__toggle pf-m-plain'])[4]",
+        By.XPATH,
+    ),
+    "failover-app": ("//button[normalize-space()='Failover application']", By.XPATH),
+    "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
+    "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
+    "select-policy": ('//*[text()="{}"]', By.XPATH),
+    "target-cluster-dropdown": (
+        "//button[@data-test='target-cluster-dropdown-toggle']",
+        By.XPATH,
+    ),
+    "failover-preferred-cluster-name": ('//*[text()="{}"]', By.XPATH),
+    "operation-readiness": ("//*[contains(text(), 'Ready')]", By.XPATH),
+    "subscription-dropdown": (".pf-c-select__toggle.pf-m-typeahead", By.CSS_SELECTOR),
+    "peer-ready": ("//i[normalize-space()='Peer ready']", By.XPATH),
+    "initiate-action": ("#modal-intiate-action", By.CSS_SELECTOR),
+    "close-action-modal": ("//button[normalize-space()='Close']", By.XPATH),
+    "close-action-modal-page": ("//*[text()='Close']", By.XPATH),
+    "title-alert-after-action": ("//h4[@class='pf-c-alert__title']", By.XPATH),
+    "clear-filters": (
+        "(//button[@type='button'][normalize-space()='Clear all filters'])[2]"
+    ),
+    "data-policy-hyperlink": (
+        "1 policy",
+        By.LINK_TEXT,
+    ),
+    "view-more-details": ("//button[@data-test='status-modal-link']", By.XPATH),
+    "action-status-failover": ("//*[text()='Failed']", By.XPATH),
+    "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
+    "create-cluster-set": ("//button[@id='createClusterSet']", By.XPATH),
+    "review-btn": ("//button[@id='save']", By.XPATH),
+    "next-btn": ("//button[@class='pf-c-button pf-m-primary']", By.XPATH),
+}
+
+acm_configuration_4_13 = {
+    **acm_configuration_4_12,
 }
 
 add_capacity = {
@@ -1172,6 +1224,13 @@ locators = {
         },
         "obc": obc,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+        },
     },
     "4.12": {
         "login": {**login, **login_4_11},
@@ -1197,6 +1256,7 @@ locators = {
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
+            **acm_configuration_4_11,
             **acm_configuration_4_12,
         },
         "obc": obc,
