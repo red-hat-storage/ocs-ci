@@ -25,7 +25,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.utility import version
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 
 
@@ -209,7 +209,7 @@ class OCP(object):
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
         debug_cmd = (
             f"debug nodes/{node} --to-namespace={namespace} "
             f' -- chroot /host /bin/bash -c "{cmd}"'
@@ -1234,7 +1234,7 @@ def switch_to_default_rook_cluster_project():
     Returns:
         bool: True on success, False otherwise
     """
-    return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+    return switch_to_project(config.ENV_DATA["cluster_namespace"])
 
 
 def rsync(src, dst, node, dst_node=True, extra_params=""):
@@ -1635,7 +1635,7 @@ def clear_overprovision_spec(ignore_errors=False):
     log.info("Removing overprovisionControl from storage cluster.")
     storagecluster_obj = OCP(
         resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
 
@@ -1678,7 +1678,7 @@ def set_overprovision_policy(capacity, quota_name, sc_name, label):
 
     storagecluster_obj = OCP(
         resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
 

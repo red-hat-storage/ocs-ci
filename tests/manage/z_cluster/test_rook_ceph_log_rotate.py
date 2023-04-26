@@ -3,7 +3,6 @@ import time
 import pytest
 import re
 
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.cluster import ceph_health_check
@@ -42,7 +41,7 @@ class TestRookCephLogRotate(ManageTest):
             log.info("Delete logCollector from storage cluster yaml file")
             storagecluster_obj = OCP(
                 resource_name=constants.DEFAULT_CLUSTERNAME,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.STORAGECLUSTER,
             )
             params = '[{"op": "remove", "path": "/spec/logCollector"}]'
@@ -156,7 +155,7 @@ class TestRookCephLogRotate(ManageTest):
             )
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )
         log.info(

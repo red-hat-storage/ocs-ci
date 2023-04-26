@@ -31,7 +31,6 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.utility import version
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -2127,7 +2126,8 @@ def validate_existence_of_blocking_pdb():
 
     """
     pdb_obj = ocp.OCP(
-        kind=constants.POD_DISRUPTION_BUDGET, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.POD_DISRUPTION_BUDGET,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []
@@ -2442,7 +2442,7 @@ class LVM(object):
 
         """
         lvmc_cop = OCP(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             kind="lvmcluster",
             resource_name=get_lvm_cluster_name(),
         )
@@ -2922,7 +2922,7 @@ def check_clusters():
         lvmcluster_obj = OCP(
             kind="lvmcluster",
             resource_name=get_lvm_cluster_name(),
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             silent=True,
         )
         if isinstance(lvmcluster_obj.data, dict):

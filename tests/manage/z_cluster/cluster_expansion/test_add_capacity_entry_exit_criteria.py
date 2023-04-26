@@ -4,7 +4,6 @@ import pytest
 
 from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.framework.testlib import (
     tier2,
@@ -75,7 +74,7 @@ class TestAddCapacity(ManageTest):
         # Perform Health checks:
         # Make sure cluster is healthy
         assert ceph_health_check(
-            defaults.ROOK_CLUSTER_NAMESPACE
+            config.ENV_DATA["cluster_namespace"]
         ), "Entry criteria FAILED: Cluster is Unhealthy"
 
         # All OCS pods are in running state:
@@ -186,7 +185,7 @@ class TestAddCapacity(ManageTest):
 
         # Get restart count of ocs pods before expanstion
         restart_count_before = pod_helpers.get_pod_restarts_count(
-            defaults.ROOK_CLUSTER_NAMESPACE
+            config.ENV_DATA["cluster_namespace"]
         )
 
         # Get osd pods before expansion
@@ -229,7 +228,7 @@ class TestAddCapacity(ManageTest):
         # Get restart count of ocs pods after expansion and see any pods got
         # restated
         restart_count_after = pod_helpers.get_pod_restarts_count(
-            defaults.ROOK_CLUSTER_NAMESPACE
+            config.ENV_DATA["cluster_namespace"]
         )
         #
         # # TO DO

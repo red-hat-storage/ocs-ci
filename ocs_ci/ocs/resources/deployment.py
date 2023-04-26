@@ -166,7 +166,7 @@ def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
         osd_label (str): label associated with osd deployments
             (default: defaults.OSD_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: OSD deployment OCS instances
@@ -184,7 +184,7 @@ def get_mon_deployments(mon_label=constants.MON_APP_LABEL, namespace=None):
         mon_label (str): label associated with mon deployments
             (default: defaults.MON_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: Mon deployment OCS instances

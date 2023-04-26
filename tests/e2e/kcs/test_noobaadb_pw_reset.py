@@ -3,6 +3,7 @@ from time import sleep
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier3,
@@ -14,7 +15,7 @@ from ocs_ci.helpers.helpers import (
     scale_nb_resources,
 )
 
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
 from ocs_ci.utility.retry import retry
@@ -57,7 +58,7 @@ class TestNoobaaDbPw(E2ETest):
         run_db_reset_cmd()
         nb_db_secret_obj = ocp.OCP(
             kind=constants.SECRET,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="noobaa-db",
         )
         db_secret_patch = '[{"op": "add", "path": "/stringData", "value": {"password": "myNewPassword"}}]'
@@ -80,6 +81,6 @@ def run_db_reset_cmd():
     """
     alter_cmd = "ALTER USER noobaa WITH PASSWORD 'myNewPassword';"
     ocp.OCP().exec_oc_cmd(
-        f"exec -n {defaults.ROOK_CLUSTER_NAMESPACE} {constants.NB_DB_NAME_47_AND_ABOVE} "
+        f"exec -n {config.ENV_DATA['cluster_namespace']} {constants.NB_DB_NAME_47_AND_ABOVE} "
         f'-- psql -d nbcore -c "{alter_cmd}"'
     )

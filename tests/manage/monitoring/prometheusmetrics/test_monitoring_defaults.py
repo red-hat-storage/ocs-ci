@@ -13,7 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     metrics_for_external_mode_required,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
@@ -85,7 +85,9 @@ def test_ceph_mgr_dashboard_not_deployed():
     .. _`ceph mgr dashboard`: https://rook.io/docs/rook/v1.0/ceph-dashboard.html
     """
     logger.info("Checking that there is no ceph mgr dashboard pod deployed")
-    ocp_pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp_pod = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     # if there is no "items" in the reply, OCS is very broken
     ocs_pods = ocp_pod.get()["items"]
     for pod_item in ocs_pods:

@@ -7,6 +7,7 @@ import yaml
 from ocs_ci.utility import utils, nfs_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -979,7 +980,7 @@ class TestNfsEnable(ManageTest):
 
         # Respin nfsplugin pods while active I/O on in-cluster consumer
         nfsplugin_pod_objs = pod.get_all_pods(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, selector=["csi-nfsplugin"]
+            namespace=config.ENV_DATA["cluster_namespace"], selector=["csi-nfsplugin"]
         )
         log.info(f"nfs plugin pods-----{nfsplugin_pod_objs}")
         pod.delete_pods(pod_objs=nfsplugin_pod_objs)
@@ -1269,7 +1270,7 @@ class TestNfsEnable(ManageTest):
 
         # Respin cephfsplugin provisioner pods while active I/O on in-cluster consumer
         cephfsplugin_provisioner_pod_objs = pod.get_all_pods(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             selector=["csi-cephfsplugin-provisioner"],
         )
         log.info(

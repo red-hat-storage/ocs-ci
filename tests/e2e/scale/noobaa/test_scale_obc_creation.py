@@ -3,6 +3,7 @@ import pytest
 import time
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required
@@ -13,7 +14,7 @@ log = logging.getLogger(__name__)
 @pytest.fixture(autouse=True)
 def teardown(request):
     def finalizer():
-        scale_noobaa_lib.cleanup(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        scale_noobaa_lib.cleanup(config.ENV_DATA["cluster_namespace"])
 
     request.addfinalizer(finalizer)
 
@@ -27,7 +28,7 @@ class TestScaleOCBCreation(E2ETest):
 
     """
 
-    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = config.ENV_DATA["cluster_namespace"]
     sc_name = constants.NOOBAA_SC
     sc_rgw_name = constants.DEFAULT_STORAGECLASS_RGW
     scale_obc_count = 1000

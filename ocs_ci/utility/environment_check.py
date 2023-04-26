@@ -78,7 +78,7 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
         if (
             ns is not None
             and ns.startswith(("openshift-", defaults.BG_LOAD_NAMESPACE))
-            and ns != defaults.ROOK_CLUSTER_NAMESPACE
+            and ns != config.ENV_DATA["cluster_namespace"]
         ):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue

@@ -1,13 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import verify_quota_resource_exist
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -53,7 +53,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             log.info("Delete overprovisionControl from storage cluster yaml file")
             storagecluster_obj = OCP(
                 resource_name=constants.DEFAULT_CLUSTERNAME,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.STORAGECLUSTER,
             )
             params = '{"spec": {"overprovisionControl": []}}'
@@ -131,7 +131,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         log.info("Add 'overprovisionControl' section to storagecluster yaml file")
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )
         sc_name_str = f'"{sc_name}"'
