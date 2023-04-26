@@ -269,7 +269,9 @@ def ocs_install_verification(
             continue
         if label == constants.MANAGED_CONTROLLER_LABEL:
             if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
-                service_pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["service_namespace"])
+                service_pod = OCP(
+                    kind=constants.POD, namespace=config.ENV_DATA["service_namespace"]
+                )
                 assert service_pod.wait_for_resource(
                     condition=constants.STATUS_RUNNING,
                     selector=label,
