@@ -1,7 +1,5 @@
 import logging
 import os
-import pytest
-import yaml
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework.testlib import skipif_ocp_version, skipif_ocs_version, E2ETest
