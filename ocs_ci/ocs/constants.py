@@ -1902,6 +1902,7 @@ PATCH_SPECIFIC_SOURCES_CMD = (
 
 # Submariner constants
 SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
+GLOBALNET_STATUS = "True"
 
 # Multicluster related
 
