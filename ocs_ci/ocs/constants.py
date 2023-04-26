@@ -1963,8 +1963,8 @@ ACM_CSV_LABEL = (
 )
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
-SSH_PRIV_KEY = config.DEPLOYMENT.get("ssh_key_private")
-SSH_PUB_KEY = config.DEPLOYMENT.get("ssh_key")
+SSH_PRIV_KEY = config.DEPLOYMENT["ssh_key_private"]
+SSH_PUB_KEY = config.DEPLOYMENT["ssh_key"]
 SPACE = " "
 
 # DR actions

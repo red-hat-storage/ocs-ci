@@ -89,7 +89,7 @@ class TestNfsEnable(ManageTest):
         ENV_DATA:
             nfs_client_ip: "10.0.151.68"
             nfs_client_user: "root"
-            nfs_client_pwd: ""
+            nfs_client_private_key: constants.SSH_PRIV_KEY
         these values are provided in all our automation runs in Jenkins.
 
         But if someone will run locally, they will need to create custom config file and provide that via
@@ -97,7 +97,7 @@ class TestNfsEnable(ManageTest):
         ENV_DATA:
             nfs_client_ip: "10.10.10.10"
             nfs_client_user: "root"
-            nfs_client_pwd: ""
+            nfs_client_private_key: "<path to ssh private key>"
 
         If this VM IP is not available in config, then the external nfs consume tests will be skipped.
 
@@ -134,7 +134,9 @@ class TestNfsEnable(ManageTest):
         self.nfs_client_user = config.ENV_DATA.get("nfs_client_user")
         log.info(f"nfs_client_user is: {self.nfs_client_user}")
 
-        self.nfs_client_pwd = config.ENV_DATA.get("nfs_client_pwd")
+        self.nfs_client_private_key = (
+            config.ENV_DATA.get("nfs_client_private_key") or constants.SSH_PRIV_KEY
+        )
 
         self.con = None
 
@@ -318,8 +320,7 @@ class TestNfsEnable(ManageTest):
         self.con = Connection(
             self.nfs_client_ip,
             self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+            private_key=self.nfs_client_private_key,
         )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
@@ -496,8 +497,7 @@ class TestNfsEnable(ManageTest):
         self.con = Connection(
             self.nfs_client_ip,
             self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+            private_key=self.nfs_client_private_key,
         )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
@@ -646,8 +646,7 @@ class TestNfsEnable(ManageTest):
         self.con = Connection(
             self.nfs_client_ip,
             self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+            private_key=self.nfs_client_private_key,
         )
 
         # Create nfs pvc with storageclass ocs-storagecluster-ceph-nfs
@@ -793,8 +792,7 @@ class TestNfsEnable(ManageTest):
         self.con = Connection(
             self.nfs_client_ip,
             self.nfs_client_user,
-            password=self.nfs_client_pwd,
-            private_key=constants.SSH_PRIV_KEY,
+            private_key=self.nfs_client_private_key,
         )
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
