@@ -10,6 +10,7 @@ and with consideration of the entire project.
 """
 
 import os
+from ocs_ci.framework import config
 
 
 # Logging
@@ -1962,8 +1963,8 @@ ACM_CSV_LABEL = (
 )
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
-SSH_PRIV_KEY = os.path.expanduser(os.path.join("~", ".ssh", "openshift-dev.pem"))
-SSH_PUB_KEY = os.path.expanduser(os.path.join("~", ".ssh", "openshift-dev.pub"))
+SSH_PRIV_KEY = config.DEPLOYMENT.get("ssh_key_private")
+SSH_PUB_KEY = config.DEPLOYMENT.get("ssh_key")
 SPACE = " "
 
 # DR actions

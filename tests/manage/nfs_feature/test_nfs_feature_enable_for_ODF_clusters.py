@@ -9,7 +9,6 @@ from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -32,6 +31,8 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 # Error message to look in a command output
 ERRMSG = "Error in command"
+
+# This is a test message
 
 
 @tier1
@@ -136,7 +137,6 @@ class TestNfsEnable(ManageTest):
         log.info(f"nfs_client_user is: {self.nfs_client_user}")
 
         self.nfs_client_pwd = config.ENV_DATA.get("nfs_client_pwd")
-        log.info(f"nfs_client_pwd is: {self.nfs_client_pwd}")
 
         self.con = None
 
