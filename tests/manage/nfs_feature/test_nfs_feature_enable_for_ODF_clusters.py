@@ -32,8 +32,6 @@ log = logging.getLogger(__name__)
 # Error message to look in a command output
 ERRMSG = "Error in command"
 
-# This is a test message
-
 
 @tier1
 @skipif_ocs_version("<4.11")
