@@ -78,6 +78,7 @@ class TestRbdSpaceReclaim(ManageTest):
         log.info(f"Used size before IO is {used_size_before_io}")
 
         # Create four 4 GB file
+        temp_used_size = used_size_before_io
         for filename in [fio_filename1, fio_filename2, fio_filename3, fio_filename4]:
             pod_obj.run_io(
                 storage_type="fs",
@@ -88,10 +89,11 @@ class TestRbdSpaceReclaim(ManageTest):
             )
             pod_obj.get_fio_results()
 
-        # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (16 * self.pool_replica)
-        used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
-        log.info(f"Used size after IO is {used_size_after_io}")
+            # Verify used size after IO
+            exp_used_size_after_io = temp_used_size + (16 * self.pool_replica)
+            used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
+            log.info(f"Used size after IO is {used_size_after_io}")
+            temp_used_size = used_size_after_io
 
         # Delete the file and validate the reclaimspace cronjob
         for filename in [fio_filename1, fio_filename2, fio_filename3]:
