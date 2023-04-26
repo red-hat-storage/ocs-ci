@@ -1630,14 +1630,16 @@ def verify_managed_fusion_provider():
     1. Check the presence of catalogsource and its state
     2. Check the presence of subscription
     """
-    catsrc = ocp.OCP(kind=constants.CATSRC, namespace="managed-fusion")
+    catsrc = ocp.OCP(
+        kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith("Managed Fusion Agent")
     assert catsrc_info["status"]["connectionState"]["lastObservedState"] == "READY"
     subscr = ocp.OCP(
         kind=constants.CATSRC,
-        namespace="managed-fusion",
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector="operators.coreos.com/managed-fusion-agent.managed-fusion",
     )
     subscr_info = subscr.get().get("items")[0]
