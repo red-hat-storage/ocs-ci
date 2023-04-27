@@ -87,7 +87,8 @@ def check_automated_recovery_from_stopped_node(nodes):
         osd_node_name
     )
 
-    nodes.stop_nodes([osd_node], wait=True)
+    nodes.stop_nodes([osd_node], wait=False)
+    nodes.wait_for_nodes_to_stop_or_terminate([osd_node])
     log.info(f"Successfully powered off node: {osd_node_name}")
 
     log.info("Verify the node rook ceph pods go into a Terminating state")

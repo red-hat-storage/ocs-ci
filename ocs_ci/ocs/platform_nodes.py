@@ -7,6 +7,7 @@ import time
 
 
 import boto3
+from botocore.exceptions import WaiterError
 import yaml
 import ovirtsdk4.types as types
 
@@ -21,6 +22,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     NotAllNodesCreated,
     RebootEventNotFoundException,
+    ResourceWrongStatusException,
 )
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
@@ -198,6 +200,21 @@ class NodesBase(object):
 
     def terminate_nodes(self, nodes, wait=True):
         raise NotImplementedError("terminate nodes functionality is not implemented")
+
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
 
 
 class VMWareNodes(NodesBase):
@@ -577,6 +594,7 @@ class AWSNodes(NodesBase):
 
 
         """
+
         instances = self.get_ec2_instances(nodes)
         assert (
             instances
@@ -1174,6 +1192,70 @@ class AWSNodes(NodesBase):
         instance_id = self.aws.get_instance_id_from_private_dns_name(node_name)
         stack_name = self.aws.get_stack_name_by_instance_id(instance_id)
         return stack_name
+
+    def wait_for_nodes_to_stop(self, nodes):
+        """
+        Wait for the nodes to reach status stopped
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Raises:
+            ResourceWrongStatusException: In case of the nodes didn't reach the expected status stopped.
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        assert (
+            instances
+        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+        try:
+            self.aws.wait_for_instances_to_stop(instances=instances)
+        except WaiterError as e:
+            logger.info("Failed to reach the expected status stopped")
+            raise ResourceWrongStatusException(e)
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        """
+        Wait for the nodes to reach status terminated
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Raises:
+            ResourceWrongStatusException: In case of the nodes didn't reach the expected status terminated.
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        assert (
+            instances
+        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+        try:
+            self.aws.wait_for_instances_to_terminate(instances=instances)
+        except WaiterError as e:
+            logger.info("Failed to reach the expected status terminated")
+            raise ResourceWrongStatusException(e)
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        """
+        Wait for the nodes to reach status stopped or terminated
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Raises:
+            ResourceWrongStatusException: In case of the nodes didn't reach the expected
+                status stopped or terminated.
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        assert (
+            instances
+        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+        try:
+            self.aws.wait_for_instances_to_stop_or_terminate(instances=instances)
+        except WaiterError as e:
+            logger.info("Failed to reach the expected status stopped or terminated")
+            raise ResourceWrongStatusException(e)
 
 
 class AWSUPINode(AWSNodes):
