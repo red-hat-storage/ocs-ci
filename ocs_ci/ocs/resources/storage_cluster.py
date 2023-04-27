@@ -1457,12 +1457,12 @@ def verify_consumer_resources():
     # Verify the default Storageclassclaims
     if ocs_version >= version.VERSION_4_11:
         storage_class_claim = OCP(
-            kind=constants.STORAGECLASSCLAIM, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            kind=constants.STORAGECLASSCLAIM,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
-        storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
         for sc_claim in [
-            f"{storage_cluster_name}-ceph-rbd",
-            f"{storage_cluster_name}-cephfs",
+            constants.DEFAULT_STORAGECLASS_RBD,
+            constants.DEFAULT_STORAGECLASS_CEPHFS,
         ]:
             sc_claim_phase = storage_class_claim.get_resource(
                 resource_name=sc_claim, column="PHASE"
@@ -1471,6 +1471,7 @@ def verify_consumer_resources():
                 f"The phase of the storageclassclaim {sc_claim} is {sc_claim_phase}. "
                 f"Expected phase is '{constants.STATUS_READY}'"
             )
+            log.info(f"Storageclassclaim {sc_claim} is {constants.STATUS_READY}")
         log.info("Verified the status of the default storageclassclaims")
 
 
