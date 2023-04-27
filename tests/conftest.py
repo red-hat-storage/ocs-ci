@@ -4892,7 +4892,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             (ocs_ci.ocs.resource.ocs) ocs object of the CephBlockPool.
 
         """
-        blockpool_ui_object = BlockPoolUI(setup_ui)
+        blockpool_ui_object = BlockPoolUI()
         pool_name, pool_status = blockpool_ui_object.create_pool(
             replica=replica, compression=compression
         )
@@ -4931,7 +4931,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             except CommandFailed:
                 log.warning("Pool is already deleted")
                 continue
-            blockpool_ui_obj = BlockPoolUI(setup_ui)
+            blockpool_ui_obj = BlockPoolUI()
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
@@ -5003,7 +5003,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
 
         """
         global sc_name
-        storageclass_ui_object = StorageClassUI(setup_ui)
+        storageclass_ui_object = StorageClassUI()
         if encryption:
             sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
                 backend_path=backend_path,
@@ -5046,7 +5046,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             except CommandFailed:
                 log.warning("Storageclass is already deleted")
                 continue
-            storageclass_ui_obj = StorageClassUI(setup_ui)
+            storageclass_ui_obj = StorageClassUI()
             if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
                 instance.delete()
                 raise StorageClassNotDeletedFromUI(
