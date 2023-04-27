@@ -2283,12 +2283,12 @@ def awscli_pod_fixture(request, scope_name):
     assert s3cli_sts_obj, "Failed to create S3CLI STS"
 
     awscli_pod_obj = retry(IndexError, tries=3, delay=15)(
-        lambda _: Pod(
+        lambda: Pod(
             **get_pods_having_label(
                 constants.S3CLI_LABEL, config.ENV_DATA["cluster_namespace"]
             )[0]
         )
-    )
+    )()
 
     OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="ConfigMap"
