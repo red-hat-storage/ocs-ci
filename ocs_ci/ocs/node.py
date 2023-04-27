@@ -2644,7 +2644,7 @@ def generate_nodes_for_provider_worker_node_tests():
         ceph_node_set = {mgr_node_name, random.choice(mon_node_names)}
     else:
         # Set of one mgr node, and two mon nodes
-        ceph_node_set = set([mgr_node_name] + random.choices(mon_node_names, k=2))
+        ceph_node_set = set([mgr_node_name] + random.sample(mon_node_names, k=2))
 
     osd_node_set = set(get_osd_running_nodes())
     ceph_include_osd_node_set = ceph_node_set.intersection(osd_node_set)

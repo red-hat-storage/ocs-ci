@@ -1,6 +1,7 @@
 import logging
 import pytest
 import random
+import time
 
 
 from ocs_ci.framework.testlib import (
@@ -35,6 +36,8 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.helpers.sanity_helpers import SanityManagedService, Sanity
 from ocs_ci.ocs.cluster import is_ms_provider_cluster, is_managed_service_cluster
 from ocs_ci.framework import config
+from ocs_ci.ocs.constants import MS_PROVIDER_TYPE, MS_CONSUMER_TYPE
+from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
 
 
 log = logging.getLogger(__name__)
@@ -51,11 +54,12 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
+    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
         """
         Initialize the Sanity instance for the Managed Service
 
         """
+        switch_to_correct_cluster_at_setup(request)
         if is_managed_service_cluster():
             self.sanity_helpers = SanityManagedService(
                 create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
@@ -111,13 +115,15 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
         else:
             # If it's not a provider cluster, test rolling terminate two ocs worker nodes will suffice
-            ocs_node_objs = random.choices(get_ocs_nodes(), k=2)
+            ocs_node_objs = random.sample(get_ocs_nodes(), k=2)
+        log.info(f"Generated ocs worker nodes: {[n.name for n in ocs_node_objs]}")
 
         log.info("Start rolling terminate and recovery of the OCS worker nodes")
         for node_obj in ocs_node_objs:
             old_wnodes = get_worker_nodes()
             log.info(f"Current worker nodes: {old_wnodes}")
             machine_name = get_machine_from_node_name(node_obj.name)
+            log.info(f"Machine name: {machine_name}")
             machineset = get_machineset_from_machine_name(machine_name)
             log.info(f"machineset name: {machineset}")
             old_ready_rc = get_ready_replica_count(machineset)
@@ -135,6 +141,9 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                     "Change the current replica count to the expected ready replica count"
                 )
                 set_replica_count(machineset, expected_ready_rc)
+                timeout = 20
+                log.info(f"Wait {timeout} seconds before adding a new node")
+                time.sleep(timeout)
                 new_ocs_node_names = add_new_node_and_label_it(machineset)
                 new_ocs_node = get_node_objs(new_ocs_node_names)[0]
 
@@ -151,7 +160,13 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                 self.sanity_helpers.health_check(cluster_check=False, tries=40)
 
     @managed_service_required
-    def test_rolling_terminate_and_recovery_in_controlled_fashion_ms(self, nodes):
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [MS_PROVIDER_TYPE, MS_CONSUMER_TYPE],
+    )
+    def test_rolling_terminate_and_recovery_in_controlled_fashion_ms(
+        self, cluster_type, nodes
+    ):
         """
         Test rolling terminate and recovery of the OCS worker nodes, when waiting for the pods to
         be running and Ceph Health OK between the iterations. This test is for the Managed Service
