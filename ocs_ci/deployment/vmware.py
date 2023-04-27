@@ -893,6 +893,21 @@ class VSPHEREUPI(VSPHEREBASE):
             for each_file in files_to_remove:
                 os.remove(each_file)
 
+            # Update manifests for compact deployment if applicable
+            compact_deployment = config.ENV_DATA["worker_replicas"] == 0
+            if compact_deployment:
+                cluster_scheduler_config = os.path.join(
+                    self.cluster_path, "manifests", "cluster-scheduler-02-config.yml"
+                )
+
+                with open(cluster_scheduler_config, "r") as f:
+                    data = yaml.safe_load(f)
+
+                data["spec"]["mastersSchedulable"] = True
+
+                with open(cluster_scheduler_config, "w") as f:
+                    yaml.dump(data, f)
+
         def create_ignitions(self):
             """
             Creates the ignition files
