@@ -497,7 +497,7 @@ def process_cluster_cli_params(config):
     suffix = ocsci_config.cur_index + 1 if ocsci_config.multicluster else ""
     cluster_path = get_cli_param(config, f"cluster_path{suffix}")
     if not cluster_path:
-        if "KUBECONFIG" in os.environ:
+        if os.getenv("KUBECONFIG"):
             cluster_path = os.path.dirname(os.environ["KUBECONFIG"])
             ocsci_config.RUN["kubeconfig_location"] = "kubeconfig"
             ocsci_config.RUN["password_location"] = "kubeadmin-password"
