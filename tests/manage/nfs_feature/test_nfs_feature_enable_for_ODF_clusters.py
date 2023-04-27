@@ -2,6 +2,7 @@ import pytest
 import logging
 import time
 import yaml
+import os
 
 
 from ocs_ci.utility import nfs_utils
@@ -134,8 +135,9 @@ class TestNfsEnable(ManageTest):
         self.nfs_client_user = config.ENV_DATA.get("nfs_client_user")
         log.info(f"nfs_client_user is: {self.nfs_client_user}")
 
-        self.nfs_client_private_key = (
-            config.ENV_DATA.get("nfs_client_private_key") or constants.SSH_PRIV_KEY
+        self.nfs_client_private_key = os.path.expanduser(
+            config.ENV_DATA.get("nfs_client_private_key")
+            or config.DEPLOYMENT["ssh_key_private"]
         )
 
         self.con = None
