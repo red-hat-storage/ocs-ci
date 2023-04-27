@@ -745,7 +745,11 @@ def verify_storage_cluster():
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
-    storage_cluster.wait_for_phase(phase="Ready", timeout=600)
+    if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+        timeout = 1000
+    else:
+        timeout = 600
+    storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
 
 def verify_noobaa_endpoint_count():
