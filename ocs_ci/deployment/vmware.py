@@ -896,6 +896,9 @@ class VSPHEREUPI(VSPHEREBASE):
             # Update manifests for compact deployment if applicable
             compact_deployment = config.ENV_DATA["worker_replicas"] == 0
             if compact_deployment:
+                logger.debug(
+                    "Updating cluster scheduler config for compact deployment."
+                )
                 cluster_scheduler_config = os.path.join(
                     self.cluster_path, "manifests", "cluster-scheduler-02-config.yml"
                 )
