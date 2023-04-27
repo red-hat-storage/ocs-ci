@@ -1431,6 +1431,7 @@ def verify_consumer_resources():
     Verify resources specific to managed OCS consumer:
     1. MGR endpoint
     2. monitoring endpoint in cephcluster yaml
+    3. Verify the default Storageclassclaims
     """
     mgr_endpoint = OCP(
         kind="endpoints",
