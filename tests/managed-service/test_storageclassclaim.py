@@ -32,13 +32,13 @@ class TestStorageClassClaim(ManageTest):
         """
         # Create a project
         proj_obj = project_factory()
+
+        log.info("Creating storageclassclaims")
         sc_claim_obj_rbd = create_storageclassclaim(
             interface_type=constants.CEPHBLOCKPOOL, namespace=proj_obj.namespace
         )
-
-        log.info("Creating storageclassclaims")
         sc_claim_obj_cephfs = create_storageclassclaim(
-            interface_type=constants.CEPHBLOCKPOOL, namespace=proj_obj.namespace
+            interface_type=constants.CEPHFILESYSTEM, namespace=proj_obj.namespace
         )
         teardown_factory(sc_claim_obj_rbd)
         teardown_factory(sc_claim_obj_cephfs)
