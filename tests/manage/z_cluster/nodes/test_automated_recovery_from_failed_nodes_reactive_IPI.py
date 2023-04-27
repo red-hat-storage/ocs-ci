@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import machine, constants, defaults
+from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
 from ocs_ci.utility.utils import ceph_health_check
@@ -332,7 +332,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         )
 
         # Validate that the OSD in terminate state has a new OSD in Pending
-        all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        all_pod_obj = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         new_osd = None
         for pod_obj in all_pod_obj:
             if osd_real_name == "-".join(pod_obj.name.split("-")[:-1]) and (

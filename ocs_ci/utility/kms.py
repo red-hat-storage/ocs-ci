@@ -355,16 +355,16 @@ class Vault(KMS):
 
         """
         ocp_obj = ocp.OCP()
-        cmd = f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} sa {sa_name}"
+        cmd = f"create -n {config.ENV_DATA['cluster_namespace']} sa {sa_name}"
         ocp_obj.exec_oc_cmd(command=cmd)
         self.vault_cwd_kms_sa_name = sa_name
         logger.info(f"Created serviceaccount {sa_name}")
 
         cmd = (
-            f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"create -n {config.ENV_DATA['cluster_namespace']} "
             "clusterrolebinding vault-tokenreview-binding "
             "--clusterrole=system:auth-delegator "
-            f"--serviceaccount={constants.OPENSHIFT_STORAGE_NAMESPACE}:{sa_name}"
+            f"--serviceaccount={config.ENV_DATA['cluster_namespace']}:{sa_name}"
         )
         ocp_obj.exec_oc_cmd(command=cmd)
         logger.info("Created the clusterrolebinding vault-tokenreview-binding")
@@ -389,12 +389,12 @@ class Vault(KMS):
                 token_reviewer_name=self.vault_cwd_kms_sa_name,
             )
             self.create_vault_kube_auth_role(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 role_name=self.vault_kube_auth_role,
                 sa_name="rook-ceph-system,rook-ceph-osd,noobaa",
             )
             self.create_vault_kube_auth_role(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 role_name="odf-rook-ceph-osd",
                 sa_name="rook-ceph-osd",
             )
@@ -609,7 +609,7 @@ class Vault(KMS):
         connection_details = ocp.OCP(
             kind="ConfigMap",
             resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         return connection_details.get().get("data")[resource_name]
 
@@ -657,7 +657,7 @@ class Vault(KMS):
             vault_token = ocp.OCP(
                 kind="Secret",
                 resource_name=constants.VAULT_KMS_TOKEN_RESOURCE,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             token = vault_token.get().get("data")["token"]
             self.vault_path_token = base64.b64decode(token).decode()
@@ -672,7 +672,7 @@ class Vault(KMS):
             ocs_kms_configmap = ocp.OCP(
                 kind="ConfigMap",
                 resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             self.vault_kube_auth_role = ocs_kms_configmap.get().get("data")[
                 "VAULT_AUTH_KUBERNETES_ROLE"
@@ -887,13 +887,17 @@ class Vault(KMS):
             logger.error("KMS not enabled on storage cluster")
             raise NotFoundError("KMS flag not found")
 
-    def create_vault_csi_kms_token(
-        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-    ):
+    def create_vault_csi_kms_token(self, namespace=None):
         """
         create vault specific csi kms secret resource
 
+        Args:
+            namespace (str) the namespace of the resource. If None is provided
+                then value from config will be used.
+
         """
+        if namespace is None:
+            namespace = config.ENV_DATA["cluster_namespace"]
         csi_kms_token = templating.load_yaml(constants.EXTERNAL_VAULT_CSI_KMS_TOKEN)
         csi_kms_token["data"]["token"] = base64.b64encode(
             self.vault_path_token.encode()
@@ -905,13 +909,15 @@ class Vault(KMS):
         self,
         kv_version,
         vault_auth_method=constants.VAULT_TOKEN,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=None,
     ):
         """
         Create vault specific csi kms connection details
         configmap resource
 
         """
+        if namespace is None:
+            namespace = config.ENV_DATA["cluster_namespace"]
 
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
@@ -1076,7 +1082,7 @@ class Vault(KMS):
             logger.info("Retrieving secret name from serviceaccount ")
             cmd = (
                 f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
-                f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                f" -n {config.ENV_DATA['cluster_namespace']}"
             )
             secrets = run_cmd(cmd=cmd).split()
             secret_name = ""
@@ -1092,7 +1098,7 @@ class Vault(KMS):
         logger.info(f"Retrieving token from {secret_name}")
         cmd = (
             rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'token\']}}\""
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f" -n {config.ENV_DATA['cluster_namespace']}"
         )
         token = base64.b64decode(run_cmd(cmd=cmd)).decode()
         token_file = tempfile.NamedTemporaryFile(
@@ -1105,7 +1111,7 @@ class Vault(KMS):
         # Get ca.crt from secret
         logger.info(f"Retrieving CA cert from {secret_name}")
         ca_regex = r"{.data['ca\.crt']}"
-        cmd = f'oc get secret -n {constants.OPENSHIFT_STORAGE_NAMESPACE} {secret_name} -o jsonpath="{ca_regex}"'
+        cmd = f'oc get secret -n {config.ENV_DATA["cluster_namespace"]} {secret_name} -o jsonpath="{ca_regex}"'
         ca_crt = base64.b64decode(run_cmd(cmd=cmd)).decode()
         ca_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="test", dir=".", delete=True
@@ -1301,7 +1307,7 @@ class HPCS(KMS):
             hpcs_conf = load_auth_config()["hpcs"]
             return hpcs_conf
 
-    def create_ibm_kp_kms_secret(self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    def create_ibm_kp_kms_secret(self, namespace=config.ENV_DATA["cluster_namespace"]):
         """
         create hpcs specific csi kms secret resource
 
@@ -1322,7 +1328,7 @@ class HPCS(KMS):
         return ibm_kp_kms_secret["metadata"]["name"]
 
     def create_hpcs_csi_kms_connection_details(
-        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        self, namespace=config.ENV_DATA["cluster_namespace"]
     ):
         """
         Create hpcs specific csi kms connection details
@@ -1681,7 +1687,7 @@ class KMIP(KMS):
             )
             cmd = (
                 rf"oc get secret rook-ceph-osd-encryption-key-{pvc} -o jsonpath=\"{{.data[\'dmcrypt-key\']}}\""
-                f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                f" -n {config.ENV_DATA['cluster_namespace']}"
             )
             key_ids.append(base64.b64decode(run_cmd(cmd=cmd)).decode())
         return key_ids
@@ -1696,13 +1702,13 @@ class KMIP(KMS):
         """
         cmd = (
             rf"oc get cm ocs-kms-connection-details -o jsonpath=\"{{.data[\'KMIP_SECRET_NAME\']}}\""
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f" -n {config.ENV_DATA['cluster_namespace']}"
         )
         secret_name = run_cmd(cmd=cmd)
 
         cmd = (
             rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'UniqueIdentifier\']}}\""
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f" -n {config.ENV_DATA['cluster_namespace']}"
         )
         noobaa_key_id = base64.b64decode(run_cmd(cmd=cmd)).decode()
         return noobaa_key_id
@@ -1751,7 +1757,7 @@ class KMIP(KMS):
             raise NotFoundError("KMS flag not found")
 
     def create_kmip_csi_kms_connection_details(
-        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        self, namespace=config.ENV_DATA["cluster_namespace"]
     ):
         """
         Create KMIP specific csi-kms-connection-details
@@ -1809,7 +1815,7 @@ def update_csi_kms_vault_connection_details(update_config):
     csi_kms_conf = ocp.OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     try:
@@ -1916,7 +1922,7 @@ def get_encryption_kmsid():
     csi_kms_conf = ocp.OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     try:
         csi_kms_conf.get()
@@ -1943,7 +1949,7 @@ def remove_kmsid(kmsid):
     ocp_obj = ocp.OCP()
     patch = f'\'[{{"op": "remove", "path": "/data/{kmsid}"}}]\''
     patch_cmd = (
-        f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm "
+        f"patch -n {config.ENV_DATA['cluster_namespace']} cm "
         f"{constants.VAULT_KMS_CSI_CONNECTION_DETAILS} --type json -p " + patch
     )
     ocp_obj.exec_oc_cmd(command=patch_cmd)
@@ -1960,7 +1966,7 @@ def remove_token_reviewer_resources():
     """
 
     run_cmd(
-        f"oc delete sa {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME} -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        f"oc delete sa {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME} -n {config.ENV_DATA['cluster_namespace']}"
     )
     run_cmd(f"oc delete ClusterRole {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME}")
     run_cmd(

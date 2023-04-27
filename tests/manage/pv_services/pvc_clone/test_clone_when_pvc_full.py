@@ -112,7 +112,7 @@ class TestCloneWhenFull(ManageTest):
                 pv = clone_pvc.get().get("spec").get("volumeName")
                 error_msg = f"{pv} failed to create clone from subvolume"
                 csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                     selector=["csi-cephfsplugin-provisioner"],
                 )
             relevant_pod_logs = None

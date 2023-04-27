@@ -5,7 +5,6 @@ apiVersion: ocs.openshift.io/v1alpha1
 kind: StorageClassClaim
 metadata:
   name: storageclassclaim-sample
-  namespace: openshift-storage
 spec:
   # type: blockpool or sharedfilesystem
   type: <blockpool | sharedfilesystem>

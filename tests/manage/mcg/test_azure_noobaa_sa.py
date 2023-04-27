@@ -4,13 +4,14 @@ import pytest
 import requests
 
 from ocs_ci.deployment.azure import AZUREIPI
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier1,
     skipif_ocs_version,
     azure_platform_required,
 )
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class TestNoobaaStorageAccount:
         azure_depl = AZUREIPI()
         token = azure_depl.azure_util.credentials.token["access_token"]
         secret_ocp_obj = OCP(
-            kind=constants.SECRET, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
         )
         creds_secret_obj = secret_ocp_obj.get(constants.AZURE_NOOBAA_SECRET)
         resource_group_name = base64.b64decode(

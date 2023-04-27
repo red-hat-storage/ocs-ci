@@ -265,7 +265,7 @@ class ROSA(CloudDeploymentBase):
         if config.ENV_DATA.get("cluster_type") == "consumer":
             configmap_obj = ocp.OCP(
                 kind=constants.CONFIGMAP,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             rook_ceph_mon_configmap = configmap_obj.get(
                 resource_name=constants.ROOK_CEPH_MON_ENDPOINTS
@@ -282,7 +282,7 @@ class ROSA(CloudDeploymentBase):
                     logger.info("Deleting rook-ceph-operator as a workaround")
                     rook_operator_pod = get_operator_pods(
                         operator_label=constants.OPERATOR_LABEL,
-                        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                        namespace=config.ENV_DATA["cluster_namespace"],
                     )
                     rook_operator_pod[0].delete(wait=False)
 

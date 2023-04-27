@@ -1468,7 +1468,7 @@ def scale_down_deployments(node_name):
         node_name (str): The node name
 
     """
-    ocp = OCP(kind="node", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp = OCP(kind="node", namespace=config.ENV_DATA["cluster_namespace"])
     pods_to_scale_down = get_node_pods_to_scale_down(node_name)
     for p in pods_to_scale_down:
         deployment_name = pod.get_deployment_name(p.name)
@@ -1824,7 +1824,7 @@ def get_nodes_where_ocs_pods_running():
 
     """
     pods_openshift_storage = pod.get_all_pods(
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     ocs_nodes = list()
     for pod_obj in pods_openshift_storage:
@@ -2477,7 +2477,7 @@ def check_for_zombie_process_on_node(node_name=None):
     node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
     for node_obj in node_obj_list:
         debug_cmd = (
-            f"debug nodes/{node_obj.name} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
             '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
         )
         out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)

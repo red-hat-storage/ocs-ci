@@ -505,7 +505,7 @@ def ocs_install_verification(
     if ocs_version < version.VERSION_4_6:
         log.info("Verifying CSI snapshotter is not present.")
         provisioner_pods = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             selector=[
                 constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
                 constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
@@ -754,7 +754,7 @@ def verify_noobaa_endpoint_count():
     if not (disable_noobaa or managed_service):
         nb_ep_pods = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         assert len(nb_ep_pods) <= max_eps, (
             f"The number of running NooBaa endpoint pods ({len(nb_ep_pods)}) "
@@ -795,7 +795,7 @@ def osd_encryption_verification():
     osd_node_names = get_osds_per_node()
     for worker_node in osd_node_names:
         lsblk_cmd = (
-            f"oc debug node/{worker_node} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"oc debug node/{worker_node} --to-namespace={config.ENV_DATA['cluster_namespace']} "
             "-- chroot /host lsblk"
         )
         # It happens from time to time that we see this error:
@@ -1084,7 +1084,7 @@ def add_capacity_lso(ui_flag=False):
     else:
         set_deviceset_count(set_count)
 
-    pod_obj = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     pod_obj.wait_for_resource(
         timeout=600,
         condition=constants.STATUS_RUNNING,
@@ -1117,7 +1117,7 @@ def set_deviceset_count(count):
     )
 
 
-def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get storage cluster name
 
@@ -1202,7 +1202,7 @@ def get_all_storageclass():
 
     """
     sc_obj = ocp.OCP(
-        kind=constants.STORAGECLASS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.STORAGECLASS, namespace=config.ENV_DATA["cluster_namespace"]
     )
     result = sc_obj.get()
     sample = result["items"]
@@ -1297,7 +1297,7 @@ def verify_multus_network():
     ocp.OCP(
         resource_name=multus_public_network_name,
         kind="network-attachment-definitions",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     # TODO: also check if private NAD exists
 
@@ -1346,7 +1346,7 @@ def verify_multus_network():
     network_data = sc_data["spec"]["network"]
     assert network_data["provider"] == "multus"
     selectors = network_data["selectors"]
-    assert selectors["public"] == f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
+    assert selectors["public"] == f"{config.ENV_DATA['cluster_namespace']}/ocs-public"
     # TODO: also check private network if it exists
 
 
@@ -1370,14 +1370,14 @@ def verify_managed_service_resources():
         constants.OSE_PROMETHEUS_OPERATOR,
     }:
         csvs = csv.get_csvs_start_with_prefix(
-            managed_csv, constants.OPENSHIFT_STORAGE_NAMESPACE
+            managed_csv, config.ENV_DATA["cluster_namespace"]
         )
         assert (
             len(csvs) == 1
         ), f"Unexpected number of CSVs with {managed_csv} prefix: {len(csvs)}"
         csv_name = csvs[0]["metadata"]["name"]
         csv_obj = csv.CSV(
-            resource_name=csv_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            resource_name=csv_name, namespace=config.ENV_DATA["cluster_namespace"]
         )
         log.info(f"Check if {csv_name} is in Succeeded phase.")
         csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
@@ -1388,7 +1388,7 @@ def verify_managed_service_resources():
     # Verify alerting pods are Running
     pod_obj = OCP(
         kind="pod",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     for alert_pod in {
         (constants.MANAGED_PROMETHEUS_LABEL, 1),
@@ -1414,7 +1414,7 @@ def verify_managed_service_resources():
     # Verify that noobaa-operator replicas is set to 0
     noobaa_deployment = deployment.get_deployments_having_label(
         "operators.coreos.com/mcg-operator.openshift-storage=",
-        constants.OPENSHIFT_STORAGE_NAMESPACE,
+        config.ENV_DATA["cluster_namespace"],
     )[0]
     log.info(f"Noobaa replicas count: {noobaa_deployment.replicas}")
     assert noobaa_deployment.replicas == 0
@@ -1433,7 +1433,7 @@ def verify_managed_service_resources():
     ocp_version = get_semantic_version(get_ocp_version(), only_major_minor=True)
     if ocp_version < VERSION_4_11:
         prometheus_csv = csv.get_csvs_start_with_prefix(
-            constants.OSE_PROMETHEUS_OPERATOR, constants.OPENSHIFT_STORAGE_NAMESPACE
+            constants.OSE_PROMETHEUS_OPERATOR, config.ENV_DATA["cluster_namespace"]
         )
         prometheus_version = prometheus_csv[0]["spec"]["version"]
         assert prometheus_version.startswith("4.10.")
@@ -1450,14 +1450,16 @@ def verify_provider_resources():
     # Verify ocs-provider-server pod is Running
     pod_obj = OCP(
         kind="pod",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     pod_obj.wait_for_resource(
         condition="Running", selector="app=ocsProviderApiServer", resource_count=1
     )
 
     # Verify that cephcluster is Ready and hostNetworking is True
-    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster = OCP(
+        kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+    )
     cephcluster_yaml = cephcluster.get().get("items")[0]
     log.info("Verifying that cephcluster is Ready and hostNetworking is True")
     assert (
@@ -1478,7 +1480,7 @@ def verify_consumer_resources():
     """
     mgr_endpoint = OCP(
         kind="endpoints",
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.MGR_APP_LABEL,
     )
     mgr_ep_yaml = mgr_endpoint.get().get("items")[0]
@@ -1486,7 +1488,9 @@ def verify_consumer_resources():
     mgr_ip = mgr_ep_yaml["subsets"][0]["addresses"][0]["ip"]
     log.info(f"MGR endpoint IP is {mgr_ip}")
     assert re.match("\\d+(\\.\\d+){3}", mgr_ip)
-    cephcluster = OCP(kind="CephCluster", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cephcluster = OCP(
+        kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+    )
     cephcluster_yaml = cephcluster.get().get("items")[0]
     monitoring_endpoint = cephcluster_yaml["spec"]["monitoring"][
         "externalMgrEndpoints"
@@ -1506,7 +1510,7 @@ def verify_managed_service_networkpolicy():
     }:
         policy_obj = OCP(
             kind=policy[0],
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         assert policy_obj.is_exist(
             resource_name=policy[1]
@@ -1523,7 +1527,7 @@ def verify_managed_secrets():
     For a consumer cluster verify existence of 5 rook-ceph-client secrets
     """
     secret_ocp_obj = OCP(
-        kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
     )
     for secret_name in {
         managedservice.get_pagerduty_secret_name(),
@@ -1535,7 +1539,7 @@ def verify_managed_secrets():
     }:
         assert secret_ocp_obj.is_exist(
             resource_name=secret_name
-        ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
+        ), f"{secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
     if config.ENV_DATA["cluster_type"].lower() == "provider":
         for secret_name in {
             constants.MANAGED_ONBOARDING_SECRET,
@@ -1543,7 +1547,7 @@ def verify_managed_secrets():
         }:
             assert secret_ocp_obj.is_exist(
                 resource_name=secret_name
-            ), f"{secret_name} does not exist in {constants.OPENSHIFT_STORAGE_NAMESPACE} namespace"
+            ), f"{secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
     else:
         secrets = secret_ocp_obj.get().get("items")
         client_secrets = []
@@ -1623,7 +1627,9 @@ def verify_consumer_storagecluster(sc_data):
         f"Onboarding ticket begins with: {ticket[:10]} and ends with: {ticket[-10:]}"
     )
     assert len(ticket) > 500
-    catsrc = ocp.OCP(kind=constants.CATSRC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    catsrc = ocp.OCP(
+        kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith(
@@ -1647,7 +1653,7 @@ def verify_managedocs_security():
     """
     pod_obj = OCP(
         kind="pod",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.MANAGED_CONTROLLER_LABEL,
     )
     deployer_yaml = pod_obj.get().get("items")[0]
@@ -1673,23 +1679,27 @@ def get_ceph_clients():
     Returns:
         list: yamls of all ceph clients
     """
-    consumer = ocp.OCP(kind="CephClient", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    consumer = ocp.OCP(
+        kind="CephClient", namespace=config.ENV_DATA["cluster_namespace"]
+    )
     return consumer.get().get("items")
 
 
-def get_storage_cluster_state(sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_storage_cluster_state(sc_name, namespace=None):
     """
     Get the storage cluster state
 
     Args:
         sc_name (str): The storage cluster name
         namespace (str): Namespace of the resource. The default value is:
-            'defaults.ROOK_CLUSTER_NAMESPACE'
+            'config.ENV_DATA["cluster_namespace"]' if None provided
 
     Returns:
         str: The storage cluster state
 
     """
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
     sc_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         namespace=namespace,
@@ -1707,7 +1717,7 @@ def get_rook_ceph_mon_per_endpoint_ip():
     """
     configmap_obj = ocp.OCP(
         kind=constants.CONFIGMAP,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_CEPH_MON_ENDPOINTS,
     )
     cm_data = configmap_obj.get().get("data").get("data")
@@ -1773,7 +1783,7 @@ def get_consumer_storage_provider_endpoint():
     """
     sc_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.DEFAULT_CLUSTERNAME,
     )
     return sc_obj.get()["spec"]["externalStorage"]["storageProviderEndpoint"]

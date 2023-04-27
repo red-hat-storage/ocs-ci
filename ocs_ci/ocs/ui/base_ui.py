@@ -143,6 +143,33 @@ class BaseUI:
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
 
+    def do_click_by_xpath(self, xpath, timeout=30):
+        """
+        Function to click on a web element using XPATH
+        Args:
+            xpath (str): xpath to interact with web element
+            timeout (int): timeout until which an exception won't be raised
+
+        Returns:
+                Clicks on the web element found
+
+        """
+        return self.do_click((xpath, By.XPATH), timeout)
+
+    def find_an_element_by_xpath(self, locator):
+        """
+        Function to find an element using xpath
+
+        Args:
+            locator (str): locator of the element to be found
+
+        Returns:
+            an object of the type WebElement
+
+        """
+        element = self.driver.find_element_by_xpath(locator)
+        return element
+
     def do_send_keys(self, locator, text, timeout=30):
         """
         Send text to element on OpenShift Console
@@ -188,7 +215,14 @@ class BaseUI:
 
         """
         wait = WebDriverWait(self.driver, timeout)
-        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        try:
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        except TimeoutException:
+            # element_to_be_clickable() doesn't work as expected so just to harden
+            # we are using presence_of_element_located
+            element = wait.until(
+                ec.presence_of_element_located((locator[1], locator[0]))
+            )
         return True if element.get_attribute("aria-expanded") == "true" else False
 
     def choose_expanded_mode(self, mode, locator):
@@ -199,7 +233,7 @@ class BaseUI:
         locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
-        current_mode = self.is_expanded(locator=locator, timeout=100)
+        current_mode = self.is_expanded(locator=locator, timeout=1000)
         if mode != current_mode:
             self.do_click(locator=locator, enable_screenshot=False)
 

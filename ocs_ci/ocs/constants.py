@@ -84,6 +84,7 @@ HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.y
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 # Statuses
 STATUS_READY = "Ready"
+PEER_READY = "Peer ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
 STATUS_AVAILABLE = "Available"
@@ -206,6 +207,7 @@ END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 RAM = "rss"
 VIRT = "vms"
+
 # cluster types
 MS_CONSUMER_TYPE = "consumer"
 MS_PROVIDER_TYPE = "provider"
@@ -791,6 +793,8 @@ RBD_SIDECAR_COUNT_4_12 = 14
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
+DRPOLICY_STATUS = "Validated"
+RDR_REPLICATION_POLICY = "async"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -998,6 +1002,10 @@ CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 # VMware Datastore types
 VMFS = "VMFS"
 VSAN = "vsan"
+
+# VMware VM Default network settings.
+VM_DEFAULT_NETWORK_ADAPTER = "Network adapter 1"
+VM_DEFAULT_NETWORK = "VM Network"
 
 # terraform haproxy service
 TERRAFORM_HAPROXY_SERVICE = os.path.join(VSPHERE_DIR, "lb/haproxy.service")
@@ -1894,6 +1902,7 @@ PATCH_SPECIFIC_SOURCES_CMD = (
 
 # Submariner constants
 SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
+GLOBALNET_STATUS = "True"
 
 # Multicluster related
 
@@ -1948,6 +1957,9 @@ ACM_CLUSTER_DESTROY_TIMEOUT = 2700  # 45 minutes
 ACM_CLUSTER_DEPLOYMENT_LABEL_KEY = "hive.openshift.io/cluster-deployment-name"
 ACM_CLUSTER_DEPLOYMENT_SECRET_TYPE_LABEL_KEY = "hive.openshift.io/secret-type"
 ACM_4_7_MULTICLUSTER_URL = "/multicloud/infrastructure/clusters/managed"
+ACM_CSV_LABEL = (
+    "operators.coreos.com/advanced-cluster-management.open-cluster-management= "
+)
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
 SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))

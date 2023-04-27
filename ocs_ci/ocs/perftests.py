@@ -251,7 +251,7 @@ class PASTest(BaseTest):
             log.warning(f"Node type ({node_type}) is invalid")
             return
 
-        oc_cmd = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         self.environment[f"{node_type}_nodes_num"] = len(nodes)
         self.environment[f"{node_type}_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
             node=nodes[0],
@@ -728,7 +728,7 @@ class PASTest(BaseTest):
 
         # Check if it is Arbiter cluster
         my_obj = OCP(
-            kind="StorageCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind="StorageCluster", namespace=config.ENV_DATA["cluster_namespace"]
         )
         arbiter = (
             my_obj.data.get("items")[0].get("spec").get("arbiter").get("enable", False)
@@ -771,7 +771,7 @@ class PASTest(BaseTest):
             osd_pod_obj = OCP(
                 kind="POD",
                 resource_name=osd_pod,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             log.info(f"The First OSD pod nams is {osd_pod}")
 
@@ -782,7 +782,7 @@ class PASTest(BaseTest):
             osd_pvc_obj = OCP(
                 kind="PersistentVolumeClaim",
                 resource_name=osd_pvc_name,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
 
             odf_back_storage = osd_pvc_obj.get()["spec"]["storageClassName"]

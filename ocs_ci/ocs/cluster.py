@@ -31,7 +31,6 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.utility import version
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -55,6 +54,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
+from ocs_ci.ocs.resources.pod import get_mds_pods
 
 logger = logging.getLogger(__name__)
 
@@ -2126,7 +2126,8 @@ def validate_existence_of_blocking_pdb():
 
     """
     pdb_obj = ocp.OCP(
-        kind=constants.POD_DISRUPTION_BUDGET, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.POD_DISRUPTION_BUDGET,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []
@@ -2441,7 +2442,7 @@ class LVM(object):
 
         """
         lvmc_cop = OCP(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             kind="lvmcluster",
             resource_name=get_lvm_cluster_name(),
         )
@@ -2921,7 +2922,7 @@ def check_clusters():
         lvmcluster_obj = OCP(
             kind="lvmcluster",
             resource_name=get_lvm_cluster_name(),
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             silent=True,
         )
         if isinstance(lvmcluster_obj.data, dict):
@@ -2972,3 +2973,61 @@ def get_lvm_full_version():
     image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
     full_version = image.split(":")[1]
     return full_version
+
+
+def get_mds_standby_replay_info():
+    """Return information about the Ceph MDS standby replay node.
+
+    Returns:
+        dict: A dictionary containing information about the standby-replay MDS daemon,
+        including the following keys in case of success, otherwise None.
+        - "node_ip": The IP address of the node running the standby-replay MDS daemon.
+        - "mds_daemon": The name of the MDS daemon.
+        - "standby_replay_pod": The name of the standby replay pod.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+
+    # Find ceph daemon state as 'standby-replay'
+    ceph_daemon_name = next(
+        (
+            daemon["name"]
+            for daemon in ceph_mdsmap["mdsmap"]
+            if daemon["state"] == "standby-replay"
+        ),
+        None,
+    )
+
+    if ceph_daemon_name is None:
+        logger.error("No standby-replay MDS daemon found")
+        return None
+
+    logger.info(f"Found standby-replay MDS daemon: {ceph_daemon_name}")
+
+    # Find ceph MDS pod running 'standby-replay' daemon.
+    mds_pods = get_mds_pods()
+    standby_replay_pod = next(
+        (srp for srp in mds_pods if ceph_daemon_name in srp.name), None
+    )
+
+    if standby_replay_pod is None:
+        logger.error(
+            f"No standby-replay MDS Pod found with running daemon '{ceph_daemon_name}'"
+        )
+        return None
+
+    logger.info(f"Found standby-replay MDS pod: {standby_replay_pod.name}")
+
+    # Get the node name of running pod.
+    node_ip = standby_replay_pod.data["status"].get("hostIP")
+    if not node_ip:
+        logger.error(
+            f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
+        )
+        return None
+
+    return {
+        "node_ip": node_ip,
+        "mds_daemon": ceph_daemon_name,
+        "standby_replay_pod": standby_replay_pod.name,
+    }

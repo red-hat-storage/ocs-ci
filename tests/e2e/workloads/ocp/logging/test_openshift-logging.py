@@ -10,9 +10,10 @@ import random
 
 from ocs_ci.utility import version
 from ocs_ci.helpers import helpers, disruption_helpers
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, delete_deploymentconfig_pods
 from ocs_ci.utility.retry import retry
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -240,7 +241,7 @@ class Testopenshiftloggingonocs(E2ETest):
         assert ocp_logging_obj.check_health_of_clusterlogging()
 
         # Checks openshift-storage project exists and get filecount
-        self.check_filecount_in_project(project=defaults.ROOK_CLUSTER_NAMESPACE)
+        self.check_filecount_in_project(project=config.ENV_DATA["cluster_namespace"])
 
         # Creates new-project and app-pod and checks the logs are retained
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
