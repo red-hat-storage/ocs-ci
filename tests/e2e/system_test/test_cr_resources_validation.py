@@ -3,6 +3,7 @@ import os
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework.testlib import skipif_ocp_version, skipif_ocs_version, E2ETest
+from ocs_ci.framework.pytest_customization.marks import system_test
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
+@system_test
 @skipif_ocp_version("<4.13")
 @skipif_ocs_version("<4.13")
 class TestCRRsourcesValidation(E2ETest):
