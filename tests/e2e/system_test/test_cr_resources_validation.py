@@ -28,15 +28,15 @@ class TestCRRsourcesValidation(E2ETest):
             constants.TEMPLATE_CSI_ADDONS_DIR, "NetworkFence.yaml"
         )
         res = run_oc_command(cmd=f"create -f {network_fence_yaml}")
-        if ERRMSG in res[0]:
-            err_msg = f"Failed to create resource Network Fence from yaml file : {network_fence_yaml}, got result {res}"
-            logger.error(err_msg)
-            raise Exception(err_msg)
+        assert (
+            not ERRMSG in res[0]
+        ), f"Failed to create resource Network Fence from yaml file {network_fence_yaml}, got result {res}"
 
         network_fence_name = res[0].split()[0]
 
-        res = run_oc_command(f"get {network_fence_name} -o yaml")
-        network_fence_original_yaml = res
+        network_fence_original_yaml = run_oc_command(
+            f"get {network_fence_name} -o yaml"
+        )
 
         patches = {  # dictionary: patch_name --> patch
             "apiVersion": {"apiVersion": "csiaddons.openshift.io/v1alpha2"},
@@ -85,7 +85,6 @@ class TestCRRsourcesValidation(E2ETest):
                 continue  # just continue to the next property
 
         res = run_oc_command(cmd=f"delete {network_fence_name}")
-        if ERRMSG in res[0]:
-            err_msg = f"Failed to delete network fence resource with name : {network_fence_name}, got result: {res}"
-            logger.error(err_msg)
-            raise Exception(err_msg)
+        assert (
+            not ERRMSG in res[0]
+        ), f"Failed to delete network fence resource with name : {network_fence_name}, got result: {res}"
