@@ -5,7 +5,11 @@ import yaml
 from ocs_ci.ocs.exceptions import ConfigurationError
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.utility.managedservice import remove_header_footer_from_key
+from ocs_ci.utility.managedservice import (
+    remove_header_footer_from_key,
+    generate_onboarding_token,
+    get_storage_provider_endpoint,
+)
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import Templating, load_yaml
 from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, exec_cmd
@@ -66,6 +70,14 @@ def deploy_odf():
     """
     Create openshift-storage namespace and deploy managedFusionOffering CR there.
     """
+
+    # TODO: Remove this workaround when the build is fixed.
+    # Temporary workaround to create storageclassclaim CRD.
+    storageclassclaim_crd = (
+        "https://raw.githubusercontent.com/red-hat-storage/ocs-client-operator/release-4.12/config/crd/"
+        "bases/ocs.openshift.io_storageclassclaims.yaml"
+    )
+    exec_cmd(f"oc create -f {storageclassclaim_crd}")
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
     ns_name = config.ENV_DATA["cluster_namespace"]
     logger.info(f"Creating {ns_name} namespace")
@@ -74,22 +86,39 @@ def deploy_odf():
     offering_data = dict()
     offering_data["namespace"] = ns_name
     offering_data["ocp_version"] = get_ocp_version()
-    offering_data["size"] = config.ENV_DATA["size"]
-    public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
-    if not public_key:
-        raise ConfigurationError(
-            "Public key for Managed Service not defined.\n"
-            "Expected following configuration in auth.yaml file:\n"
-            "managed_service:\n"
-            '  private_key: "..."\n'
-            '  public_key: "..."'
+
+    if config.ENV_DATA.get("cluster_type") == "provider":
+        offering_data["size"] = config.ENV_DATA["size"]
+        public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
+        if not public_key:
+            raise ConfigurationError(
+                "Public key for Managed Service not defined.\n"
+                "Expected following configuration in auth.yaml file:\n"
+                "managed_service:\n"
+                '  private_key: "..."\n'
+                '  public_key: "..."'
+            )
+        public_key_only = remove_header_footer_from_key(public_key)
+        offering_data["onboarding_validation_key"] = public_key_only
+        template_file = "managedfusionoffering.yaml.j2"
+
+    elif config.ENV_DATA.get("cluster_type") == "consumer":
+        # To use unreleased version of operators and DFC offering, create ImageContentSourcePolicy
+        icsp_path = os.path.join(FUSION_TEMPLATE_DIR, "icsp.yaml")
+        icsp_data = load_yaml(icsp_path)
+        helpers.create_resource(**icsp_data)
+
+        onboarding_ticket = config.DEPLOYMENT.get("onboarding_ticket", "")
+        if not onboarding_ticket:
+            onboarding_ticket = generate_onboarding_token()
+        offering_data["onboarding_ticket"] = onboarding_ticket
+        provider_name = config.ENV_DATA.get("provider_name", "")
+        offering_data["storage_provider_endpoint"] = get_storage_provider_endpoint(
+            provider_name
         )
-    public_key_only = remove_header_footer_from_key(public_key)
-    offering_data["onboarding_validation_key"] = public_key_only
-    template = templating.render_template(
-        "managedfusionoffering.yaml.j2",
-        offering_data,
-    )
+        template_file = "managedfusionoffering-dfc.yaml.j2"
+
+    template = templating.render_template(template_file, offering_data)
     template = yaml.load(template, Loader=yaml.Loader)
     # CRDs may have not be available yet
     offering_check_cmd = ["oc", "get", "crd", "managedfusionofferings.misf.ibm.com"]
