@@ -28,9 +28,8 @@ class TestCRRsourcesValidation(E2ETest):
             constants.TEMPLATE_CSI_ADDONS_DIR, "NetworkFence.yaml"
         )
         res = run_oc_command(cmd=f"create -f {network_fence_yaml}")
-        assert (
-            not ERRMSG in res[0]
-        ), f"Failed to create resource Network Fence from yaml file {network_fence_yaml}, got result {res}"
+        assert (ERRMSG not in res[0]),\
+            f"Failed to create resource Network Fence from yaml file {network_fence_yaml}, got result {res}"
 
         network_fence_name = res[0].split()[0]
 
@@ -85,6 +84,5 @@ class TestCRRsourcesValidation(E2ETest):
                 continue  # just continue to the next property
 
         res = run_oc_command(cmd=f"delete {network_fence_name}")
-        assert (
-            not ERRMSG in res[0]
-        ), f"Failed to delete network fence resource with name : {network_fence_name}, got result: {res}"
+        assert (ERRMSG not in res[0]), \
+            f"Failed to delete network fence resource with name : {network_fence_name}, got result: {res}"
