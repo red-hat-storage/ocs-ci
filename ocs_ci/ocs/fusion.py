@@ -106,7 +106,17 @@ def deploy_odf():
         # To use unreleased version of operators and DFC offering, create ImageContentSourcePolicy
         icsp_path = os.path.join(FUSION_TEMPLATE_DIR, "icsp.yaml")
         icsp_data = load_yaml(icsp_path)
-        helpers.create_resource(**icsp_data)
+        try:
+            helpers.create_resource(**icsp_data)
+        except CommandFailed as exc:
+            # To unblock the deployment if the creation of ImageContentSourcePolicy fails.
+            if "failed calling webhook" in str(exc):
+                logger.warning(
+                    "Creation of ImageContentSourcePolicy failed due to the error given below. Create it manually."
+                )
+                logger.warning(str(exc))
+            else:
+                raise
 
         onboarding_ticket = config.DEPLOYMENT.get("onboarding_ticket", "")
         if not onboarding_ticket:
