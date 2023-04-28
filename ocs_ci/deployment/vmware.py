@@ -90,7 +90,10 @@ __all__ = ["VSPHEREUPI", "VSPHEREIPI"]
 class VSPHEREBASE(Deployment):
 
     # default storage class for StorageCluster CRD on VmWare platform
-    DEFAULT_STORAGECLASS = "thin"
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_13:
+        DEFAULT_STORAGECLASS = "thin-csi"
+    else:
+        DEFAULT_STORAGECLASS = "thin"
 
     def __init__(self):
         """
