@@ -40,6 +40,7 @@ tier4a = compose(tier4, pytest.mark.tier4a)
 tier4b = compose(tier4, pytest.mark.tier4b)
 tier4c = compose(tier4, pytest.mark.tier4c)
 tier_after_upgrade = pytest.mark.tier_after_upgrade(value=5)
+post_upgrade = pytest.mark.post_upgrade(value=6)
 
 
 # build acceptance
@@ -93,6 +94,7 @@ tier_marks = [
     scale_long_run,
     scale_changed_layout,
     workloads,
+    post_upgrade,
 ]
 
 # upgrade related markers
