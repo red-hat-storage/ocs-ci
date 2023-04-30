@@ -639,11 +639,7 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Cluster Overview Page")
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
-            self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
-            self.navigate_storage()
-        else:
-            self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
 
     def nav_odf_default_page(self):
@@ -667,8 +663,7 @@ class PageNavigator(BaseUI):
         """
         self.navigate_cluster_overview_page()
         logger.info("Navigate to Quickstarts Page")
-        self.scroll_into_view(self.page_nav["quickstarts"])
-        self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=False)
+        self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=True)
 
     def navigate_projects_page(self):
         """
