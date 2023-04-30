@@ -99,7 +99,9 @@ class BaseUI:
         self.mcg_stores = self.deep_get(locators, self.ocp_version, "mcg_stores")
         self.acm_page_nav = self.deep_get(locators, self.ocp_version, "acm_page")
         self.obc_loc = self.deep_get(locators, self.ocp_version, "obc")
-        self.add_capacity_ui = self.deep_get(locators, self.ocp_version, "add_capacity")
+        self.add_capacity_ui_loc = self.deep_get(
+            locators, self.ocp_version, "add_capacity"
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
