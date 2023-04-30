@@ -986,7 +986,7 @@ class DataFoundationTabBar(PageNavigator):
         """
         logger.info("Navigate to Data Foundation - Bucket class tab")
         self.do_click(locator=self.validation_loc["osc_bucket_class_tab"])
-        return BackingStoreTab()
+        return BucketClassTab()
 
     def nav_namespace_store_tab(self):
         """
