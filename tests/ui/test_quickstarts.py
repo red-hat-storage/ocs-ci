@@ -32,7 +32,7 @@ class TestPvcUserInterface(object):
             ),
         ],
     )
-    def test_quickstart_presense(self, setup_ui_class, title):
+    def test_quickstart_presence(self, setup_ui_class, title):
         """
         Check that the quickstart with the given title is present in the UI
 
