@@ -1,0 +1,14 @@
+name: Build Container Image
+
+on: [push]
+
+jobs:
+  run-shell-command:
+    runs-on: ubuntu-latest
+    steps:
+      - name: echo a string
+        run: echo "Oded 123"
+      - name: multiline script
+        run: |
+          node -v
+          npm -v
