@@ -1,6 +1,6 @@
 name: Build Container Image
 
-on: pull_request
+on: [pull_request, push]
 
 env:
   REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
