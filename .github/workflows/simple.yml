@@ -2,6 +2,11 @@ name: Build Container Image
 
 on: [pull_request, push]
 
+# This allows a subsequently queued workflow run to interrupt previous runs
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
 env:
   REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
   IMAGE_REGISTRY: quay.io
@@ -9,9 +14,9 @@ env:
   REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
 jobs:
-  login:
-    name: Log in to image registry
+  buildah:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
