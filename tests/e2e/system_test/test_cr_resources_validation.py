@@ -9,7 +9,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.exceptions import CommandFailed
 
-
 logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
@@ -26,6 +25,8 @@ class TestCRRsourcesValidation(E2ETest):
         """
         Test case to check that network fence object is not editable once created
         """
+        self.temp_files_list = []
+        self.object_name_to_delete = ""
         network_fence_yaml = os.path.join(
             constants.TEMPLATE_CSI_ADDONS_DIR, "NetworkFence.yaml"
         )
@@ -35,6 +36,7 @@ class TestCRRsourcesValidation(E2ETest):
         ), f"Failed to create resource Network Fence from yaml file {network_fence_yaml}, got result {res}"
 
         network_fence_name = res[0].split()[0]
+        self.object_name_to_delete = network_fence_name
 
         network_fence_original_yaml = run_oc_command(
             f"get {network_fence_name} -o yaml"
@@ -63,16 +65,17 @@ class TestCRRsourcesValidation(E2ETest):
             )
             with open(temp_file.name, "w") as t_file:
                 t_file.writelines(command)
+            self.temp_files_list.append(temp_file.name)
             run_cmd(f"chmod 777 {temp_file.name}")
             logger.info(f"Trying to edit property {patch}")
 
             try:
                 run_cmd(f"sh {temp_file.name}")
-                res = run_oc_command(f"get {network_fence_name} -o yaml")
-                network_fence_modified_yaml = res
+                network_fence_modified_yaml = run_oc_command(
+                    f"get {network_fence_name} -o yaml"
+                )
 
                 if network_fence_original_yaml != network_fence_modified_yaml:
-                    run_oc_command(cmd=f"delete {network_fence_name}")
                     err_msg = (
                         f"Network fence object has been edited but it should not be. \n"
                         f"Property {patch} was changed. \n"
@@ -86,7 +89,18 @@ class TestCRRsourcesValidation(E2ETest):
             ):  # some properties are not editable and CommandFailed exception is thrown
                 continue  # just continue to the next property
 
-        res = run_oc_command(cmd=f"delete {network_fence_name}")
-        assert (
-            ERRMSG not in res[0]
-        ), f"Failed to delete network fence resource with name : {network_fence_name}, got result: {res}"
+    def teardown(self):
+        """
+        Cleanup the test environment
+
+        """
+
+        for temp_file in self.temp_files_list:
+            if os.path.exists(temp_file):
+                run_cmd(f"rm {temp_file}")
+
+        if self.object_name_to_delete != "":
+            res = run_oc_command(cmd=f"delete {self.object_name_to_delete}")
+            assert (
+                ERRMSG not in res[0]
+            ), f"Failed to delete network fence resource with name : {self.object_name_to_delete}, got result: {res}"
