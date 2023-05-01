@@ -12,7 +12,7 @@ jobs:
     name: Log in to image registry
     runs-on: ubuntu-latest
     steps:
-      - name: Log in to Quay.io
+      - name: Log in to Quay.io .
         uses: redhat-actions/podman-login@v1
         with:
           username: ${{ env.REGISTRY_USER }}
