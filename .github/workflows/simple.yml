@@ -32,8 +32,8 @@ jobs:
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ocsci
-          tags: ${{ github.event.pull_request.head.label || github.ref_name || github.run_id }} ${{ github.sha }} latest stable
+          image: quay.io/ocsci/ocs-ci-container
+          tags: stable1
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
           build-args: |
@@ -46,3 +46,16 @@ jobs:
 
       - name: check image name
         run: podman images
+
+      # Podman Login action (https://github.com/redhat-actions/podman-login) also be used to log in,
+      # in which case 'username' and 'password' can be omitted.
+      - name: Push To quay.io
+        id: push-to-quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.IMAGE_REGISTRY }}/${{ env.REGISTRY_NS }}
+
+      - name: Print image url
+        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
