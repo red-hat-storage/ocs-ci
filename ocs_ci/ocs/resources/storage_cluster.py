@@ -854,16 +854,41 @@ def osd_encryption_verification():
         log.info("Luks header info found for all the encrypted osds")
 
 
-def in_transit_encryption_verification():
+def ceph_config_dump():
+    """Get the 'ceph config dump' output.
+
+    Returns:
+        dict: The output of the 'ceph config dump' command as a dict.
     """
-    Verify in-transit encryption is enabled.
+    log.info("Getting 'ceph config dump' output.")
+    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
+
+    return toolbox.exec_ceph_cmd("ceph config dump")
+
+
+def ceph_mon_dump():
+    """Get the 'ceph mon dump' output.
+
+    Returns:
+        dict: The output of the 'ceph mon dump' command as a dictionary.
+    """
+    log.info("Getting 'ceph mon dump' output.")
+    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
+
+    return toolbox.exec_ceph_cmd("ceph mon dump")
+
+
+def in_transit_encryption_verification():
+    """Verifies in-transit encryption is enabled and ceph mons are configured with 'v2' protocol version.
+
+    Raises:
+        ValueError: if in-transit encryption is not configured or ceph mon protocol is not configured with 'v2' version.
     """
     log.info("in-transit encryption is about to be validated.")
-    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
-    output = toolbox.exec_ceph_cmd("ceph config dump")
+    ceph_dump_data = ceph_config_dump()
     keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
     keys_found = [
-        record["name"] for record in output if record["name"] in keys_to_match
+        record["name"] for record in ceph_dump_data if record["name"] in keys_to_match
     ]
 
     if len(keys_to_match) != len(keys_found):
@@ -879,50 +904,83 @@ def in_transit_encryption_verification():
         f" {','.join(keys_found)} keys configured."
     )
 
-
-def disable_in_transit_encryption():
-    """
-    Disable in_transit encryption.
-    """
-    ocp_obj = StorageCluster(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    # Verify ceph monitor protocol version
+    log.info("Verifying ceph monitor protocol version.")
+    ceph_mon_data = ceph_mon_dump()
+    v2_protocol_mon = sum(
+        1
+        for mon in ceph_mon_data["mons"]
+        if mon["public_addrs"]["addrvec"][0]["type"] == "v2"
     )
 
-    patch_cmd = '[{ "op": "replace", "path": "/spec/network/connections/encryption/enabled", "value": false }]'
-    log.info("patching storageclass to disable in-transit encryption.")
-    ocp_obj.patch(params=patch_cmd, format_type="json")
-    ocp_obj.wait_for_phase("Progressing", timeout=60)
-    verify_storage_cluster()
+    if not v2_protocol_mon:
+        log.error("ceph mons are not configured with v2 protocol version. ")
+        raise ValueError(
+            "ceph mon protocol is not configured with 'v2' version which is recomended for in-transit encryption."
+        )
+
+    log.info("Ceph mons are configured with 'v2' protocol version.")
     return True
 
 
-def enable_in_transit_encryption():
-    """
-    Enable in-transit encryption
+def get_in_transit_encryption_state():
+    """Returns the state of in-transit encryption for the OCS cluster.
+
+    Returns:
+        bool: True if in-transit encryption is enabled, False if it is disabled, or None if an error occurred.
     """
     ocp_obj = StorageCluster(
         resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
-    patch_cmd = '[{ "op": "replace", "path": "/spec/network/connections/encryption/enabled", "value": true }]'
-    log.info("patching storageclass to enable in-transit encryption.")
-    ocp_obj.patch(params=patch_cmd, format_type="json")
-    ocp_obj.wait_for_phase("Progressing", timeout=60)
-    verify_storage_cluster()
-    return True
-
-
-def verify_in_transit_encryption_keys_exists():
-    """
-    verify that "ms_client_mode", "ms_cluster_mode", "ms_service_mode" keys are exists
-    in 'ceph config dump output'.
-    """
     try:
-        in_transit_encryption_verification()
-    except Exception:
+        return ocp_obj.data["spec"]["network"]["connections"]["encryption"]["enabled"]
+    except KeyError as e:
+        log.error(f"In-transit Encryption key {e}. not present in the storagecluster.")
         return False
+
+
+def set_in_transit_encryption(enabled=True):
+    """
+    Enable or disable in-transit encryption for the default storage cluster.
+
+    Args:
+        enabled (bool, optional): A boolean indicating whether to enable or disable in-transit encryption.
+            Defaults to True, i.e., enabling in-transit encryption.
+
+    Returns:
+        bool: True if in-transit encryption was successfully enabled or disabled, False otherwise.
+    """
+
+    # First confirming the existing status of the in-transit encryption
+    # on storage cluster If its same as desire state then returning.
+    if get_in_transit_encryption_state() == enabled:
+        log.info("Existing in-transit encryption state is same as desire state.")
+        return True
+
+    ocp_obj = StorageCluster(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    patch = [
+        {
+            "op": "replace",
+            "path": "/spec/network/connections/encryption/enabled",
+            "value": enabled,
+        }
+    ]
+    action = "enable" if enabled else "disable"
+    log.info(f"Patching storage class to {action} in-transit encryption.")
+
+    if not ocp_obj.patch(params=patch, format_type="json"):
+        log.error(f"Error {action} in-transit encryption.")
+        return False
+
+    log.info(f"In-transit encryption is {action}d successfully.")
+    ocp_obj.wait_for_phase("Progressing", timeout=60)
+    verify_storage_cluster()
     return True
 
 
