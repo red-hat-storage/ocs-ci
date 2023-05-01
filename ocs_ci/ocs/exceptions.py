@@ -520,6 +520,10 @@ class RDRDeploymentException(Exception):
     pass
 
 
+class MDRDeploymentException(Exception):
+    pass
+
+
 class ACMClusterDestroyException(Exception):
     pass
 

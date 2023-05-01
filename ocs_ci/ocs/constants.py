@@ -790,7 +790,7 @@ OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML = os.path.join(
 OPENSHIFT_DR_SYSTEM_OPERATORGROUP = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_system_operatorgroup.yaml"
 )
-ACM_DPA_OPERATOR = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dpa_acm.yaml")
+ACM_DPA = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dpa_acm.yaml")
 DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml")
 ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
 OPENSHIFT_DR_SYSTEM_NAMESPACE = "openshift-dr-system"
@@ -801,6 +801,9 @@ DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
 DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 RDR_MODE = "regional-dr"
+MDR_RESTIC_POD_COUNT = 3
+MDR_VELERO_POD_COUNT = 1
+MDR_DPA = "dpa-1"
 
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"

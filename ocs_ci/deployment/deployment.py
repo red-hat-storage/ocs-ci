@@ -49,6 +49,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
+    MDRDeploymentException,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -2452,24 +2453,70 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # create s3 bucket
         self.create_s3_bucket()
         self.create_generic_credentials()
-        # Create OADP
-        self.create_oadp()
+        # Reconfigure OADP on all ACM clusters
+        old_ctx = config.cur_index
+        for i in acm_indexes:
+            config.switch_acm_ctx()
+            self.create_dpa()
+        config.switch_ctx(old_ctx)
 
-    def create_oadp(self):
+    def create_dpa(self):
         """
-        Create OADP operator
-        """
+        create DPA
+        OADP will be already installed when we enable backup flag
+        Here we will create dataprotection application and
+        update bucket name and s3 storage link
 
-        oadp_data = templating.load_yaml(constants.ACM_DPA_OPERATOR)
+        """
+        oadp_data = templating.load_yaml(constants.ACM_DPA)
         oadp_data["backupLocations"][0]["velero"]["objectStorage"][
             "bucket"
         ] = self.meta_obj.bucket_name
         oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
         templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
-        old_ctx = config.cur_index
-        config.switch_ctx(get_active_acm_index())
         run_cmd(f"oc create -f {oadp_yaml.name}")
-        config.switch_ctx(old_ctx)
+        # Validation
+        self.validate_dpa()
+
+    def validate_dpa(self):
+        """
+        Validate
+        1. 3 restic pods
+        2. 1 velero pod
+        3. backupstoragelocation resource in "Available" phase
+
+        """
+        # Check restic pods
+        restic_list = get_pods_having_label(
+            "name=restic", constants.ACM_HUB_BACKUP_NAMESPACE
+        )
+        if len(restic_list) != constants.MDR_RESTIC_POD_COUNT:
+            raise MDRDeploymentException("restic pod count mismatch")
+        for pod in restic_list:
+            if pod["status"]["phase"] != "Running":
+                raise MDRDeploymentException("restic pod not in 'Running' phase")
+
+        # Check velero pod
+        veleropod = get_pods_having_label(
+            "app.kubernetes.io/name=velero", constants.ACM_HUB_BACKUP_NAMESPACE
+        )
+        if len(veleropod) != constants.MDR_VELERO_POD_COUNT:
+            raise MDRDeploymentException("Velero pod count mismatch")
+        if veleropod["items"][0]["status"]["phase"] != "Running":
+            raise MDRDeploymentException("Velero pod not in 'Running' phase")
+
+        # Check backupstoragelocation resource in "Available" phase
+        backupstorage = ocp.OCP(
+            kind="BackupStorageLocation",
+            resource_name=constants.MDR_DPA,
+            namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
+        )
+        backupstorage.get()
+        if backupstorage["items"][0]["status"]["phase"] != "Available":
+            raise MDRDeploymentException(
+                "Backupstoragelocation resource is no in 'Avaialble' phase"
+            )
+        logger.info("Dataprotection application successful")
 
     def create_generic_credentials(self):
         s3_cred_str = (
@@ -2536,6 +2583,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     def enable_cluster_backup(self):
         """
         set cluster-backup to True in mch resource
+        Note: changing this flag automatically installs OADP operator
         """
         mch_resource = ocp.OCP(
             kind="MultiClusterHub",
