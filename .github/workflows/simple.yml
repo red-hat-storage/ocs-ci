@@ -30,7 +30,7 @@ jobs:
           image: ocsci
           tags: ${{ github.event.pull_request.head.label || github.ref_name || github.run_id }} ${{ github.sha }} latest stable
           containerfiles: |
-            ./Docker_files/Containerfile.ci
+            ./Docker_files/ocsci_container/Containerfile.ci
           build-args: |
             COMMIT=${{ github.sha }}
             BRANCH=${{ env.BRANCH }}
