@@ -2,13 +2,19 @@ name: Build Container Image
 
 on: pull_request
 
+env:
+  REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
+  IMAGE_REGISTRY: quay.io
+  REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+
 jobs:
-  run-shell-command:
+  login:
+    name: Log in to image registry
     runs-on: ubuntu-latest
     steps:
-      - name: echo a string
-        run: echo "Oded 1234"
-      - name: multiline script
-        run: |
-          node -v
-          npm -v
+      - name: Log in to Quay.io
+        uses: redhat-actions/podman-login@v1
+        with:
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+          registry: ${{ env.IMAGE_REGISTRY }}
