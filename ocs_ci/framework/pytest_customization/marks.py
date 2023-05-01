@@ -320,7 +320,7 @@ skipif_ibm_cloud = pytest.mark.skipif(
 )
 
 skipif_ibm_cloud_managed = pytest.mark.skipif(
-    config.ENV_DATA["deployment_type"].lower() != "managed"
+    config.ENV_DATA["deployment_type"].lower() == "managed"
     and config.ENV_DATA["platform"].lower() == IBMCLOUD_PLATFORM,
     reason="Test will not run on IBM Cloud aka ROKS (managed deployment type)",
 )
