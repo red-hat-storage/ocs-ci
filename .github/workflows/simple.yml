@@ -27,10 +27,17 @@ jobs:
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ocs-123
-          tags: stable1
+          image: ocsci
+          tags: ${{ github.event.pull_request.head.label || github.ref_name || github.run_id }} ${{ github.sha }} latest stable
           containerfiles: |
             ./Docker_files/Containerfile.ci
+          build-args: |
+            COMMIT=${{ github.sha }}
+            BRANCH=${{ env.BRANCH }}
+            LABEL=${{ github.event.pull_request.head.label }}
+            HEAD_REF=${{ github.head_ref }}
+            REF_NAME=${{ github.ref_name }}
+            REF=${{ github.ref }}
 
       - name: check image name
         run: podman images
