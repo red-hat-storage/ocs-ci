@@ -1,6 +1,9 @@
 name: Build Container Image
 
-on: [push]
+on:
+  push:
+    branches:
+      - github_action_container
 
 jobs:
   run-shell-command:
