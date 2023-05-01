@@ -5,6 +5,7 @@ on: [pull_request, push]
 env:
   REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
   IMAGE_REGISTRY: quay.io
+  REGISTRY_NS: ocsci/ocs-ci-container
   REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
 jobs:
@@ -12,9 +13,24 @@ jobs:
     name: Log in to image registry
     runs-on: ubuntu-latest
     steps:
-      - name: Log in to Quay.io .
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Log in to Quay.io
         uses: redhat-actions/podman-login@v1
         with:
           username: ${{ env.REGISTRY_USER }}
           password: ${{ env.REGISTRY_PASSWORD }}
           registry: ${{ env.IMAGE_REGISTRY }}
+
+      - name: Buildah Action
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ocs-123
+          tags: stable1
+          containerfiles: |
+            ./Docker_files/Containerfile.ci
+
+      - name: check image name
+        run: podman images
