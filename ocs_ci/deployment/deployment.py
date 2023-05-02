@@ -45,6 +45,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
     UnsupportedFeatureError,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.netsplit import get_netsplit_mc
@@ -199,6 +200,103 @@ class Deployment(object):
             submariner = Submariner()
             submariner.deploy()
 
+    def do_gitops_deploy(self):
+        """
+        Deploy GitOps operator
+
+        Returns:
+
+        """
+        if not config.ENV_DATA.get("deploy_gitops_operator"):
+            return
+
+        # Multicluster operations
+        if config.multicluster:
+            config.switch_acm_ctx()
+            logger.info("Creating GitOps Operator Subscription")
+            gitops_subscription_yaml_data = templating.load_yaml(
+                constants.GITOPS_SUBSCRIPTION_YAML
+            )
+            package_manifest = PackageManifest(
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+            )
+            gitops_subscription_yaml_data["spec"][
+                "startingCSV"
+            ] = package_manifest.get_current_csv(
+                channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
+            )
+
+            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="gitops_subscription_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                gitops_subscription_yaml_data, gitops_subscription_manifest.name
+            )
+            run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
+
+            self.wait_for_subscription(
+                constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
+            )
+            logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
+            time.sleep(90)
+            subscriptions = ocp.OCP(
+                kind=constants.SUBSCRIPTION_WITH_ACM,
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+                namespace=constants.OPENSHIFT_OPERATORS,
+            ).get()
+            gitops_csv_name = subscriptions["status"]["currentCSV"]
+            csv = CSV(
+                resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE
+            )
+            csv.wait_for_phase("Succeeded", timeout=720)
+            logger.info("GitOps Operator Deployment Succeeded")
+
+            logger.info("Creating GitOps CLuster Resource")
+            run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")
+
+            logger.info("Creating GitOps CLuster Placement Resource")
+            run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
+
+            logger.info("Creating ManagedClusterSetBinding")
+
+            cluster_set = []
+            managed_clusters = (
+                ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+            )
+            # ignore local-cluster here
+            for i in managed_clusters:
+                if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+                    cluster_set.append(
+                        i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL]
+                    )
+            if all(x == cluster_set[0] for x in cluster_set):
+                logger.info(f"Found the uniq clusterset {cluster_set[0]}")
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    "There are more then one clusterset added to multiple managedcluters"
+                )
+
+            managedclustersetbinding_obj = templating.load_yaml(
+                constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
+            )
+            managedclustersetbinding_obj["metadata"]["name"] = cluster_set[0]
+            managedclustersetbinding_obj["spec"]["clusterSet"] = cluster_set[0]
+            managedclustersetbinding = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="managedcluster_setbinding", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                managedclustersetbinding_obj, managedclustersetbinding.name
+            )
+            run_cmd(f"oc create -f {managedclustersetbinding.name}")
+
+            gitops_obj = ocp.OCP(
+                resource_name=constants.GITOPS_CLUSTER_NAME,
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                kind=constants.GITOPS_CLUSTER,
+            )
+            gitops_obj._has_phase = True
+            gitops_obj.wait_for_phase("successful", timeout=720)
+
     def do_deploy_ocs(self):
         """
         Deploy OCS/ODF and run verification as well
@@ -313,6 +411,7 @@ class Deployment(object):
             self.deploy_acm_hub()
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
+        self.do_gitops_deploy()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
 
@@ -543,21 +642,25 @@ class Deployment(object):
         logger.info("Sleeping for 30 seconds after CSV created")
         time.sleep(30)
 
-    def wait_for_subscription(self, subscription_name):
+    def wait_for_subscription(self, subscription_name, namespace=None):
         """
         Wait for the subscription to appear
 
         Args:
             subscription_name (str): Subscription name pattern
+            namespace (str): Namespace name for checking subscription if None then default from ENV_data
 
         """
+        if not namespace:
+            namespace = self.namespace
+
         if config.multicluster:
             resource_kind = constants.SUBSCRIPTION_WITH_ACM
         else:
             resource_kind = constants.SUBSCRIPTION
-        ocp.OCP(kind=resource_kind, namespace=self.namespace)
+        ocp.OCP(kind=resource_kind, namespace=namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind=resource_kind, namespace=self.namespace
+            300, 10, ocp.OCP, kind=resource_kind, namespace=namespace
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
