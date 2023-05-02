@@ -2459,6 +2459,50 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             config.switch_acm_ctx()
             self.create_dpa()
         config.switch_ctx(old_ctx)
+        # Only on the active hub enable managedserviceaccount-preview
+        self.enable_managed_serviceaccount()
+        # Create backupschedule resource
+        self.create_backup_schedule()
+
+    def create_backup_schedule(self):
+        """
+        Create backupschedule resource
+
+        """
+        backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
+        backup_schedule_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="bkp", delete=False
+        )
+        templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
+        run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+
+    def enable_managed_serviceaccount(self):
+        """
+        update MultiClusterEngine
+
+        - enabled: true
+          name: managedserviceaccount-preview
+
+        """
+        old_ctx = config.cur_index
+        config.switch_ctx(get_active_acm_index)
+        multicluster_engine = ocp.OCP(
+            kind="MultiClusterEngine",
+            resource_name=constants.MDR_MULTICLUSTER_ENGINE,
+        )
+        multicluster_engine.get()
+        for item in multicluster_engine["items"][0]["spec"]["overrides"]["components"]:
+            if item["name"] == "managedserviceaccount-preview":
+                item["enabled"] = True
+        multicluster_engine_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multiengine", delete=False
+        )
+        yaml_serialized = yaml.dump(multicluster_engine)
+        multicluster_engine_yaml.write(yaml_serialized)
+        multicluster_engine_yaml.flush()
+        run_cmd(f"oc apply -f {multicluster_engine_yaml.name}")
+        multicluster_engine.wait_for_phase("Available")
+        config.switch_ctx(old_ctx)
 
     def create_dpa(self):
         """

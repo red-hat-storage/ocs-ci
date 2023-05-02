@@ -804,6 +804,11 @@ RDR_MODE = "regional-dr"
 MDR_RESTIC_POD_COUNT = 3
 MDR_VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
+MDR_MULTICLUSTER_ENGINE = "multiclusterengine"
+MDR_BACKUP_SCHEDULE_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "backupschedule.yaml"
+)
+MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
