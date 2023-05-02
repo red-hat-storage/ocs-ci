@@ -183,7 +183,7 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
 
 def failover_relocate_ui(
     acm_obj,
-    scheduling_interval,
+    scheduling_interval=0,
     workload_to_move=None,
     policy_name=None,
     failover_or_preferred_cluster=None,
@@ -195,7 +195,9 @@ def failover_relocate_ui(
     Function to perform Failover/Relocate operations via ACM UI
 
     Args:
+
         acm_obj (AcmAddClusters): ACM Page Navigator Class
+        scheduling_interval (int): scheduling interval value from DRPolicy
         workload_to_move (str): Name of running workloads on which action to be taken
         policy_name (str): Name of the DR policy applied to the running workload
         failover_or_preferred_cluster (str): Name of the failover cluster or preferred cluster to which workloads
@@ -251,13 +253,10 @@ def failover_relocate_ui(
             )
         else:
             log.info("Select target cluster on ACM UI")
-            acm_obj.do_click(
-                format_locator(
-                    acm_loc["failover-preferred-cluster-name"],
-                    failover_or_preferred_cluster,
-                ),
-                enable_screenshot=True,
-            )
+            xpath = f"//button[text()='{failover_or_preferred_cluster}']"
+            element = acm_obj.find_an_element_by_xpath(xpath)
+            element.click()
+
         log.info("Check operation readiness")
         if action == constants.ACTION_FAILOVER:
             if move_workloads_to_same_cluster:

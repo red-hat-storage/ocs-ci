@@ -1,5 +1,4 @@
-MULTICLUSTER:
-  # Other modes could be managed services
-  multicluster_mode: "metro-dr"
 ENV_DATA:
   dr_metadata_store: "awss3"
+  multicluster_mode: "metro-dr"
+

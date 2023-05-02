@@ -2693,3 +2693,24 @@ def generate_nodes_for_provider_worker_node_tests():
     generated_nodes = get_node_objs(node_choice_names)
     log.info(f"Generated nodes for provider node tests: {node_choice_names}")
     return generated_nodes
+
+
+def gracefully_reboot_nodes():
+    """
+    Gracefully reboot OpenShift Container Platform nodes
+    """
+    from ocs_ci.ocs import platform_nodes
+
+    node_objs = get_node_objs()
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    waiting_time = 30
+    for node in node_objs:
+        node_name = node.name
+        unschedule_nodes([node_name])
+        drain_nodes([node_name])
+        nodes.restart_nodes([node], wait=False)
+        log.info(f"Waiting for {waiting_time} seconds")
+        time.sleep(waiting_time)
+        schedule_nodes([node_name])
+    wait_for_nodes_status(status=constants.NODE_READY, timeout=180)
