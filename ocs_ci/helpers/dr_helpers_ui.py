@@ -3,6 +3,7 @@ Helper functions specific to DR User Interface
 """
 
 import logging
+import sys
 
 from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.framework import config
@@ -189,6 +190,7 @@ def failover_relocate_ui(
     failover_or_preferred_cluster=None,
     action=constants.ACTION_FAILOVER,
     timeout=120,
+    move_workloads_to_same_cluster=False,
 ):
     """
     Function to perform Failover/Relocate operations via ACM UI
@@ -201,7 +203,8 @@ def failover_relocate_ui(
                                             will be moved
         action (str): action could be "Failover" or "Relocate", "Failover" is set to default
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
-
+        move_workloads_to_same_cluster (bool): Bool condition to test negative failover/relocate scenarios to move
+                                            running workloads to same cluster
     Returns:
             bool: True if the action is triggered, raises Exception if any of the mandatory argument is not provided
 
@@ -239,25 +242,60 @@ def failover_relocate_ui(
         )
         log.info("Click on target cluster dropdown")
         acm_obj.do_click(acm_loc["target-cluster-dropdown"], enable_screenshot=True)
-        log.info("Select target cluster on ACM UI")
-        acm_obj.do_click(
-            format_locator(
-                acm_loc["failover-preferred-cluster-name"],
-                failover_or_preferred_cluster,
-            ),
-            enable_screenshot=True,
-        )
+        if move_workloads_to_same_cluster:
+            log.info("Select target cluster same as current primary cluster on ACM UI")
+            acm_obj.do_click(
+                format_locator(
+                    acm_loc["failover-preferred-cluster-name"],
+                    failover_or_preferred_cluster,
+                ),
+                enable_screenshot=True,
+            )
+        else:
+            log.info("Select target cluster on ACM UI")
+            acm_obj.do_click(
+                format_locator(
+                    acm_loc["failover-preferred-cluster-name"],
+                    failover_or_preferred_cluster,
+                ),
+                enable_screenshot=True,
+            )
         log.info("Check operation readiness")
         if action == constants.ACTION_FAILOVER:
-            assert acm_obj.wait_until_expected_text_is_found(
-                locator=acm_loc["operation-readiness"],
-                expected_text=constants.STATUS_READY,
-            ), "Failover Operation readiness check failed"
+            if move_workloads_to_same_cluster:
+                assert not acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                ), "Failover Operation readiness check failed"
+                log.info("Failover readiness is False as expected")
+            else:
+                assert acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                ), "Failover Operation readiness check failed"
         else:
-            assert acm_obj.wait_until_expected_text_is_found(
-                locator=acm_loc["operation-readiness"],
-                expected_text=constants.STATUS_READY,
-            ), "Relocate Operation readiness check failed"
+            if move_workloads_to_same_cluster:
+                assert not acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                ), "Relocate Operation readiness check failed"
+                log.info("Relocate readiness is False as expected")
+            else:
+                assert acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                ), "Relocate Operation readiness check failed"
+        if move_workloads_to_same_cluster:
+            initiate_btn = acm_obj.find_an_element_by_xpath(
+                "//button[@id='modal-intiate-action']"
+            )
+            assert initiate_btn.is_enabled(), log.error(
+                "Initiate button in enabled to failover/relocate on the same cluster"
+            )
+            log.info(
+                "Initate button is disabled to failover/relocate on the same cluster"
+            )
+            sys.exit()
         log.info("Click on subscription dropdown")
         acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
         log.info("Check peer readiness")
