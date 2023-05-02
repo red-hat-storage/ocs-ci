@@ -106,6 +106,6 @@ class TestCRRsourcesValidation(E2ETest):
                 res = run_oc_command(cmd=f"delete {self.object_name_to_delete}")
                 assert (
                     ERRMSG not in res[0]
-                ), f"Failed to delete network fence resource with name : {self.object_name_to_delete}, got result: {res}"
+                ), f"Failed to delete network fence resource with name: {self.object_name_to_delete}, got result: {res}"
 
         request.addfinalizer(finalizer)
