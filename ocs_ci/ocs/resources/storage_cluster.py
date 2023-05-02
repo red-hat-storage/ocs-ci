@@ -278,6 +278,7 @@ def ocs_install_verification(
                     resource_count=count,
                     timeout=timeout,
                 )
+                continue
 
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
