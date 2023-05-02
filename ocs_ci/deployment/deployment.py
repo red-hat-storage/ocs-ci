@@ -247,7 +247,7 @@ class Deployment(object):
             csv = CSV(
                 resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE
             )
-            csv.wait_for_phase("Succeeded", timeout=720)  # 720
+            csv.wait_for_phase("Succeeded", timeout=720)
             logger.info("GitOps Operator Deployment Succeeded")
 
             logger.info("Creating GitOps CLuster Resource")
