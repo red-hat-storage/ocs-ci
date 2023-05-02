@@ -1,5 +1,6 @@
 import logging
 import os
+import pytest
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework.testlib import skipif_ocp_version, skipif_ocs_version, E2ETest
@@ -89,18 +90,22 @@ class TestCRRsourcesValidation(E2ETest):
             ):  # some properties are not editable and CommandFailed exception is thrown
                 continue  # just continue to the next property
 
-    def teardown(self):
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
         """
         Cleanup the test environment
 
         """
 
-        for temp_file in self.temp_files_list:
-            if os.path.exists(temp_file):
-                run_cmd(f"rm {temp_file}")
+        def finalizer():
+            for temp_file in self.temp_files_list:
+                if os.path.exists(temp_file):
+                    run_cmd(f"rm {temp_file}")
 
-        if self.object_name_to_delete != "":
-            res = run_oc_command(cmd=f"delete {self.object_name_to_delete}")
-            assert (
-                ERRMSG not in res[0]
-            ), f"Failed to delete network fence resource with name : {self.object_name_to_delete}, got result: {res}"
+            if self.object_name_to_delete != "":
+                res = run_oc_command(cmd=f"delete {self.object_name_to_delete}")
+                assert (
+                    ERRMSG not in res[0]
+                ), f"Failed to delete network fence resource with name : {self.object_name_to_delete}, got result: {res}"
+
+        request.addfinalizer(finalizer)
