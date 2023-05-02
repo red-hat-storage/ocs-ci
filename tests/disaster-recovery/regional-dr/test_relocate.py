@@ -46,7 +46,7 @@ class TestRelocate:
                 logger.error("ODF/ACM version isn't supported for Relocate operation")
                 raise NotImplementedError
 
-        acm_obj = AcmAddClusters(setup_acm_ui)
+        acm_obj = AcmAddClusters()
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace

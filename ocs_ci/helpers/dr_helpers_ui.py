@@ -23,7 +23,7 @@ def dr_submariner_validation_from_ui(acm_obj):
     such as Submariner validation from ACM console for Regional DR.
 
     Args:
-        acm_obj (driver): Selenium webdriver object
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
 
     """
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode", None)
@@ -45,7 +45,7 @@ def check_cluster_status_on_acm_console(
     These clusters are the managed OCP clusters and the ACM Hub cluster.
 
     Args:
-        acm_obj (driver): Selenium webdriver object
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
         down_cluster_name (str): If Failover is performed when a cluster goes down, it waits and checks the updated
                             status of cluster unavailability on the ACM console.
                             It takes the cluster name which is down.
@@ -152,7 +152,7 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     Function to verify DRPolicy status and replication policy on Data Policies page of ACM console
 
     Args:
-        acm_obj (driver): Selenium webdriver object
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
         scheduling_interval (int): Scheduling interval in the DRPolicy to be verified on ACM UI
 
     """
@@ -194,7 +194,7 @@ def failover_relocate_ui(
     Function to perform Failover/Relocate operations via ACM UI
 
     Args:
-        acm_obj (driver): Selenium webdriver object
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
         workload_to_move (str): Name of running workloads on which action to be taken
         policy_name (str): Name of the DR policy applied to the running workloads
         failover_or_preferred_cluster (str): Name of the failover cluster or preferred cluster to which workloads
@@ -290,7 +290,7 @@ def verify_failover_relocate_status_ui(
     Function to verify current status of in progress Failover/Relocate operation on ACM UI
 
     Args:
-        acm_obj (driver): Selenium webdriver object
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
         action (str): action "Failover" or "Relocate" which was taken on the workloads,
                     "Failover" is set to default
         timeout (int): timeout to wait for certain elements to be found on the ACM UI

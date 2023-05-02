@@ -1166,10 +1166,10 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
             create_catalog_source()
-        setup_ui = login_ui()
-        deployment_obj = DeploymentUI(setup_ui)
+        login_ui()
+        deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()
-        close_browser(setup_ui)
+        close_browser()
 
     def deploy_with_external_mode(self):
         """

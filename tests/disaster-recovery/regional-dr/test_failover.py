@@ -74,7 +74,7 @@ class TestFailover:
                 logger.error("ODF/ACM version isn't supported for Failover operation")
                 raise NotImplementedError
 
-        acm_obj = AcmAddClusters(setup_acm_ui)
+        acm_obj = AcmAddClusters()
 
         dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
         primary_cluster_index = config.cur_index
