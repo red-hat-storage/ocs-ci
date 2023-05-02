@@ -40,7 +40,6 @@ tier4a = compose(tier4, pytest.mark.tier4a)
 tier4b = compose(tier4, pytest.mark.tier4b)
 tier4c = compose(tier4, pytest.mark.tier4c)
 tier_after_upgrade = pytest.mark.tier_after_upgrade(value=5)
-post_upgrade = pytest.mark.post_upgrade(value=6)
 
 
 # build acceptance
@@ -94,7 +93,6 @@ tier_marks = [
     scale_long_run,
     scale_changed_layout,
     workloads,
-    post_upgrade,
 ]
 
 # upgrade related markers
@@ -116,6 +114,17 @@ pre_ocs_upgrade = compose(pytest.mark.pre_ocs_upgrade, order_pre_ocs_upgrade)
 post_upgrade = compose(pytest.mark.post_upgrade, order_post_upgrade)
 post_ocp_upgrade = compose(pytest.mark.post_ocp_upgrade, order_post_ocp_upgrade)
 post_ocs_upgrade = compose(pytest.mark.post_ocs_upgrade, order_post_ocs_upgrade)
+
+upgrade_marks = [
+    "ocp_upgrade",
+    "ocs_upgrade",
+    "pre_upgrade",
+    "pre_ocp_upgrade",
+    "pre_ocs_upgrade",
+    "post_upgrade",
+    "post_ocp_upgrade",
+    "post_ocs_upgrade",
+]
 
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers
