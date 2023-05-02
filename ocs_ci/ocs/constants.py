@@ -159,6 +159,7 @@ LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
 MACHINEHEALTHCHECK = "machinehealthcheck"
+STORAGECLIENT = "StorageClient"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
