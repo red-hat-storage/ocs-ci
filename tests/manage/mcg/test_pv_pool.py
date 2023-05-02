@@ -3,7 +3,12 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier2, tier3
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    tier3,
+    bugzilla,
+    polarion_id,
+)
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
@@ -280,6 +285,8 @@ class TestPvPool:
             s3_obj=OBC(bucket_name),
         )
 
+    @bugzilla("2187789")
+    @polarion_id("OCS-4862")
     def test_ephemeral_for_pv_bs(self, backingstore_factory):
 
         """
@@ -314,16 +321,9 @@ class TestPvPool:
 
         # check if the dummy data is also present in pv backingstore pod node ephemeral storage
         base_dir = "/var/lib/kubelet/plugins/kubernetes.io/csi/openshift-storage.rbd.csi.ceph.com/"
-        guid_list = (
-            OCP()
-            .exec_oc_debug_cmd(
-                node=pod_node,
-                cmd_list=[f"ls -l {base_dir} | awk 'NR>1' | awk '{{print $9}}'"],
-            )
-            .split("\n")
+        search_output = OCP().exec_oc_debug_cmd(
+            node=pod_node, cmd_list=[f"find {base_dir} -name test_object"]
         )
-        for guid in guid_list:
-            file_path = f"{base_dir}/{guid}/globalmount/*/"
-            assert "test_object" not in OCP().exec_oc_debug_cmd(
-                node=pod_node, cmd_list=[f"ls -l {file_path} | awk '{{print $9}}'"]
-            ), "Dummy data was found in the node ephemeral storage!"
+        assert (
+            "test_object" in search_output
+        ), "Dummy data was found in the node ephemeral storage!"
