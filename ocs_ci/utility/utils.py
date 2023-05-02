@@ -2259,6 +2259,7 @@ def get_rook_repo(branch="master", to_checkout=None):
 def clone_repo(
     url,
     location,
+    tmp_repo=False,
     branch="master",
     to_checkout=None,
     clone_type="shallow",
@@ -2271,6 +2272,7 @@ def clone_repo(
     Args:
         url (str): location of the repository to clone
         location (str): path where the repository will be cloned to
+        tmp_repo (bool): temporary repo, means it will be copied to temp path, to 'location'
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
         clone_type (str): type of clone (shallow, blobless, treeless and normal)
@@ -2315,7 +2317,7 @@ def clone_repo(
                 )
                 time.sleep(5)
 
-    if not os.path.isdir(location):
+    if not os.path.isdir(location) or (tmp_repo and os.path.isdir(location)):
         log.info("Cloning repository into %s", location)
         run_cmd(f"git clone {git_params} {url} {location}")
     else:
