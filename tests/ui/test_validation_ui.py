@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     skipif_external_mode,
     skipif_mcg_only,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
@@ -19,6 +20,7 @@ from ocs_ci.utility import version
 logger = logging.getLogger(__name__)
 
 
+@skipif_ibm_cloud_managed
 class TestUserInterfaceValidation(object):
     """
     Test User Interface Validation
