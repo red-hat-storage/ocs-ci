@@ -855,10 +855,12 @@ def osd_encryption_verification():
 
 
 def ceph_config_dump():
-    """Get the 'ceph config dump' output.
+    """
+    Get the 'ceph config dump' output.
 
     Returns:
         dict: The output of the 'ceph config dump' command as a dict.
+
     """
     log.info("Getting 'ceph config dump' output.")
     toolbox = get_ceph_tools_pod(skip_creating_pod=True)
@@ -867,10 +869,12 @@ def ceph_config_dump():
 
 
 def ceph_mon_dump():
-    """Get the 'ceph mon dump' output.
+    """
+    Get the 'ceph mon dump' output.
 
     Returns:
         dict: The output of the 'ceph mon dump' command as a dictionary.
+
     """
     log.info("Getting 'ceph mon dump' output.")
     toolbox = get_ceph_tools_pod(skip_creating_pod=True)
@@ -879,10 +883,12 @@ def ceph_mon_dump():
 
 
 def in_transit_encryption_verification():
-    """Verifies in-transit encryption is enabled and ceph mons are configured with 'v2' protocol version.
+    """
+    Verifies in-transit encryption is enabled and ceph mons are configured with 'v2' protocol version.
 
     Raises:
         ValueError: if in-transit encryption is not configured or ceph mon protocol is not configured with 'v2' version.
+
     """
     log.info("in-transit encryption is about to be validated.")
     ceph_dump_data = ceph_config_dump()
@@ -924,10 +930,12 @@ def in_transit_encryption_verification():
 
 
 def get_in_transit_encryption_state():
-    """Returns the state of in-transit encryption for the OCS cluster.
+    """
+    Returns the state of in-transit encryption for the OCS cluster.
 
     Returns:
         bool: True if in-transit encryption is enabled, False if it is disabled, or None if an error occurred.
+
     """
     ocp_obj = StorageCluster(
         resource_name=constants.DEFAULT_CLUSTERNAME,
@@ -951,6 +959,7 @@ def set_in_transit_encryption(enabled=True):
 
     Returns:
         bool: True if in-transit encryption was successfully enabled or disabled, False otherwise.
+
     """
 
     # First confirming the existing status of the in-transit encryption
