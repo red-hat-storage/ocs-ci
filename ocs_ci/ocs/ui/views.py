@@ -1157,19 +1157,6 @@ validation_4_11 = {
 
 
 locators = {
-    "4.13": {
-        "login": {**login, **login_4_11},
-        "page": {**page_nav, **page_nav_4_10},
-        "generic": generic_locators,
-        "deployment": {
-            **deployment,
-            **deployment_4_7,
-            **deployment_4_9,
-            **deployment_4_10,
-            **deployment_4_11,
-            **deployment_4_12,
-        },
-    },
     "4.12": {
         "login": {**login, **login_4_11},
         "page": {**page_nav, **page_nav_4_10},
