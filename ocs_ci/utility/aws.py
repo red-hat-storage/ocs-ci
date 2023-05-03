@@ -1739,7 +1739,9 @@ class AWS(object):
 
         """
         for instance_id, instance_name in instances.items():
-            logger.info(f"Waiting for instance {instance_name} to reach status stopped")
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status stopped or terminated"
+            )
             instance = self.get_ec2_instance(instance_id)
             try:
                 instance.wait_until_stopped()

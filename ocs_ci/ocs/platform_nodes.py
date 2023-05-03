@@ -1205,9 +1205,10 @@ class AWSNodes(NodesBase):
 
         """
         instances = self.get_ec2_instances(nodes)
-        assert (
-            instances
-        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+        if not instances:
+            raise ValueError(
+                f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+            )
         try:
             self.aws.wait_for_instances_to_stop(instances=instances)
         except WaiterError as e:
@@ -1226,9 +1227,10 @@ class AWSNodes(NodesBase):
 
         """
         instances = self.get_ec2_instances(nodes)
-        assert (
-            instances
-        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+        if not instances:
+            raise ValueError(
+                f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+            )
         try:
             self.aws.wait_for_instances_to_terminate(instances=instances)
         except WaiterError as e:
@@ -1248,9 +1250,10 @@ class AWSNodes(NodesBase):
 
         """
         instances = self.get_ec2_instances(nodes)
-        assert (
-            instances
-        ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+        if not instances:
+            raise ValueError(
+                f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+            )
         try:
             self.aws.wait_for_instances_to_stop_or_terminate(instances=instances)
         except WaiterError as e:
