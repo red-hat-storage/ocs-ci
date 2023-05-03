@@ -235,12 +235,14 @@ ENV_DATA:
   num_workers_additional: 0
 
   # Multus settings
+  multus_create_public_net: true
   multus_public_net_name: "public-net"
   multus_public_net_namespace: "openshift-storage"
   multus_public_net_interface: "br-ex"
   multus_public_net_range: "192.168.20.0/24"
   multus_public_net_type: "macvlan"
   multus_public_net_mode: "bridge"
+  multus_create_cluster_net: true
   multus_cluster_net_name: "private-net"
   multus_cluster_net_namespace: "openshift-storage"
   multus_cluster_net_interface: "br-ex"
