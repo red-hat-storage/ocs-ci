@@ -342,7 +342,9 @@ def verify_pods_in_managed_fusion_namespace():
     Verify the status of pods in the namespace managed-fusion
 
     """
-    log.info(f"Verifying the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}")
+    log.info(
+        f"Verifying the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}"
+    )
     pods_dict = {
         constants.MANAGED_FUSION_ALERTMANAGER_LABEL: 1,
         constants.MANAGED_FUSION_AWS_DATA_GATHER: 1,
@@ -358,4 +360,6 @@ def verify_pods_in_managed_fusion_namespace():
             resource_count=count,
             timeout=600,
         )
-    log.info(f"Verified the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}")
+    log.info(
+        f"Verified the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}"
+    )
