@@ -25,12 +25,16 @@ from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
 )
+from ocs_ci.framework.pytest_customization.marks import (
+    purple_squad,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
 @ocp_upgrade
+@purple_squad
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health

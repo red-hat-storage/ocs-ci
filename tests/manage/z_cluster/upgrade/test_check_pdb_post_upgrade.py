@@ -15,10 +15,14 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+)
 
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 class TestToCheckPDBPostUpgrade(ManageTest):
     """
     Validate post ocs upgrade mon pdb count
