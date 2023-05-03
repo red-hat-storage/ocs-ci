@@ -27,11 +27,13 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.utility import version
-from ocs_ci.ocs.exceptions import ACMClusterImportException, UnexpectedDeploymentConfiguration
+from ocs_ci.ocs.exceptions import (
+    ACMClusterImportException,
+    UnexpectedDeploymentConfiguration,
+)
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
-from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -473,7 +475,7 @@ def import_clusters_with_acm(import_ui=False):
         )
     else:
         for cluster in clusters:
-            log.info(f"Create project {cluster[0]}")
+            log.info("Importing clusters via CLI method")
             create_project(cluster[0])
 
             log.info("Create and apply managed-cluster.yaml")
