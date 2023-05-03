@@ -1407,26 +1407,26 @@ def tier_marks_name():
     return tier_marks_name
 
 
-# @pytest.fixture(scope="session")
-# def upgrade_marks_name():
-#     """
-#     Gets the upgrade mark names
-#
-#     Returns:
-#         list: list of upgrade mark names
-#
-#     """
-#     upgrade_marks_name = []
-#     for each_tier in upgrade_marks:
-#         try:
-#             upgrade_marks_name.append(each_tier.name)
-#         except AttributeError:
-#             upgrade_marks_name.append(each_tier().args[0].name)
-#     return upgrade_marks_name
+@pytest.fixture(scope="session")
+def upgrade_marks_name():
+    """
+    Gets the upgrade mark names
+
+    Returns:
+        list: list of upgrade mark names
+
+    """
+    upgrade_marks_name = []
+    for each_tier in upgrade_marks:
+        try:
+            upgrade_marks_name.append(each_tier().args[0].name)
+        except AttributeError:
+            log.error(f"123")
+    return upgrade_marks_name
 
 
 @pytest.fixture(scope="function", autouse=True)
-def health_checker(request, tier_marks_name):
+def health_checker(request, tier_marks_name, upgrade_marks_name):
     skipped = False
     dev_mode = config.RUN["cli_params"].get("dev_mode")
     mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
