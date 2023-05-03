@@ -2886,6 +2886,7 @@ class VMWareUPINodes(VMWareNodes):
         """
         Terminate the VMs.
         The VMs will be deleted only from the inventory and not from the disk.
+        After deleting the VMs, it will also modify terraform state file of the removed VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
@@ -2899,3 +2900,15 @@ class VMWareUPINodes(VMWareNodes):
 
         logger.info(f"Terminating nodes: {vm_names}")
         super().terminate_nodes(nodes, wait)
+
+        if config.ENV_DATA.get("rhel_user"):
+            node_type = constants.RHEL_OS
+        else:
+            node_type = constants.RHCOS
+        node_cls_obj = VSPHEREUPINode(
+            node_conf={}, node_type=node_type, compute_count=0
+        )
+        logger.info(f"Modifying terraform state file of the removed VMs {vm_names}")
+        for vm_name in vm_names:
+            node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
+            node_cls_obj.change_terraform_tfvars_after_remove_vm()
