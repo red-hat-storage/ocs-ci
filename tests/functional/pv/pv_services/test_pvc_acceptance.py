@@ -1,4 +1,4 @@
-# ## implemented ###############
+# ## implemented ###################
 # tests/manage/pv_services/test_dynamic_pvc_accessmodes_with_reclaim_policies.py::TestDynamicPvc
 #     test_rwo_dynamic_pvc[CephBlockPool-Retain]
 #     test_rwo_dynamic_pvc[CephBlockPool-Delete]
@@ -6,12 +6,15 @@
 #     test_rwo_dynamic_pvc[CephFileSystem-Delete]
 #     test_rwx_dynamic_pvc[CephFileSystem-Retain]
 #     test_rwx_dynamic_pvc[CephFileSystem-Delete]
-# ## not implemented ###############
+#
+# ## partially implemented #########
 # tests/manage/pv_services/test_pvc_assign_pod_node.py::TestPvcAssignPodNode
 #     test_rwo_pvc_assign_pod_node[CephBlockPool]
 #     test_rwo_pvc_assign_pod_node[CephFileSystem]
 #     test_rwx_pvc_assign_pod_node[CephBlockPool]
 #     test_rwx_pvc_assign_pod_node[CephFileSystem]
+#
+# ## not implemented ###############
 # tests/manage/pv_services/test_pvc_delete_verify_size_is_returned_to_backendpool.py
 #     test_pvc_delete_and_verify_size_is_returned_to_backend_pool
 # tests/manage/pv_services/test_raw_block_pv.py::TestRawBlockPV
@@ -46,14 +49,15 @@ from ocs_ci.framework.testlib import (
     acceptance,
 )
 
+from ocs_ci.framework import config
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.cluster import is_managed_service_cluster
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.retry import retry
-from ocs_ci.helpers import helpers
 from ocs_ci.utility import version
-from ocs_ci.ocs.cluster import is_managed_service_cluster
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +191,26 @@ class TestPvcAcceptance(ManageTest):
             if test_variant.access_mode == constants.ACCESS_MODE_RWX:
                 test_variant.verify_data_is_mutable_from_any_pod()
 
+        self.verify_access_token_notin_odf_pod_logs()
+
+    def verify_access_token_notin_odf_pod_logs(self):
+        """
+        This function will verify logs of kube-rbac-proxy container in
+        odf-operator-controller-manager pod shouldn't contain api access token
+        """
+        odf_operator_pod_objs = pod.get_all_pods(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector_label="app.kubernetes.io/name",
+            selector=[constants.ODF_SUBSCRIPTION],
+        )
+        error_msg = "Authorization: Bearer"
+        pod_log = pod.get_pod_logs(
+            pod_name=odf_operator_pod_objs[0].name, container="kube-rbac-proxy"
+        )
+        assert not (
+            error_msg in pod_log
+        ), f"Logs should not contain the error message '{error_msg}'"
+
 
 class PvcAcceptance:
     def log_execution(f):
@@ -275,6 +299,10 @@ class PvcAcceptance:
             f"Creating first pod on node: {self.worker_nodes_list[0]} "
             f"with pvc {self.pvc_obj.name}"
         )
+        # TODO: randomly select nodes where to run the pods?
+        # (from test_pvc_assign_pod_node)
+        # TODO: add teardown_factory?
+        # (from test_pvc_assign_pod_node)
         self.pod_obj1 = self.pod_factory(
             interface=self.interface_type,
             pvc=self.pvc_obj,
@@ -301,11 +329,16 @@ class PvcAcceptance:
         node_pod2 = self.pod_obj2.get().get("spec").get("nodeName")
         assert node_pod1 != node_pod2, "Both pods are on the same node"
 
+        # TODO: check that pods are running on the selected node?
+        # (from test_pvc_assign_pod_node)
+
     @log_execution
     def run_io_on_first_pod(self):
         """
         Run IO on first pod
         """
+        # TODO: size=512M, runtime=30? (same also on second pod?)
+        # (from test_pvc_assign_pod_node)
         logger.info(f"Running IO on first pod {self.pod_obj1.name}")
         self.file_name1 = self.pod_obj1.name
         self.pod_obj1.run_io(
