@@ -10,6 +10,7 @@ import os
 from azure.common.credentials import ServicePrincipalCredentials
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.storage import StorageManagementClient
 
 
 from ocs_ci.framework import config
@@ -214,6 +215,17 @@ class AZURE:
             )
         return self._resource_client
 
+    @property
+    def storage_client(self):
+        """
+        Azure Stroage Managment Client instance
+        """
+        if not self._storage_client:
+            self._storage_client = StorageManagementClient(
+                credentials=self.credentials, subscription_id=self._subscription_id
+            )
+        return self._storage_client
+
     def get_vm_instance(self, vm_name):
         """
         Get instance of Azure vm Instance
@@ -398,3 +410,41 @@ class AZURE:
         """
         self.stop_vm_instances(vm_names, force=force)
         self.start_vm_instances(vm_names)
+
+    def get_storage_accounts(self):
+        """
+        Get list of storage accounts in azure resource group
+
+        Returns:
+           (list): list of Azure storage accounts
+
+        """
+        storage_accounts_list = self._storage_client.storage_accounts.list()
+        return storage_accounts_list
+
+    def get_storage_accounts_names(self):
+        """
+        Get list of names of storage accounts in azure resource group
+
+        Returns:
+           (list): list of Azure storage accounts name
+
+        """
+        storage_accounts_list = self._storage_client.storage_accounts.list()
+        storage_accounts_name_list = [account.name for account in storage_accounts_list]
+        return storage_accounts_name_list
+
+    def get_storage_account_properties(self, storage_account_name):
+        """
+        Get the properties of the storage account whose name is passed.
+
+        Args:
+            storage_account_name (str): Name of the storage account
+        """
+        storage_account_properties = (
+            self._storage_client.storage_accounts.get_properties(
+                resource_group_name=self._cluster_resource_group,
+                storage_account_name=storage_account_name,
+            )
+        )
+        return storage_account_properties
