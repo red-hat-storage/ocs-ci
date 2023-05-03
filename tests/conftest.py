@@ -1417,11 +1417,11 @@ def upgrade_marks_name():
 
     """
     upgrade_marks_name = []
-    for each_tier in upgrade_marks:
+    for upgrade_mark in upgrade_marks:
         try:
-            upgrade_marks_name.append(each_tier().args[0].name)
+            upgrade_marks_name.append(upgrade_mark().args[0].name)
         except AttributeError:
-            log.error(f"123")
+            log.error(f"upgrade mark does not exist")
     return upgrade_marks_name
 
 
@@ -1478,7 +1478,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
 
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
-        if mark.name in tier_marks_name + upgrade_marks and config.RUN.get(
+        if mark.name in tier_marks_name + upgrade_marks_name and config.RUN.get(
             "cephcluster"
         ):
             log.info("Checking for Ceph Health OK ")
