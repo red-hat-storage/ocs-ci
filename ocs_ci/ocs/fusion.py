@@ -102,7 +102,7 @@ def deploy_odf():
     helpers.create_resource(**template)
     # Sometimes it takes time before ocs operator csv is present
     for sample in TimeoutSampler(
-        timeout=1200,
+        timeout=1800,
         sleep=15,
         func=get_csvs_start_with_prefix,
         csv_prefix=defaults.OCS_OPERATOR_NAME,
