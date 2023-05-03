@@ -20,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_external_mode,
     skipif_ms_consumer,
+    brown_squad,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -279,6 +280,7 @@ class TestNodeReplacement(ManageTest):
 
 
 @tier4a
+@brown_squad
 @ignore_leftovers
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")

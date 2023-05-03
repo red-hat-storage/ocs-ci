@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_external_mode,
     ipi_deployment_required,
+    orange_squad,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
@@ -88,6 +89,7 @@ def test_scale_pvcs_pods_pre_upgrade():
     utils.ceph_health_check(tries=30)
 
 
+@orange_squad
 @skipif_bm
 @skipif_external_mode
 @post_upgrade
