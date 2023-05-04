@@ -99,7 +99,7 @@ def get_oc_mirror_tool():
         oc_mirror_repo = "https://github.com/openshift/oc-mirror.git"
         oc_mirror_dir = os.path.join(constants.EXTERNAL_DIR, "oc-mirror")
         oc_mirror_branch = f"release-{get_ocp_version()}"
-        clone_repo(oc_mirror_repo, oc_mirror_dir, oc_mirror_branch)
+        clone_repo(url=oc_mirror_repo, location=oc_mirror_dir, branch=oc_mirror_branch)
         # build oc-mirror tool
         exec_cmd("make build", cwd=oc_mirror_dir)
         os.rename(

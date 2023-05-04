@@ -555,7 +555,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 "coreos-installer",
             )
             clone_repo(
-                constants.COREOS_INSTALLER_REPO, coreos_installer_repo_path, "main"
+                url=constants.COREOS_INSTALLER_REPO,
+                location=coreos_installer_repo_path,
+                branch="main",
             )
             if os.path.isdir(f"{constants.EXTERNAL_DIR}/coreos-install"):
                 shutil.rmtree(f"{constants.EXTERNAL_DIR}/coreos-install")
@@ -1252,9 +1254,9 @@ class VSPHEREUPI(VSPHEREBASE):
                         f"release-{original_installed_ocp_version_major_minor}"
                     )
                     clone_repo(
-                        constants.VSPHERE_INSTALLER_REPO,
-                        upi_repo_path,
-                        installer_release_branch,
+                        url=constants.VSPHERE_INSTALLER_REPO,
+                        location=upi_repo_path,
+                        branch=installer_release_branch,
                         force_checkout=True,
                     )
 
@@ -1618,25 +1620,27 @@ def clone_openshift_installer():
                 ocp_version
             ) >= version.get_semantic_version("4.13"):
                 clone_repo(
-                    constants.VSPHERE_INSTALLER_REPO,
-                    upi_repo_path,
-                    "release-4.12",
+                    url=constants.VSPHERE_INSTALLER_REPO,
+                    location=upi_repo_path,
+                    branch="release-4.12",
                 )
             else:
                 clone_repo(
-                    constants.VSPHERE_INSTALLER_REPO,
-                    upi_repo_path,
-                    f"release-{ocp_version}",
+                    url=constants.VSPHERE_INSTALLER_REPO,
+                    location=upi_repo_path,
+                    branch=f"release-{ocp_version}",
                 )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO,
-            upi_repo_path,
-            constants.VSPHERE_INSTALLER_BRANCH,
+            url=constants.VSPHERE_INSTALLER_REPO,
+            location=upi_repo_path,
+            branch=constants.VSPHERE_INSTALLER_BRANCH,
         )
     else:
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
+            url=constants.VSPHERE_INSTALLER_REPO,
+            location=upi_repo_path,
+            branch=f"release-{ocp_version}",
         )
 
 
