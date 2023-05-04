@@ -97,7 +97,8 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
 
         # Start rolling shutdown and recovery of OCS worker nodes
         for node_obj in ocs_node_objs:
-            nodes.stop_nodes(nodes=[node_obj])
+            nodes.stop_nodes(nodes=[node_obj], wait=False)
+            nodes.wait_for_nodes_to_stop_or_terminate(nodes=[node_obj])
             # When we use the managed service, the worker node should recover automatically
             # by starting the node, or removing it and creating a new one
             log.info("Waiting for all the worker nodes to be ready...")
