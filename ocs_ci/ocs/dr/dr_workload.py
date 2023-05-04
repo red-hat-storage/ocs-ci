@@ -182,7 +182,9 @@ class BusyBox(DRWorkload):
         """
         # Clone workload repo
         clone_repo(
-            self.workload_repo_url, self.target_clone_dir, self.workload_repo_branch
+            url=self.workload_repo_url,
+            location=self.target_clone_dir,
+            branch=self.workload_repo_branch,
         )
 
     def _get_workload_namespace(self):
