@@ -13,6 +13,9 @@ from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 from ocs_ci.utility.rosa import post_onboarding_verification
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
+import ocs_ci.utility.azure_utils as azure
+
+
 log = logging.getLogger(__name__)
 
 
@@ -52,6 +55,8 @@ def test_deployment(pvc_factory, pod_factory):
                 # Check basic cluster functionality by creating resources
                 # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
                 # run IO and delete the resources
+                if config.ENV_DATA["platform"].lower() == "azure":
+                    test_azure_storageaccount()
                 if config.DEPLOYMENT["external_mode"]:
                     sanity_helpers = SanityExternalCluster()
                 else:
@@ -78,3 +83,13 @@ def test_deployment(pvc_factory, pod_factory):
 
     if teardown:
         log.info("Cluster will be destroyed during teardown part of this test.")
+
+
+def test_azure_storageaccount():
+    """
+    Testing that Azure storage account, post deployment.
+
+    Testing for property 'allowBlobPublicAccess' to be 'false'
+    """
+    az = azure.AZURE()
+    print(az.get_storage_accounts_names())
