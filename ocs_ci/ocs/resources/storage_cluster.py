@@ -1323,7 +1323,7 @@ def verify_multus_network():
 def verify_managed_service_resources():
     """
     Verify creation and status of resources specific to OSD and ROSA deployments:
-    1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
+    1. ocs-operator, ose-prometheus-operator csvs are Succeeded
     2. 1 prometheus and 1 alertmanager pods are in Running state
     3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
     4. Verify that noobaa-operator replicas is set to 0
@@ -1336,7 +1336,6 @@ def verify_managed_service_resources():
     # Verify CSV status
     for managed_csv in {
         constants.OCS_CSV_PREFIX,
-        constants.OSD_DEPLOYER,
         constants.OSE_PROMETHEUS_OPERATOR,
     }:
         csvs = csv.get_csvs_start_with_prefix(
