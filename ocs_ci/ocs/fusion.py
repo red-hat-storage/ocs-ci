@@ -124,7 +124,7 @@ def deploy_odf():
         onboarding_ticket = config.DEPLOYMENT.get("onboarding_ticket", "")
         if not onboarding_ticket:
             onboarding_ticket = generate_onboarding_token()
-        offering_data["onboarding_ticket"] = onboarding_ticket
+        offering_data["onboarding_ticket"] = onboarding_ticket.strip()
         provider_name = config.ENV_DATA.get("provider_name", "")
         offering_data["storage_provider_endpoint"] = get_storage_provider_endpoint(
             provider_name
