@@ -1,5 +1,6 @@
 import base64
 import copy
+import json
 import logging
 import os
 import random
@@ -59,6 +60,8 @@ from ocs_ci.ocs.utils import (
     collect_ocs_logs,
     collect_pod_container_rpm_package,
 )
+from ocs_ci.ocs.resources.deployment import Deployment
+from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
@@ -89,6 +92,7 @@ from ocs_ci.ocs.resources.pod import (
     verify_data_integrity_for_multi_pvc_objs,
     get_pod_count,
     wait_for_pods_by_label_count,
+    get_noobaa_pods,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -6522,3 +6526,264 @@ def set_osd_op_complaint_time(request, reduced_osd_complaint_time: float) -> dic
     request.addfinalizer(finalizer)
 
     return cmd_status
+
+@pytest.fixture()
+def change_the_noobaa_log_level(request):
+    """
+    This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
+    """
+    noobaa_cm = OCP(
+        kind="configmap",
+        resource_name="noobaa-config",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    def factory(level="all"):
+        assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
+        noobaa_cm.patch(
+            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
+        )
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+
+    def finalizer():
+        level = "default_level"
+        noobaa_cm.patch(
+            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
+        )
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def add_env_vars_to_noobaa_core_class(request, mcg_obj_session):
+    """
+    Class-scoped fixture for adding env vars to the noobaa-core sts
+
+    """
+    return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
+
+
+def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
+    """
+    Add env vars to the noobaa-core sts
+
+    """
+    sts_obj = OCP(kind="StatefulSet", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
+    op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
+
+    added_env_vars = []
+
+    def add_env_vars_to_noobaa_core_implementation(new_env_vars_touples):
+        """
+        Implementation of add_env_vars_to_noobaa_core_fixture()
+
+        Args:
+            new_env_vars_touples (list): A list of touples, each containing the env var name and
+                value to be added to the noobaa-core sts
+                i.e. [("env_var_name_1", "env_var_value_1"), ("env_var_name_2", "env_var_value_2")]
+
+        """
+
+        nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+        sts_env_vars = nb_core_sts["spec"]["template"]["spec"]["containers"][0]["env"]
+        sts_env_vars = [env_var_in_sts["name"] for env_var_in_sts in sts_env_vars]
+
+        patch_ops = []
+
+        for env_var, value in new_env_vars_touples:
+            if env_var in sts_env_vars:
+                log.warning(f"Env var {env_var} already exists in the noobaa-core sts")
+                continue
+
+            # Copy and modify the template to create the required dict for the first addition
+            add_env_var_op = copy.deepcopy(op_template_dict)
+            add_env_var_op["op"] = "add"
+            add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
+            add_env_var_op["value"] = {"name": env_var, "value": str(value)}
+
+            patch_ops.append(copy.deepcopy(add_env_var_op))
+            added_env_vars.append(env_var)
+
+        log.info(
+            f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
+        )
+        sts_obj.patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=json.dumps(patch_ops),
+            format_type="json",
+        )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    def finalizer():
+        """
+        Remove any env vars that were added to the noobaa-core sts
+
+        """
+        log.info("Removing the added env vars from the noobaa-core statefulset:")
+
+        # Adjust the template for removal ops
+        remove_env_var_op = copy.deepcopy(op_template_dict)
+        remove_env_var_op["op"] = "remove"
+        remove_env_var_op["path"] = ""
+        del remove_env_var_op["value"]
+
+        for target_env_var in added_env_vars:
+            # Fetch the target's index from the noobaa-core statefulset
+            nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+            env_vars_in_sts = nb_core_sts["spec"]["template"]["spec"]["containers"][0][
+                "env"
+            ]
+            env_vars_names_in_sts = [
+                env_var_in_sts["name"] for env_var_in_sts in env_vars_in_sts
+            ]
+            target_index = env_vars_names_in_sts.index(target_env_var)
+            remove_env_var_op["path"] = f"{yaml_path_to_env_variables}/{target_index}"
+
+            # Patch the noobaa-core sts to remove the env var
+            sts_obj.patch(
+                resource_name=constants.NOOBAA_CORE_STATEFULSET,
+                params=json.dumps([remove_env_var_op]),
+                format_type="json",
+            )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    request.addfinalizer(finalizer)
+    return add_env_vars_to_noobaa_core_implementation
+
+
+@pytest.fixture()
+def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
+    def factory(project_name):
+        return pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project_name,
+            size="10",
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def logwriter_workload_factory(request, teardown_factory):
+    def factory(pvc, logwriter_path):
+
+        dc_data = templating.load_yaml(logwriter_path)
+        dc_data["metadata"]["namespace"] = pvc.namespace
+        dc_data["spec"]["replicas"] = 4
+        dc_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = "quay.io/ocsci/logwriter:latest"
+        dc_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+            "claimName"
+        ] = pvc.name
+        logwriter_dc = helpers.create_resource(**dc_data)
+        teardown_factory(logwriter_dc)
+
+        logwriter_dc_obj = Deployment(
+            **get_deployments_having_label(
+                label="app=logwriter-cephfs", namespace=pvc.namespace
+            )[0]
+        )
+        logwriter_dc_pods = [
+            pod["metadata"]["name"]
+            for pod in get_pods_having_label(
+                label="app=logwriter-cephfs", namespace=pvc.namespace
+            )
+        ]
+        wait_for_pods_to_be_running(
+            namespace=pvc.namespace, pod_names=logwriter_dc_pods
+        )
+
+        return logwriter_dc_obj
+
+    return factory
+
+
+@pytest.fixture()
+def logreader_workload_factory(request, teardown_factory):
+    def factory(pvc, logreader_path, duration=30):
+
+        job_data = templating.load_yaml(logreader_path)
+        job_data["metadata"]["namespace"] = pvc.namespace
+        job_data["spec"]["completions"] = 4
+        job_data["spec"]["parallelism"] = 4
+        job_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+            "claimName"
+        ] = pvc.name
+        job_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = "quay.io/ocsci/logwriter:latest"
+        job_data["spec"]["template"]["spec"]["containers"][0]["command"][
+            2
+        ] = f"/opt/logreader.py -t {duration} *.log -d"
+        logreader_job = helpers.create_resource(**job_data)
+        teardown_factory(logreader_job)
+
+        logreader_job_obj = get_job_obj(
+            name="logreader-cephfs", namespace=pvc.namespace
+        )
+        logreader_job_pods = [
+            pod["metadata"]["name"]
+            for pod in get_pods_having_label(
+                label="app=logreader-cephfs", namespace=pvc.namespace
+            )
+        ]
+        wait_for_pods_to_be_running(
+            namespace=pvc.namespace, pod_names=logreader_job_pods
+        )
+
+        return logreader_job_obj
+
+    return factory
+
+@pytest.fixture()
+def setup_logwriter_cephfs_workload_factory(
+    request,
+    project_factory,
+    pvc_factory,
+    logwriter_cephfs_many_pvc_factory,
+    logwriter_workload_factory,
+    logreader_workload_factory,
+):
+    logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
+    logreader_path = constants.LOGWRITER_CEPHFS_READER
+    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
+    pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
+    logwriter_workload = logwriter_workload_factory(
+        pvc=pvc, logwriter_path=logwriter_path
+    )
+    logreader_workload = logreader_workload_factory(
+        pvc=pvc, logreader_path=logreader_path
+    )
+
+    return logwriter_workload, logreader_workload
+
+
+@pytest.fixture()
+def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_factory):
+
+    logwriter_sts_path = constants.LOGWRITER_STS_PATH
+    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
+    sts_data = templating.load_yaml(logwriter_sts_path)
+    sts_data["metadata"]["namespace"] = project.namespace
+    logwriter_sts = helpers.create_resource(**sts_data)
+    teardown_factory(logwriter_sts)
+    logwriter_sts_pods = [
+        pod["metadata"]["name"]
+        for pod in get_pods_having_label(
+            label="app=logwriter-rbd", namespace=project.namespace
+        )
+    ]
+    wait_for_pods_to_be_running(
+        namespace=project.namespace, pod_names=logwriter_sts_pods
+    )
+
+    return logwriter_sts

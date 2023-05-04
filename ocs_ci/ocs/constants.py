@@ -1756,6 +1756,7 @@ LOGWRITER_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "logwriter")
 LOGWRITER_CEPHFS_REPRODUCER = os.path.join(LOGWRITER_DIR, "cephfs.reproducer.yaml")
 LOGWRITER_CEPHFS_READER = os.path.join(LOGWRITER_DIR, "cephfs.logreader.yaml")
 LOGWRITER_CEPHFS_WRITER = os.path.join(LOGWRITER_DIR, "cephfs.logwriter.yaml")
+LOGWRITER_STS_PATH = os.path.join(LOGWRITER_DIR, "logwriter.rbd.yaml")
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
@@ -2213,3 +2214,27 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
     "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }
+
+# DR
+DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+APPLICATION_SET = "ApplicationSet"
+PLACEMENT = "Placement"
+GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
+APPLICATION_ARGOCD = "applications.argoproj.io"
+PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
+
+# Stretch cluster
+STRETCH_CLUSTER_NAMESPACE = "sc-project"
+
+ARBITER_ZONE = "a"
+DATA_ZONE_1 = "b"
+DATA_ZONE_2 = "c"
+
+NETSPLIT_DATA_1_DATA_2 = f"{DATA_ZONE_1}{DATA_ZONE_2}"
+NETSPLIT_ARBITER_DATA_1 = f"{ARBITER_ZONE}{DATA_ZONE_1}"
+NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
+    f"{ARBITER_ZONE}{DATA_ZONE_1}-{ARBITER_ZONE}{DATA_ZONE_2}"
+)
+NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
+    f"{ARBITER_ZONE}{DATA_ZONE_1}-{DATA_ZONE_1}{DATA_ZONE_2}"
+)
