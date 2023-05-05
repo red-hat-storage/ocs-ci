@@ -30,7 +30,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
     TimeoutExpiredError,
-    PageNotLoaded,
     CephHealthException,
 )
 from ocs_ci.ocs.ui.views import OCS_OPERATOR, ODF_OPERATOR
@@ -87,35 +86,34 @@ class BaseUI:
         enable_screenshot (bool): take screenshot
         copy_dom (bool): copy page source of the webpage
         """
-        if (
-            version.get_semantic_version(get_ocp_version(), True)
-            <= version.VERSION_4_11
-        ):
-            try:
-                wait = WebDriverWait(self.driver, timeout)
+        self.page_has_loaded()
+        screenshot = ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+        if screenshot:
+            self.take_screenshot()
+        if copy_dom:
+            self.copy_dom()
+
+        wait = WebDriverWait(self.driver, timeout)
+        try:
+            if (
+                version.get_semantic_version(get_ocp_version(), True)
+                <= version.VERSION_4_11
+            ):
                 element = wait.until(
                     ec.element_to_be_clickable((locator[1], locator[0]))
                 )
-                screenshot = (
-                    ocsci_config.UI_SELENIUM.get("screenshot") and enable_screenshot
+            else:
+                element = wait.until(
+                    ec.visibility_of_element_located((locator[1], locator[0]))
                 )
-                if screenshot:
-                    self.take_screenshot()
-                element.click()
-                if copy_dom:
-                    self.copy_dom()
-            except TimeoutException as e:
-                self.take_screenshot()
-                self.copy_dom()
-                logger.error(e)
-                raise TimeoutException
-        else:
-            self.page_has_loaded()
-            wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(
-                ec.visibility_of_element_located((locator[1], locator[0]))
-            )
             element.click()
+        except TimeoutException as e:
+            self.take_screenshot()
+            self.copy_dom()
+            logger.error(e)
+            raise TimeoutException(
+                f"Failed to find the element ({locator[1]},{locator[0]})"
+            )
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -129,27 +127,28 @@ class BaseUI:
         timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         """
-        if (
-            version.get_semantic_version(get_ocp_version(), True)
-            <= version.VERSION_4_11
-        ):
-            try:
-                wait = WebDriverWait(self.driver, timeout)
+        self.page_has_loaded()
+        wait = WebDriverWait(self.driver, timeout)
+        try:
+            if (
+                version.get_semantic_version(get_ocp_version(), True)
+                <= version.VERSION_4_11
+            ):
                 element = wait.until(
                     ec.presence_of_element_located((locator[1], locator[0]))
                 )
-                element.send_keys(text)
-            except TimeoutException as e:
-                self.take_screenshot()
-                logger.error(e)
-                raise TimeoutException
-        else:
-            self.page_has_loaded()
-            wait = WebDriverWait(self.driver, timeout)
-            element = wait.until(
-                ec.visibility_of_element_located((locator[1], locator[0]))
-            )
+            else:
+                element = wait.until(
+                    ec.visibility_of_element_located((locator[1], locator[0]))
+                )
             element.send_keys(text)
+        except TimeoutException as e:
+            self.take_screenshot()
+            self.copy_dom()
+            logger.error(e)
+            raise TimeoutException(
+                f"Failed to find the element ({locator[1]},{locator[0]})"
+            )
 
     def is_expanded(self, locator, timeout=30):
         """
@@ -334,9 +333,11 @@ class BaseUI:
             time.sleep(sleep_time)
             page_hash_new = get_page_hash()
             if retry_counter == retries:
-                raise PageNotLoaded(
+                logger.error(
                     f"Current URL did not finish loading in {retries * sleep_time}"
                 )
+                self.take_screenshot()
+                return
         logger.info(f"page loaded: {self.driver.current_url}")
 
     def refresh_page(self):
@@ -502,7 +503,10 @@ class PageNavigator(BaseUI):
         if config.DEPLOYMENT.get("local_storage", False):
             self.storage_class = "localblock_sc"
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            self.storage_class = "thin_sc"
+            if self.ocs_version_semantic <= version.VERSION_4_12:
+                self.storage_class = "thin_sc"
+            else:
+                self.storage_class = "thin-csi_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
             if aws_sc == "gp3-csi":
