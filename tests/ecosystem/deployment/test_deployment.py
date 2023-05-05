@@ -13,7 +13,7 @@ from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 from ocs_ci.utility.rosa import post_onboarding_verification
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
-import ocs_ci.utility.azure_utils as azure
+from ocs_ci.utility import azure_utils
 
 
 log = logging.getLogger(__name__)
@@ -91,5 +91,7 @@ def test_azure_storageaccount():
 
     Testing for property 'allowBlobPublicAccess' to be 'false'
     """
-    az = azure.AZURE()
-    print(az.get_storage_accounts_names())
+    azure = azure_utils.AZURE()
+    azure.storage_client
+    storage_account_names = azure.get_storage_accounts_names()
+    print(f"{storage_account_names=}")

@@ -94,6 +94,7 @@ class AZURE:
 
     _compute_client = None
     _resource_client = None
+    _storage_client = None
     _credentials = None
     _cluster_resource_group = None
 
@@ -222,7 +223,7 @@ class AZURE:
         """
         if not self._storage_client:
             self._storage_client = StorageManagementClient(
-                credentials=self.credentials, subscription_id=self._subscription_id
+                credential=self.credentials, subscription_id=self._subscription_id
             )
         return self._storage_client
 
