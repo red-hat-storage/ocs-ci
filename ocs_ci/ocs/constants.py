@@ -161,6 +161,8 @@ STORAGECLASSCLAIM = "StorageClassClaim"
 MACHINEHEALTHCHECK = "machinehealthcheck"
 STORAGECLIENT = "StorageClient"
 MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
+CEPH_CLUSTER = "CephCluster"
+ENDPOINTS = "Endpoints"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -1076,6 +1078,9 @@ MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
+MANAGED_FUSION_AGENT = "managed-fusion-agent"
+OCS_CLIENT_OPERATOR = "ocs-client-operator"
+ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
