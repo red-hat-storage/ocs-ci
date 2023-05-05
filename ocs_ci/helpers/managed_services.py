@@ -538,14 +538,14 @@ def verify_faas_provider_storagecluster(sc_data):
     1. allowRemoteStorageConsumers: true
     2. hostNetwork: true
     3. matchExpressions:
-    key: node-role.kubernetes.io/worker
-    operator: Exists
-    key: node-role.kubernetes.io/infra
-    operator: DoesNotExist
+        key: node-role.kubernetes.io/worker
+        operator: Exists
+        key: node-role.kubernetes.io/infra
+        operator: DoesNotExist
     4. storageProviderEndpoint
     5. annotations:
-    uninstall.ocs.openshift.io/cleanup-policy: delete
-    uninstall.ocs.openshift.io/mode: graceful
+        uninstall.ocs.openshift.io/cleanup-policy: delete
+        uninstall.ocs.openshift.io/mode: graceful
 
     Args:
         sc_data (dict): storagecluster data dictionary
