@@ -8,7 +8,6 @@ from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
 from ocs_ci.ocs import managedservice
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
@@ -387,9 +386,12 @@ def verify_faas_resources():
 
     # Verify attributes specific to cluster types
     if config.ENV_DATA["cluster_type"].lower() == "provider":
-        sc = get_storage_cluster()
-        sc_data = sc.get()["items"][0]
-        verify_provider_storagecluster(sc_data)
+        sc_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        sc_data = sc_obj.get()["items"][0]
+        verify_faas_provider_storagecluster(sc_data)
         verify_faas_provider_resources()
         if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11-0"):
             verify_provider_topology()
