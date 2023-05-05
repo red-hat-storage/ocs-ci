@@ -5,7 +5,6 @@ import logging
 import re
 
 from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
-from ocs_ci.ocs import managedservice
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
