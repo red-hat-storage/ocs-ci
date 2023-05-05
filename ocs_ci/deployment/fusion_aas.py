@@ -103,10 +103,12 @@ class FUSIONAAS(rosa_deployment.ROSA):
         """
         Deployment of ODF Managed Service addon on Fusion aaS.
         """
-        ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
+        managed_fusion_offering = ocp.OCP(
+            kind=constants.MANAGED_FUSION_OFFERING, namespace=self.namespace
+        )
         try:
-            ceph_cluster.get().get("items")[0]
-            logger.warning("OCS cluster already exists")
+            managed_fusion_offering.get().get("items")[0]
+            logger.warning("ManagedFusionOffering exists. Skipping installation.")
             return
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")

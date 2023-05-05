@@ -42,6 +42,7 @@ MCG_OPERATOR = "mcg-operator"
 ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
+OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
 
 # Noobaa S3 bucket website configurations
 website_config = {
