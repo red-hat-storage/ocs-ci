@@ -139,12 +139,19 @@ def deploy_odf():
         exec_cmd
     )(offering_check_cmd)
     helpers.create_resource(**template)
+
+    operator_name = (
+        defaults.OCS_OPERATOR_NAME
+        if config.ENV_DATA.get("cluster_type") == "provider"
+        else defaults.OCS_CLIENT_OPERATOR_NAME
+    )
+
     # Sometimes it takes time before ocs operator csv is present
     for sample in TimeoutSampler(
         timeout=1800,
         sleep=15,
         func=get_csvs_start_with_prefix,
-        csv_prefix=defaults.OCS_OPERATOR_NAME,
+        csv_prefix=operator_name,
         namespace=ns_name,
     ):
         if sample:

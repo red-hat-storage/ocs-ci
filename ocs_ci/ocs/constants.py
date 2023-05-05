@@ -160,6 +160,7 @@ LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
 MACHINEHEALTHCHECK = "machinehealthcheck"
 STORAGECLIENT = "StorageClient"
+MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -336,6 +337,8 @@ CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-ver
 CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )
+CSI_ADDONS_CONTROLLER_MANAGER_LABEL = "app.kubernetes.io/name=csi-addons"
+
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
