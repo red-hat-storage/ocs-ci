@@ -394,7 +394,10 @@ def ocs_install_verification(
                 config.DEPLOYMENT["external_mode"]
                 and config.ENV_DATA["restricted-auth-permission"]
             ):
-                rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+                if config.ENV_DATA.get("alias_rbd_name"):
+                    rbd_name = config.ENV_DATA["alias_rbd_name"]
+                else:
+                    rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
                 rbd_node_secret = (
                     f"{constants.RBD_NODE_SECRET}-{cluster_name}-{rbd_name}"
                 )
