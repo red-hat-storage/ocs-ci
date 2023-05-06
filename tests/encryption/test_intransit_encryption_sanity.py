@@ -16,13 +16,17 @@ log = logging.getLogger(__name__)
 
 @skipif_intransit_encryption_notset
 class TestInTransitEncryptionSanity:
-    def teardown(self):
-        set_in_transit_encryption()
+    @pytest.fixture(autouse=True)
+    def set_encryption_at_teardown(self, request):
+        def teardown():
+            set_in_transit_encryption()
+
+        request.addfinalizer(teardown)
 
     @tier1
     @skipif_ocs_version("<4.12")
     @pytest.mark.polarion_id("OCS-4861")
-    def test_intransit_encryption_enable_disable_statetransition(self, request):
+    def test_intransit_encryption_enable_disable_statetransition(self):
         """
         The test does the following:
         1. Verify in-transit Encryption is Enable on setup.
@@ -34,7 +38,6 @@ class TestInTransitEncryptionSanity:
         """
         log.info("Verifying the in-transit encryption is enable on setup.")
         assert in_transit_encryption_verification()
-        request.addfinalizer(self.teardown)
 
         log.info("Disabling the in-transit encryption.")
         set_in_transit_encryption(enabled=False)
