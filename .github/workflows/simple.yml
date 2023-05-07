@@ -34,7 +34,7 @@ jobs:
         uses: redhat-actions/buildah-build@v2
         with:
           image: ${{ env.REGISTRY_IMAGE }}
-          tags: ${{ github.event.pull_request.head.label || github.ref_name || github.run_id }} ${{ github.sha }} latest stable
+          tags: quay.io/ocsci/ocs-ci-container:test1
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
           build-args: |
