@@ -33,8 +33,7 @@ jobs:
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ${{ env.IMAGE_REGISTRY }}/${{ env.REGISTRY_NS }}/{{ env.REGISTRY_IMAGE }}
-          tags: stable
+          tags: ${{ env.IMAGE_REGISTRY }}/${{ env.REGISTRY_NS }}/{{ env.REGISTRY_IMAGE }}/stable
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
           build-args: |
