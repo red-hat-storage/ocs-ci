@@ -1,6 +1,6 @@
 name: Build Container Image
 
-on: [pull_request, push]
+on: [pull_request]
 
 # This allows a subsequently queued workflow run to interrupt previous runs.
 concurrency:
@@ -10,7 +10,7 @@ concurrency:
 env:
   REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
   IMAGE_REGISTRY: quay.io
-  REGISTRY_NS: ocsci/ocs-ci-container
+  REGISTRY_NS: ocsci
   REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
 jobs:
@@ -26,13 +26,13 @@ jobs:
         with:
           username: ${{ env.REGISTRY_USER }}
           password: ${{ env.REGISTRY_PASSWORD }}
-          registry: ${{ env.IMAGE_REGISTRY }}
+          registry: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}
 
       - name: Buildah Action
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ocsci
+          image: ocs-ci-container
           tags: ${{ github.event.pull_request.head.label || github.ref_name || github.run_id }} ${{ github.sha }} latest stable
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
