@@ -70,10 +70,10 @@ def check_noobaa_logs(pod_name: str, text_to_search: str) -> bool:
 
 @tier2
 @bugzilla("1932846")
-@pytest.mark.polarion_id("TBD")
+@pytest.mark.polarion_id("OCS-4863")
 class TestNoobaaLogLevel:
     """
-    Test optional Noobaa (MCG) log leevl reduction, as validation of BZ-1932846
+    Test optional Noobaa (MCG) log level reduction, as validation of BZ-1932846
 
     """
 
