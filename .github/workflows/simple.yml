@@ -9,9 +9,10 @@ concurrency:
 
 env:
   REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
   IMAGE_REGISTRY: quay.io
   REGISTRY_NS: ocsci
-  REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+  REGISTRY_IMAGE: ocs-ci-container
 
 jobs:
   buildah:
@@ -26,13 +27,13 @@ jobs:
         with:
           username: ${{ env.REGISTRY_USER }}
           password: ${{ env.REGISTRY_PASSWORD }}
-          registry: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}
+          registry: ${{ env.REGISTRY }}
 
       - name: Buildah Action
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ocs-ci-container
+          image: env.REGISTRY_IMAGE
           tags: ${{ github.event.pull_request.head.label || github.ref_name || github.run_id }} ${{ github.sha }} latest stable
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
