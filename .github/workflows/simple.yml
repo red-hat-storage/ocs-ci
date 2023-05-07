@@ -28,8 +28,7 @@ jobs:
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ${{ env.REGISTRY_IMAGE }}
-          tags: quay.io/ocsci/ocs-ci-container:test2
+          tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test12
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
 
