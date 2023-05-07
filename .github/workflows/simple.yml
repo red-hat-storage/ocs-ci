@@ -10,7 +10,7 @@ concurrency:
 env:
   REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
   REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
-  IMAGE_REGISTRY: quay.io
+  REGISTRY: quay.io
   REGISTRY_NS: ocsci
   REGISTRY_IMAGE: ocs-ci-container
 
