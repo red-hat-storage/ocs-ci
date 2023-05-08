@@ -18,6 +18,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
+      - name: Print time time
+        run: echo "Image pushed to ${{ env.TIME }}"
+
       - name: Log in to Quay.io
         uses: redhat-actions/podman-login@v1
         with:
