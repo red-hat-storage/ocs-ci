@@ -8,7 +8,7 @@ env:
   REGISTRY: quay.io
   REGISTRY_NS: ocsci
   REGISTRY_IMAGE: ocs-ci-container
-  TIME: None
+  TIME: $(date --rfc-3339=date)
 
 jobs:
   buildah:
@@ -27,8 +27,6 @@ jobs:
 
       - name: Buildah Action
         id: build-image
-        run: |
-          echo "release-date=$(date --rfc-3339=date)" >> ${env.TIME}
         uses: redhat-actions/buildah-build@v2
         with:
           tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 \
