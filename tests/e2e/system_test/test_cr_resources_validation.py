@@ -26,14 +26,19 @@ class TestCRRsourcesValidation(E2ETest):
         self.temp_files_list = []
         self.object_name_to_delete = ""
 
-    def cr_resource_not_editable(self, cr_object_kind, yaml_name, patches):
+    def cr_resource_not_editable(
+        self, cr_object_kind, yaml_name, patches_non_editable, patches_editable
+    ):
         """
         Test that cr object is not editable once created
 
         Args:
             cr_object_kind (str): cr object kind
             yaml_name (str): name of the yaml file from which the object is to be created
-            patches (dict, of str: str): patches to be applied by 'oc patch' command
+            patches_non_editable (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
+                    have no effect. If such a patch is sucessfully applied, the test should fail
+            patches_editable (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
+                    have an effect. If such a patch is not sucessfully applied, the test should fail
 
         """
         cr_resource_yaml = os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, yaml_name)
@@ -47,10 +52,11 @@ class TestCRRsourcesValidation(E2ETest):
 
         cr_resource_original_yaml = run_oc_command(f"get {cr_resource_name} -o yaml")
 
-        editable_properties = {}
+        # test that all non editable properties are really not editable
+        non_editable_properties_errors = {}
         cr_resource_prev_yaml = cr_resource_original_yaml
-        for patch in patches:
-            params = "'" + f"{patches[patch]}" + "'"
+        for patch in patches_non_editable:
+            params = "'" + f"{patches_non_editable[patch]}" + "'"
             command = f"oc -n openshift-storage patch {cr_resource_name} -p {params} --type merge"
 
             temp_file = NamedTemporaryFile(
@@ -69,7 +75,7 @@ class TestCRRsourcesValidation(E2ETest):
                 )
 
                 if cr_resource_prev_yaml != cr_resource_modified_yaml:
-                    editable_properties[patch] = cr_resource_modified_yaml
+                    non_editable_properties_errors[patch] = cr_resource_modified_yaml
                     # reset prev yaml to the modified one to track further modifications
                     cr_resource_prev_yaml = cr_resource_modified_yaml
             except (
@@ -77,21 +83,62 @@ class TestCRRsourcesValidation(E2ETest):
             ):  # some properties are not editable and CommandFailed exception is thrown
                 continue  # just continue to the next property
 
-        if editable_properties:
+        if non_editable_properties_errors:
             err_msg = (
                 f"{cr_object_kind} object has been edited but it should not be. \n"
-                f"Changed properties: {list(editable_properties.keys())}"
+                f"Changed properties: {list(non_editable_properties_errors.keys())}"
             )
             logger.error(err_msg)
 
             detailed_err_msg = f"Original object yaml is {cr_resource_original_yaml}\n."
-            for prop in editable_properties:
+            for prop in non_editable_properties_errors:
                 detailed_err_msg += f"Changed property is {prop}. "
                 detailed_err_msg += (
-                    f"Edited object yaml is {editable_properties[prop]}\n"
+                    f"Edited object yaml is {non_editable_properties_errors[prop]}\n"
                 )
             logger.error(detailed_err_msg)
 
+            raise Exception(err_msg)
+
+        # test that all editable properties are really editable
+        editable_properties_errors = {}
+        cr_resource_prev_yaml = cr_resource_original_yaml
+        for patch in patches_editable:
+            params = "'" + f"{patches_editable[patch]}" + "'"
+            command = f"oc -n openshift-storage patch {cr_resource_name} -p {params} --type merge"
+
+            temp_file = NamedTemporaryFile(
+                mode="w+", prefix="cr_resource_modification", suffix=".sh"
+            )
+            with open(temp_file.name, "w") as t_file:
+                t_file.writelines(command)
+            self.temp_files_list.append(temp_file.name)
+            run_cmd(f"chmod 777 {temp_file.name}")
+            logger.info(f"Trying to edit property {patch}")
+
+            try:
+                run_cmd(f"sh {temp_file.name}")
+                cr_resource_modified_yaml = run_oc_command(
+                    f"get {cr_resource_name} -o yaml"
+                )
+
+                if cr_resource_prev_yaml == cr_resource_modified_yaml:
+                    editable_properties_errors[patch] = cr_resource_modified_yaml
+                else:
+                    # reset prev yaml to the modified one to track further modifications
+                    cr_resource_prev_yaml = cr_resource_modified_yaml
+            except (
+                CommandFailed
+            ):  # some properties are not editable and CommandFailed exception is thrown
+                editable_properties_errors[patch] = cr_resource_modified_yaml
+                continue  # just continue to the next property
+
+        if editable_properties_errors:
+            err_msg = (
+                f"{cr_object_kind} object has not been edited but it should be. \n"
+                f"Unchanged properties: {list(editable_properties_errors.keys())}"
+            )
+            logger.error(err_msg)
             raise Exception(err_msg)
 
     def test_network_fence_not_editable(self):
@@ -99,7 +146,7 @@ class TestCRRsourcesValidation(E2ETest):
         Test case to check that network fence object is not editable once created
         """
 
-        patches = {  # dictionary: patch_name --> patch
+        patches_non_editable = {  # dictionary: patch_name --> patch
             "apiVersion": {"apiVersion": "csiaddons.openshift.io/v1alpha2"},
             "kind": {"kind": "newNetworkFence"},
             "generation": '{"metadata": {"generation": 6456456 }}',
@@ -108,38 +155,32 @@ class TestCRRsourcesValidation(E2ETest):
             "uid": '{"metadata": {"uid": "897b3c9c-c1ce-40e3-95e6-7f3dadeb3e83" }}',
             "secret": '{"spec": {"secret": {"name": "new_secret"}}}',
             "cidrs": '{"spec": {"cidrs": {"10.90.89.66/32", "11.67.12.42/32"}}}',
-            "fenceState": '{"spec": {"fenceState": "Unfenced"}}',
             "driver": '{"spec": {"driver": "example.new_driver"}}',
             "new_property": '{"spec": {"new_property": "new_value"}}',
         }
 
-        self.cr_resource_not_editable("Network fence", "NetworkFence.yaml", patches)
+        patches_editable = {  # dictionary: patch_name --> patch
+            "fenceState": '{"spec": {"fenceState": "Unfenced"}}',
+        }
+
+        self.cr_resource_not_editable(
+            "Network fence", "NetworkFence.yaml", patches_non_editable, patches_editable
+        )
 
     def test_reclaim_space_cron_job_editable(self):
         """
         Test case to check that reclaim space cron job object is not editable once created
         """
 
-        patches = {  # dictionary: patch_name --> patch
-            "apiVersion": {"apiVersion": "csiaddons.openshift.io/v1alpha2"},
-            "kind": {"kind": "newReclainSpaceCronJob"},
-            "generation": '{"metadata": {"generation": 6456456 }}',
-            "creationTime": '{"metadata": {"creationTimestamp": "2022-04-24T19:39:54Z" }}',
-            "name": '{"metadata": {"name": "newName" }}',
-            "resourceVersion": '{"metadata": {"resourceVersion": "21332" }}',
-            "uid": '{"metadata": {"uid": "897b3c9c-c1ce-40e3-95e6-7f3dadeb3e83" }}',
-            "concurrencyPolicy": '{"spec": {"concurrencyPolicy": "Replace"}}',
-            "failedJobsHistoryLimit": '{"spec": {"failedJobsHistoryLimit": 50}}',
-            "backoffLimit": '{"spec": {"jobTemplate": {"spec": {"backOffLimit": 111}}}}',
-            "retryDeadlineSeconds": '{"spec": {"jobTemplate": {"spec": {"retryDeadlineSeconds": 20}}}}',
+        non_editable_patches = {  # dictionary: patch_name --> patch
             "persistentVolumeClaim": '{"spec": {"jobTemplate": {"spec": {"target" :{"persistentVolumeClaim": "pv"}}}}}',
-            "successfulJobsHistoryLimit": '{"spec": {"successfulJobsHistoryLimit": 300}}',
-            "new_property": '{"spec": {"new_property": "new_value"}}',
-            "schedule": '{"spec": {"schedule": "@daily"}}',
         }
 
         self.cr_resource_not_editable(
-            "Reclaim space cron job", "ReclaimSpaceCronJob.yaml", patches
+            "Reclaim space cron job",
+            "ReclaimSpaceCronJob.yaml",
+            non_editable_patches,
+            {},
         )
 
     @pytest.fixture(autouse=True)
