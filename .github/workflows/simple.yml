@@ -19,8 +19,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Print time time
-        run: echo "Image pushed to ${{ env.TIME }}"
-
+        run:  |
+          echo "Image pushed to ${{ env.TIME }}"
+          echo "${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:stable-${{ env.TIME }}"
       - name: Log in to Quay.io
         uses: redhat-actions/podman-login@v1
         with:
@@ -32,8 +33,7 @@ jobs:
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 \
-                ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:stable-${{ env.TIME }}
+          tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:stable-${{ env.TIME }}
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
 
