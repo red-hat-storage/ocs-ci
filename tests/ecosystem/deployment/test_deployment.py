@@ -12,6 +12,7 @@ from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 from ocs_ci.utility.rosa import post_onboarding_verification
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
+from ocs_ci.framework.pytest_customization.marks import azure_platform_required
 
 from ocs_ci.utility import azure_utils
 
@@ -55,8 +56,6 @@ def test_deployment(pvc_factory, pod_factory):
                 # Check basic cluster functionality by creating resources
                 # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
                 # run IO and delete the resources
-                if config.ENV_DATA["platform"].lower() == "azure":
-                    test_azure_storageaccount()
                 if config.DEPLOYMENT["external_mode"]:
                     sanity_helpers = SanityExternalCluster()
                 else:
@@ -85,6 +84,7 @@ def test_deployment(pvc_factory, pod_factory):
         log.info("Cluster will be destroyed during teardown part of this test.")
 
 
+@azure_platform_required
 def test_azure_storageaccount():
     """
     Testing that Azure storage account, post deployment.
@@ -92,6 +92,9 @@ def test_azure_storageaccount():
     Testing for property 'allowBlobPublicAccess' to be 'false'
     """
     azure = azure_utils.AZURE()
-    azure.storage_client
     storage_account_names = azure.get_storage_accounts_names()
     print(f"{storage_account_names=}")
+    for storage in storage_account_names:
+        if "noobaa" in storage:
+            property = azure.get_storage_account_properties(storage)
+            print(f"{property=}")
