@@ -28,7 +28,8 @@ jobs:
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
-          tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test16 ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test15
+          tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 \
+                ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:$(date +'%Y-%m-%d')
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
 
