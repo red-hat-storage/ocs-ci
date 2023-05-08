@@ -20,11 +20,11 @@ jobs:
       - name: Set time env
         run: echo "TIME=$(date --rfc-3339=date)" >> "$GITHUB_ENV"
 
-      - name: Print time time
+      - name: Print time
         run:  |
-          echo "Image pushed to ${{ env.TIME }}"
+          echo "Time = ${{ env.TIME }}"
           echo "${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 \
-          ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:stable-${{ env.TIME }}"
+          ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55-${{ env.TIME }}"
       - name: Log in to Quay.io
         uses: redhat-actions/podman-login@v1
         with:
@@ -52,7 +52,7 @@ jobs:
         with:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}
+          registry: ${{ env.REGISTRY }}
 
       - name: Print image url
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
