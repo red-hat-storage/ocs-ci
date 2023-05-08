@@ -8,6 +8,7 @@ env:
   REGISTRY: quay.io
   REGISTRY_NS: ocsci
   REGISTRY_IMAGE: ocs-ci-container
+  TIME: None
 
 jobs:
   buildah:
@@ -26,10 +27,12 @@ jobs:
 
       - name: Buildah Action
         id: build-image
+        run: |
+          echo "release-date=$(date --rfc-3339=date)" >> ${env.TIME}
         uses: redhat-actions/buildah-build@v2
         with:
           tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 \
-                ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:$(date +'%Y-%m-%d')
+                ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:${{ env.TIME }}
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
 
