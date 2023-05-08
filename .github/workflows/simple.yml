@@ -8,7 +8,6 @@ env:
   REGISTRY: quay.io
   REGISTRY_NS: ocsci
   REGISTRY_IMAGE: ocs-ci-container
-  TIME: $(date --rfc-3339=date)
 
 jobs:
   buildah:
@@ -18,10 +17,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
+      - name: Set time env
+        run: echo "TIME=$(date --rfc-3339=date)" >> "$GITHUB_ENV"
+
       - name: Print time time
         run:  |
+          env.TIME = $(date --rfc-3339=date)
           echo "Image pushed to ${{ env.TIME }}"
-          echo "${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:stable-${{ env.TIME }}"
+          echo "${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 \
+          ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:stable-${{ env.TIME }}"
       - name: Log in to Quay.io
         uses: redhat-actions/podman-login@v1
         with:
@@ -47,6 +51,7 @@ jobs:
         id: push-to-quay
         uses: redhat-actions/push-to-registry@v2
         with:
+          image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}
 
       - name: Print image url
