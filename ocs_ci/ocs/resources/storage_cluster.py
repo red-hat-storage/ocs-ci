@@ -863,7 +863,7 @@ def ceph_config_dump():
 
     """
     log.info("Getting 'ceph config dump' output.")
-    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
+    toolbox = get_ceph_tools_pod()
 
     return toolbox.exec_ceph_cmd("ceph config dump")
 
@@ -877,7 +877,7 @@ def ceph_mon_dump():
 
     """
     log.info("Getting 'ceph mon dump' output.")
-    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
+    toolbox = get_ceph_tools_pod()
 
     return toolbox.exec_ceph_cmd("ceph mon dump")
 
@@ -929,7 +929,7 @@ def in_transit_encryption_verification():
     return True
 
 
-def get_in_transit_encryption_state():
+def get_in_transit_encryption_config_state():
     """
     Returns the state of in-transit encryption for the OCS cluster.
 
@@ -964,7 +964,7 @@ def set_in_transit_encryption(enabled=True):
 
     # First confirming the existing status of the in-transit encryption
     # on storage cluster If its same as desire state then returning.
-    if get_in_transit_encryption_state() == enabled:
+    if get_in_transit_encryption_config_state() == enabled:
         log.info("Existing in-transit encryption state is same as desire state.")
         return True
 

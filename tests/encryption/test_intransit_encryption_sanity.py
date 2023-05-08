@@ -24,7 +24,7 @@ class TestInTransitEncryptionSanity:
         request.addfinalizer(teardown)
 
     @tier1
-    @skipif_ocs_version("<4.12")
+    @skipif_ocs_version("<4.13")
     @pytest.mark.polarion_id("OCS-4861")
     def test_intransit_encryption_enable_disable_statetransition(self):
         """
