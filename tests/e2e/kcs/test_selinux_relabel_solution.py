@@ -1,99 +1,48 @@
 import logging
-import pytest
 import yaml
-import os
-import os.path
 import time
-import urllib.request
 
-from ocs_ci.ocs.resources import pod
-from tempfile import mkdtemp
-from ocs_ci.ocs.resources.pod import validate_pods_are_respinned_and_running_state
-from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods
-from ocs_ci.ocs.resources import pod as res_pod
+from ocs_ci.ocs.exceptions import PodNotCreated
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pvc import delete_pvcs
+from ocs_ci.ocs.resources.pod import (
+    validate_pods_are_respinned_and_running_state,
+    delete_deploymentconfig_pods,
+)
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
-
-
-TARFILE = "file.gz"
-ntar_loc = mkdtemp()
 
 log = logging.getLogger(__name__)
 
 
 class TestSelinuxrelabel(E2ETest):
-    @pytest.fixture()
-    def download_files(self):
-        kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
-        download_path = ntar_loc
-        dir_path = os.path.join(os.getcwd(), download_path)
-        file_path = os.path.join(dir_path, "file.gz")
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-        urllib.request.urlretrieve(kernel_url, file_path)
-        return dir_path
-
-    @pytest.fixture()
-    def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
+    def create_deploymentconfig_pod(self, **kwargs):
         """"""
-
-        def finalizer():
-            delete_deploymentconfig_pods(pod_obj)
-
-        request.addfinalizer(finalizer)
-
-        # Create pvc
-        pvc_obj = pvc_factory(size=20)
-
+        self.project_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         # Create service_account to get privilege for deployment pods
-        sa_name = helpers.create_serviceaccount(pvc_obj.project.namespace)
+        sa_name = helpers.create_serviceaccount(namespace=self.project_namespace)
 
         helpers.add_scc_policy(
-            sa_name=sa_name.name, namespace=pvc_obj.project.namespace
-        )
-
-        pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=pvc_obj.name,
-            namespace=pvc_obj.project.namespace,
             sa_name=sa_name.name,
-            dc_deployment=True,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
-        helpers.wait_for_resource_state(
-            resource=pod_obj, state=constants.STATUS_RUNNING
-        )
-        return pod_obj, pvc_obj
-
-    def copy_files(self, pod_obj, pvc_obj):
-        log.info(f"pod obj name---- {pod_obj.name}")
-        pod_name = pod_obj.name
-
-        log.info("cephfs pod created")
-        ocp_obj = ocp.OCP(
-            kind=constants.POD,
-            namespace=pvc_obj.project.namespace,
-        )
-        # Number of times we copy the kernel
-        copies = 3
-        tmploc = ntar_loc.split("/")[-1]
-        ocp_obj.exec_oc_cmd(
-            f"rsync {ntar_loc} {pod_name}:{constants.FLEXY_MNT_CONTAINER_DIR}",
-            timeout=300,
-        )
-        ocp_obj.exec_oc_cmd(
-            f"exec {pod_name} -- mkdir {constants.FLEXY_MNT_CONTAINER_DIR}/x"
-        )
-        for x in range(copies):
-            ocp_obj.exec_oc_cmd(
-                f"exec {pod_name} -- /bin/tar xf"
-                f" {constants.FLEXY_MNT_CONTAINER_DIR}/{tmploc}/{TARFILE}"
-                f" -C {constants.FLEXY_MNT_CONTAINER_DIR}/x/x{x}",
-                timeout=3600,
+        try:
+            self.pod_obj = helpers.create_pod(
+                interface_type=constants.CEPHFS_INTERFACE,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.project_namespace,
+                sa_name=sa_name.name,
+                dc_deployment=True,
+                **kwargs,
             )
-        log.info("cephfs test files created on pod")
+        except Exception as e:
+            log.exception(
+                f"Pod attached to PVC {self.pod_obj.name} was not created, exception [{str(e)}]"
+            )
+            raise PodNotCreated("Pod attached to PVC was not created.")
 
     def data_integrity_check(self, pod_obj, pvc_namespace):
         pod_name = pod_obj.name
@@ -103,7 +52,7 @@ class TestSelinuxrelabel(E2ETest):
             namespace=pvc_namespace,
         )
 
-        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}/x"
+        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         random_file = ocp_obj.exec_oc_cmd(
             f"exec -it {pod_name} -- /bin/bash"
             f' -c "find {data_path} -type f | "shuf" -n 1"',
@@ -111,13 +60,9 @@ class TestSelinuxrelabel(E2ETest):
         )
         log.info(f"files are {random_file}")
         ini_md5sum_pod_data = pod.cal_md5sum(pod_obj=pod_obj, file_name=random_file)
-        start_time = time.time()
         assert validate_pods_are_respinned_and_running_state([pod_obj])
-        end_time = time.time()
-        total_time = end_time - start_time
-        log.info(f"Time taken by pod to restart is  {total_time}")
         pod_objs = pod.get_all_pods(
-            namespace=pvc_namespace, selector=["pod-test-rbd"], selector_label="name"
+            namespace=pvc_namespace, selector=["pod-test-"], selector_label="name"
         )
         for pod_obj in pod_objs:
             pod_name = pod_obj.name
@@ -127,16 +72,15 @@ class TestSelinuxrelabel(E2ETest):
                 pod_obj=pod_obj1, file_name=random_file
             )
             assert ini_md5sum_pod_data == fin_md5sum_pod_data
-        return total_time
 
-    def test_selinux_relabel(
-        self,
-        create_pvc_and_deploymentconfig_pod,
-        download_files,
-        snapshot_factory,
-        snapshot_restore_factory,
-        pod_factory,
-    ):
+    def teardown(self):
+        """
+        Cleanup the test environment
+        """
+        delete_deploymentconfig_pods(self.pod_obj)
+        delete_pvcs([self.pvc_obj])
+
+    def test_selinux_relabel(self):
         """
         Steps:
             1. Create multiple cephfs pvcs(4) and 100K files each across multiple nested  directories
@@ -147,24 +91,35 @@ class TestSelinuxrelabel(E2ETest):
             6. Check data integrity.
 
         """
-        download_files
-        pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
-        self.copy_files(pod_obj=pod_obj, pvc_obj=pvc_obj)
-        log.info(f"files copied to pod {pod_obj}")
+        # Create pvc
+        self.pvc_obj = helpers.create_pvc(
+            namespace=self.project_namespace,
+            sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
+            size="20Gi",
+        )
 
-        self.data_integrity_check(pod_obj, pvc_obj)
+        copies = 3
+        self.create_deploymentconfig_pod(
+            command=["/opt/multiple_files.sh"],
+            command_args=[f"{copies}", "/mnt"],
+        )
+        log.info(f"files copied to pod {self.pod_obj}")
 
-        # Apply the fix/solution in the “Existing PVs” section
-        pv_name = pvc_obj.get().get("spec").get("volumeName")
-        project_namespace = pvc_obj.project.namespace
+        start_time1 = time.time()
+        self.data_integrity_check(self.pod_obj, self.project_namespace)
+        end_time1 = time.time()
+        total_time1 = end_time1 - start_time1
+        log.info(f"Time taken by pod to restart is  {total_time1}")
 
+        # Apply the fix/solution for “Existing PVs”
+        pv_name = self.pvc_obj.get().get("spec").get("volumeName")
         ocp_obj = ocp.OCP(
             kind=constants.POD,
-            namespace=project_namespace,
+            namespace=self.project_namespace,
         )
 
         backup_file = "/tmp/backup.yaml"
-        backup_get = pvc_obj.backed_pv_obj.get()
+        backup_get = self.pvc_obj.backed_pv_obj.get()
         dump_data_to_temp_yaml(backup_get, backup_file)
         log.info("backup file created")
 
@@ -186,6 +141,7 @@ class TestSelinuxrelabel(E2ETest):
             ] = 'context="system_u:object_r:container_file_t:s0"'
         with open(r"/tmp/backup.yaml", "w") as backup:
             yaml.dump(backup1, backup)
+            log.info(f"{backup_file} is updated")
 
         ocp_pv.delete(resource_name=pv_name, wait=False)
         ocp_pv.patch(
@@ -194,16 +150,35 @@ class TestSelinuxrelabel(E2ETest):
             format_type="merge",
         )
         ocp_pv.wait_for_delete(resource_name=ocp_obj)
-        log.info("pv deleted")
+        log.info(f"pv {pv_name} deleted")
+
         run_cmd(f"oc apply -f {backup_file}")
-        log.info("Backup pv created")
+        log.info(f"Backup pv {pv_name}created")
+
+        params = [
+            {
+                "op": "remove",
+                "path": "/metadata/annotations/pv.kubernetes.io~1bind-completed",
+            }
+        ]
+        ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=self.project_namespace)
+        ocp_pvc.patch(
+            resource_name=self.pvc_obj.name,
+            params=params,
+            format_type="json",
+        )
 
         # Get the node running this pod
-        node_name = res_pod.get_pod_node(pod_obj=pod_obj).name
-        oc_cmd = ocp.OCP(namespace=project_namespace)
-        cmd1 = f"crictl inspect $(crictl ps --name fedora -q)"
+        node_name = pod.get_pod_node(pod_obj=self.pod_obj).name
+        oc_cmd = ocp.OCP(namespace=self.project_namespace)
+        cmd1 = f"crictl inspect $(crictl ps --name perf -q)"
         output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
         key = f'"selinuxRelabel": false'
         assert key in output
 
-        self.data_integrity_check(pod_obj, project_namespace)
+        start_time2 = time.time()
+        self.data_integrity_check(self.pod_obj, self.project_namespace)
+        end_time2 = time.time()
+        total_time2 = end_time2 - start_time2
+        log.info(f"Time taken by pod to restart is  {total_time2}")
+        assert total_time1 > total_time2
