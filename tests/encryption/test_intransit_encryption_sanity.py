@@ -4,22 +4,25 @@ import pytest
 from ocs_ci.ocs.resources.storage_cluster import (
     in_transit_encryption_verification,
     set_in_transit_encryption,
+    get_in_transit_encryption_config_state,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_intransit_encryption_notset,
     tier1,
     skipif_ocs_version,
 )
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
 
-@skipif_intransit_encryption_notset
 class TestInTransitEncryptionSanity:
     @pytest.fixture(autouse=True)
     def set_encryption_at_teardown(self, request):
         def teardown():
-            set_in_transit_encryption()
+            if config.ENV_DATA.get("in_transit_encryption"):
+                set_in_transit_encryption()
+            else:
+                set_in_transit_encryption(enabled=False)
 
         request.addfinalizer(teardown)
 
@@ -29,13 +32,17 @@ class TestInTransitEncryptionSanity:
     def test_intransit_encryption_enable_disable_statetransition(self):
         """
         The test does the following:
-        1. Verify in-transit Encryption is Enable on setup.
-        2. Disable Encryption
-        3. Verify in-transit encryption configuration is removed.
-        4. Enable encryption Again and verify it.
-        5. Verify in-transit encryption config is exists.
+        1. Enable in-transit Encryption if not Enabled.
+        2. Verify in-transit Encryption is Enable on setup.
+        3. Disable Encryption
+        4. Verify in-transit encryption configuration is removed.
+        5. Enable encryption Again and verify it.
+        6. Verify in-transit encryption config is exists.
 
         """
+        if not get_in_transit_encryption_config_state():
+            set_in_transit_encryption()
+
         log.info("Verifying the in-transit encryption is enable on setup.")
         assert in_transit_encryption_verification()
 
