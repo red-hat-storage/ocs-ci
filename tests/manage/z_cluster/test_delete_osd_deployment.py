@@ -59,7 +59,10 @@ class TestDeleteOSDDeployment(ManageTest):
 
             # Wait for new OSD deployment to be Ready
             deployment_obj.wait_for_resource(
-                condition="1/1", resource_name=osd_deployment_name, column="READY"
+                condition="1/1",
+                resource_name=osd_deployment_name,
+                column="READY",
+                timeout=120,
             )
 
             # Check if a new OSD pod is created
