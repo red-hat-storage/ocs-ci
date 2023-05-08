@@ -1634,15 +1634,20 @@ def verify_all_nodes_created():
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
             constants.AZURE_PLATFORM,
+            constants.MANAGED_SERVICE_PLATFORMS,
         ]
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if config.ENV_DATA[
+            "platform"
+        ].lower() in constants.MANAGED_SERVICE_PLATFORMS and not config.DEPLOYMENT.get(
+            "pullsecret_workaround"
+        ):
             log.warning(
                 f"Expected number of nodes is {expected_num_nodes} but "
                 f"created during deployment is {existing_num_nodes}"
             )
-        elif (
-            config.ENV_DATA["platform"].lower() in platforms_to_wait
-            and config.ENV_DATA["deployment_type"] == "ipi"
+        elif config.ENV_DATA["platform"].lower() in platforms_to_wait and (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            or config.ENV_DATA["deployment_type"] == "managed"
         ):
             try:
 
