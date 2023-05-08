@@ -2,6 +2,7 @@ name: Build Container Image
 
 on: [pull_request]
 
+# Environment Vars
 env:
   REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
   REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
