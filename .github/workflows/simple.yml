@@ -50,9 +50,9 @@ jobs:
         id: push-to-quay
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: ${{ steps.build-image.outputs.image }}
+          registry: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}
+          image: ${{ env.REGISTRY_IMAGE }}
           tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.REGISTRY }}
 
       - name: Print image url
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
