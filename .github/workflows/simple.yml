@@ -22,7 +22,6 @@ jobs:
 
       - name: Print time time
         run:  |
-          echo ${env.TIME}
           echo "Image pushed to ${{ env.TIME }}"
           echo "${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:test55 \
           ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}:stable-${{ env.TIME }}"
