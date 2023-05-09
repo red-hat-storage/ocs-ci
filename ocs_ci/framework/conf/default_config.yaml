@@ -224,6 +224,7 @@ ENV_DATA:
   rosa_billing_model: 'standard'
   appliance_mode: true
   ms_osd_pod_memory: "6Gi"
+  ms_osd_pod_cpu: "1650m"
 
   # used in external mode deployment
   restricted-auth-permission: false
