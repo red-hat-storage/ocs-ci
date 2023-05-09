@@ -5,6 +5,7 @@ import logging
 import re
 
 from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
@@ -119,8 +120,8 @@ def verify_provider_topology():
     log.info(f"Verified that the OSD count is {size_map[size]['osd_count']}")
 
     # Verify OSD CPU and memory
-    osd_cpu_limit = "1650m"
-    osd_cpu_request = "1650m"
+    osd_cpu_limit = "1750m"
+    osd_cpu_request = "1750m"
     osd_pods = get_osd_pods()
     osd_memory_size = config.ENV_DATA["ms_osd_pod_memory"]
     log.info("Verifying OSD CPU and memory")
@@ -323,16 +324,13 @@ def verify_storageclient_storageclass_claims(storageclient):
     """
     sc_claim_objs = get_storageclassclaims_of_storageclient(storageclient)
     for sc_claim in sc_claim_objs:
-        sc_claim.ocp.wait_for_resource(
-            condition=constants.STATUS_READY,
-            resource_name=sc_claim.name,
-            column="PHASE",
-            resource_count=1,
-        )
-        log.info(
-            f"Storageclassclaim {sc_claim.name} associated with the storageclient {storageclient} is "
-            f"{constants.STATUS_READY}"
-        )
+        if sc_claim.data["status"]["phase"] == constants.STATUS_READY:
+            log.info(
+                f"Storageclassclaim {sc_claim.name} associated with the storageclient {storageclient} is "
+                f"{constants.STATUS_READY}"
+            )
+        else:
+            raise ResourceWrongStatusException(sc_claim.name, sc_claim.ocp.describe())
 
         # Create OCS object of kind Storageclass
         sc_obj = create_ocs_object_from_kind_and_name(
