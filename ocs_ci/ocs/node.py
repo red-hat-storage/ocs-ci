@@ -1635,6 +1635,8 @@ def verify_all_nodes_created():
     # when DEPLOYMENT["pullsecret_workaround"] is True
     if config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM:
         wait_time = 2400
+    else:
+        wait_time = 1200
 
     if expected_num_nodes != existing_num_nodes:
         platforms_to_wait = [
