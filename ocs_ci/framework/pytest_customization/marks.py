@@ -450,6 +450,12 @@ skipif_intransit_encryption_notset = pytest.mark.skipif(
     reason="Skipping test due to intransit encryption is not set in config.",
 )
 
+# Skip if multus is enabled
+skipif_multus_enabled = pytest.mark.skipif(
+    config.ENV_DATA.get("is_multus_enabled"),
+    reason="This test doesn't work correctly with multus deployments",
+)
+
 # Squad marks
 aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad

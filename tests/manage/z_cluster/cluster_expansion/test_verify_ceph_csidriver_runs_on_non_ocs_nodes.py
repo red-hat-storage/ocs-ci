@@ -5,6 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_flexy_deployment,
     skipif_managed_service,
+    skipif_multus_enabled,
 )
 from ocs_ci.framework.testlib import tier1, ManageTest, ignore_leftovers
 from ocs_ci.ocs.node import get_worker_nodes_not_in_ocs
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 # https://github.com/red-hat-storage/ocs-ci/issues/4802
 @skipif_flexy_deployment
 @skipif_managed_service
+@skipif_multus_enabled
 @tier1
 @pytest.mark.polarion_id("OCS-2490")
 @pytest.mark.bugzilla("1794389")
