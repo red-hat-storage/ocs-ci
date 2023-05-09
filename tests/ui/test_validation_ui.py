@@ -67,7 +67,8 @@ class TestUserInterfaceValidation(object):
     @ui
     @tier1
     @black_squad
-    @skipif_ocs_version("<4.9")
+    # skipped for 4.10 - WONTFIX bz 2189623
+    @skipif_ocs_version("<4.11")
     @skipif_external_mode
     @skipif_mcg_only
     @pytest.mark.bugzilla("2096414")
