@@ -1643,8 +1643,8 @@ def verify_all_nodes_created():
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
             constants.AZURE_PLATFORM,
-            constants.MANAGED_SERVICE_PLATFORMS,
         ]
+        platforms_to_wait.extend(constants.MANAGED_SERVICE_PLATFORMS)
         if config.ENV_DATA[
             "platform"
         ].lower() in constants.MANAGED_SERVICE_PLATFORMS and not config.DEPLOYMENT.get(
