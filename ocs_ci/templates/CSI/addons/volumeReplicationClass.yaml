@@ -1,7 +1,7 @@
 apiVersion: replication.storage.openshift.io/v1alpha1
 kind: VolumeReplicationClass
 metadata:
-  name: volumereplicationclass-sample
+  name: volume-replication-class-sample
 spec:
   provisioner: example.provisioner.io
   parameters:

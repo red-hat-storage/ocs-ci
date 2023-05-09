@@ -1,7 +1,7 @@
 apiVersion: replication.storage.openshift.io/v1alpha1
 kind: VolumeReplication
 metadata:
-  name: volumereplication-sample
+  name: volume-replication-sample
   namespace: default
 spec:
   volumeReplicationClass: volumereplicationclass-sample
