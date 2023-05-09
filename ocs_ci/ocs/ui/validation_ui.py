@@ -536,11 +536,11 @@ class ValidationUI(PageNavigator):
         )
         return compression_status_blockpools_tab, compression_status_blockpools_details
 
-    def verify_odf_operator_in_installed_operator(self) -> bool:
+    def verify_odf_without_ocs_in_installed_operator(self) -> bool:
         """
-        Function to validate either ODF operator pod is up and running post ODF installation,
-        expectation is only ODF operator should be running in Installed operators tab other operators shouldn't be there
-        This function is only written for 4.9+ versions
+        Function to validate either ODF operator is present post ODF installation,
+        expectation is only ODF operator should be present in Installed operators tab and
+        OCS operator shouldn't be present. This function is only written for 4.9+ versions
 
         Returns:
         True: If only odf operator is present in the UI

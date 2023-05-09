@@ -105,14 +105,10 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @pytest.mark.bugzilla("1994584")
-    def test_ocs_operator_is_not_present(self, setup_ui_class):
+    def test_ocs_operator_is_not_present(self):
         """
         Validate odf operator is present in the installed operator tab in ui.
-
-         Args:
-            setup_ui_class: login function on conftest file
-
         """
 
-        validation_ui_obj = ValidationUI(setup_ui_class)
-        assert validation_ui_obj.verify_odf_operator_in_installed_operator()
+        validation_ui_obj = ValidationUI()
+        assert validation_ui_obj.verify_odf_without_ocs_in_installed_operator()
