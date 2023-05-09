@@ -304,7 +304,7 @@ class Deployment(object):
         """
         if not config.ENV_DATA["skip_ocs_deployment"]:
             for i in range(config.nclusters):
-                if config.multicluster and config.get_acm_index() == i:
+                if config.multicluster and config.get_active_acm_index() == i:
                     continue
                 config.switch_ctx(i)
                 try:
@@ -325,7 +325,7 @@ class Deployment(object):
             # For single cluster, test_deployment will take care.
             if config.multicluster:
                 for i in range(config.multicluster):
-                    if config.get_acm_index() == i:
+                    if config.get_active_acm_index() == i:
                         continue
                     else:
                         config.switch_ctx(i)
@@ -1884,7 +1884,7 @@ class RBDDRDeployOps(object):
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=config.get_acm_index()
+            query_mirroring, skip_index=config.get_active_acm_index()
         )
         index = 0
         for out in out_list:
@@ -1978,7 +1978,10 @@ class RBDDRDeployOps(object):
         # on all participating clusters except HUB
         # We will switch config ctx to Participating clusters
         for cluster in config.clusters:
-            if cluster.MULTICLUSTER["multicluster_index"] == config.get_acm_index():
+            if (
+                cluster.MULTICLUSTER["multicluster_index"]
+                == config.get_active_acm_index()
+            ):
                 continue
             else:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -2234,7 +2237,7 @@ class MultiClusterDROperatorsDeploy(object):
             # Create s3 secret on all clusters except ACM
             for secret_yaml in secret_yaml_files:
                 cmd = f"oc create -f {secret_yaml}"
-                run_cmd_multicluster(cmd, skip_index=config.get_acm_index())
+                run_cmd_multicluster(cmd, skip_index=config.get_active_acm_index())
 
         def get_participating_regions(self):
             """

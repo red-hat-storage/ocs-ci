@@ -1421,7 +1421,7 @@ def health_checker(request, tier_marks_name):
     if config.multicluster:
         if (
             config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-            == config.get_acm_index()
+            == config.get_active_acm_index()
         ):
             return
 
