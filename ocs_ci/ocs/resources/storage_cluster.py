@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
-    verify_pods_in_managed_fusion_namespace,
+    verify_faas_resources,
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
@@ -638,11 +638,7 @@ def ocs_install_verification(
         verify_multus_network()
 
     if fusion_aas:
-        verify_pods_in_managed_fusion_namespace()
-
-    # TODO: Enable the verification for FaaS consumer cluster
-    if managed_service and not fusion_aas_consumer:
-        verify_managed_service_resources()
+        verify_faas_resources()
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
