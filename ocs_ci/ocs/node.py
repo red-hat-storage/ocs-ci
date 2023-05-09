@@ -1629,6 +1629,13 @@ def verify_all_nodes_created():
         expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
 
     existing_num_nodes = len(get_all_nodes())
+
+    # Some nodes will take time to create due to the issue https://issues.redhat.com/browse/SDA-6346
+    # Increasing the wait time for FaaS where the presence of all nodes are important
+    # when DEPLOYMENT["pullsecret_workaround"] is True
+    if config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM:
+        wait_time = 2400
+
     if expected_num_nodes != existing_num_nodes:
         platforms_to_wait = [
             constants.VSPHERE_PLATFORM,
@@ -1652,7 +1659,7 @@ def verify_all_nodes_created():
             try:
 
                 for node_list in TimeoutSampler(
-                    timeout=1200, sleep=60, func=get_all_nodes
+                    timeout=wait_time, sleep=60, func=get_all_nodes
                 ):
                     if len(node_list) == expected_num_nodes:
                         log.info(

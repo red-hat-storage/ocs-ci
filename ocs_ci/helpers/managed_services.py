@@ -392,8 +392,7 @@ def verify_faas_resources():
         sc_data = sc_obj.get()["items"][0]
         verify_faas_provider_storagecluster(sc_data)
         verify_faas_provider_resources()
-        if get_ocs_osd_deployer_version() >= get_semantic_version("2.0.11-0"):
-            verify_provider_topology()
+        verify_provider_topology()
     else:
         verify_storageclient()
         verify_faas_consumer_resources()
