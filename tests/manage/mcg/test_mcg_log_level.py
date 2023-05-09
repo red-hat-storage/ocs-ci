@@ -21,6 +21,8 @@ from ocs_ci.ocs.constants import (
 
 log = getLogger(__name__)
 NAMESPACE = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+LOG_LEVEL_DEFAULT = "default"
+LOG_LEVEL_WARN = "warn"
 
 
 def get_noobaa_cfg_log_level(cfgmap: OCP) -> str:
@@ -34,7 +36,9 @@ def get_noobaa_cfg_log_level(cfgmap: OCP) -> str:
         str: value of NOOBAA_LOG_LEVEL
 
     """
-    return cfgmap.get(NOOBAA_CONFIGMAP).get("data").get("NOOBAA_LOG_LEVEL")
+    log_level = cfgmap.get(NOOBAA_CONFIGMAP).get("data").get("NOOBAA_LOG_LEVEL")
+    log.info(f"Noobaa current log level from configmap: {log_level}")
+    return log_level
 
 
 def set_noobaa_cfg_log_level(cfgmap: OCP, log_level: str) -> None:
@@ -47,6 +51,7 @@ def set_noobaa_cfg_log_level(cfgmap: OCP, log_level: str) -> None:
 
     """
     cmd = f'{{"data": {{"NOOBAA_LOG_LEVEL": "{log_level}"}}}}'
+    log.info(f"Setting noobaa's log level to {log_level} at {NOOBAA_CONFIGMAP}:")
     cfgmap.patch(resource_name=NOOBAA_CONFIGMAP, params=cmd, format_type="merge")
 
 
@@ -80,11 +85,14 @@ class TestNoobaaLogLevel:
     cfgmap = OCP(namespace=NAMESPACE, kind=CONFIGMAP, resource_name=NOOBAA_CONFIGMAP)
     pod_obj = OCP(namespace=NAMESPACE, kind=POD, selector=NOOBAA_APP_LABEL)
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope="class")
     def set_log_level_warn(self) -> None:
         log_level = get_noobaa_cfg_log_level(self.cfgmap)
         if log_level != "warn":
-            set_noobaa_cfg_log_level(cfgmap=self.cfgmap, log_level="warn")
+            set_noobaa_cfg_log_level(cfgmap=self.cfgmap, log_level=LOG_LEVEL_WARN)
+        self.pod_obj.wait_for_resource(condition=STATUS_RUNNING)
+        yield log_level
+        set_noobaa_cfg_log_level(cfgmap=self.cfgmap, log_level=LOG_LEVEL_DEFAULT)
         self.pod_obj.wait_for_resource(condition=STATUS_RUNNING)
 
     def test_mcg_core_log_level(self) -> None:
