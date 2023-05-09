@@ -24,8 +24,7 @@ from ocs_ci.utility.utils import (
     string_chunkify,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
-from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ui.base_ui import login_ui
+from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
@@ -42,9 +41,9 @@ class AcmAddClusters(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.page_nav = locators[self.ocp_version]["acm_page"]
+    def __init__(self):
+        super().__init__()
+        self.page_nav = self.acm_page_nav
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """
@@ -244,6 +243,7 @@ class AcmAddClusters(AcmPageNavigator):
         This is a mandatory pre-check for Regional DR.
 
         """
+
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
             locator=self.page_nav["cluster-sets"],
@@ -340,15 +340,13 @@ def get_acm_url():
     return f"https://{url}"
 
 
-def validate_page_title(driver, title):
+def validate_page_title(title):
     """
     Validates Page HTML Title
     Args:
-        driver: driver (Selenium WebDriver)
         title (str): required title
-
     """
-    WebDriverWait(driver, 60).until(ec.title_is(title))
+    WebDriverWait(SeleniumDriver(), 60).until(ec.title_is(title))
     log.info(f"page title: {title}")
 
 
@@ -370,7 +368,7 @@ def login_to_acm():
         url = get_acm_url()
     log.info(f"URL: {url}")
     driver = login_ui(url)
-    page_nav = AcmPageNavigator(driver)
+    page_nav = AcmPageNavigator()
     if not compare_versions(cmp_str):
         page_nav.navigate_from_ocp_to_acm_cluster_page()
 
@@ -378,7 +376,7 @@ def login_to_acm():
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
-    validate_page_title(driver, title=page_title)
+    validate_page_title(title=page_title)
 
     return driver
 
@@ -464,8 +462,8 @@ def import_clusters_with_acm():
     cluster_name_a = clusters_env.get("cluster_name_1")
     cluster_name_b = clusters_env.get("cluster_name_2")
     verify_running_acm()
-    driver = login_to_acm()
-    acm_nav = AcmAddClusters(driver)
+    login_to_acm()
+    acm_nav = AcmAddClusters()
     acm_nav.import_cluster(
         cluster_name=cluster_name_a,
         kubeconfig_location=kubeconfig_a,

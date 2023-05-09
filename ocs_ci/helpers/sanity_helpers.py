@@ -41,7 +41,13 @@ class Sanity:
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status(timeout=300)
 
-        if not config.ENV_DATA["mcg_only_deployment"]:
+        if not (
+            config.ENV_DATA["mcg_only_deployment"]
+            or (
+                config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+                and config.ENV_DATA["cluster_type"].lower() == "consumer"
+            )
+        ):
             ceph_health_check(
                 namespace=config.ENV_DATA["cluster_namespace"], tries=tries
             )

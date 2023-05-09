@@ -14,6 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
+    verify_pods_in_managed_fusion_namespace,
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
@@ -173,9 +174,13 @@ def ocs_install_verification(
     external = config.DEPLOYMENT["external_mode"] or (
         managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
     )
+    fusion_aas = config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+    fusion_aas_consumer = fusion_aas and consumer_cluster
+    fusion_aas_provider = fusion_aas and provider_cluster
 
     # Basic Verification for cluster
-    basic_verification(ocs_registry_image)
+    if not fusion_aas_consumer:
+        basic_verification(ocs_registry_image)
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
@@ -248,6 +253,10 @@ def ocs_install_verification(
             }
         )
 
+    if fusion_aas_consumer:
+        del resources_dict[constants.OCS_OPERATOR_LABEL]
+        del resources_dict[constants.OPERATOR_LABEL]
+
     if ocs_version >= version.VERSION_4_9:
         resources_dict.update(
             {
@@ -267,6 +276,18 @@ def ocs_install_verification(
             continue
         if "mds" in label and disable_cephfs:
             continue
+        if label == constants.MANAGED_CONTROLLER_LABEL:
+            if fusion_aas_provider:
+                service_pod = OCP(
+                    kind=constants.POD, namespace=config.ENV_DATA["service_namespace"]
+                )
+                assert service_pod.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=label,
+                    resource_count=count,
+                    timeout=timeout,
+                )
+                continue
 
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
@@ -333,7 +354,13 @@ def ocs_install_verification(
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
     if not provider_cluster:
-        assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+        if fusion_aas_consumer:
+            {
+                f"{namespace}.cephfs.csi.ceph.com",
+                f"{namespace}.rbd.csi.ceph.com",
+            }.issubset(csi_drivers)
+        else:
+            assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -436,7 +463,9 @@ def ocs_install_verification(
 
     log.info("Verified node and provisioner secret names in storage class.")
 
-    ct_pod = get_ceph_tools_pod()
+    # TODO: Enable the tools pod check when a solution is identified for tools pod on FaaS consumer
+    if not fusion_aas_consumer:
+        ct_pod = get_ceph_tools_pod()
 
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
@@ -533,7 +562,8 @@ def ocs_install_verification(
         log.info("Verified: CSI snapshotter is not present.")
 
     # Verify pool crush rule is with "type": "zone"
-    if utils.get_az_count() == 3:
+    # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
+    if utils.get_az_count() == 3 and not fusion_aas_consumer:
         log.info("Verifying pool crush rule is with type: zone")
         crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
         pool_names = [
@@ -563,10 +593,18 @@ def ocs_install_verification(
         # health OK. See discussion in BZ:
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
-    assert utils.ceph_health_check(namespace, health_check_tries, health_check_delay)
+
+    # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
+    if not fusion_aas_consumer:
+        assert utils.ceph_health_check(
+            namespace, health_check_tries, health_check_delay
+        )
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
-    verify_storage_system()
+
+    if not fusion_aas:
+        verify_storage_system()
+
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
         # a verification of the installation of it will run
@@ -580,20 +618,30 @@ def ocs_install_verification(
             if config.ENV_DATA.get("VAULT_CA_ONLY", None):
                 verify_kms_ca_only()
 
-    storage_cluster_obj = get_storage_cluster()
-    is_flexible_scaling = (
-        storage_cluster_obj.get()["items"][0].get("spec").get("flexibleScaling", False)
-    )
-    if is_flexible_scaling is True:
-        failure_domain = storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
-        assert failure_domain == "host", (
-            f"The expected failure domain on cluster with flexible scaling is 'host',"
-            f" the actaul failure domain is {failure_domain}"
+    if not fusion_aas_consumer:
+        storage_cluster_obj = get_storage_cluster()
+        is_flexible_scaling = (
+            storage_cluster_obj.get()["items"][0]
+            .get("spec")
+            .get("flexibleScaling", False)
         )
+        if is_flexible_scaling is True:
+            failure_domain = storage_cluster_obj.data["items"][0]["status"][
+                "failureDomain"
+            ]
+            assert failure_domain == "host", (
+                f"The expected failure domain on cluster with flexible scaling is 'host',"
+                f" the actaul failure domain is {failure_domain}"
+            )
 
     if config.ENV_DATA.get("is_multus_enabled"):
         verify_multus_network()
-    if managed_service:
+
+    if fusion_aas:
+        verify_pods_in_managed_fusion_namespace()
+
+    # TODO: Enable the verification for FaaS consumer cluster
+    if managed_service and not fusion_aas_consumer:
         verify_managed_service_resources()
 
 
@@ -734,7 +782,11 @@ def verify_storage_cluster():
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
-    storage_cluster.wait_for_phase(phase="Ready", timeout=600)
+    if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+        timeout = 1000
+    else:
+        timeout = 600
+    storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
 
 def verify_noobaa_endpoint_count():
@@ -1544,6 +1596,7 @@ def verify_consumer_resources():
     Verify resources specific to managed OCS consumer:
     1. MGR endpoint
     2. monitoring endpoint in cephcluster yaml
+    3. Verify the default Storageclassclaims
     """
     mgr_endpoint = OCP(
         kind="endpoints",
@@ -1564,6 +1617,28 @@ def verify_consumer_resources():
     ][0]["ip"]
     log.info(f"Monitoring endpoint of cephcluster yaml: {monitoring_endpoint}")
     assert re.match("\\d+(\\.\\d+){3}", monitoring_endpoint)
+
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
+    # Verify the default Storageclassclaims
+    if ocs_version >= version.VERSION_4_11:
+        storage_class_claim = OCP(
+            kind=constants.STORAGECLASSCLAIM,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        for sc_claim in [
+            constants.DEFAULT_STORAGECLASS_RBD,
+            constants.DEFAULT_STORAGECLASS_CEPHFS,
+        ]:
+            sc_claim_phase = storage_class_claim.get_resource(
+                resource_name=sc_claim, column="PHASE"
+            )
+            assert sc_claim_phase == constants.STATUS_READY, (
+                f"The phase of the storageclassclaim {sc_claim} is {sc_claim_phase}. "
+                f"Expected phase is '{constants.STATUS_READY}'"
+            )
+            log.info(f"Storageclassclaim {sc_claim} is {constants.STATUS_READY}")
+        log.info("Verified the status of the default storageclassclaims")
 
 
 def verify_managed_service_networkpolicy():

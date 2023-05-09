@@ -11,11 +11,10 @@ from selenium.webdriver.common.action_chains import ActionChains
 from ocs_ci.deployment import vmware
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
-from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.base_ui import BaseUI, SeleniumDriver
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators, acm_ui_specific
+from ocs_ci.ocs.ui.views import acm_ui_specific
 from ocs_ci.utility.utils import (
-    get_ocp_version,
     expose_ocp_version,
     run_cmd,
     get_running_acm_version,
@@ -46,10 +45,8 @@ class AcmPageNavigator(BaseUI):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.ocp_version = get_ocp_version()
-        self.acm_page_nav = locators[self.ocp_version]["acm_page"]
+    def __init__(self):
+        super().__init__()
 
     def navigate_welcome_page(self):
         """
@@ -217,8 +214,8 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver, platform, cluster_conf):
-        super().__init__(driver)
+    def __init__(self, platform, cluster_conf):
+        super().__init__()
         self.platform = platform
         self.cluster_conf = cluster_conf
         self.cluster_name = self.cluster_conf.ENV_DATA["cluster_name"]
@@ -509,8 +506,8 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
 
     """
 
-    def __init__(self, driver, cluster_conf=None):
-        super().__init__(driver=driver, platform="vsphere", cluster_conf=cluster_conf)
+    def __init__(self, cluster_conf=None):
+        super().__init__(platform="vsphere", cluster_conf=cluster_conf)
         self.platform_credential_name = cluster_conf.ENV_DATA.get(
             "platform_credential_name",
             f"{ACM_PLATOFRM_VSPHERE_CRED_PREFIX}{self.cluster_name}",
@@ -875,14 +872,13 @@ class ACMOCPDeploymentFactory(object):
             "vsphereupi": ACMOCPPlatformVsphereIPI,
         }
 
-    def get_platform_instance(self, driver, cluster_config):
+    def get_platform_instance(self, cluster_config):
         """
         Args:
-            driver: selenium UI driver object
             cluster_config (dict): Cluster Config object
         """
         platform_deployment = (
             f"{cluster_config.ENV_DATA['platform']}"
             f"{cluster_config.ENV_DATA['deployment_type']}"
         )
-        return self.platform_map[platform_deployment](driver, cluster_config)
+        return self.platform_map[platform_deployment](SeleniumDriver(), cluster_config)

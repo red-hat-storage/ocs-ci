@@ -6,11 +6,11 @@ source Docker_files/ocsci_container/scripts/common.sh
 
 if [ "$AWS_PATH_ARG" == "" ];
 then
-  $ENGINE_ARG run -v $CLUSTER_PATH:/opt/cluster \
-  -v $PWD/data:/opt/ocs-ci/data $IMAGE_NAME_ARG $RUN_CI
+  $ENGINE_ARG run -v $CLUSTER_PATH:/opt/cluster:Z \
+  -v $PWD/data:/opt/ocs-ci/data:Z $IMAGE_NAME_ARG $RUN_CI
 else
-  $ENGINE_ARG run -v $CLUSTER_PATH:/opt/cluster -v $PWD/data:/opt/ocs-ci/data \
-   -v $AWS_PATH_ARG:/root/.aws $IMAGE_NAME_ARG $RUN_CI
+  $ENGINE_ARG run -v $CLUSTER_PATH:/opt/cluster:Z -v $PWD/data:/opt/ocs-ci/data:Z \
+   -v $AWS_PATH_ARG:/root/.aws:Z $IMAGE_NAME_ARG $RUN_CI
 fi
 
 #make run-odf CLUSTER_PATH=~/ClusterPath RUN_CI="run-ci --cluster-path /opt/cluster --ocp-version 4.12\

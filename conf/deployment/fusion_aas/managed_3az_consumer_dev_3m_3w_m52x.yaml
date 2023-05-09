@@ -6,6 +6,7 @@ ENV_DATA:
   # or via rosa_service i.e appliance mode
   cluster_type: 'consumer'
   cluster_namespace: 'fusion-storage'
+  service_namespace: 'managed-fusion'
   multi_availability_zones: True
   worker_replicas: 3
   master_replicas: 3

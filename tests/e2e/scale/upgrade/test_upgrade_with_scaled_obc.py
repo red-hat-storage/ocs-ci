@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_managed_service,
     skipif_external_mode,
+    orange_squad,
 )
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.utility import utils, templating
@@ -84,6 +85,7 @@ def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
 @skipif_bm
 @skipif_managed_service
 @pytest.mark.polarion_id("OCS-3988")
+@orange_squad
 def test_scale_obc_post_upgrade():
     """
     Validate OBC scaled for post upgrade

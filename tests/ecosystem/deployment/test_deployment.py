@@ -69,7 +69,12 @@ def test_deployment(pvc_factory, pod_factory):
                 sanity_helpers.delete_resources()
                 # Verify ceph health
                 log.info("Verifying ceph health after deployment")
-                assert ceph_health_check(tries=10, delay=30)
+                # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
+                if not (
+                    config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+                    and config.ENV_DATA["cluster_type"].lower() == "consumer"
+                ):
+                    assert ceph_health_check(tries=10, delay=30)
 
     if teardown:
         log.info("Cluster will be destroyed during teardown part of this test.")

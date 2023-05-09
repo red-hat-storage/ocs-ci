@@ -23,6 +23,8 @@ from ocs_ci.ocs.resources.pod import check_pods_after_node_replacement
 from ocs_ci.helpers.sanity_helpers import SanityManagedService
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import is_ms_consumer_cluster, is_ms_provider_cluster
+from ocs_ci.ocs.constants import MS_PROVIDER_TYPE, MS_CONSUMER_TYPE
+from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup, ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -38,12 +40,13 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
+    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
         """
         Save the current index and initialize the Sanity instance
 
         """
         self.orig_index = config.cur_index
+        switch_to_correct_cluster_at_setup(request)
         self.sanity_helpers = SanityManagedService(
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
         )
@@ -59,7 +62,6 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
             for n in ocp_nodes:
                 recover_node_to_ready_state(n)
 
-            config.switch_ctx(self.orig_index)
             # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
             if is_ms_provider_cluster() and config.is_consumer_exist():
                 log.info(
@@ -67,10 +69,20 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
                 )
                 consumers_verification_steps_after_provider_node_replacement()
 
+            log.info("Switch to the original cluster index")
+            config.switch_ctx(self.orig_index)
+            ceph_health_check()
+
         request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-4637")
-    def test_rolling_shutdown_and_recovery_in_controlled_fashion(self, nodes):
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [MS_PROVIDER_TYPE, MS_CONSUMER_TYPE],
+    )
+    def test_rolling_shutdown_and_recovery_in_controlled_fashion(
+        self, cluster_type, nodes
+    ):
         """
         Test rolling shutdown and recovery of the OCS worker nodes, when waiting for the pods to
         be running and Ceph Health OK between the iterations. This test is for the Managed Service
@@ -85,7 +97,8 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
 
         # Start rolling shutdown and recovery of OCS worker nodes
         for node_obj in ocs_node_objs:
-            nodes.stop_nodes(nodes=[node_obj])
+            nodes.stop_nodes(nodes=[node_obj], wait=False)
+            nodes.wait_for_nodes_to_stop_or_terminate(nodes=[node_obj])
             # When we use the managed service, the worker node should recover automatically
             # by starting the node, or removing it and creating a new one
             log.info("Waiting for all the worker nodes to be ready...")

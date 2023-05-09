@@ -2,8 +2,6 @@ import logging
 import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_ocp_version
 from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
@@ -18,11 +16,8 @@ class BlockPoolUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.bp_loc = locators[ocp_version]["block_pool"]
-        self.sc_loc = locators[ocp_version]["storageclass"]
+    def __init__(self):
+        super().__init__()
 
     def create_pool(self, replica, compression):
         """
@@ -69,7 +64,7 @@ class BlockPoolUI(PageNavigator):
             bool: True if pool is in the list of pools page, otherwise False
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
         pool_existence = self.wait_until_expected_text_is_found(
@@ -90,7 +85,7 @@ class BlockPoolUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
         self.do_click((f"{pool_name}", By.LINK_TEXT))
@@ -111,7 +106,7 @@ class BlockPoolUI(PageNavigator):
             compression (bool): True if enable compression. False otherwise.
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
         self.do_click([f"{pool_name}", By.LINK_TEXT])

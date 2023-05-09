@@ -3,6 +3,9 @@ Managed Services related functionalities
 """
 import logging
 
+from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility.managedservice import get_storage_provider_endpoint
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -219,3 +222,144 @@ def verify_osd_distribution_on_provider():
         assert (
             osd_count == int(size) / 4
         ), f"Zone {zone} does not have {size/4} osd, but {osd_count}"
+
+
+def verify_storageclient(
+    storageclient_name=None, namespace=None, provider_name=None, verify_sc=True
+):
+    """
+    Verify status, values and resources related to a storageclient
+
+    Args:
+        storageclient_name (str): Name of the storageclient to be verified. If the name is not given, it will be
+            assumed that only one storageclient is present in the cluster.
+        namespace (str): Namespace where the storageclient is present.
+            Default value will be taken from ENV_DATA["cluster_namespace"]
+        provider_name (str): Name of the provider cluster to which the storageclient is connected.
+        verify_sc (bool): True to verify the storageclassclaims and storageclasses associated with the storageclient.
+
+    """
+    storageclient_obj = OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=namespace or config.ENV_DATA["cluster_namespace"],
+    )
+    storageclient = (
+        storageclient_obj.get(resource_name=storageclient_name)
+        if storageclient_name
+        else storageclient_obj.get()["items"][0]
+    )
+    storageclient_name = storageclient["metadata"]["name"]
+    provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
+    endpoint_actual = get_storage_provider_endpoint(provider_name)
+    assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
+        f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
+        f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
+        f"Value in the provider cluster {provider_name} is {endpoint_actual}"
+    )
+    log.info(
+        f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
+    )
+
+    # Verify storageclient status
+    assert storageclient["status"]["phase"] == "Connected"
+    log.info(f"Storageclient {storageclient_name} is Connected.")
+
+    if verify_sc:
+        # Verify storageclassclaims and the presence of storageclasses
+        verify_storageclient_storageclass_claims(storageclient_name)
+        log.info(
+            f"Verified the status of the storageclassclaims associated with the storageclient {storageclient_name}"
+        )
+
+
+def get_storageclassclaims_of_storageclient(storageclient_name):
+    """
+    Get all storageclassclaims associated with a storageclient
+
+    Args:
+        storageclient_name (str): Name of the storageclient
+
+    Returns:
+         List: OCS objects of kind Storageclassclaim
+
+    """
+    sc_claims = get_all_storageclassclaims()
+    return [
+        sc_claim
+        for sc_claim in sc_claims
+        if sc_claim.data["spec"]["storageClient"]["name"] == storageclient_name
+    ]
+
+
+def get_all_storageclassclaims():
+    """
+    Get all storageclassclaims
+
+    Returns:
+         List: OCS objects of kind Storageclassclaim
+
+    """
+    sc_claim_obj = OCP(
+        kind=constants.STORAGECLASSCLAIM, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    sc_claims_data = sc_claim_obj.get()["items"]
+    return [OCS(**claim_data) for claim_data in sc_claims_data]
+
+
+def verify_storageclient_storageclass_claims(storageclient):
+    """
+    Verify the status of storageclassclaims and the presence of the storageclass associated with the storageclient
+
+    Args:
+        storageclient_name (str): Name of the storageclient
+
+    """
+    sc_claim_objs = get_storageclassclaims_of_storageclient(storageclient)
+    for sc_claim in sc_claim_objs:
+        sc_claim.ocp.wait_for_resource(
+            condition=constants.STATUS_READY,
+            resource_name=sc_claim.name,
+            column="PHASE",
+            resource_count=1,
+        )
+        log.info(
+            f"Storageclassclaim {sc_claim.name} associated with the storageclient {storageclient} is "
+            f"{constants.STATUS_READY}"
+        )
+
+        # Create OCS object of kind Storageclass
+        sc_obj = create_ocs_object_from_kind_and_name(
+            kind=constants.STORAGECLASS,
+            resource_name=sc_claim.name,
+        )
+        # Verify that the Storageclass is present
+        sc_obj.get()
+        log.info(f"Verified Storageclassclaim and Storageclass {sc_claim.name}")
+
+
+def verify_pods_in_managed_fusion_namespace():
+    """
+    Verify the status of pods in the namespace managed-fusion
+
+    """
+    log.info(
+        f"Verifying the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}"
+    )
+    pods_dict = {
+        constants.MANAGED_FUSION_ALERTMANAGER_LABEL: 1,
+        constants.MANAGED_FUSION_AWS_DATA_GATHER: 1,
+        constants.MANAGED_CONTROLLER_LABEL: 1,
+        constants.MANAGED_FUSION_PROMETHEUS_LABEL: 1,
+        constants.PROMETHEUS_OPERATOR_LABEL: 1,
+    }
+    pod = OCP(kind=constants.POD, namespace=constants.MANAGED_FUSION_NAMESPACE)
+    for label, count in pods_dict.items():
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=label,
+            resource_count=count,
+            timeout=600,
+        )
+    log.info(
+        f"Verified the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}"
+    )

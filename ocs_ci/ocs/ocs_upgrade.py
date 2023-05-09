@@ -752,10 +752,10 @@ def ocs_odf_upgrade_ui():
 
     """
 
-    setup_ui = login_ui()
-    val_obj = ValidationUI(setup_ui)
-    pagenav_obj = ValidationUI(setup_ui)
-    dep_obj = DeploymentUI(setup_ui)
+    login_ui()
+    val_obj = ValidationUI()
+    pagenav_obj = ValidationUI()
+    dep_obj = DeploymentUI()
     dep_obj.operator = ODF_OPERATOR
     dep_obj.install_ocs_operator()
     original_ocs_version = config.ENV_DATA.get("ocs_version")

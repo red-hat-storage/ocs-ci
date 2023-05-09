@@ -137,7 +137,7 @@ class TestPVEncryption(ManageTest):
         logger.info("ceph-csi-kms-token created")
         time.sleep(10)
 
-        pvc_ui_obj = PvcUI(setup_ui)
+        pvc_ui_obj = PvcUI()
 
         access_mode = ["ReadWriteMany", "ReadWriteOnce"]
         pvc_size = "5"
@@ -288,6 +288,6 @@ class TestPVEncryption(ManageTest):
                         f"Vault: Key deletion failed for {vol_handle}"
                     )
         # Deleting Storage Class via UI
-        sc_obj = StorageClassUI(setup_ui)
+        sc_obj = StorageClassUI()
         logger.info("Deleting Storage Class via UI")
         sc_obj.delete_rbd_storage_class(sc_name=sc_name)
