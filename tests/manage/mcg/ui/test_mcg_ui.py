@@ -1,9 +1,8 @@
 import logging
+import pytest
+from ocs_ci.framework.pytest_customization.marks import on_prem_platform_required
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
-
-import pytest
-
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -249,7 +248,7 @@ class TestObcUserInterface(object):
                     "noobaa-default-bucket-class",
                     "three_dots",
                 ],
-                marks=pytest.mark.polarion_id("OCS-2542"),
+                marks=pytest.mark.polarion_id("OCS-4698"),
             ),
             pytest.param(
                 *[
@@ -257,7 +256,15 @@ class TestObcUserInterface(object):
                     "noobaa-default-bucket-class",
                     "Actions",
                 ],
-                marks=pytest.mark.polarion_id("OCS-4698"),
+                marks=pytest.mark.polarion_id("OCS-2542"),
+            ),
+            pytest.param(
+                *[
+                    "ocs-storagecluster-ceph-rgw",
+                    None,
+                    "three_dots",
+                ],
+                marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
             ),
         ],
     )
@@ -267,6 +274,7 @@ class TestObcUserInterface(object):
         """
         Test creation and deletion of an OBC via the UI
 
+        The test covers BZ #2175685 RGW OBC creation via the UI is blocked by "Address form errors to proceed"
         """
         obc_name = create_unique_resource_name(
             resource_description="ui", resource_type="obc"
@@ -288,15 +296,18 @@ class TestObcUserInterface(object):
         test_obc_obj = test_obc.get()
 
         obc_storageclass = test_obc_obj.get("spec").get("storageClassName")
-        obc_bucketclass = (
-            test_obc_obj.get("spec").get("additionalConfig").get("bucketclass")
-        )
         assert (
             obc_storageclass == storageclass
         ), f"StorageClass mismatch. Expected: {storageclass}, found: {obc_storageclass}"
-        assert (
-            obc_bucketclass == bucketclass
-        ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
+
+        # no Bucket Classes available for ocs-storagecluster-ceph-rgw Storage Class
+        if bucketclass:
+            obc_bucketclass = (
+                test_obc_obj.get("spec").get("additionalConfig").get("bucketclass")
+            )
+            assert (
+                obc_bucketclass == bucketclass
+            ), f"BucketClass mismatch. Expected: {bucketclass}, found: {obc_bucketclass}"
 
         logger.info(f"Delete {obc_name}")
         obc_ui_obj.delete_obc_ui(obc_name, delete_via)
