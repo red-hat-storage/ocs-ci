@@ -12,7 +12,7 @@ from ocs_ci.deployment import rosa as rosa_deployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.utility.utils import get_ocp_version, wait_for_machineconfigpool_status
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -114,7 +114,11 @@ class FUSIONAAS(rosa_deployment.ROSA):
             logger.info("Running OCS basic installation")
         create_fusion_monitoring_resources()
         if config.DEPLOYMENT.get("pullsecret_workaround"):
+            # The pull secret may not get updated on all nodes if any node is not updated. Ensure it by checking the
+            # status of machineconfigpool
+            wait_for_machineconfigpool_status("all", timeout=1800)
             update_pull_secret()
+            wait_for_machineconfigpool_status("all", timeout=900)
         deploy_odf()
 
     def destroy_ocs(self):
