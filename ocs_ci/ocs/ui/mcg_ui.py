@@ -1,4 +1,6 @@
 import logging
+import random
+import string
 
 from selenium.webdriver.common.by import By
 from ocs_ci.ocs import constants
@@ -9,8 +11,7 @@ from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.base_ui import PageNavigator, CreateResourceForm
 from tests.conftest import delete_projects
 
 logger = logging.getLogger(__name__)
@@ -311,14 +312,70 @@ class BucketsUI(PageNavigator):
         self.do_click(self.generic_locators["confirm_action"], enable_screenshot=True)
 
 
-class ObcUI(BucketsUI):
+class ObcUI(BucketsUI, CreateResourceForm):
     """
     A class representation for abstraction of OBC-related OpenShift UI actions
 
     """
 
     def __init__(self):
-        super().__init__()
+        BucketsUI.__init__(self)
+        CreateResourceForm.__init__(self)
+        self.name_input_loc = self.obc_loc["obc_name"]
+        self.rules = {
+            constants.UI_INPUT_RULES_OBJECT_BUCKET_CLAIM[
+                "rule1"
+            ]: self._check_max_length_backing_store_rule,
+            constants.UI_INPUT_RULES_OBJECT_BUCKET_CLAIM[
+                "rule2"
+            ]: self._check_start_end_char_rule,
+            constants.UI_INPUT_RULES_OBJECT_BUCKET_CLAIM[
+                "rule3"
+            ]: self._check_only_lower_case_numbers_periods_hyphens_rule,
+            constants.UI_INPUT_RULES_OBJECT_BUCKET_CLAIM[
+                "rule4"
+            ]: self._check_obc_cannot_be_used_before,
+        }
+
+    def _check_obc_cannot_be_used_before(self, rule_exp):
+        """
+        Check whether the given rule expression can be used before creating an OBC.
+
+        Args:
+            rule_exp (str): the rule requested to be checked. rule_exp text should match the text from validation popup.
+
+        Returns:
+            bool: True if the input text length not violated, False otherwise.
+        """
+        existing_obc = OCP().exec_oc_cmd(
+            "get obc --all-namespaces -o custom-columns=':metadata.name'"
+        )
+        if not existing_obc:
+            obc_name = create_unique_resource_name(
+                resource_description="bucket", resource_type="s3"
+            )
+            logger.info(f"create new OBC with name '{obc_name}'")
+            self.create_obc_ui(
+                obc_name, "openshift-storage.noobaa.io", "noobaa-default-bucket-class"
+            )
+            self.navigate_object_bucket_claims_page()
+            self.proceed_resource_creation()
+            existing_obc = str(
+                OCP().exec_oc_cmd(
+                    "get obc --all-namespaces -o custom-columns=':metadata.name'"
+                )
+            )
+
+        name_exist = existing_obc.split()[0]
+        random_char = random.choice(string.ascii_lowercase + string.digits)
+        name_does_not_exist = random_char + name_exist[1:]
+
+        params_list = [
+            (rule_exp, name_exist, self.status_error),
+            (rule_exp, name_does_not_exist, self.status_success),
+        ]
+
+        return all(self._check_rule_case(*params) for params in params_list)
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
         """
@@ -345,6 +402,9 @@ class ObcUI(BucketsUI):
         logger.info("Select Storage Class")
         self.do_click(self.obc_loc["storageclass_dropdown"])
         self.do_send_keys(self.obc_loc["storageclass_text_field"], storageclass)
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
         self.do_click(
             locator=format_locator(self.generic_locators["storage_class"], storageclass)
         )

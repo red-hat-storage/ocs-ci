@@ -2094,3 +2094,54 @@ TOPOLVM_ALERTS = {
 
 
 WARP_CLIENT_PORT = 7761
+
+UI_INPUT_RULES_GENERAL = {
+    "rule1": "Starts and ends with a lowercase letter or number",
+    "rule2": "Only lowercase letters, numbers, non-consecutive periods, or hyphens",
+    "rule3": "A unique name for the BackingStore within the project",
+    "rule4": "Cannot be used before",
+    "rule5": "No more than 253 characters",
+}
+
+UI_INPUT_RULES_BACKING_STORE = {
+    "rule1": "No more than 43 characters",
+    "rule2": UI_INPUT_RULES_GENERAL["rule1"],
+    "rule3": UI_INPUT_RULES_GENERAL["rule2"],
+    "rule4": "A unique name for the BackingStore within the project",
+}
+
+UI_INPUT_RULES_BUCKET_CLASS = {
+    "rule1": "3-63 characters",
+    "rule2": UI_INPUT_RULES_GENERAL["rule1"],
+    "rule3": UI_INPUT_RULES_GENERAL["rule2"],
+    "rule4": "Avoid using the form of an IP address",
+    "rule5": "Cannot be used before",
+}
+
+UI_INPUT_RULES_OBJECT_BUCKET_CLAIM = {
+    "rule1": UI_INPUT_RULES_GENERAL["rule5"],
+    "rule2": UI_INPUT_RULES_GENERAL["rule1"],
+    "rule3": UI_INPUT_RULES_GENERAL["rule2"],
+    "rule4": UI_INPUT_RULES_GENERAL["rule4"],
+}
+
+UI_INPUT_RULES_NAMESPACE_STORE = {
+    "rule1": "No more than 43 characters",
+    "rule2": UI_INPUT_RULES_GENERAL["rule1"],
+    "rule3": UI_INPUT_RULES_GENERAL["rule2"],
+    "rule4": "A unique name for the NamespaceStore within the project",
+}
+
+UI_INPUT_RULES_BLOCKING_POOL = {
+    "rule1": UI_INPUT_RULES_GENERAL["rule5"],
+    "rule2": UI_INPUT_RULES_GENERAL["rule1"],
+    "rule3": UI_INPUT_RULES_GENERAL["rule2"],
+    "rule4": UI_INPUT_RULES_GENERAL["rule4"],
+}
+
+UI_INPUT_RULES_STORAGE_SYSTEM = {
+    "rule1": UI_INPUT_RULES_GENERAL["rule5"],
+    "rule2": UI_INPUT_RULES_GENERAL["rule1"],
+    "rule3": UI_INPUT_RULES_GENERAL["rule2"],
+    "rule4": UI_INPUT_RULES_GENERAL["rule4"],
+}

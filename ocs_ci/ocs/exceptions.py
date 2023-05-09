@@ -606,3 +606,7 @@ class UnknownOperationForTerraformVariableUpdate(Exception):
 
 class TerrafromFileNotFoundException(Exception):
     pass
+
+
+class IncorrectUiOptionRequested(Exception):
+    pass
