@@ -1,11 +1,12 @@
 import logging
 
 from ocs_ci.framework.pytest_customization.marks import (
-    ui,
     skipif_ibm_cloud_managed,
     skipif_managed_service,
     black_squad,
     polarion_id,
+    tier3,
+    bugzilla,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -14,11 +15,12 @@ from ocs_ci.ocs.ui.base_ui import PageNavigator
 logger = logging.getLogger(__name__)
 
 
-@ui
+@tier3
 @black_squad
 @skipif_ibm_cloud_managed
 @skipif_managed_service
 class TestErrorMessageImprovements(ManageTest):
+    @bugzilla("2193109")
     @polarion_id("OCS-4865")
     def test_backing_store_create_rules(self, setup_ui_class):
         """
@@ -34,6 +36,7 @@ class TestErrorMessageImprovements(ManageTest):
         backing_store_tab.proceed_resource_creation()
         backing_store_tab.check_error_messages()
 
+    @bugzilla("2193109")
     @polarion_id("OCS-4867")
     def test_obc_create_rules(self, setup_ui_class):
         """
@@ -49,6 +52,7 @@ class TestErrorMessageImprovements(ManageTest):
         object_bucket_claim_create_tab.proceed_resource_creation()
         object_bucket_claim_create_tab.check_error_messages()
 
+    @bugzilla("2193109")
     @polarion_id("OCS-4869")
     def test_bucket_class_create_rules(self, setup_ui_class):
         """
@@ -65,6 +69,7 @@ class TestErrorMessageImprovements(ManageTest):
         bucket_class_create_tab.proceed_resource_creation()
         bucket_class_create_tab.check_error_messages()
 
+    @bugzilla("2193109")
     @polarion_id("OCS-4871")
     def test_namespace_store_create_rules(
         self, cld_mgr, namespace_store_factory, setup_ui_class
@@ -93,6 +98,7 @@ class TestErrorMessageImprovements(ManageTest):
         namespace_store_tab.proceed_resource_creation()
         namespace_store_tab.check_error_messages()
 
+    @bugzilla("2193109")
     @polarion_id("OCS-4873")
     def test_blocking_pool_create_rules(self, setup_ui_class):
         """
@@ -112,6 +118,7 @@ class TestErrorMessageImprovements(ManageTest):
         blocking_pool_tab.proceed_resource_creation()
         blocking_pool_tab.check_error_messages()
 
+    @bugzilla("2193109")
     @polarion_id("OCS-4875")
     def test_storage_class_create_rules(self, setup_ui_class):
         """

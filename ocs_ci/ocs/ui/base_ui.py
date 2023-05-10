@@ -11,6 +11,7 @@ import time
 import zipfile
 from functools import reduce
 
+import pandas as pd
 import pytest
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -999,6 +1000,8 @@ class CreateResourceForm(PageNavigator):
         self.status_error = "error status"
         self.status_indeterminate = "indeterminate status"
         self.status_success = "success status"
+        self.result_col = ["rule", "check_func", "check_status"]
+        self.test_results = pd.DataFrame(columns=self.result_col)
         super().__init__()
 
     def _report_failed(self, error_text):
@@ -1017,6 +1020,7 @@ class CreateResourceForm(PageNavigator):
         """
         Method to proceed to resource creation form, when Create button is visible
         """
+        self.page_has_loaded()
         self.do_click(self.generic_locators["create_resource_button"])
 
     def check_error_messages(self):
@@ -1028,6 +1032,7 @@ class CreateResourceForm(PageNavigator):
         error message does not match the expected message.
         Finally, it navigates back to the previous page.
         """
+        self.page_has_loaded()
         self._verify_input_requirements()
         self.navigate_backward()
         logger.info("all error improvements checks done")
@@ -1039,16 +1044,28 @@ class CreateResourceForm(PageNavigator):
         rules_texts_ok = self._check_all_rules_exist(
             self.generic_locators["text_input_popup_rules"]
         )
+        self.test_results.loc[len(self.test_results)] = [
+            None,
+            self._check_all_rules_exist.__name__,
+            rules_texts_ok,
+        ]
 
-        rule_check_statuses = {rule: func(rule) for rule, func in self.rules.items()}
+        for rule, func in self.rules.items():
+            res = func(rule)
+            self.test_results.loc[len(self.test_results)] = [rule, func.__name__, res]
 
-        if not all(rule_check_statuses.values()):
-            pytest.fail(
-                "Error message improvements check failed, trace issue from the log and artifacts"
+        logger.info(
+            "\n"
+            + self.test_results.to_markdown(
+                headers="keys", index=False, tablefmt="grid"
             )
-        if not rules_texts_ok:
+        )
+
+        if not self.test_results[self.result_col[2]].all():
+            failed_cases = self.test_results[~self.test_results[self.result_col[2]]]
             pytest.fail(
-                "Error message improvements check failed. Not all expected rules exist"
+                "Error message improvements check failed\n"
+                f"{failed_cases.to_markdown(headers='keys', index=False, tablefmt='grid')}"
             )
 
     def _check_all_rules_exist(self, input_loc: tuple):
@@ -1089,13 +1106,19 @@ class CreateResourceForm(PageNavigator):
         Returns:
             bool: True if the check passed, False otherwise.
         """
-        logger.info(f"check rule case with input '{input_text}'")
-        self._send_input_and_update_popup(input_text)
-        check_pass = self._check_input_rule_and_status(rule, status_exp)
-        self._remove_text_from_input()
+        logger.info(f"check input '{input_text}', rule '{rule}'")
+        try:
+            self._send_input_and_update_popup(input_text)
+            check_pass = self._check_input_rule_and_status(rule, status_exp)
+        except TimeoutException or NoSuchElementException as e:
+            logger.error(f"Got exception on check rule '{rule}'\n{e}")
+            check_pass = False
+        finally:
+            self._remove_text_from_input()
 
         return check_pass
 
+    @retry(TimeoutException)
     def _remove_text_from_input(self) -> bool:
         """
         Remove all text from a specified input element.
@@ -1108,7 +1131,7 @@ class CreateResourceForm(PageNavigator):
         input_el = elements[0]
         input_len = len(str(input_el.get_attribute("value")))
 
-        # timeout in seconds will be equal no a number of symbols to be removed, but not less than 30s
+        # timeout in seconds will be equal to a number of symbols to be removed, but not less than 30s
         timeout = input_len if input_len > 30 else 30
         timeout = time.time() + timeout
         if len(elements):
@@ -1118,8 +1141,7 @@ class CreateResourceForm(PageNavigator):
                     input_el.send_keys(Keys.BACKSPACE, Keys.DELETE)
                     time.sleep(0.05)
                 else:
-                    logger.error("time to clear input os out")
-                    return False
+                    raise TimeoutException("time to clear input os out")
         else:
             logger.error("test input locator not found")
             return False
@@ -1333,14 +1355,14 @@ class CreateResourceForm(PageNavigator):
 
         name_with_no_ascii = random_name[:4] + "æå" + random_name[6:]
 
-        param_list = [
+        params_list = [
             (rule_exp, name_with_consecutive_period, self.status_error),
             (rule_exp, name_with_uppercase_letters, self.status_error),
             (rule_exp, name_with_no_ascii, self.status_error),
             (rule_exp, random_name, self.status_success),
         ]
 
-        return all(self._check_rule_case(*params) for params in param_list)
+        return all(self._check_rule_case(*params) for params in params_list)
 
     def _check_max_length_backing_store_rule(self, rule_exp):
         """
@@ -1376,9 +1398,17 @@ class CreateResourceForm(PageNavigator):
         Returns:
             bool: True if not allowed to use duplicated resource name, False otherwise.
         """
-        name_exist = existing_resource_names.split()[0]
-        random_char = random.choice(string.ascii_lowercase + string.digits)
-        name_does_not_exist = random_char + name_exist[1:]
+        name_exist = existing_resource_names.split()[0].strip()
+        index_to_replace = random.randint(0, len(name_exist) - 1)
+        char_to_replace = name_exist[index_to_replace]
+        random_char = random.choice(
+            string.ascii_lowercase.replace(char_to_replace, "") + string.digits
+        )
+        name_does_not_exist = (
+            name_exist[:index_to_replace]
+            + random_char
+            + name_exist[index_to_replace + 1 :]
+        )
         params_list = [
             (rule_exp, name_exist, self.status_error),
             (rule_exp, name_does_not_exist, self.status_success),
