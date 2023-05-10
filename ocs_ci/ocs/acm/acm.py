@@ -476,6 +476,8 @@ def import_clusters_with_acm(import_ui=False):
     else:
         for cluster in clusters:
             log.info("Importing clusters via CLI method")
+            log.info(f"**** clustername={cluster[0]}")
+            log.info(f"**** kubeconfig={cluster[1]}")
             create_project(cluster[0])
 
             log.info("Create and apply managed-cluster.yaml")
@@ -496,6 +498,7 @@ def import_clusters_with_acm(import_ui=False):
             auto_import_secret_obj.apply(**auto_import_secret)
 
             log.info("Wait managedcluster move to Available state")
+            time.sleep(100)
             ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
             ocp_obj.wait_for_resource(
                 timeout=600,
