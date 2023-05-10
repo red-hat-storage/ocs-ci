@@ -169,7 +169,7 @@ class TestScaleRespinOperatorPods(E2ETest):
                 namespace=namespace, pod_scale_list=pod_scale_list
             )
 
-            logging.info(
+            log.info(
                 f"Iteration {itr} respin successful for operator {resource_to_delete}"
             )
 
