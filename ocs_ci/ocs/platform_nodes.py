@@ -1773,6 +1773,14 @@ class VSPHEREUPINode(VMWareNodes):
             pre_count_csr = len(existing_csr_data)
             logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
 
+            # get VM names from vSphere before adding node
+            compute_vms = self.vsphere.get_compute_vms_in_pool(
+                self.cluster_name, self.datacenter, self.cluster
+            )
+            compute_node_names = [compute_vm.name for compute_vm in compute_vms]
+            compute_node_names.sort()
+            logger.info(f"VM names before adding nodes: {compute_node_names}")
+
             if use_terraform:
                 self.add_nodes_with_terraform()
             else:
@@ -1787,7 +1795,34 @@ class VSPHEREUPINode(VMWareNodes):
             else:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
 
-            wait_for_all_nodes_csr_and_approve(expected_node_num=nodes_approve_csr_num)
+            # get vm names from vSphere after adding node
+            compute_vms_after_adding_node = self.vsphere.get_compute_vms_in_pool(
+                self.cluster_name, self.datacenter, self.cluster
+            )
+            compute_node_names_after_adding_node = [
+                compute_vm.name for compute_vm in compute_vms_after_adding_node
+            ]
+            compute_node_names_after_adding_node.sort()
+            logger.info(
+                f"VM names after adding node: {compute_node_names_after_adding_node}"
+            )
+
+            # get newly added VM name
+            new_node = list(
+                set(compute_node_names_after_adding_node) - set(compute_node_names)
+            )[0]
+
+            # If CSR exists for new node, create dictionary with the csr info
+            # e.g: {'compute-1': ['csr-64vkw']}
+            ignore_existing_csr = None
+            if new_node in existing_csr_data:
+                nodes_approve_csr_num -= 1
+                ignore_existing_csr = {new_node: existing_csr_data[new_node]}
+
+            wait_for_all_nodes_csr_and_approve(
+                expected_node_num=nodes_approve_csr_num,
+                ignore_existing_csr=ignore_existing_csr,
+            )
 
     def add_nodes_with_terraform(self):
         """
