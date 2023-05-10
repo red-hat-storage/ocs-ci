@@ -1,6 +1,9 @@
 name: Build Container Image
 
-on: [pull_request]
+on:
+  push:
+    branches:
+      - 'stable'
 
 # Environment Vars
 env:
@@ -33,7 +36,7 @@ jobs:
         uses: redhat-actions/buildah-build@v2
         with:
           image: ${{ env.REGISTRY }}/${{ env.REGISTRY_NS }}/${{ env.REGISTRY_IMAGE }}
-          tags: test55 test55-${{ env.TIME }}
+          tags: stable stable-${{ env.TIME }}
           containerfiles: |
             ./Docker_files/ocsci_container/Containerfile.ci
 
