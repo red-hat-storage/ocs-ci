@@ -415,7 +415,8 @@ def create_pod(
         )
         dpod_list = pod.get_all_pods(namespace=namespace)
         for dpod in dpod_list:
-            if "-1-deploy" not in dpod.name:
+            labels = dpod.get().get("metadata").get("labels")
+            if not any("deployer-pod-for" in label for label in labels):
                 if pod_name in dpod.name:
                     return dpod
     else:
