@@ -305,12 +305,12 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Submariner is healthy, check passed")
 
 
-def copy_kubeconfig(file):
+def copy_kubeconfig(file=None, return_str=False):
     """
 
     Args:
         file: (str): kubeconfig file location
-
+        return_str: (bool): kubeconfig txt
     Returns:
         list: with kubeconfig lines
 
@@ -318,7 +318,10 @@ def copy_kubeconfig(file):
 
     try:
         with open(file, "r") as f:
-            txt = f.readlines()
+            if return_str is True:
+                txt = f.read()
+            else:
+                txt = f.readlines()
             return txt
 
     except FileNotFoundError as e:
@@ -460,8 +463,12 @@ def import_clusters_with_acm(import_ui=False):
     # TODO: Import action should be dynamic per cluster count (Use config.nclusters loop)
     clusters_env = get_clusters_env()
     log.info(clusters_env)
-    kubeconfig_a = clusters_env.get("kubeconfig_location_c1")
-    kubeconfig_b = clusters_env.get("kubeconfig_location_c2")
+    kubeconfig_a = copy_kubeconfig(
+        file=clusters_env.get("kubeconfig_location_c1"), return_str=True
+    )
+    kubeconfig_b = copy_kubeconfig(
+        file=clusters_env.get("kubeconfig_location_c2"), return_str=True
+    )
     cluster_name_a = clusters_env.get("cluster_name_1")
     cluster_name_b = clusters_env.get("cluster_name_2")
     clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
