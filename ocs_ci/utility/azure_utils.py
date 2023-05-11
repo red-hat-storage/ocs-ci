@@ -13,7 +13,7 @@ from azure.mgmt.resource import ResourceManagementClient
 
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, TerrafromFileNotFoundException
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
@@ -22,6 +22,7 @@ logger = logging.getLogger(name=__file__)
 # default location of files with necessary azure cluster details
 SERVICE_PRINCIPAL_FILEPATH = os.path.expanduser("~/.azure/osServicePrincipal.json")
 TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
+OLD_TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 
 
 def load_cluster_resource_group(cluster_path, terraform_filename=TERRRAFORM_FILENAME):
@@ -39,7 +40,20 @@ def load_cluster_resource_group(cluster_path, terraform_filename=TERRRAFORM_FILE
     Returns:
         string with resource group name
     """
-    filepath = os.path.join(cluster_path, terraform_filename)
+    terraform_files = [
+        os.path.join(cluster_path, f)
+        for f in [OLD_TERRRAFORM_FILENAME, TERRRAFORM_FILENAME]
+    ]
+    filepath = None
+    for tf_file in terraform_files:
+        if os.path.exists(tf_file):
+            filepath = os.path.join(cluster_path, tf_file)
+
+    if not filepath:
+        raise TerrafromFileNotFoundException(
+            f"None of terraform file path from {','.join(terraform_files)} exists!"
+        )
+
     with open(filepath, "r") as tf_file:
         tf_dict = json.load(tf_file)
     resource_group = tf_dict.get("azure_network_resource_group_name")

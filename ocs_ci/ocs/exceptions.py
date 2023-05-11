@@ -600,5 +600,8 @@ class UnexpectedODFAccessException(Exception):
     pass
 
 
-class UnknownOperationForTerraformVariableUpdate(Exception):
+class TerrafromFileNotFoundException(Exception):
+    pass
+
+class TerrafromFileNotFoundException(Exception):
     pass
