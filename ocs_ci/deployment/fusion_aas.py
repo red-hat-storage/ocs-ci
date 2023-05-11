@@ -116,7 +116,7 @@ class FUSIONAAS(rosa_deployment.ROSA):
         if config.DEPLOYMENT.get("pullsecret_workaround"):
             # The pull secret may not get updated on all nodes if any node is not updated. Ensure it by checking the
             # status of machineconfigpool
-            wait_for_machineconfigpool_status("all", timeout=2800)
+            wait_for_machineconfigpool_status("all", timeout=1800)
             update_pull_secret()
             wait_for_machineconfigpool_status("all", timeout=900)
         deploy_odf()
