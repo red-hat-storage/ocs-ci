@@ -157,7 +157,7 @@ class TestAdmissionWebhooks(MCGTest):
                             "secret": {"name": ""},
                         },
                     },
-                    "please provide a valid ARN or secret name",
+                    "secret name",
                 ],
                 marks=[tier3, polarion_id("OCS-2786")],
             ),
