@@ -670,6 +670,10 @@ def ocs_install_verification(
                 False
             ), "deleting webhook messages not found in rook-ceph-operator logs"
 
+    # Verify in-transit encryption is enabled.
+    if config.ENV_DATA.get("in_transit_encryption"):
+        in_transit_encryption_verification()
+
 
 def mcg_only_install_verification(ocs_registry_image=None):
     """
