@@ -25,16 +25,11 @@ TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 OLD_TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 
 
-def load_cluster_resource_group(terraform_filename=None):
+def load_cluster_resource_group():
     """
     Read terraform tfvars.json file created by ``openshift-installer`` in a
     cluster dir to get azure ``resource group`` of an OCP cluster. All Azure
     resources of the cluster are placed in this group.
-
-    Args:
-        terraform_filename (str): name of azure terraform vars file, this is
-            optional and you need to specify this only if you want to override
-            the default
 
     Returns:
         string with resource group name
