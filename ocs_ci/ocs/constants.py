@@ -1284,6 +1284,28 @@ OSD_TREE_ZONE = {
     "additionalProperties": False,
 }
 
+FUSION_SC_DEFAULT_STORAGE_PROFILE = {
+    "blockPoolConfiguration": {
+        "parameters": {
+            "pg_autoscale_mode": "off",
+            "pg_num": "128",
+            "pgp_num": "128",
+            "target_size_ratio": ".49",
+        }
+    },
+    "deviceClass": "ssd",
+    "name": "default-storage-profile",
+    "sharedFilesystemConfiguration": {
+        "parameters": {
+            "pg_autoscale_mode": "off",
+            "pg_num": "512",
+            "pgp_num": "512",
+        }
+    },
+}
+
+FUSION_SC_RESOURCES_NAMES = ["crashcollector", "mds", "mgr", "mon"]
+
 # gather bootstrap
 GATHER_BOOTSTRAP_PATTERN = "openshift-install gather bootstrap --help"
 

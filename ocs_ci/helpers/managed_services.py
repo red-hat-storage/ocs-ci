@@ -577,6 +577,25 @@ def verify_faas_provider_storagecluster(sc_data):
     assert annotations["uninstall.ocs.openshift.io/cleanup-policy"] == "delete"
     assert annotations["uninstall.ocs.openshift.io/mode"] == "graceful"
 
+    log.info("Check the storagecluster resources limits and requests are valid")
+    resources_names = constants.FUSION_SC_RESOURCES_NAMES
+    sc_data_resources = sc_data["spec"]["resources"]
+    for resource_name in resources_names:
+        resource_limits = sc_data_resources[resource_name]["limits"]
+        log.info(f"Resource '{resource_name}' limits = {resource_limits}")
+        # Simple verification to check that the limits values start with numbers
+        assert re.match("(\\d+)", resource_limits["cpu"])
+        assert re.match("(\\d+)", resource_limits["memory"])
+
+        resource_requests = sc_data_resources[resource_name]["requests"]
+        log.info(f"Resource '{resource_name}' requests = {resource_requests}")
+        # Simple verification to check that the requests values start with numbers
+        assert re.match("(\\d+)", resource_requests["cpu"])
+        assert re.match("(\\d+)", resource_requests["memory"])
+
+    log.info("Finish verifying the storagecluster resources limits and requests")
+    verify_faas_provider_storagecluster_storages(sc_data)
+
 
 def verify_client_operator_security():
     """
@@ -605,3 +624,57 @@ def verify_client_operator_security():
         dropped_capabilities = container["securityContext"]["capabilities"]["drop"]
         log.info(f"Dropped capabilities: {dropped_capabilities}")
         assert "ALL" in dropped_capabilities
+
+
+def verify_faas_provider_storagecluster_storages(sc_data):
+    # Check the backingStorageClasses
+    log.info(f"sc backingStorageClasses = {sc_data['spec']['backingStorageClasses']}")
+    backing_storage_classes = sc_data["spec"]["backingStorageClasses"]
+    assert backing_storage_classes, "Didn't find any backingStorageClasses"
+    # Search for the default ocs storage class
+    default_ocs_sc_name = "default-ocs-storage-class"
+    default_ocs_sc = None
+    for storage_class in backing_storage_classes:
+        if storage_class["metadata"].get("name") == default_ocs_sc_name:
+            default_ocs_sc = storage_class
+            break
+
+    assert default_ocs_sc, f"The storage class {default_ocs_sc_name} does not exist"
+    log.info(f"Found the storage class {default_ocs_sc_name}")
+    # Check the type of the default ocs storage class
+    default_ocs_sc_type = storage_class["parameters"]["type"]
+    expected_type = "gp3"
+    log.info(f"The type of '{default_ocs_sc_name}' is {default_ocs_sc_type}")
+    assert (
+        default_ocs_sc_type == expected_type
+    ), f"The default ocs sc type is '{default_ocs_sc_type}' and not the expected type {expected_type}"
+
+    # Check the defaultStorageProfile value
+    default_sp_name = constants.FUSION_SC_DEFAULT_STORAGE_PROFILE["name"]
+    log.info(
+        f"The defaultStorageProfile value is {sc_data['spec']['defaultStorageProfile']}"
+    )
+    assert sc_data["spec"]["defaultStorageProfile"] == default_sp_name
+
+    # Check the StorageProfiles
+    log.info(f"sc storageProfiles = {sc_data['spec']['storageProfiles']}")
+    storage_profiles = sc_data["spec"]["storageProfiles"]
+    assert storage_profiles, "Didn't find any storageProfiles"
+    # Search for the default storage profile
+    default_sp = None
+    for storage_profile in storage_profiles:
+        if storage_profile["name"] == default_sp_name:
+            default_sp = storage_profile
+            break
+
+    assert default_sp, f"The storage profile {default_sp_name} does not exist"
+    log.info(f"Found the storage profile {default_sp_name}")
+
+    log.info(f"Check the values in the storage profile {default_sp_name}")
+    expected_default_sp = constants.FUSION_SC_DEFAULT_STORAGE_PROFILE
+    for key, expected_key in zip(default_sp.keys(), expected_default_sp.keys()):
+        assert key == expected_key
+        assert default_sp[key] == expected_default_sp[expected_key]
+
+    log.info(f"The values in the storage profile {default_sp_name} are correct")
+    log.info("Finish Verifying all the storages in the provider faas storagecluster")
