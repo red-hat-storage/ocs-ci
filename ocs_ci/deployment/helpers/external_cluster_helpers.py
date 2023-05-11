@@ -86,6 +86,7 @@ class ExternalCluster(object):
         ceph_fs_name = config.ENV_DATA.get("cephfs_name") or self.get_ceph_fs()
 
         rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+        cluster_name = config.ENV_DATA.get("cluster_name") or defaults.RHCS_CLUSTER_NAME
 
         params = (
             f"--rbd-data-pool-name {rbd_name} --rgw-endpoint {rgw_endpoint_with_port}"
@@ -93,9 +94,18 @@ class ExternalCluster(object):
 
         if config.ENV_DATA["restricted-auth-permission"]:
             params = (
-                f"{params} --cluster-name {config.ENV_DATA['cluster_name']} --cephfs-filesystem-name "
+                f"{params} --cluster-name {cluster_name} --cephfs-filesystem-name "
                 f"{ceph_fs_name} --restricted-auth-permission true"
             )
+
+        if "." in rbd_name or "_" in rbd_name:
+            alias_rbd_name = rbd_name.replace(".", "-").replace("_", "-")
+            params = (
+                f"{params} --restricted-auth-permission true --cluster-name {cluster_name} "
+                f"--alias-rbd-data-pool-name {alias_rbd_name}"
+            )
+            config.ENV_DATA["restricted-auth-permission"] = True
+            config.ENV_DATA["alias_rbd_name"] = alias_rbd_name
 
         out = self.run_exporter_script(params=params)
 
