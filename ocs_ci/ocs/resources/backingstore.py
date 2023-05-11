@@ -1,7 +1,6 @@
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore,
@@ -15,7 +14,11 @@ from ocs_ci.ocs.bucket_utils import (
     cli_create_ibmcos_backingstore,
     cli_create_aws_backingstore,
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    ObjectsStillBeingDeletedException,
+    CommandFailed,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
@@ -55,14 +58,15 @@ class BackingStore:
         self.vol_num = vol_num
         self.vol_size = vol_size
 
-    def delete(self, retry=True):
+    def delete(self, retry=True, timeout=120):
         """
         Deletes the current backingstore by using OC/CLI commands
 
         Args:
             retry (bool): Whether to retry the deletion if it fails
-
+            timeout (int): Timeout to wait if retry is true
         """
+
         log.info(f"Cleaning up backingstore {self.name}")
         # If the backingstore utilizes a PV, save its PV name for deletion verification
         if self.type == "pv":
@@ -94,6 +98,23 @@ class BackingStore:
                     return True
                 elif all(
                     err in e.args[0]
+                    for err in [
+                        "cannot complete because objects in Backingstore",
+                        "are still being deleted, Please try later",
+                    ]
+                ) or all(
+                    err in e.args[0]
+                    for err in [
+                        "cannot complete because pool",
+                        'in "CONNECTED_BUCKET_DELETING" state',
+                    ]
+                ):
+                    log.error(
+                        "Backingstore deletion failed because the objects are still getting deleted; Retrying"
+                    )
+                    raise ObjectsStillBeingDeletedException
+                elif all(
+                    err in e.args[0]
                     for err in ["cannot complete because pool", "in", "state"]
                 ):
                     if retry:
@@ -123,9 +144,16 @@ class BackingStore:
             "cli": _cli_deletion_flow,
         }
 
+        try:
+            cmdMap[self.method]()
+        except ObjectsStillBeingDeletedException:
+            timeout = 19800
+        except CommandFailed:
+            timeout = 120
+
         if retry:
             sample = TimeoutSampler(
-                timeout=120,
+                timeout=timeout,
                 sleep=20,
                 func=cmdMap[self.method],
             )
@@ -133,8 +161,6 @@ class BackingStore:
                 err_msg = f"Failed to delete {self.name}"
                 log.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
-        else:
-            cmdMap[self.method]()
 
         # Verify deletion was successful
         log.info(f"Verifying whether backingstore {self.name} exists after deletion")

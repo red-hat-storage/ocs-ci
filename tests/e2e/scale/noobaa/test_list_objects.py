@@ -1,8 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.bucket_utils import copy_objects, craft_s3_command
-from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.ocs.bucket_utils import (
+    copy_objects,
+    craft_s3_command,
+    sync_object_directory,
+    list_objects_from_bucket,
+)
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.testlib import scale, bugzilla, skipif_ocs_version
 from ocs_ci.ocs.resources.mcg import MCG
 
@@ -11,15 +16,15 @@ log = logging.getLogger(__name__)
 
 
 @scale
-@bugzilla("2052079")
-@skipif_ocs_version("<4.8")
-@pytest.mark.polarion_id("OCS-3926")
-class TestListOfObjects(PASTest):
+class TestListOfObjects(E2ETest):
     """
     Test to verify the list whole objects without any failures
 
     """
 
+    @bugzilla("2052079")
+    @skipif_ocs_version("<4.8")
+    @pytest.mark.polarion_id("OCS-3926")
     def test_list_large_number_of_objects(
         self,
         fedora_pod_session,
@@ -98,3 +103,54 @@ class TestListOfObjects(PASTest):
             f"Files count {files_count} and objects_count {objects_count} does not match. "
             "Check does all objects are listed correctly!!!"
         )
+
+    @bugzilla("2110504")
+    @bugzilla("2141555")
+    @bugzilla("2135782")
+    @bugzilla("2149226")
+    @bugzilla("2150005")
+    @bugzilla("2150006")
+    @skipif_ocs_version("<4.9")
+    @pytest.mark.polarion_id("OCS-4650")
+    def test_list_with_prefix_delimiter(self, bucket_factory, scale_cli_pod, mcg_obj):
+        """
+        This will test list directory with large number of objects using prefix & delimeter
+        """
+        origin_dir, large_dir = ("large_objects", "dir_500")
+        bucketclass = {
+            "interface": "OC",
+            "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+        }
+        bucket_name = bucket_factory(bucketclass=bucketclass)[0].name
+
+        # sync all the directories and objects to the bucket
+        sync_object_directory(
+            scale_cli_pod,
+            f"{origin_dir}",
+            f"s3://{bucket_name}",
+            s3_obj=mcg_obj,
+            timeout=27000,
+        )
+        log.info("Synced all the object directories!")
+
+        # list all directories first
+        try:
+            list_objects_from_bucket(
+                scale_cli_pod,
+                f"s3://{bucket_name}",
+                s3_obj=mcg_obj,
+            )
+        except Exception as ex:
+            if "Timeout" in ex.args[0]:
+                log.error(f"Failed with: {ex.args[0]}")
+            raise ex
+
+        # list objects with prefix and delimeter
+        list_objects_from_bucket(
+            scale_cli_pod,
+            f"s3://{bucket_name}",
+            prefix=f"{large_dir}",
+            s3_obj=mcg_obj,
+            timeout=9000,
+        )
+        log.info("Test succeeded without any errors!")
