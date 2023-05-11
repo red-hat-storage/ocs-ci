@@ -507,35 +507,6 @@ class ValidationUI(PageNavigator):
         else:
             raise UnexpectedODFAccessException
 
-    def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
-        """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
-        Get compression status from storagesystem details and ocs-storagecluster-cephblockpool
-
-        Returns:
-            tuple: String representation of 'Compression status' from StorageSystem details page and
-            String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
-
-        """
-        self.navigate_cephblockpool()
-        logger.info(
-            f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
-        )
-        compression_status_blockpools_tab = self.get_element_text(
-            self.validation_loc["storagesystem-details-compress-state"]
-        )
-        logger.info(
-            f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
-        )
-        self.do_click(
-            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
-            enable_screenshot=True,
-        )
-        compression_status_blockpools_details = self.get_element_text(
-            self.validation_loc["storagecluster-blockpool-details-compress-status"]
-        )
-        return compression_status_blockpools_tab, compression_status_blockpools_details
-
     def verify_odf_without_ocs_in_installed_operator(self) -> bool:
         """
         Function to validate either ODF operator is present post ODF installation,

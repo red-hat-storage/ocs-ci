@@ -1169,18 +1169,7 @@ class Deployment(object):
         login_ui()
         deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()
-        self.post_ocs_deployment_with_ui()
-        close_browser(setup_ui)
-
-    def post_ocs_deployment_with_ui(self):
-        """
-        Function does post OCS deployment check when its UI deployment.
-        1. checks ODF operator in installed operators.
-        """
-        from ocs_ci.ocs.ui.validation_ui import ValidationUI
-
-        validation_ui_obj = ValidationUI()
-        validation_ui_obj.verify_odf_operator_in_installed_operator()
+        close_browser()
 
     def deploy_with_external_mode(self):
         """
