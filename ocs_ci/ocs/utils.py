@@ -933,7 +933,7 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
     mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_10:
-        timeout = 2100
+        timeout = 60
     elif ocs_version >= version.VERSION_4_6:
         timeout = 1500
     else:
@@ -956,68 +956,112 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             cluster_config=cluster_config,
         )
     except CommandFailed as ex:
-        log.error(get_helper_pods_output())
         log.error(
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
-        get_logs_ocp_mg_pods()
+        get_logs_ocp_mg_pods(log_dir_path)
 
     except TimeoutExpired as ex:
-        log.error(get_helper_pods_output())
-        log.error(
-            f"Timeout {must_gather_timeout}s for must-gather reached, command"
-            f" exited with error: {ex}"
-            f"Must-Gather Output: {mg_output}"
-        )
+        f"Failed during must gather logs! Error: {ex}"
+        export_mg_pods_logs(log_dir_path=log_dir_path, mg_output=mg_output)
     return mg_output
 
 
-def get_logs_ocp_mg_pods():
+def export_mg_pods_logs(log_dir_path, mg_output=None):
+    """
+    Export must gather pods logs
+
+    Args:
+        mg_output (str): the output of "oc adm must-gather --image=quay.io/rhceph-dev/ocs-must-gather:tag" command
+        log_dir_path (str): the path of copying the logs
+
+    Returns:
+
+    """
+    file_mg_cmd_output = os.path.join(log_dir_path, "mg_cmd_output.txt")
+    with open(file_mg_cmd_output, "w") as file1:
+        file1.write(mg_output)
+    log.error(f"Print must gather command output:{mg_output}")
+    get_logs_ocp_mg_pods(log_dir_path)
+    get_helper_pods_output(log_dir_path)
+
+
+def get_logs_ocp_mg_pods(log_dir_path):
     """
     Get logs from OCP Must Gather pods
+
+    Args:
+        log_dir_path (str): the path of copying the logs
 
     """
     from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_logs
 
     namespaces = get_namespce_name_by_pattern(pattern="openshift-must-gather")
-    for namespace in namespaces:
-        pods_mg_ns = get_all_pods(namespace=namespace)
-        for pod_mg_ns in pods_mg_ns:
-            log.info(
-                f"*** ocp_mg_pod_name: {pod_mg_ns.name} ocp_mg_pod_namespace: {namespace} ***"
-            )
-            pod_logs = get_pod_logs(
-                pod_name=pod_mg_ns.name, namespace=namespace, all_containers=True
-            )
-            log.error(f"ocp mg pod logs:\n{pod_logs}")
-            log.error(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
+    try:
+        for namespace in namespaces:
+            pods_mg_ns = get_all_pods(namespace=namespace)
+            for pod_mg_ns in pods_mg_ns:
+                log.info(
+                    f"*** ocp_mg_pod_name: {pod_mg_ns.name} ocp_mg_pod_namespace: {namespace} ***"
+                )
+
+                file_path_describe = os.path.join(
+                    log_dir_path, f"describe_ocp_mg_{pod_mg_ns.name}.txt"
+                )
+                with open(file_path_describe, "w") as file1:
+                    file1.write(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
+                log.error(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
+
+                ocp_mg_pod_logs = get_pod_logs(
+                    pod_name=pod_mg_ns.name, namespace=namespace, all_containers=True
+                )
+                file_path_describe = os.path.join(
+                    log_dir_path, f"log_ocp_mg_{pod_mg_ns.name}.txt"
+                )
+                with open(file_path_describe, "w") as file1:
+                    file1.write(ocp_mg_pod_logs)
+                log.error(f"ocp mg pod logs:\n{ocp_mg_pod_logs}")
+    except Exception as e:
+        log.error(e)
 
 
-def get_helper_pods_output():
+def get_helper_pods_output(log_dir_path):
     """
     Get the output of "oc describe mg-helper pods"
 
-    Returns:
-        str: the output of "oc describe pods mg-helper" and "oc logs mg-helper"
+    Args:
+        log_dir_path (str): the path of copying the logs
 
     """
     from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
 
-    output_describe_mg_helper = ""
     helper_pods = get_pod_name_by_pattern(pattern="helper")
     for helper_pod in helper_pods:
         try:
             helper_pod_obj = get_pod_obj(
                 name=helper_pod, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
             )
-            output_describe_mg_helper += (
-                f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
-                f"****helper pod {helper_pod} logs***\n{get_pod_logs(pod_name=helper_pod)}"
+
+            describe_helper_pod = helper_pod_obj.describe()
+            file_path_describe = os.path.join(
+                log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod_obj.name}.txt"
             )
+            with open(file_path_describe, "w") as file1:
+                file1.write(describe_helper_pod)
+            log.error(
+                f"****helper pod {helper_pod} describe****\n{describe_helper_pod}\n"
+            )
+
+            log_helper_pod = get_pod_logs(pod_name=helper_pod)
+            file_path_describe = os.path.join(
+                log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod_obj.name}.txt"
+            )
+            with open(file_path_describe, "w") as file1:
+                file1.write(log_helper_pod)
+            log.error(f"****helper pod {helper_pod} logs***\n{log_helper_pod}")
         except Exception as e:
             log.error(e)
-    return output_describe_mg_helper
 
 
 def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
