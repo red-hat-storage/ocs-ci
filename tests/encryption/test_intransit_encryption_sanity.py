@@ -41,7 +41,10 @@ class TestInTransitEncryptionSanity:
 
         """
         if not get_in_transit_encryption_config_state():
-            set_in_transit_encryption()
+            if config.ENV_DATA.get("in_transit_encryption"):
+                pytest.fail("In-transit encryption is not enabled on the setup")
+            else:
+                set_in_transit_encryption()
 
         log.info("Verifying the in-transit encryption is enable on setup.")
         assert in_transit_encryption_verification()
@@ -54,11 +57,12 @@ class TestInTransitEncryptionSanity:
         with pytest.raises(ValueError):
             assert not in_transit_encryption_verification()
 
-        log.info("Re-enabling in-transit encryption.")
-        set_in_transit_encryption()
+        if config.ENV_DATA.get("in_transit_encryption"):
+            log.info("Re-enabling in-transit encryption.")
+            set_in_transit_encryption()
 
-        # Verify that encryption is enabled again after re-enabling it
-        log.info(
-            "Verifying the in-transit encryption config after enabling the cluster."
-        )
-        assert in_transit_encryption_verification()
+            # Verify that encryption is enabled again after re-enabling it
+            log.info(
+                "Verifying the in-transit encryption config after enabling the cluster."
+            )
+            assert in_transit_encryption_verification()
