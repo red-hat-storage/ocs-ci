@@ -51,7 +51,11 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
-from ocs_ci.helpers.helpers import get_secret_names, get_cephfs_name
+from ocs_ci.helpers.helpers import (
+    get_secret_names,
+    get_cephfs_name,
+    get_logs_rook_ceph_operator,
+)
 from ocs_ci.utility import (
     localstorage,
     utils,
@@ -642,6 +646,29 @@ def ocs_install_verification(
 
     if fusion_aas:
         verify_faas_resources()
+
+    # validation in case of openshift-cert-manager installed
+    if config.DEPLOYMENT.get("install_cert_manager"):
+        # get webhooks
+        webhook = OCP(kind=constants.WEBHOOK, namespace=defaults.CERT_MANAGER_NAMESPACE)
+        webhook_names = [
+            each_webhook["metadata"]["name"] for each_webhook in webhook.get()["items"]
+        ]
+        log.debug(f"webhooks in the cluster: {webhook_names}")
+        assert (
+            constants.ROOK_CEPH_WEBHOOK not in webhook_names
+        ), f"webhook {constants.ROOK_CEPH_WEBHOOK} should be disabled"
+        log.info(f"[Expected]: {constants.ROOK_CEPH_WEBHOOK} not found in webhooks")
+
+        # check rook-ceph-operator logs
+        rook_ceph_operator_logs = get_logs_rook_ceph_operator()
+        for line in rook_ceph_operator_logs.splitlines():
+            if "delete webhook resources since webhook is disabled" in line:
+                break
+        else:
+            assert (
+                False
+            ), "deleting webhook messages not found in rook-ceph-operator logs"
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
