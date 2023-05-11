@@ -940,10 +940,6 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         timeout = 600
     must_gather_timeout = cluster_config.REPORTING.get("must_gather_timeout", timeout)
 
-    timeout = 900
-    must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
-
-
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
@@ -953,8 +949,6 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
     log.info(f"OCS logs will be placed in location {log_dir_path}")
     occli = OCP()
     try:
-        delete_must_gather_leftovers()
-
         mg_output = occli.exec_oc_cmd(
             cmd,
             out_yaml_format=False,
@@ -967,7 +961,7 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
-        delete_must_gather_leftovers()
+        get_logs_ocp_mg_pods()
 
     except TimeoutExpired as ex:
         log.error(get_helper_pods_output())
@@ -979,30 +973,25 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
     return mg_output
 
 
-def delete_must_gather_leftovers():
+def get_logs_ocp_mg_pods():
     """
-    Delete Must Gather Leftovers
+    Get logs from OCP Must Gather pods
 
     """
-    from ocs_ci.ocs.resources.pod import get_pod_obj, get_all_pods
-
-    helper_pod_names = get_pod_name_by_pattern(pattern="helper")
-    for helper_pod_name in helper_pod_names:
-        helper_pod_obj = get_pod_obj(
-            helper_pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        log.info(f"Delete must-gather-helper pod {helper_pod_obj.name}")
-        helper_pod_obj.delete(force=True)
+    from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_logs
 
     namespaces = get_namespce_name_by_pattern(pattern="openshift-must-gather")
     for namespace in namespaces:
-        pods = get_all_pods(namespace=namespace)
-        for pod in pods:
-            log.info(f"Delete the ocp-mg pod {pod.name} from namespace {namespace}")
-            pod.delete(force=True)
-        ocp_obj = OCP(kind="namespace")
-        log.info(f"Delete must-gather namespace {namespace}")
-        ocp_obj.delete(resource_name=namespace, force=True)
+        pods_mg_ns = get_all_pods(namespace=namespace)
+        for pod_mg_ns in pods_mg_ns:
+            log.info(
+                f"*** ocp_mg_pod_name: {pod_mg_ns.name} ocp_mg_pod_namespace: {namespace} ***"
+            )
+            pod_logs = get_pod_logs(
+                pod_name=pod_mg_ns.name, namespace=namespace, all_containers=True
+            )
+            log.error(f"ocp mg pod logs:\n{pod_logs}")
+            log.error(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
 
 
 def get_helper_pods_output():
