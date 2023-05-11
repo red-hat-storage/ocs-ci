@@ -390,7 +390,7 @@ class BaseUI:
             if sample == attribute_value:
                 break
 
-    def page_has_loaded(self, retries=5, sleep_time=1):
+    def page_has_loaded(self, retries=5, sleep_time=2):
         """
         Waits for page to completely load by comparing current page hash values.
         Not suitable for pages that use frequent dynamically content (less than sleep_time)
@@ -401,13 +401,13 @@ class BaseUI:
 
         """
 
+        @retry(TimeoutException)
         def get_page_hash():
             """
             Get dom html hash
             """
-            dom = self.driver.find_element_by_tag_name("html").get_attribute(
-                "innerHTML"
-            )
+            self.check_element_presence((By.TAG_NAME, "html"))
+            dom = self.get_element_attribute(("html", By.TAG_NAME), "innerHTML")
             dom_hash = hash(dom.encode("utf-8"))
             return dom_hash
 
@@ -615,6 +615,15 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
+        self.page_has_loaded(5, 5)
+
+    def navigate_OCP_home_page(self):
+        """
+        Navigate to Home Page
+        """
+        logger.info("Navigate to OCP Home Page")
+        self.driver.get(get_ocp_url())
+        self.page_has_loaded()
 
     def navigate_storage(self):
         logger.info("Navigate to ODF tab under Storage section")
@@ -1159,6 +1168,7 @@ class StorageSystemDetails(StorageSystemTab):
         Raises:
             CephHealthException if cephblockpool_status != 'Ready'
         """
+        self.page_has_loaded(5, 5)
         self.nav_ceph_blockpool()
         self.verify_cephblockpool_status()
 
