@@ -1023,3 +1023,107 @@ class PASTest(BaseTest):
         except Exception:
             log.warning("The POD failed to delete")
             pass
+
+    def get_performance_metrics(self, start_time, pod_names, step):
+        # This function is used to determine CPU and memory utilization of openshift storage pods and nodes
+        # start_time (secs) : start time of the test
+        # Importing here to avoid circular dependency
+        from ocs_ci.ocs.resources import pod as pod1
+
+        nodes = node.get_ocs_nodes()
+        cluster_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        metrics_result = {
+            "pod": {"memory": {}, "cpu": {}},
+            "node": {"memory": {}, "cpu": {}},
+        }
+        metrics_result["cluster_id"] = get_running_cluster_id()
+        metrics_result["step_size"] = step
+        ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
+        pods = pod1.get_all_pods(namespace=cluster_namespace)
+        if pod_names == "all":
+            pass
+        else:
+            pods = pod_names
+        end_time = int(time.time())
+        prometheus = PrometheusAPI()
+        duration = end_time - start_time
+
+        for nodee in nodes:
+            query1 = (
+                "irate(node_cpu_seconds_total{mode='user', instance='"
+                + nodee.name
+                + "'}["
+                + str(duration)
+                + "s])"
+            )
+            cpu_result = prometheus.query_range(
+                query=query1, start=start_time, end=end_time, step=step
+            )
+
+            list_val_c = cpu_result[0]["values"]
+            cpu_val = [float(el[1]) for el in list_val_c]
+            metrics_result["node"]["cpu"][nodee.name] = cpu_val
+            mem_result = (
+                prometheus.query_range(
+                    query=('node_memory_Active_bytes{instance="' + nodee.name + '"}'),
+                    start=start_time,
+                    end=end_time,
+                    step=step,
+                ),
+            )
+            list_val_m = mem_result[0][0]["values"]
+            mem_val = [float(el[1]) for el in list_val_m]
+            log.info(
+                f"CPU and memory consumption across pods based on start time, end time and step value is: {metrics_result}"
+            )
+            metrics_result["node"]["memory"][nodee.name] = mem_val
+        CPU_USAGE_POD = (
+            "node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate"
+        )
+        MEM_USAGE_POD = 'sum(container_memory_working_set_bytes{cluster="", container != "", image != "",'
+        for podd in pods:
+            pod_status = ocp_pod_obj.get_resource_status(podd.name)
+            if pod_status == constants.STATUS_RUNNING:
+                query1 = (
+                    "sum("
+                    + CPU_USAGE_POD
+                    + "{namespace= "
+                    + "'"
+                    + cluster_namespace
+                    + "'"
+                    + ",pod="
+                    + "'"
+                    + podd.name
+                    + "'"
+                    + "}) by (pod)"
+                )
+                cpu_result = prometheus.query_range(
+                    query=query1,
+                    start=start_time,
+                    end=end_time,
+                    step=step,
+                )
+                list_val_c = cpu_result[0]["values"]
+                cpu_val = [float(el[1]) for el in list_val_c]
+                metrics_result["pod"]["cpu"][podd.name] = cpu_val
+
+                mem_result = (
+                    prometheus.query_range(
+                        query=MEM_USAGE_POD
+                        + " namespace = "
+                        + "'"
+                        + cluster_namespace
+                        + "'"
+                        + ",pod = "
+                        + "'"
+                        + podd.name
+                        + "'"
+                        + "})",
+                        start=start_time,
+                        end=end_time,
+                        step=step,
+                    ),
+                )
+                list_val_m = mem_result[0][0]["values"]
+                mem_val = [float(el[1]) for el in list_val_m]
+                metrics_result["pod"]["memory"][podd.name] = mem_val
