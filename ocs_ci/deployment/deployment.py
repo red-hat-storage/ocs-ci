@@ -47,6 +47,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
@@ -357,6 +358,33 @@ class Deployment(object):
         """
         self.deploy_lvmo()
 
+    def do_deploy_cert_manager(self):
+        """
+        Installs cert-manager operator
+
+        """
+        if not config.ENV_DATA["skip_ocp_deployment"]:
+            cert_manager_operator = defaults.CERT_MANAGER_OPERATOR_NAME
+            cert_manager_namespace = defaults.CERT_MANAGER_NAMESPACE
+            cert_manager_operator_csv = f"openshift-{cert_manager_operator}"
+
+            # creating Namespace and operator group for cert-manager
+            logger.info("Creating namespace and operator group for cert-manager")
+            run_cmd(f"oc create -f {constants.CERT_MANAGER_NS_YAML}")
+
+            deploy_cert_manager()
+            self.wait_for_subscription(cert_manager_operator, cert_manager_namespace)
+            self.wait_for_csv(cert_manager_operator, cert_manager_namespace)
+            logger.info(
+                f"Sleeping for 30 seconds after {cert_manager_operator} created"
+            )
+            time.sleep(30)
+            package_manifest = PackageManifest(resource_name=cert_manager_operator_csv)
+            package_manifest.wait_for_resource(timeout=120)
+            csv_name = package_manifest.get_current_csv()
+            csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
+            csv.wait_for_phase("Succeeded", timeout=300)
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -370,6 +398,9 @@ class Deployment(object):
         # ocs-deployment, not just here in this particular case
         tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
         logger.debug("created temporary directory %s", tmp_path)
+
+        if config.DEPLOYMENT.get("install_cert_manager"):
+            self.do_deploy_cert_manager()
 
         # Deployment of network split and or extra latency scripts via
         # machineconfig API happens after OCP but before OCS deployment.
@@ -672,18 +703,18 @@ class Deployment(object):
                     return
                 logger.debug(f"Still waiting for the subscription: {subscription_name}")
 
-    def wait_for_csv(self, csv_name):
+    def wait_for_csv(self, csv_name, namespace=None):
         """
         Wait for the CSV to appear
 
         Args:
             csv_name (str): CSV name pattern
+            namespace (str): Namespace where CSV exists
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
-        for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind="csv", namespace=self.namespace
-        ):
+        namespace = namespace or self.namespace
+        ocp.OCP(kind="subscription", namespace=namespace)
+        for sample in TimeoutSampler(300, 10, ocp.OCP, kind="csv", namespace=namespace):
             csvs = sample.get().get("items", [])
             for csv in csvs:
                 found_csv_name = csv.get("metadata", {}).get("name", "")
