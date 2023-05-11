@@ -960,10 +960,13 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
-        get_logs_ocp_mg_pods(log_dir_path)
+        export_mg_pods_logs(log_dir_path=log_dir_path, mg_output=mg_output)
 
     except TimeoutExpired as ex:
-        f"Failed during must gather logs! Error: {ex}"
+        log.error(
+            f"Failed during must gather logs! Error: {ex}"
+            f"Must-Gather Output: {mg_output}"
+        )
         export_mg_pods_logs(log_dir_path=log_dir_path, mg_output=mg_output)
     return mg_output
 
