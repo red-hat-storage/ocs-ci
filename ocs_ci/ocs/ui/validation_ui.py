@@ -531,7 +531,4 @@ class ValidationUI(PageNavigator):
             timeout=1,
             expected_text="OpenShift Container Storage",
         )
-        if odf_opeartor_presence and not ocs_opeartor_presence:
-            return True
-        else:
-            return False
+        return odf_opeartor_presence and not ocs_opeartor_presence
