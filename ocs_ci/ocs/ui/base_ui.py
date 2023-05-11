@@ -593,7 +593,10 @@ class PageNavigator(BaseUI):
         if config.DEPLOYMENT.get("local_storage", False):
             self.storage_class = "localblock_sc"
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            self.storage_class = "thin_sc"
+            if self.ocs_version_semantic >= version.VERSION_4_13:
+                self.storage_class = "thin-csi_sc"
+            else:
+                self.storage_class = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
             if aws_sc == "gp3-csi":
