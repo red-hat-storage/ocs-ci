@@ -33,6 +33,9 @@ def load_cluster_resource_group():
 
     Returns:
         string with resource group name
+
+    Raises:
+        TerrafromFileNotFoundException : When the terraform tfvars file is not found
     """
     cluster_path = config.ENV_DATA["cluster_path"]
     terraform_files = [
