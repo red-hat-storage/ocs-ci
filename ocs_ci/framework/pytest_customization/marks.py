@@ -419,6 +419,12 @@ skipif_ibm_flash = pytest.mark.skipif(
     reason="This test doesn't work correctly on IBM Flash system",
 )
 
+# Skipif intransit encryption is not set.
+skipif_intransit_encryption_notset = pytest.mark.skipif(
+    not config.ENV_DATA.get("in_transit_encryption"),
+    reason="Skipping test due to intransit encryption is not set in config.",
+)
+
 # Squad marks
 aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
