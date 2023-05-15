@@ -17,10 +17,11 @@ from ocs_ci.ocs.constants import (
     POD,
     NOOBAA_APP_LABEL,
     STATUS_RUNNING,
+    OPENSHIFT_STORAGE_NAMESPACE,
 )
 
 log = getLogger(__name__)
-NAMESPACE = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+NAMESPACE = config.ENV_DATA.get("cluster_namespace", OPENSHIFT_STORAGE_NAMESPACE)
 LOG_LEVEL_DEFAULT = "default"
 LOG_LEVEL_WARN = "warn"
 
@@ -98,6 +99,8 @@ class TestNoobaaLogLevel:
     def test_mcg_core_log_level(self) -> None:
         noobaa_core_pod = get_noobaa_core_pod()
         noobaa_core_name = noobaa_core_pod.data.get("metadata").get("name")
+
+        # When log level is reduced, we should only observe '[0]' level lines
         assert not check_noobaa_logs(noobaa_core_name, "[1]")
 
     def test_noobaa_operator_log_level(self) -> None:
