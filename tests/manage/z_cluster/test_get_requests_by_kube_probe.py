@@ -3,11 +3,7 @@ import re
 
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.framework.testlib import (
-    tier2,
-    bugzilla,
-    skipif_ocs_version,
-)
+from ocs_ci.framework.testlib import tier2, bugzilla, skipif_ocs_version, polarion_id
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +11,7 @@ log = logging.getLogger(__name__)
 @tier2
 @bugzilla("2155743")
 @skipif_ocs_version("<4.13")
+@polarion_id("OCS-4876")
 def test_get_requests_by_kube_probe():
     """
     Verify GET requests initiated by kube-probe on odf-console pod
