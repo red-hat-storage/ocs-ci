@@ -311,7 +311,7 @@ class Deployment(object):
         """
         if not config.ENV_DATA["skip_ocs_deployment"]:
             for i in range(config.nclusters):
-                if config.multicluster and config.get_active_acm_index() == i:
+                if config.multicluster and (i in get_all_acm_indexes()):
                     continue
                 config.switch_ctx(i)
                 try:
@@ -2138,7 +2138,7 @@ class MultiClusterDROperatorsDeploy(object):
             resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
         )
 
-        retry((ResourceNameNotSpecifiedException, ChannelNotFound), tries=5, delay=10)(
+        retry((ResourceNameNotSpecifiedException, ChannelNotFound), tries=10, delay=10)(
             package_manifest.get_current_csv
         )(self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE)
 

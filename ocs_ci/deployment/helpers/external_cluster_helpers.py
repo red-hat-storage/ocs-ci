@@ -141,7 +141,9 @@ class ExternalCluster(object):
 
         """
         script_path = generate_exporter_script()
-        upload_file(self.host, script_path, script_path, self.user, self.password)
+        upload_file(
+            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+        )
         return script_path
 
     def upload_rgw_cert_ca(self):

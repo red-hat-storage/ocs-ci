@@ -1430,6 +1430,7 @@ def get_all_acm_indexes():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["acm_cluster"]:
             acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return acm_indexes
 
 
 def get_active_acm_index():
