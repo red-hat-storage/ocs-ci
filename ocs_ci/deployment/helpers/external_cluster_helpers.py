@@ -107,6 +107,15 @@ class ExternalCluster(object):
             config.ENV_DATA["restricted-auth-permission"] = True
             config.ENV_DATA["alias_rbd_name"] = alias_rbd_name
 
+        if config.ENV_DATA.get("rgw-realm"):
+            rgw_realm = config.ENV_DATA["rgw-realm"]
+            rgw_zonegroup = config.ENV_DATA["rgw-zonegroup"]
+            rgw_zone = config.ENV_DATA["rgw-zone"]
+            params = (
+                f"{params} --rgw-realm-name {rgw_realm} --rgw-zonegroup-name {rgw_zonegroup} "
+                f"--rgw-zone-name {rgw_zone}"
+            )
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
