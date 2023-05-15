@@ -95,6 +95,12 @@ def test_azure_storageaccount():
     storage_account_names = azure.get_storage_accounts_names()
     print(f"{storage_account_names=}")
     for storage in storage_account_names:
-        if "noobaa" in storage:
-            property = azure.get_storage_account_properties(storage)
-            print(f"{property=}")
+        if "noobaaaccount" in storage:
+            property = str(azure.get_storage_account_properties(storage))
+            pat = r"'allow_blob_public_access': (True|False),"
+
+            from re import findall
+
+            match = findall(pat, property)
+
+            assert match[0] == "False"  # checking if the matched value is False or not
