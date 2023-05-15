@@ -20,6 +20,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
+    UnknownOperationForTerraformVariableUpdate,
     NotAllNodesCreated,
     RebootEventNotFoundException,
     ResourceWrongStatusException,
@@ -1677,22 +1678,7 @@ class VSPHEREUPINode(VMWareNodes):
         """
         Update terraform variables
         """
-        logger.debug("Updating terraform variables")
-        compute_str = "compute_count ="
-        updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
-        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
-
-        # backup the terraform variable file
-        original_file = f"{self.terraform_var}_{int(time.time())}"
-        shutil.copyfile(self.terraform_var, original_file)
-        logger.info(f"original terraform file: {original_file}")
-
-        replace_content_in_file(
-            self.terraform_var,
-            compute_str,
-            updated_compute_str,
-            match_and_replace_line=True,
-        )
+        self.update_terraform_tfvars_compute_count(type="add", count=self.compute_count)
 
     def _update_machine_conf(self):
         """
@@ -1710,6 +1696,38 @@ class VSPHEREUPINode(VMWareNodes):
 
         # update the machine configurations
         update_machine_conf(self.folder_structure)
+
+    def update_terraform_tfvars_compute_count(self, type, count):
+        """
+        Update terraform tfvars file for compute count
+
+        Args:
+             type (str): Type of operation. Either add or remove
+             count (int): Number to add or remove to the exiting compute count
+
+        """
+        logger.debug("Updating terraform variables")
+        compute_str = "compute_count ="
+        if type == "add":
+            target_compute_count = self.current_count_in_tfvars + count
+        elif type == "remove":
+            target_compute_count = self.current_count_in_tfvars - count
+        else:
+            raise UnknownOperationForTerraformVariableUpdate
+        updated_compute_str = f'{compute_str} "{target_compute_count}"'
+        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+
+        # backup the terraform variable file
+        original_file = f"{self.terraform_var}_{int(time.time())}"
+        shutil.copyfile(self.terraform_var, original_file)
+        logger.info(f"original terraform file: {original_file}")
+
+        replace_content_in_file(
+            self.terraform_var,
+            compute_str,
+            updated_compute_str,
+            match_and_replace_line=True,
+        )
 
     @retry(
         (NoValidConnectionsError, AuthenticationException),
@@ -1755,6 +1773,14 @@ class VSPHEREUPINode(VMWareNodes):
             pre_count_csr = len(existing_csr_data)
             logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
 
+            # get VM names from vSphere before adding node
+            compute_vms = self.vsphere.get_compute_vms_in_pool(
+                self.cluster_name, self.datacenter, self.cluster
+            )
+            compute_node_names = [compute_vm.name for compute_vm in compute_vms]
+            compute_node_names.sort()
+            logger.info(f"VM names before adding nodes: {compute_node_names}")
+
             if use_terraform:
                 self.add_nodes_with_terraform()
             else:
@@ -1769,7 +1795,34 @@ class VSPHEREUPINode(VMWareNodes):
             else:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
 
-            wait_for_all_nodes_csr_and_approve(expected_node_num=nodes_approve_csr_num)
+            # get vm names from vSphere after adding node
+            compute_vms_after_adding_node = self.vsphere.get_compute_vms_in_pool(
+                self.cluster_name, self.datacenter, self.cluster
+            )
+            compute_node_names_after_adding_node = [
+                compute_vm.name for compute_vm in compute_vms_after_adding_node
+            ]
+            compute_node_names_after_adding_node.sort()
+            logger.info(
+                f"VM names after adding node: {compute_node_names_after_adding_node}"
+            )
+
+            # get newly added VM name
+            new_node = list(
+                set(compute_node_names_after_adding_node) - set(compute_node_names)
+            )[0]
+
+            # If CSR exists for new node, create dictionary with the csr info
+            # e.g: {'compute-1': ['csr-64vkw']}
+            ignore_existing_csr = None
+            if new_node in existing_csr_data:
+                nodes_approve_csr_num -= 1
+                ignore_existing_csr = {new_node: existing_csr_data[new_node]}
+
+            wait_for_all_nodes_csr_and_approve(
+                expected_node_num=nodes_approve_csr_num,
+                ignore_existing_csr=ignore_existing_csr,
+            )
 
     def add_nodes_with_terraform(self):
         """
@@ -1933,6 +1986,18 @@ class VSPHEREUPINode(VMWareNodes):
             instance=instance,
         )
         os.chdir(self.previous_dir)
+
+    def change_terraform_tfvars_after_remove_vm(self, num_nodes_removed=1):
+        """
+        Update the compute count after removing node from cluster
+
+        Args:
+             num_nodes_removed (int): Number of nodes removed from cluster
+
+        """
+        self.update_terraform_tfvars_compute_count(
+            type="remove", count=num_nodes_removed
+        )
 
 
 class BaremetalNodes(NodesBase):
@@ -2868,6 +2933,7 @@ class VMWareUPINodes(VMWareNodes):
         vms = self.get_vms(nodes)
         vm_names = [vm.name for vm in vms]
 
+        logger.info(f"Terminating nodes: {vm_names}")
         super().terminate_nodes(nodes, wait)
 
         if config.ENV_DATA.get("rhel_user"):
@@ -2880,3 +2946,4 @@ class VMWareUPINodes(VMWareNodes):
         logger.info(f"Modifying terraform state file of the removed VMs {vm_names}")
         for vm_name in vm_names:
             node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
+            node_cls_obj.change_terraform_tfvars_after_remove_vm()

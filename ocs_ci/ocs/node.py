@@ -1200,7 +1200,10 @@ def node_replacement_verification_steps_user_side(
     if new_node_name not in ocs_node_names:
         log.warning("The new node not found in ocs nodes")
         return False
-    if old_node_name in ocs_node_names:
+    if (
+        old_node_name in ocs_node_names
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("The old node name found in ocs nodes")
         return False
 
@@ -1268,7 +1271,10 @@ def node_replacement_verification_steps_ceph_side(
         bool: True if all the verification steps passed. False otherwise
 
     """
-    if old_node_name == new_node_name:
+    if (
+        old_node_name == new_node_name
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("Hostname didn't change")
         return False
 
@@ -1298,11 +1304,17 @@ def node_replacement_verification_steps_ceph_side(
             "New osd node name is not provided. Continue with the other verification steps..."
         )
 
-    if old_node_name in ceph_osd_status:
+    if (
+        old_node_name in ceph_osd_status
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    if old_node_name in osd_node_names:
+    if (
+        old_node_name in osd_node_names
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("the old hostname found in osd node names")
         return False
 
