@@ -84,6 +84,7 @@ def test_deployment(pvc_factory, pod_factory):
         log.info("Cluster will be destroyed during teardown part of this test.")
 
 
+@deployment
 @azure_platform_required
 def test_azure_storageaccount():
     """
