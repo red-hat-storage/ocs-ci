@@ -102,3 +102,13 @@ class TestUserInterfaceValidation(object):
             f"'Compression status' from ocs-storagecluster-cephblockpool = {compression_statuses[1]}\n"
             f"Expected: {compression_status_expected}"
         )
+
+    @ui
+    @pytest.mark.bugzilla("1994584")
+    def test_ocs_operator_is_not_present(self, setup_ui_class):
+        """
+        Validate odf operator is present in the installed operator tab in ui.
+        """
+
+        validation_ui_obj = ValidationUI()
+        assert validation_ui_obj.verify_odf_without_ocs_in_installed_operator()
