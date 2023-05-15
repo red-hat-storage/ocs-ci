@@ -310,9 +310,11 @@ def copy_kubeconfig(file=None, return_str=False):
 
     Args:
         file: (str): kubeconfig file location
-        return_str: (bool): kubeconfig txt
+        return_str: (bool): if True return kubeconfig content as string
+        else return list of lines of kubeconfig content
+
     Returns:
-        list: with kubeconfig lines
+        list/str: kubeconfig content
 
     """
 
@@ -455,6 +457,60 @@ def get_clusters_env():
     return clusters_env
 
 
+def import_clusters_via_cli(clusters):
+    """
+    Import clusters via cli
+
+    Args:
+        clusters (list): list of tuples (cluster name, kubeconfig path)
+
+    """
+    for cluster in clusters:
+        log.info("Importing clusters via CLI method")
+        log.info(f"**** clustername={cluster[0]}")
+        log.info(f"**** kubeconfig={cluster[1]}")
+        create_project(cluster[0])
+
+        log.info("Create and apply managed-cluster.yaml")
+        managed_cluster = templating.load_yaml(
+            "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
+        )
+        managed_cluster["metadata"]["name"] = cluster[0]
+        managed_cluster_obj = OCS(**managed_cluster)
+        managed_cluster_obj.apply(**managed_cluster)
+
+        log.info("Create and Apply the auto-import-secret.yaml")
+        auto_import_secret = templating.load_yaml(
+            "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
+        )
+        auto_import_secret["metadata"]["namespace"] = cluster[0]
+        auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
+        auto_import_secret_obj = OCS(**auto_import_secret)
+        auto_import_secret_obj.apply(**auto_import_secret)
+
+        log.info("Wait managedcluster move to Available state")
+        time.sleep(60)
+        ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+        ocp_obj.wait_for_resource(
+            timeout=600,
+            condition="True",
+            column="AVAILABLE",
+            resource_name=cluster[0],
+        )
+        ocp_obj.wait_for_resource(
+            timeout=600,
+            condition="True",
+            column="JOINED",
+            resource_name=cluster[0],
+        )
+        ocp_obj.wait_for_resource(
+            timeout=600,
+            condition="true",
+            column="HUB ACCEPTED",
+            resource_name=cluster[0],
+        )
+
+
 def import_clusters_with_acm(import_ui=False):
     """
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
@@ -481,47 +537,4 @@ def import_clusters_with_acm(import_ui=False):
             kubeconfig_location=kubeconfig_a,
         )
     else:
-        for cluster in clusters:
-            log.info("Importing clusters via CLI method")
-            log.info(f"**** clustername={cluster[0]}")
-            log.info(f"**** kubeconfig={cluster[1]}")
-            create_project(cluster[0])
-
-            log.info("Create and apply managed-cluster.yaml")
-            managed_cluster = templating.load_yaml(
-                "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
-            )
-            managed_cluster["metadata"]["name"] = cluster[0]
-            managed_cluster_obj = OCS(**managed_cluster)
-            managed_cluster_obj.apply(**managed_cluster)
-
-            log.info("Create and Apply the auto-import-secret.yaml")
-            auto_import_secret = templating.load_yaml(
-                "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
-            )
-            auto_import_secret["metadata"]["namespace"] = cluster[0]
-            auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
-            auto_import_secret_obj = OCS(**auto_import_secret)
-            auto_import_secret_obj.apply(**auto_import_secret)
-
-            log.info("Wait managedcluster move to Available state")
-            time.sleep(100)
-            ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
-            ocp_obj.wait_for_resource(
-                timeout=600,
-                condition="True",
-                column="AVAILABLE",
-                resource_name=cluster[0],
-            )
-            ocp_obj.wait_for_resource(
-                timeout=600,
-                condition="True",
-                column="JOINED",
-                resource_name=cluster[0],
-            )
-            ocp_obj.wait_for_resource(
-                timeout=600,
-                condition="true",
-                column="HUB ACCEPTED",
-                resource_name=cluster[0],
-            )
+        import_clusters_via_cli(clusters)
