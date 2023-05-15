@@ -3,3 +3,7 @@ kind: OperatorGroup
 metadata:
  name: managed-fusion-og
  namespace: managed-fusion
+spec:
+ selector:
+   matchLabels:
+     misf.ibm.com/managed: "true"

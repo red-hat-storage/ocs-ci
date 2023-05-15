@@ -34,6 +34,7 @@ def create_fusion_monitoring_resources():
     ns_name = config.ENV_DATA["service_namespace"]
     logger.info(f"Creating {ns_name} namespace")
     exec_cmd(["oc", "new-project", ns_name])
+    exec_cmd(f"oc label namespace {ns_name} misf.ibm.com/managed=true")
     logger.info("Creating an OperatorGroup")
     og_path = os.path.join(FUSION_TEMPLATE_DIR, "operatorgroup.yaml")
     og_data = load_yaml(og_path)
@@ -85,6 +86,7 @@ def deploy_odf():
     ns_name = config.ENV_DATA["cluster_namespace"]
     logger.info(f"Creating {ns_name} namespace")
     exec_cmd(["oc", "new-project", ns_name])
+    exec_cmd(f"oc label namespace {ns_name} misf.ibm.com/managed=true")
     logger.info("Creating the offering CR")
     offering_data = dict()
     offering_data["namespace"] = ns_name
