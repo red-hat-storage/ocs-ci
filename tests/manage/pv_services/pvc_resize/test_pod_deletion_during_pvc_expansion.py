@@ -1,9 +1,7 @@
 import logging
-import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
-    delete_deploymentconfig_pods,
     get_all_pods,
     get_plugin_pods,
     get_pod_node,
@@ -14,71 +12,43 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier4c,
-    skipif_upgraded_from,
     bugzilla,
+    polarion_id,
 )
-from ocs_ci.helpers import helpers
-from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
 
 @tier4c
-@skipif_ocs_version("<4.5")
-@skipif_upgraded_from(["4.4"])
+@bugzilla("2164617")
+@polarion_id("OCS-4877")
+@skipif_ocs_version("<4.13")
 class TestPodRespinDuringPvcExpansion(ManageTest):
     """
-    Tests to verify PVC expansion during app pod respins
+    Test to verify PVC expansion during app pod respins
 
     """
 
-    @pytest.fixture()
-    def create_pod_pvc(self, request, pvc_factory, service_account_factory):
-        """
-        Create resources for the test
-
-        """
-
-        def finalizer():
-            delete_deploymentconfig_pods(rbd_pod)
-
-        request.addfinalizer(finalizer)
-
-        rbd_pvc = pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            size=10,
-            access_mode=constants.ACCESS_MODE_RWO,
-            status=constants.STATUS_BOUND,
-        )
-        sa_obj = service_account_factory(project=rbd_pvc.project)
-        rbd_pod = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=rbd_pvc.name,
-            namespace=rbd_pvc.namespace,
-            sa_name=sa_obj.name,
-            dc_deployment=True,
-            replica_count=1,
-            deploy_pod_status=constants.STATUS_RUNNING,
-        )
-        return rbd_pvc, rbd_pod
-
-    @bugzilla("2164617")
-    def test_pod_respin_during_pvc_expansion(self, create_pod_pvc):
+    def test_pod_respin_during_pvc_expansion(self, dc_pod_factory):
         """
         Verify PVC expansion during rbd-app pod respins
 
+        Test Steps:
+        * Create RBD Filesystem PVC
+        * Mount it to the application pod
+        * Expand the PVC
+        * Restart the pod multiple times
+        * Check csi-rbdplugin pod logs on the node where the app pod is running for error
+            'Internal desc = failed to get device for stagingtarget path'
+        * The expansion should be successful, and the app should be running
+
         """
+        rbd_pod = dc_pod_factory(size=10)
+        rbd_pvc = rbd_pod.pvc
 
-        rbd_pvc, rbd_pod = create_pod_pvc
-
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-            pvc_size_new = 15
-        else:
-            pvc_size_new = 25
+        pvc_size_new = 20
 
         # Modify size of PVCs and verify the change
-        log.info(f"Expanding PVC to {pvc_size_new}G")
-
         log.info(f"Expanding size of PVC {rbd_pvc.name} to {pvc_size_new}G")
         rbd_pvc.resize_pvc(pvc_size_new, True)
 
@@ -110,12 +80,10 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
                 f"{pvc_size_new}G as expected, but {new_size_mount}. "
                 f"Checking again."
             )
-        log.info(
-            f"Verified: Modified size {pvc_size_new}G is reflected " f"on all pods."
-        )
+        log.info(f"Verified: Modified size {pvc_size_new}G is reflected on all pods.")
 
         # Respin app-pods multiple times
-        for i in range(1, 5):
+        for count in range(1, 15):
             rbd_pod.delete(wait=True)
             pod_objs = get_all_pods(namespace=rbd_pvc.namespace)
             rbd_pod = pod_objs[0]
@@ -134,6 +102,7 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
             if app_node == plugin_pod_node.name:
                 rbd_plugin_pod = csi_rbdplugin_pods[pod]
                 log.info(f"App pod running node {plugin_pod_node.name}")
+                break
         pod_log = get_pod_logs(pod_name=rbd_plugin_pod.name, container="csi-rbdplugin")
         assert not (
             unexpected_log in pod_log
