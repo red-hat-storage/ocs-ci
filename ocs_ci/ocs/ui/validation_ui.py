@@ -509,7 +509,7 @@ class ValidationUI(PageNavigator):
 
     def verify_odf_without_ocs_in_installed_operator(self) -> bool:
         """
-        Function to validate either ODF operator is present post ODF installation,
+        Function to validate ODF operator is present post ODF installation,
         expectation is only ODF operator should be present in Installed operators tab and
         OCS operator shouldn't be present. This function is only written for 4.9+ versions
 
@@ -520,15 +520,15 @@ class ValidationUI(PageNavigator):
         logger.info("Navigating to Installed Operator Page")
         self.navigate_installed_operators_page()
         logger.info("Searching for Openshift Data Foundation Operator")
-        odf_opeartor_presence = self.wait_until_expected_text_is_found(
+        odf_operator_presence = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["odf-operator"],
             timeout=1,
             expected_text="OpenShift Data Foundation",
         )
         logger.info("Searching for Openshift Container Storage Operator")
-        ocs_opeartor_presence = self.wait_until_expected_text_is_found(
+        ocs_operator_presence = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["ocs-operator"],
             timeout=1,
             expected_text="OpenShift Container Storage",
         )
-        return odf_opeartor_presence and not ocs_opeartor_presence
+        return odf_operator_presence and not ocs_operator_presence
