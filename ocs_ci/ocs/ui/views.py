@@ -1015,6 +1015,7 @@ validation_4_8 = {
         'a[data-test-id="horizontal-link-Block and File"]',
         By.CSS_SELECTOR,
     ),
+    "ocs-operator": ("//h1[normalize-space()='OpenShift Container Storage']", By.XPATH),
 }
 
 validation_4_9 = {
