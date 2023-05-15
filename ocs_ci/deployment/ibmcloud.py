@@ -139,7 +139,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         self.installer = None
         super(IBMCloudIPI, self).__init__()
         self.credentials_requests_dir = os.path.join(self.cluster_path, "creds_reqs")
-        self.pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+        self.pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
