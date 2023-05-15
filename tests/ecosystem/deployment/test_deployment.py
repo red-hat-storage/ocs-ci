@@ -89,11 +89,10 @@ def test_azure_storageaccount():
     """
     Testing that Azure storage account, post deployment.
 
-    Testing for property 'allowBlobPublicAccess' to be 'false'
+    Testing for property 'allow_blob_public_access' to be 'false'
     """
     azure = azure_utils.AZURE()
     storage_account_names = azure.get_storage_accounts_names()
-    print(f"{storage_account_names=}")
     for storage in storage_account_names:
         if "noobaaaccount" in storage:
             property = str(azure.get_storage_account_properties(storage))
@@ -103,4 +102,9 @@ def test_azure_storageaccount():
 
             match = findall(pat, property)
 
-            assert match[0] == "False"  # checking if the matched value is False or not
+            if match:
+                assert (
+                    match[0] == "False"
+                ), "Property allow_blob_public_access is set to True"
+            else:
+                assert False, "Property allow_blob_public_access not found."
