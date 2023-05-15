@@ -2448,7 +2448,7 @@ def load_auth_config():
 
     """
     log.info("Retrieving the authentication config dictionary")
-    auth_file = os.path.join(constants.TOP_DIR, "data", constants.AUTHYAML)
+    auth_file = os.path.join(constants.DATA_DIR, constants.AUTHYAML)
     try:
         with open(auth_file) as f:
             return yaml.safe_load(f)
@@ -3195,7 +3195,7 @@ def prepare_customized_pull_secret(images=None):
     if type(images) == str:
         images = [images]
     # load pull-secret file to pull_secret dict
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     with open(pull_secret_path) as pull_secret_fo:
         pull_secret = json.load(pull_secret_fo)
 
