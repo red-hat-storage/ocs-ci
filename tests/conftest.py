@@ -256,7 +256,12 @@ def pytest_collection_modifyitems(session, items):
                     items.remove(item)
             if skipif_no_kms_marker:
                 try:
-                    if not is_kms_enabled(dont_raise=True):
+                    fusion_aas = (
+                        config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+                    )
+                    if fusion_aas:
+                        items.remove(item)
+                    elif not is_kms_enabled(dont_raise=True):
                         log.debug(
                             f"Test: {item} it will be skipped because the OCS cluster"
                             " has not configured cluster-wide encryption with KMS"
