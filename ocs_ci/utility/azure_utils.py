@@ -13,7 +13,7 @@ from azure.mgmt.resource import ResourceManagementClient
 
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, TerrafromFileNotFoundException
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
@@ -22,31 +22,43 @@ logger = logging.getLogger(name=__file__)
 # default location of files with necessary azure cluster details
 SERVICE_PRINCIPAL_FILEPATH = os.path.expanduser("~/.azure/osServicePrincipal.json")
 TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
+OLD_TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 
 
-def load_cluster_resource_group(cluster_path, terraform_filename=TERRRAFORM_FILENAME):
+def load_cluster_resource_group():
     """
     Read terraform tfvars.json file created by ``openshift-installer`` in a
     cluster dir to get azure ``resource group`` of an OCP cluster. All Azure
     resources of the cluster are placed in this group.
 
-    Args:
-        cluster_path (str): full file path of the openshift cluster directory
-        terraform_filename (str): name of azure terraform vars file, this is
-            optional and you need to specify this only if you want to override
-            the default
-
     Returns:
         string with resource group name
+
+    Raises:
+        TerrafromFileNotFoundException: When the terraform tfvars file is not found
     """
-    filepath = os.path.join(cluster_path, terraform_filename)
-    with open(filepath, "r") as tf_file:
+    cluster_path = config.ENV_DATA["cluster_path"]
+    terraform_files = [
+        os.path.join(cluster_path, f)
+        for f in [OLD_TERRRAFORM_FILENAME, TERRRAFORM_FILENAME]
+    ]
+    terraform_filename = None
+    for tf_file in terraform_files:
+        if os.path.exists(tf_file):
+            terraform_filename = os.path.join(cluster_path, tf_file)
+
+    if not terraform_filename:
+        raise TerrafromFileNotFoundException(
+            f"None of terraform file path from {','.join(terraform_files)} exists!"
+        )
+
+    with open(terraform_filename, "r") as tf_file:
         tf_dict = json.load(tf_file)
     resource_group = tf_dict.get("azure_network_resource_group_name")
     logger.debug(
         "fetching azure resource group (%s) from %s file",
         tf_dict.get("clientId"),
-        filepath,
+        terraform_filename,
     )
     return resource_group
 
@@ -139,9 +151,7 @@ class AZURE:
             config.ENV_DATA["cluster_path"]
         ):
             try:
-                self._cluster_resource_group = load_cluster_resource_group(
-                    config.ENV_DATA["cluster_path"]
-                )
+                self._cluster_resource_group = load_cluster_resource_group()
             except Exception as ex:
                 logger.warning("failed to load azure resource group: %s", ex)
         return self._cluster_resource_group

@@ -602,3 +602,7 @@ class UnexpectedODFAccessException(Exception):
 
 class UnknownOperationForTerraformVariableUpdate(Exception):
     pass
+
+
+class TerrafromFileNotFoundException(Exception):
+    pass
