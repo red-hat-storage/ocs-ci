@@ -822,6 +822,17 @@ add_capacity_4_12 = {
     "confirm_add_capacity": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
 }
 
+block_pool_4_12 = {
+    "actions_inside_pool": (
+        "//div[@class='pf-c-dropdown pf-m-align-right']",
+        By.XPATH,
+    ),
+    "delete_pool_inside_pool": (
+        "//a[text()='Delete BlockPool']",
+        By.XPATH,
+    ),
+}
+
 block_pool = {
     "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
     "new_pool_name": (
@@ -1272,6 +1283,7 @@ locators = {
             **acm_configuration_4_12,
         },
         "obc": obc,
+        "block_pool": {**block_pool, **block_pool_4_12},
     },
     "4.11": {
         "login": {**login, **login_4_11},
