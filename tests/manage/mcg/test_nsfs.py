@@ -1,13 +1,14 @@
 import logging
-
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import MCGTest, tier1, tier3
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     skipif_ocs_version,
     ignore_leftover_label,
 )
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import random_object_round_trip_verification
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -27,6 +28,70 @@ class TestNSFSObjectIntegrity(MCGTest):
     Test the integrity of IO operations on NSFS buckets
 
     """
+
+    @pytest.fixture(autouse=True, scope="class")
+    def modify_endpoint_scc(self, request) -> None:
+        """
+        This fixture modifies the noobaa-endpoint SCC back to the way it was before ODF 4.12.
+        See https://url.corp.redhat.com/5ceb453 for details.
+
+        """
+
+        ocp_scc = ocp.OCP(
+            kind=constants.SCC, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        nb_endpoint_scc_name = constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT_NAME
+        nb_endpoint_sa = constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT
+
+        # Modify the noobaa-endpoint SCC back to the way it was in ODF 4.11
+        json_payload = [
+            {"op": "replace", "path": "/seLinuxContext/type", "value": "MustRunAs"},
+            {"op": "add", "path": "/users/0", "value": f"{nb_endpoint_sa}"},
+        ]
+
+        ocp_scc.patch(
+            resource_name=nb_endpoint_scc_name,
+            params=json_payload,
+            format_type="json",
+        )
+
+        # Verify the changes
+        scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+        assert (
+            scc_dict["seLinuxContext"]["type"] == "MustRunAs"
+        ), "Failed to modify the noobaa-db SCC seLinuxContext type"
+        assert (
+            constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT in scc_dict["users"]
+        ), "The noobaa-endpoint SA wasn't added to the noobaa-endpoint SCC"
+
+        def finalizer():
+            """
+            Restore the noobaa-db SCC back to default
+
+            """
+
+            # Restore the noobaa-endpoint SCC back to it's default state
+            json_payload = [
+                {"op": "replace", "path": "/seLinuxContext/type", "value": "RunAsAny"},
+                {"op": "remove", "path": "/users/0", "value": f"{nb_endpoint_sa}"},
+            ]
+
+            ocp_scc.patch(
+                resource_name=nb_endpoint_scc_name,
+                params=json_payload,
+                format_type="json",
+            )
+
+            # Verify the changes
+            scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+            assert (
+                scc_dict["seLinuxContext"]["type"] == "RunAsAny"
+            ), "Failed to return the noobaa-db SCC seLinuxContext type"
+            assert (
+                constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT not in scc_dict["users"]
+            ), "Failed to remove the noobaa-endpoint SA from the noobaa-endpoint SCC"
+
+        request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-3735")
     @pytest.mark.parametrize(
