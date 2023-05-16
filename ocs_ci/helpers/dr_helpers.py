@@ -218,9 +218,6 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
 
     """
     restore_index = config.cur_index
-    if not replaying_images:
-        replaying_images = config.ENV_DATA["dr_workload_pvc_count"]
-
     for cluster in get_non_acm_cluster_config():
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(
@@ -533,7 +530,7 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
 
 
 def wait_for_all_resources_deletion(
-    namespace, check_replication_resources_state=True, timeout=900
+    namespace, check_replication_resources_state=True, timeout=1000
 ):
     """
     Wait for workload and replication resources to be deleted

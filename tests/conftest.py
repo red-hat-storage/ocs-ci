@@ -39,6 +39,7 @@ from ocs_ci.ocs.exceptions import (
     StorageclassNotCreated,
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
+    ResourceNotDeleted,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -120,7 +121,7 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
     run_cmd,
 )
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
@@ -6049,18 +6050,58 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
 
 
 @pytest.fixture()
-def rdr_workload(request):
+def dr_workload(request):
     """
     Setup Busybox workload for RDR setup
+
     """
-    workload = BusyBox()
+    instances = []
+
+    def factory(num_of_subscription=1, num_of_appset=0):
+        """
+        Args:
+            num_of_subscription (int): Number of Subscription type workload to be created
+            num_of_appset (int): Number of ApplicationSet type workload to be created
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class.
+
+        """
+        total_pvc_count = 0
+        for index in range(num_of_subscription):
+            workload_details = config.ENV_DATA["dr_workload_subscription"][index]
+            workload = BusyBox(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        # TODO: Deploy Appset workload
+
+        dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        return instances
 
     def teardown():
-        workload.delete_workload(force=True)
+        failed_to_delete = False
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                failed_to_delete = True
+
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
+            )
 
     request.addfinalizer(teardown)
-    workload.deploy_workload()
-    return workload
+    return factory
 
 
 @pytest.fixture(scope="class")
