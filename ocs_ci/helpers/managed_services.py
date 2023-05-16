@@ -406,8 +406,9 @@ def verify_faas_provider_resources():
 
     1. Verify CSV phase
     2. Verify ocs-provider-server pod is Running
-    3. Verify that Cephcluster is Ready and hostNetworking is True
-    4. Verify that the security groups are set up correctly
+    3. Verify ocs-metrics-exporter pod is Running
+    4. Verify that Cephcluster is Ready and hostNetworking is True
+    5. Verify that the security groups are set up correctly
 
     """
     # Verify CSV phase
@@ -433,6 +434,10 @@ def verify_faas_provider_resources():
     pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     pod_obj.wait_for_resource(
         condition="Running", selector=constants.PROVIDER_SERVER_LABEL, resource_count=1
+    )
+    # Verify ocs-metrics-exporter pod is Running
+    pod_obj.wait_for_resource(
+        condition="Running", selector=constants.OCS_METRICS_EXPORTER, resource_count=1
     )
 
     # Verify that Cephcluster is Ready and hostNetworking is True
