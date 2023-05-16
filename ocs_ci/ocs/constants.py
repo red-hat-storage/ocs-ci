@@ -67,7 +67,7 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 )
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
-DATA_DIR = os.path.join(TOP_DIR, "data")
+DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
     ROOK_REPO_DIR, "cluster", "examples", "kubernetes", "ceph"
