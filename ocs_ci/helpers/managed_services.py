@@ -459,7 +459,7 @@ def verify_faas_provider_resources():
     assert verify_worker_nodes_security_groups()
 
     # Check the presence of catalogsource and its state
-    catsrc = ocp.OCP(
+    catsrc = OCP(
         kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"]
     )
     catsrc_info = catsrc.get().get("items")[0]
@@ -468,7 +468,7 @@ def verify_faas_provider_resources():
     assert catsrc_info["status"]["connectionState"]["lastObservedState"] == "READY"
 
     # Check the presence of subscription
-    subscr = ocp.OCP(
+    subscr = OCP(
         kind=constants.CATSRC,
         namespace=config.ENV_DATA["cluster_namespace"],
         selector="operators.coreos.com/managed-fusion-agent.managed-fusion",
