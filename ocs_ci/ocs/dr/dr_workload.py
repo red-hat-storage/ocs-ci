@@ -19,10 +19,11 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     CommandFailed,
     UnexpectedBehaviour,
+    ResourceNotDeleted,
 )
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
-from ocs_ci.utility.utils import clone_repo, run_cmd
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import clone_repo, run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class DRWorkload(object):
             constants.PVC,
             constants.PV,
         ]
-
+        log.info("Cleaning up leftover resources in managed clusters")
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             for resource in resources:
@@ -122,21 +123,21 @@ class BusyBox(DRWorkload):
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
         super().__init__("busybox", workload_repo_url, workload_repo_branch)
 
-        self.workload_namespace = None
-        self.workload_pod_count = config.ENV_DATA["dr_workload_pod_count"]
-        self.workload_pvc_count = config.ENV_DATA["dr_workload_pvc_count"]
-
-        self.dr_policy_name = config.ENV_DATA.get("dr_policy_name") or (
-            dr_helpers.get_all_drpolicy()[0]["metadata"]["name"]
+        self.workload_type = kwargs.get("workload_type", constants.SUBSCRIPTION)
+        self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.workload_pod_count = kwargs.get("workload_pod_count")
+        self.workload_pvc_count = kwargs.get("workload_pvc_count")
+        self.dr_policy_name = kwargs.get(
+            "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
+        ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
+        self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster") or (
+            get_primary_cluster_config().ENV_DATA["cluster_name"]
         )
-        self.preferred_primary_cluster = config.ENV_DATA.get(
-            "preferred_primary_cluster"
-        ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
         self.workload_subscription_dir = os.path.join(
-            self.target_clone_dir, config.ENV_DATA.get("dr_workload_subscription_dir")
+            self.target_clone_dir, kwargs.get("workload_dir"), "subscriptions"
         )
         self.drpc_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "drpc.yaml"
@@ -208,7 +209,6 @@ class BusyBox(DRWorkload):
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
-        dr_helpers.wait_for_mirroring_status_ok()
 
     def delete_workload(self, force=False):
         """
@@ -216,6 +216,9 @@ class BusyBox(DRWorkload):
 
         Args:
             force (bool): If True, force remove the stuck resources, default False
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
 
         """
         image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
@@ -232,6 +235,7 @@ class BusyBox(DRWorkload):
                     check_replication_resources_state=False,
                 )
 
+            log.info("Verify backend RBD images are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 for image_uuid in image_uuids:
@@ -245,10 +249,17 @@ class BusyBox(DRWorkload):
                             "RBD image(s) still exists on backend"
                         )
 
-        except (TimeoutExpired, TimeoutExpiredError, TimeoutError, UnexpectedBehaviour):
+        except (
+            TimeoutExpired,
+            TimeoutExpiredError,
+            TimeoutError,
+            UnexpectedBehaviour,
+        ) as ex:
+            err_msg = f"Failed to delete the workload: {ex}"
+            log.exception(err_msg)
             if force:
                 self.resources_cleanup(self.workload_namespace, image_uuids)
-            raise
+            raise ResourceNotDeleted(err_msg)
 
         finally:
             config.switch_acm_ctx()
