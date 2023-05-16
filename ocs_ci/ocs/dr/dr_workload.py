@@ -334,8 +334,8 @@ class BusyBox(DRWorkload):
                 future_to_pods.update(
                     {
                         executor.submit(
-                            pod.exec_cmd_on_pod,
-                            constants.DR_DATA_INTEGRITY_CHECK_SCRIPT,
+                            _pod.exec_cmd_on_pod,
+                            constants.DATA_INTEGRITY_SCRIPT,
                         ): _pod
                     }
                 )
