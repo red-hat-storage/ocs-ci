@@ -676,11 +676,56 @@ def cli_create_ibmcos_backingstore(
 
 
 def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+    """
+    Create a new backingstore with S3-compatible underlying storage (ex: RGW) using oc create command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": "s3-compatible",
+        "s3Compatible": {
+            "targetBucket": uls_name,
+            "signatureVersion": "v2",
+            "endpoint": cld_mgr.rgw_client.endpoint,
+            "secret": {
+                "name": cld_mgr.rgw_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
 
 
-def cli_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+def cli_create_s3comp_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new backingstore with s3-compatible underlying storage (ex: RGW) using a NooBaa CLI command
+
+    Args:
+        mcg_obj (MCG): MCG object
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create s3-compatible {backingstore_name} "
+        f"--access-key {cld_mgr.rgw_client.access_key} "
+        f"--secret-key {cld_mgr.rgw_client.secret_key} "
+        f"--endpoint {cld_mgr.rgw_client.endpoint} "
+        f"--target-bucket {uls_name}",
+        use_yes=True,
+    )
 
 
 def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):

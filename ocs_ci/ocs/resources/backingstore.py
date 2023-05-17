@@ -8,11 +8,13 @@ from ocs_ci.ocs.bucket_utils import (
     oc_create_azure_backingstore,
     oc_create_pv_backingstore,
     oc_create_ibmcos_backingstore,
+    oc_create_s3comp_backingstore,
     cli_create_google_backingstore,
     cli_create_azure_backingstore,
     cli_create_pv_backingstore,
     cli_create_ibmcos_backingstore,
     cli_create_aws_backingstore,
+    cli_create_s3comp_backingstore,
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -266,6 +268,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             "azure": oc_create_azure_backingstore,
             "ibmcos": oc_create_ibmcos_backingstore,
             "pv": oc_create_pv_backingstore,
+            "rgw": oc_create_s3comp_backingstore,
         },
         "cli": {
             "aws": cli_create_aws_backingstore,
@@ -273,6 +276,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             "azure": cli_create_azure_backingstore,
             "ibmcos": cli_create_ibmcos_backingstore,
             "pv": cli_create_pv_backingstore,
+            "rgw": cli_create_s3comp_backingstore,
         },
     }
 
