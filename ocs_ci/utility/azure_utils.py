@@ -417,7 +417,7 @@ class AZURE:
         Get list of storage accounts in azure resource group
 
         Returns:
-           (list): list of Azure storage accounts
+           list: list of Azure storage accounts
 
         """
         storage_accounts_list = (
@@ -432,7 +432,7 @@ class AZURE:
         Get list of names of storage accounts in azure resource group
 
         Returns:
-           (list): list of Azure storage accounts name
+           list: list of Azure storage accounts name
 
         """
         storage_accounts_list = (
@@ -449,6 +449,9 @@ class AZURE:
 
         Args:
             storage_account_name (str): Name of the storage account
+
+        Returns:
+            str: Properties of the storage account in string format.
         """
         storage_account_properties = (
             self.storage_client.storage_accounts.get_properties(
@@ -456,4 +459,32 @@ class AZURE:
                 account_name=storage_account_name,
             )
         )
-        return storage_account_properties
+        return str(storage_account_properties)
+
+
+def azure_storageaccount_check():
+    """
+    Testing that Azure storage account, post deployment.
+
+    Testing for property 'allow_blob_public_access' to be 'false'
+    """
+    logger.info(
+        "Checking if the 'allow_blob_public_access property of storage account is 'false'"
+    )
+    azure = AZURE()
+    storage_account_names = azure.get_storage_accounts_names()
+    for storage in storage_account_names:
+        if "noobaaaccount" in storage:
+            property = azure.get_storage_account_properties(storage)
+            pat = r"'allow_blob_public_access': (True|False),"
+
+            from re import findall
+
+            match = findall(pat, property)
+
+            if match:
+                assert (
+                    match[0] == "False"
+                ), "Property allow_blob_public_access is set to True"
+            else:
+                assert False, "Property allow_blob_public_access not found."

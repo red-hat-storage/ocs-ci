@@ -12,10 +12,8 @@ from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 from ocs_ci.utility.rosa import post_onboarding_verification
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
-from ocs_ci.framework.pytest_customization.marks import azure_platform_required
 
-from ocs_ci.utility import azure_utils
-
+from ocs_ci.utility.azure_utils import azure_storageaccount_check
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ def test_deployment(pvc_factory, pod_factory):
                 else:
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)
 
-                if config.ENV_DATA["platform"].lower() == "azure":
+                if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
                     azure_storageaccount_check()
 
                 # Check basic cluster functionality by creating resources
@@ -85,32 +83,3 @@ def test_deployment(pvc_factory, pod_factory):
 
     if teardown:
         log.info("Cluster will be destroyed during teardown part of this test.")
-
-
-@azure_platform_required
-def azure_storageaccount_check():
-    """
-    Testing that Azure storage account, post deployment.
-
-    Testing for property 'allow_blob_public_access' to be 'false'
-    """
-    log.info(
-        "Checking if the 'allow_blob_public_access property of storage account is 'false'"
-    )
-    azure = azure_utils.AZURE()
-    storage_account_names = azure.get_storage_accounts_names()
-    for storage in storage_account_names:
-        if "noobaaaccount" in storage:
-            property = str(azure.get_storage_account_properties(storage))
-            pat = r"'allow_blob_public_access': (True|False),"
-
-            from re import findall
-
-            match = findall(pat, property)
-
-            if match:
-                assert (
-                    match[0] == "False"
-                ), "Property allow_blob_public_access is set to True"
-            else:
-                assert False, "Property allow_blob_public_access not found."
