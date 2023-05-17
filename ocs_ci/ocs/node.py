@@ -145,9 +145,13 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
         log.info(f"Waiting for nodes {node_names} to reach status {status}")
         for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
             for node in sample:
-                if node.ocp.get_resource_status(node.name) == status:
-                    log.info(f"Node {node.name} reached status {status}")
-                    nodes_not_in_state.remove(node.name)
+                try:
+                    if node.ocp.get_resource_status(node.name) == status:
+                        log.info(f"Node {node.name} reached status {status}")
+                        nodes_not_in_state.remove(node.name)
+                except CommandFailed as ex:
+                    log.info(f"failed to get the node status by error {ex}")
+                    continue
             if not nodes_not_in_state:
                 break
         log.info(f"The following nodes reached status {status}: {node_names}")
