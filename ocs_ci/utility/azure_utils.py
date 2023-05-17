@@ -22,7 +22,7 @@ logger = logging.getLogger(name=__file__)
 
 # default location of files with necessary azure cluster details
 SERVICE_PRINCIPAL_FILEPATH = os.path.expanduser("~/.azure/osServicePrincipal.json")
-TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
+TERRRAFORM_FILENAME = "terraform.platform.auto.tfvars.json"
 OLD_TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 
 
