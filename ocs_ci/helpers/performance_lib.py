@@ -171,8 +171,9 @@ def get_logfile_names(interface, provisioning=True):
     num_of_tries = (
         5  # to overcome network glitches try a few times if the command fails
     )
+    ns_name = config.ENV_DATA["cluster_namespace"]
     for i in range(num_of_tries):
-        pods = run_oc_command(cmd="get pod", namespace="openshift-storage")
+        pods = run_oc_command(cmd="get pod", namespace=ns_name)
 
         if "Error in command" in pods or "Unable to connect" in pods:
             if i == num_of_tries - 1:
@@ -211,12 +212,13 @@ def read_csi_logs(log_names, container_name, start_time):
         list : list of lines from all logs
 
     """
+    ns_name = config.ENV_DATA["cluster_namespace"]
     logs = []
     for l in log_names:
         logs.append(
             run_oc_command(
                 f"logs {l} -c {container_name} --since-time={start_time}",
-                "openshift-storage",
+                ns_name,
             )
         )
     return logs

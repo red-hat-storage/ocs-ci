@@ -1186,10 +1186,10 @@ def run_io_with_rados_bench(**kw):
 
 def get_all_pvs():
     """
-    Gets all pv in openshift-storage namespace
+    Gets all pvs in cluster namespace (openshift-storage or fusion-storage)
 
     Returns:
-         dict: Dict of all pv in openshift-storage namespace
+         dict: Dict of all pv in the cluster namespace
     """
     ocp_pv_obj = ocp.OCP(
         kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"]
@@ -3185,19 +3185,20 @@ def run_cmd_verify_cli_output(
         bool: True of all strings are included in the command output, False otherwise
 
     """
+    ns_name = config.ENV_DATA["cluster_namespace"]
     if cephtool_cmd is True:
         tool_pod = pod.get_ceph_tools_pod()
-        cmd_start = f"oc rsh -n openshift-storage {tool_pod.name} "
+        cmd_start = f"oc rsh -n {ns_name} {tool_pod.name} "
         cmd = f"{cmd_start} {cmd}"
     elif debug_node is not None:
         cmd_start = (
-            f"oc debug nodes/{debug_node} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+            f"oc debug nodes/{debug_node} --to-namespace={ns_name} "
             "-- chroot /host /bin/bash -c "
         )
         cmd = f'{cmd_start} "{cmd}"'
     elif ocs_operator_cmd is True:
         ocs_operator_pod = pod.get_ocs_operator_pod()
-        cmd_start = f"oc rsh -n openshift-storage {ocs_operator_pod.name} "
+        cmd_start = f"oc rsh -n {ns_name} {ocs_operator_pod.name} "
         cmd = f"{cmd_start} {cmd}"
 
     out = run_cmd(cmd=cmd)
