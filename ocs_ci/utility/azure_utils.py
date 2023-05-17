@@ -420,7 +420,11 @@ class AZURE:
            (list): list of Azure storage accounts
 
         """
-        storage_accounts_list = self.storage_client.storage_accounts.list()
+        storage_accounts_list = (
+            self.storage_client.storage_accounts.list_by_resource_group(
+                resource_group_name=self.cluster_resource_group
+            )
+        )
         return storage_accounts_list
 
     def get_storage_accounts_names(self):
@@ -431,7 +435,11 @@ class AZURE:
            (list): list of Azure storage accounts name
 
         """
-        storage_accounts_list = self.storage_client.storage_accounts.list()
+        storage_accounts_list = (
+            self.storage_client.storage_accounts.list_by_resource_group(
+                resource_group_name=self.cluster_resource_group
+            )
+        )
         storage_accounts_name_list = [account.name for account in storage_accounts_list]
         return storage_accounts_name_list
 
@@ -442,7 +450,6 @@ class AZURE:
         Args:
             storage_account_name (str): Name of the storage account
         """
-        print(f"{self._cluster_resource_group=}\n{storage_account_name=}")
         storage_account_properties = (
             self.storage_client.storage_accounts.get_properties(
                 resource_group_name=self.cluster_resource_group,
