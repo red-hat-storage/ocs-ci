@@ -219,7 +219,7 @@ class AZURE:
     @property
     def storage_client(self):
         """
-        Azure Stroage Managment Client instance
+        Azure Stroage Management Client instance
         """
         if not self._storage_client:
             self._storage_client = StorageManagementClient(
