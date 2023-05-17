@@ -409,6 +409,8 @@ def verify_faas_provider_resources():
     3. Verify ocs-metrics-exporter pod is Running
     4. Verify that Cephcluster is Ready and hostNetworking is True
     5. Verify that the security groups are set up correctly
+    6. Check the presence of catalogsource and its state
+    7. Check the presence of subscription
 
     """
     # Verify CSV phase
@@ -455,6 +457,24 @@ def verify_faas_provider_resources():
 
     # Verify that the security groups are set up correctly
     assert verify_worker_nodes_security_groups()
+
+    # Check the presence of catalogsource and its state
+    catsrc = ocp.OCP(
+        kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    catsrc_info = catsrc.get().get("items")[0]
+    log.info(f"Catalogsource: {catsrc_info}")
+    assert catsrc_info["spec"]["displayName"].startswith("Managed Fusion Agent")
+    assert catsrc_info["status"]["connectionState"]["lastObservedState"] == "READY"
+
+    # Check the presence of subscription
+    subscr = ocp.OCP(
+        kind=constants.CATSRC,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector="operators.coreos.com/managed-fusion-agent.managed-fusion",
+    )
+    subscr_info = subscr.get().get("items")[0]
+    assert subscr_info["spec"]["name"] == "managed-fusion-agent"
 
 
 def verify_faas_consumer_resources():
