@@ -53,6 +53,9 @@ def test_deployment(pvc_factory, pod_factory):
                 else:
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)
 
+                if config.ENV_DATA["platform"].lower() == "azure":
+                    azure_storageaccount_check()
+
                 # Check basic cluster functionality by creating resources
                 # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
                 # run IO and delete the resources
@@ -84,14 +87,16 @@ def test_deployment(pvc_factory, pod_factory):
         log.info("Cluster will be destroyed during teardown part of this test.")
 
 
-@deployment
 @azure_platform_required
-def test_azure_storageaccount():
+def azure_storageaccount_check():
     """
     Testing that Azure storage account, post deployment.
 
     Testing for property 'allow_blob_public_access' to be 'false'
     """
+    log.info(
+        "Checking if the 'allow_blob_public_access property of storage account is 'false'"
+    )
     azure = azure_utils.AZURE()
     storage_account_names = azure.get_storage_accounts_names()
     for storage in storage_account_names:
