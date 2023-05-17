@@ -459,9 +459,7 @@ def verify_faas_provider_resources():
     assert verify_worker_nodes_security_groups()
 
     # Check the presence of catalogsource and its state
-    catsrc = OCP(
-        kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    catsrc = OCP(kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"])
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith("Managed Fusion Agent")
