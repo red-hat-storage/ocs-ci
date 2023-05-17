@@ -1421,7 +1421,7 @@ def upgrade_marks_name():
         try:
             upgrade_marks_name.append(upgrade_mark().args[0].name)
         except AttributeError:
-            log.error(f"upgrade mark does not exist")
+            log.error("upgrade mark does not exist")
     return upgrade_marks_name
 
 
