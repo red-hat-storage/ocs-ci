@@ -195,7 +195,8 @@ def get_ocs_osd_deployer_version():
          Version: OCS OSD deployer version
 
     """
-    csv_kind = OCP(kind="ClusterServiceVersion", namespace="openshift-storage")
+    ns_name = config.ENV_DATA["cluster_namespace"]
+    csv_kind = OCP(kind="ClusterServiceVersion", namespace=ns_name)
     deployer_csv = csv_kind.get(selector=constants.OCS_OSD_DEPLOYER_CSV_LABEL)
     assert (
         "ocs-osd-deployer" in deployer_csv["items"][0]["metadata"]["name"]
