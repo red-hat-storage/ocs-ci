@@ -234,7 +234,7 @@ def uninstall_ocs():
     else:
         log.info("Cleanup policy set to retain. skipping nodes cleanup")
 
-    log.info("Deleting cluster namespace {ns_name}")
+    log.info(f"Deleting cluster namespace {ns_name}")
     ocp_obj.delete_project(ns_name)
     ocp_obj.wait_for_delete(ns_name)
     switch_to_project(constants.DEFAULT_NAMESPACE)
