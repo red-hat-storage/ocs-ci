@@ -511,7 +511,7 @@ def import_clusters_via_cli(clusters):
         )
 
 
-def import_clusters_with_acm(import_ui=False):
+def import_clusters_with_acm():
     """
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
 
@@ -529,7 +529,7 @@ def import_clusters_with_acm(import_ui=False):
     cluster_name_b = clusters_env.get("cluster_name_2")
     clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
     verify_running_acm()
-    if import_ui:
+    if config.DEPLOYMENT.get("ui_acm_import") is not None:
         login_to_acm()
         acm_nav = AcmAddClusters()
         acm_nav.import_cluster(
