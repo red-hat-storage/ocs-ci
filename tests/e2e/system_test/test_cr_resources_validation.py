@@ -206,10 +206,10 @@ class TestCRRsourcesValidation(E2ETest):
         """
 
         non_editable_patches = {  # dictionary: patch_name --> patch
-            "persistentVolumeClaim": '{"spec": {"provisioner": "edited.provisioner.io"}}}',
-            "persistentVolumeClaim": '{"spec": {"parameters" : '
+            "provisioner": '{"spec": {"provisioner": "edited.provisioner.io"}}}',
+            "replication-secret-name": '{"spec": {"parameters" : '
             '{"replication.storage.openshift.io/replication-secret-name": "my-secret"}}}',
-            "persistentVolumeClaim": '{"spec": {"parameters" :'
+            "replication-secret-namespace": '{"spec": {"parameters" :'
             '{"replication.storage.openshift.io/replication-secret-namespace": "my-name"}}}',
         }
 
