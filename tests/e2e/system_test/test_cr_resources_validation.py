@@ -143,7 +143,7 @@ class TestCRRsourcesValidation(E2ETest):
 
     def test_network_fence_not_editable(self):
         """
-        Test case to check that network fence object is not editable once created
+        Test case to check that some properties of network fence object are not editable once object is created
         """
 
         patches_non_editable = {  # dictionary: patch_name --> patch
@@ -169,7 +169,7 @@ class TestCRRsourcesValidation(E2ETest):
 
     def test_reclaim_space_cron_job_editable(self):
         """
-        Test case to check that reclaim space cron job object is not editable once created
+        Test case to check that some properties reclaim space cron job object are not editable once object is created
         """
 
         non_editable_patches = {  # dictionary: patch_name --> patch
@@ -179,6 +179,43 @@ class TestCRRsourcesValidation(E2ETest):
         self.cr_resource_not_editable(
             "Reclaim space cron job",
             "ReclaimSpaceCronJob.yaml",
+            non_editable_patches,
+            {},
+        )
+
+    def test_reclaim_space_job_editable(self):
+        """
+        Test case to check that some properties of reclaim space job object are not editable once object is created
+        """
+
+        non_editable_patches = {  # dictionary: patch_name --> patch
+            "persistentVolumeClaim": '{"spec": {"target" :{"persistentVolumeClaim": "pv"}}}',
+        }
+
+        self.cr_resource_not_editable(
+            "Reclaim space job",
+            "ReclaimSpaceJob.yaml",
+            non_editable_patches,
+            {},
+        )
+
+    def test_volume_replication_class_editable(self):
+        """
+        Test case to check that some properties of volume replication class object are not editable
+        once object is created
+        """
+
+        non_editable_patches = {  # dictionary: patch_name --> patch
+            "persistentVolumeClaim": '{"spec": {"provisioner": "edited.provisioner.io"}}}',
+            "persistentVolumeClaim": '{"spec": {"parameters" : '
+            '{"replication.storage.openshift.io/replication-secret-name": "my-secret"}}}',
+            "persistentVolumeClaim": '{"spec": {"parameters" :'
+            '{"replication.storage.openshift.io/replication-secret-namespace": "my-name"}}}',
+        }
+
+        self.cr_resource_not_editable(
+            "Volume Replication Class",
+            "volumeReplicationClass.yaml",
             non_editable_patches,
             {},
         )
