@@ -103,7 +103,7 @@ def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
     # ignore errors, because some of the images might be already mirrored
     # via the `oc adm catalog mirror ...` command and not available on the
     # mirror
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     exec_cmd(
         f"oc image mirror --filter-by-os='.*' -f {mapping_file} "
         f"--insecure --registry-config={pull_secret_path} "
@@ -137,7 +137,7 @@ def prune_and_mirror_index_image(
 
     """
     get_opm_tool()
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
     # prune an index image
     logger.info(
@@ -232,7 +232,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
 
     """
     get_oc_mirror_tool()
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
@@ -357,7 +357,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
     # Disable the default OperatorSources
     disable_default_sources()
 
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
@@ -468,7 +468,7 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
             or checksum
     """
     ocp_image = f"{ocp_image_path}:{ocp_version}"
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
 

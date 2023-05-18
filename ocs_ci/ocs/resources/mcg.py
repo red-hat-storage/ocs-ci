@@ -932,7 +932,7 @@ class MCG:
                 constants.NOOBAA_OPERATOR_POD_CLI_PATH
             )
             # The MCG CLI retrieval process is known to be flaky
-            # and there's an active BZ regardaing it -
+            # and there's an active BZ regarding it -
             # https://bugzilla.redhat.com/show_bug.cgi?id=2011845
             # rsync should be more reliable than cp, thus the use of oc rsync.
             if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:

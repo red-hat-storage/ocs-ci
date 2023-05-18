@@ -57,7 +57,7 @@ class OCPINSTALLRHEL(object):
             config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
         )
         self.pod_name = "rhelpod"
-        self.pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+        self.pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         self.pod_pull_secret_path = os.path.join(
             constants.POD_UPLOADPATH, "pull-secret"
         )

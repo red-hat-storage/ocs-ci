@@ -60,7 +60,7 @@ class OCPDeployment:
         Returns:
             dict: content of pull secret
         """
-        pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         with open(pull_secret_path, "r") as f:
             # Parse, then unparse, the JSON file.
             # We do this for two reasons: to ensure it is well-formatted, and
