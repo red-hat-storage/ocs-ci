@@ -219,6 +219,13 @@ class MultiClusterConfig:
         self.switch_ctx(self.get_active_acm_index())
 
     def get_active_acm_index(self):
+        """
+        Retrieve the active ACM cluster index.
+
+        Returns:
+            int: The multicluster_index of the active ACM cluster config.
+
+        """
         for cluster in self.clusters:
             if cluster.MULTICLUSTER["active_acm_cluster"]:
                 return cluster.MULTICLUSTER["multicluster_index"]
@@ -226,6 +233,14 @@ class MultiClusterConfig:
         return self.designate_active_acm_cluster()
 
     def designate_active_acm_cluster(self):
+        """
+        Set one of the ACM clusters as the active ACM cluster. This is done in
+        the event that none of the ACM clusters are set as active.
+
+        Returns:
+            int: The multicluster index of the newly designated active ACM cluster
+
+        """
         for cluster in self.clusters:
             if cluster.MULTICLUSTER["acm_cluster"]:
                 cluster.MULTICLUSTER["active_acm_cluster"] = True

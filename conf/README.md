@@ -255,6 +255,16 @@ auth file or pulled from s3.
 
 * `test_quay_auth` - Config variable used during unit_testing
 
+#### MULTICLUSTER
+
+This section of the config is used for multicluster specific configuration data.
+Scenarios that use this data include MDR and RDR deployments.
+
+* `multicluster_index` - Index of the cluster, used to differentiate between other cluster configurations.
+* `acm_cluster` - True if the cluster is an ACM hub cluster, otherwise False.
+* `primary_cluster` - True if the cluster is the primary cluster, otherwise False.
+* `active_acm_cluster` - True if the cluster is the active ACM hub cluster, False if passive.
+
 ##### ibmcloud
 
 IBM Cloud related section under AUTH config.
