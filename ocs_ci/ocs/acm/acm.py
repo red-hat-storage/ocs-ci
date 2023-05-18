@@ -529,7 +529,7 @@ def import_clusters_with_acm():
     cluster_name_b = clusters_env.get("cluster_name_2")
     clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
     verify_running_acm()
-    if config.DEPLOYMENT.get("ui_acm_import") is not None:
+    if config.DEPLOYMENT.get("ui_acm_import"):
         login_to_acm()
         acm_nav = AcmAddClusters()
         acm_nav.import_cluster(
