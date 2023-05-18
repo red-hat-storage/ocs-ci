@@ -736,7 +736,7 @@ def get_namespce_name_by_pattern(
         filter (str): namespace name to filter from the list
 
     Returns:
-        namespace_list (list): List of namespace names matching the pattern
+        list: Namespace names matching the pattern
 
     """
     ocp_obj = OCP(kind="namespace")
@@ -983,8 +983,8 @@ def export_mg_pods_logs(log_dir_path, mg_output=None):
 
     """
     file_mg_cmd_output = os.path.join(log_dir_path, "mg_cmd_output.log")
-    with open(file_mg_cmd_output, "w") as file1:
-        file1.write(mg_output)
+    with open(file_mg_cmd_output, "w") as df:
+        df.write(mg_output)
     log.error(f"Print must gather command output:{mg_output}")
     get_logs_ocp_mg_pods(log_dir_path)
     get_helper_pods_output(log_dir_path)
@@ -1012,8 +1012,8 @@ def get_logs_ocp_mg_pods(log_dir_path):
                 file_path_describe = os.path.join(
                     log_dir_path, f"describe_ocp_mg_{pod_mg_ns.name}.log"
                 )
-                with open(file_path_describe, "w") as file1:
-                    file1.write(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
+                with open(file_path_describe, "w") as df:
+                    df.write(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
                 log.error(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
 
                 ocp_mg_pod_logs = get_pod_logs(
@@ -1022,8 +1022,8 @@ def get_logs_ocp_mg_pods(log_dir_path):
                 file_path_describe = os.path.join(
                     log_dir_path, f"log_ocp_mg_{pod_mg_ns.name}.log"
                 )
-                with open(file_path_describe, "w") as file1:
-                    file1.write(ocp_mg_pod_logs)
+                with open(file_path_describe, "w") as df:
+                    df.write(ocp_mg_pod_logs)
                 log.error(f"ocp mg pod logs:\n{ocp_mg_pod_logs}")
     except Exception as e:
         log.error(e)
@@ -1050,8 +1050,8 @@ def get_helper_pods_output(log_dir_path):
             file_path_describe = os.path.join(
                 log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod_obj.name}.log"
             )
-            with open(file_path_describe, "w") as file1:
-                file1.write(describe_helper_pod)
+            with open(file_path_describe, "w") as df:
+                df.write(describe_helper_pod)
             log.error(
                 f"****helper pod {helper_pod} describe****\n{describe_helper_pod}\n"
             )
@@ -1060,8 +1060,8 @@ def get_helper_pods_output(log_dir_path):
             file_path_describe = os.path.join(
                 log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod_obj.name}.log"
             )
-            with open(file_path_describe, "w") as file1:
-                file1.write(log_helper_pod)
+            with open(file_path_describe, "w") as df:
+                df.write(log_helper_pod)
             log.error(f"****helper pod {helper_pod} logs***\n{log_helper_pod}")
         except Exception as e:
             log.error(e)
