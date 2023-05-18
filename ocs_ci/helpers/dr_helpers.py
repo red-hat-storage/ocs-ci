@@ -613,8 +613,10 @@ def enable_fence(drcluster_name):
     """
     Once the managed cluster is fenced, all communication
     from applications to the ODF external storage cluster will fail
+
     Args:
         drcluster_name (str): Name of the DRcluster which needs to be fenced
+
     """
 
     logger.info(
@@ -633,9 +635,11 @@ def enable_fence(drcluster_name):
 def enable_unfence(drcluster_name):
     """
     The OpenShift cluster to be Unfenced is the one where applications
-     are not currently running and the cluster that was Fenced earlier.
+    are not currently running and the cluster that was Fenced earlier.
+
     Args:
         drcluster_name (str): Name of the DRcluster which needs to be fenced
+
     """
 
     logger.info(
@@ -657,7 +661,7 @@ def fence_state(drcluster_name, fence_state):
     Args:
        drcluster_name (str): Name of the DRcluster which needs to be fenced
        fence_state (str): Specify the clusterfence state
-        either constants.ACTION_UNFENCE and ACTION_FENCE
+                          either constants.ACTION_UNFENCE and ACTION_FENCE
     """
 
     logger.info(
