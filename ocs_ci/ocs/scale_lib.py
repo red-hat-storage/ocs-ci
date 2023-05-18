@@ -844,7 +844,7 @@ def check_and_add_enough_worker(worker_count):
                         )
                     )
                 for ms in ms_name:
-                    machine.wait_for_new_node_to_be_ready(ms)
+                    machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             if len(ms_name) == 3:
                 exp_count = int(worker_count / 3)
             else:
@@ -852,7 +852,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -908,7 +908,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -954,7 +954,7 @@ def check_and_add_enough_worker(worker_count):
                         )
                     )
                 for ms in ms_name:
-                    machine.wait_for_new_node_to_be_ready(ms)
+                    machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             if len(ms_name) == 3:
                 exp_count = int(worker_count / 3)
             else:
@@ -962,7 +962,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -1003,7 +1003,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms, 900)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
