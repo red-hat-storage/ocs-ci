@@ -1,17 +1,20 @@
 import pytest
 import logging
 import boto3
+import time
 
 from ocs_ci.ocs.bucket_utils import patch_replication_policy_to_bucket
 
 # from ocs_ci.ocs import constants
 
+# from concurrent.futures import ThreadPoolExecutor, wait
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.rgw import RGW
+from ocs_ci.helpers.sc_utils import start_mcg_bi_replication
 
 # from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
 # from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -159,3 +162,13 @@ class TestFITonSC:
         # MCG NSFS
 
         # RGW kafka notification
+
+        start_mcg_bi_replication(first_bucket, second_bucket, duration=2)
+
+    def random_func(self):
+        time.sleep(30)
+        logger.info("Inside this function")
+        assert False, "Here failed!"
+
+    def test_sample(self):
+        start_mcg_bi_replication("test1", "test2", duration=2)
