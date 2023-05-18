@@ -660,8 +660,7 @@ def fence_state(drcluster_name, fence_state):
     Sets the specified clusterFence state
     Args:
        drcluster_name (str): Name of the DRcluster which needs to be fenced
-       fence_state (str): Specify the clusterfence state
-                          either constants.ACTION_UNFENCE and ACTION_FENCE
+       fence_state (str): Specify the clusterfence state either constants.ACTION_UNFENCE and ACTION_FENCE
     """
 
     logger.info(
@@ -685,8 +684,7 @@ def get_fence_state(drcluster_name):
     Args:
         drcluster_name (str): Name of the DRcluster
     Returns:
-        state (str): If drcluster are fenced: Fenced or Unfenced,
-                     else None if not defined
+        state (str): If drcluster are fenced: Fenced or Unfenced, else None if not defined
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
