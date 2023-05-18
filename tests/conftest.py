@@ -6116,8 +6116,8 @@ def dr_workload(request):
             workload.deploy_workload()
 
         # TODO: Deploy Appset workload
-
-        dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
 
     def teardown():

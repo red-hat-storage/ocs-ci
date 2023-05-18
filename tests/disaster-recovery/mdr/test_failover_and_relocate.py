@@ -43,7 +43,7 @@ class TestApplicationFailoverAndRelocate:
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, rdr_workload):
+    def teardown(self, request, dr_workload):
         """
         If fenced, unfence the cluster and reboot nodes
         """
@@ -75,7 +75,7 @@ class TestApplicationFailoverAndRelocate:
         setup_acm_ui,
         primary_cluster_down,
         nodes_multicluster,
-        rdr_workload,
+        dr_workload,
         node_restart_teardown,
     ):
         """
@@ -97,17 +97,18 @@ class TestApplicationFailoverAndRelocate:
                 )
                 raise NotImplementedError
 
-        acm_obj = AcmAddClusters(setup_acm_ui)
+        acm_obj = AcmAddClusters()
+        workload = dr_workload(num_of_subscription=1)[0]
 
         # Create application on Primary managed cluster
-        set_current_primary_cluster_context(rdr_workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace)
         primary_cluster_index = config.cur_index
         node_objs = get_node_objs()
         primary_cluster_name = get_current_primary_cluster_name(
-            namespace=rdr_workload.workload_namespace
+            namespace=workload.workload_namespace
         )
         self.drcluster_name = primary_cluster_name
-        self.namespace = rdr_workload.workload_namespace
+        self.namespace = workload.workload_namespace
 
         # Stop primary cluster nodes
         if primary_cluster_down:
@@ -119,30 +120,30 @@ class TestApplicationFailoverAndRelocate:
 
         # Application Failover to Secondary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace
+            workload.workload_namespace
         )
         if config.RUN.get("mdr_failover_via_ui"):
             logger.info("Start the process of Failover from ACM UI")
             config.switch_acm_ctx()
             failover_relocate_ui(
                 acm_obj,
-                workload_to_move=f"{rdr_workload.workload_name}-1",
-                policy_name=rdr_workload.dr_policy_name,
+                workload_to_move=f"{workload.workload_name}-1",
+                policy_name=workload.dr_policy_name,
                 failover_or_preferred_cluster=secondary_cluster_name,
             )
         else:
             failover(
                 failover_cluster=secondary_cluster_name,
-                namespace=rdr_workload.workload_namespace,
+                namespace=workload.workload_namespace,
             )
 
         # Verify application are running in other managedcluster
         # And not in previous cluster
-        set_current_primary_cluster_context(rdr_workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace)
         wait_for_all_resources_creation(
-            rdr_workload.workload_pvc_count,
-            rdr_workload.workload_pod_count,
-            rdr_workload.workload_namespace,
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
         )
 
         # Verify the failover status from UI
@@ -171,48 +172,46 @@ class TestApplicationFailoverAndRelocate:
             ), "Not all the pods reached running state"
 
         # Verify application are deleted from old cluster
-        set_current_secondary_cluster_context(rdr_workload.workload_namespace)
-        wait_for_all_resources_deletion(rdr_workload.workload_namespace)
+        set_current_secondary_cluster_context(workload.workload_namespace)
+        wait_for_all_resources_deletion(workload.workload_namespace)
 
         # Validate data integrity
-        set_current_primary_cluster_context(rdr_workload.workload_namespace)
-        validate_data_integrity(rdr_workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace)
+        validate_data_integrity(workload.workload_namespace)
 
         # Unfenced the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.drcluster_name)
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_ocp_nodes(
-            rdr_workload.workload_namespace, self.drcluster_name
-        )
+        gracefully_reboot_ocp_nodes(workload.workload_namespace, self.drcluster_name)
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace
+            workload.workload_namespace
         )
         if config.RUN.get("mdr_relocate_via_ui"):
             logger.info("Start the process of Relocate from ACM UI")
             # Relocate via ACM UI
             failover_relocate_ui(
                 acm_obj,
-                workload_to_move=f"{rdr_workload.workload_name}-1",
-                policy_name=rdr_workload.dr_policy_name,
+                workload_to_move=f"{workload.workload_name}-1",
+                policy_name=workload.dr_policy_name,
                 failover_or_preferred_cluster=secondary_cluster_name,
                 action=constants.ACTION_RELOCATE,
             )
         else:
-            relocate(secondary_cluster_name, rdr_workload.workload_namespace)
+            relocate(secondary_cluster_name, workload.workload_namespace)
 
         # Verify resources deletion from previous primary or current secondary cluster
-        set_current_secondary_cluster_context(rdr_workload.workload_namespace)
-        wait_for_all_resources_deletion(rdr_workload.workload_namespace)
+        set_current_secondary_cluster_context(workload.workload_namespace)
+        wait_for_all_resources_deletion(workload.workload_namespace)
 
         # Verify resources creation on preferredCluster
-        set_current_primary_cluster_context(rdr_workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace)
         wait_for_all_resources_creation(
-            rdr_workload.workload_pvc_count,
-            rdr_workload.workload_pod_count,
-            rdr_workload.workload_namespace,
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
         )
 
         # Verify Relocate statis from UI
@@ -223,5 +222,5 @@ class TestApplicationFailoverAndRelocate:
             )
 
         # Validate data integrity
-        set_current_primary_cluster_context(rdr_workload.workload_namespace)
-        validate_data_integrity(rdr_workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace)
+        validate_data_integrity(workload.workload_namespace)
