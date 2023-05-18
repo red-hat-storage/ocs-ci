@@ -982,7 +982,7 @@ def export_mg_pods_logs(log_dir_path, mg_output=None):
     Returns:
 
     """
-    file_mg_cmd_output = os.path.join(log_dir_path, "mg_cmd_output.txt")
+    file_mg_cmd_output = os.path.join(log_dir_path, "mg_cmd_output.log")
     with open(file_mg_cmd_output, "w") as file1:
         file1.write(mg_output)
     log.error(f"Print must gather command output:{mg_output}")
@@ -1010,7 +1010,7 @@ def get_logs_ocp_mg_pods(log_dir_path):
                 )
 
                 file_path_describe = os.path.join(
-                    log_dir_path, f"describe_ocp_mg_{pod_mg_ns.name}.txt"
+                    log_dir_path, f"describe_ocp_mg_{pod_mg_ns.name}.log"
                 )
                 with open(file_path_describe, "w") as file1:
                     file1.write(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
@@ -1020,7 +1020,7 @@ def get_logs_ocp_mg_pods(log_dir_path):
                     pod_name=pod_mg_ns.name, namespace=namespace, all_containers=True
                 )
                 file_path_describe = os.path.join(
-                    log_dir_path, f"log_ocp_mg_{pod_mg_ns.name}.txt"
+                    log_dir_path, f"log_ocp_mg_{pod_mg_ns.name}.log"
                 )
                 with open(file_path_describe, "w") as file1:
                     file1.write(ocp_mg_pod_logs)
@@ -1048,7 +1048,7 @@ def get_helper_pods_output(log_dir_path):
 
             describe_helper_pod = helper_pod_obj.describe()
             file_path_describe = os.path.join(
-                log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod_obj.name}.txt"
+                log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod_obj.name}.log"
             )
             with open(file_path_describe, "w") as file1:
                 file1.write(describe_helper_pod)
@@ -1058,7 +1058,7 @@ def get_helper_pods_output(log_dir_path):
 
             log_helper_pod = get_pod_logs(pod_name=helper_pod)
             file_path_describe = os.path.join(
-                log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod_obj.name}.txt"
+                log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod_obj.name}.log"
             )
             with open(file_path_describe, "w") as file1:
                 file1.write(log_helper_pod)
