@@ -113,7 +113,6 @@ def test_ceph_mgr_dashboard_not_deployed():
 @metrics_for_external_mode_required
 @tier1
 @pytest.mark.bugzilla("1779336")
-@pytest.mark.bugzilla("2203795")
 @pytest.mark.polarion_id("OCS-1267")
 @skipif_managed_service
 def test_ceph_rbd_metrics_available():
@@ -133,6 +132,7 @@ def test_ceph_rbd_metrics_available():
 
 
 @tier1
+@pytest.mark.bugzilla("2203795")
 @metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
 @skipif_managed_service

@@ -94,7 +94,6 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
 
 
 @tier3
-@bugzilla("2203795")
 @pytest.mark.polarion_id("OCS-1307")
 @skipif_managed_service
 @skipif_external_mode
@@ -166,6 +165,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
 
 
 @tier3
+@bugzilla("2203795")
 @pytest.mark.polarion_id("OCS-2734")
 @skipif_managed_service
 def test_ceph_metrics_presence_when_osd_down(measure_stop_ceph_osd):
