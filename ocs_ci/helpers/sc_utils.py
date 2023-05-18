@@ -40,7 +40,7 @@ def start_mcg_bi_replication(first_bucket, second_bucket, duration=0, delay=5):
             secrets=[
                 obc_obj.access_key_id,
                 obc_obj.access_key,
-                obc_obj.s3_internal_endpoint,
+                obc_obj.s3_external_endpoint,
             ],
         )
 
