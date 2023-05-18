@@ -7,5 +7,5 @@ from ocs_ci.framework.testlib import acm_import
 
 
 @acm_import
-def test_acm_import(setup_acm_ui):
+def test_acm_import():
     import_clusters_with_acm()
