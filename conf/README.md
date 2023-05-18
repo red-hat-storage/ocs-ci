@@ -77,6 +77,7 @@ anywhere else.
 * `force_deploy_multiple_clusters` - Allow multiple clusters to be deployed with the same prefix (vmware)
 * `allow_lower_instance_requirements` Allow instance requirements lower than the documented recommended values (Default: false)
 * `ui_deployment` - Utilize openshift-console to deploy OCS via the UI (Default: false)
+* `ui_acm_import` - Import clusters to ACM via the UI (Default: false)
 * `live_deployment` - Deploy OCS from live content (Default: false)
 * `live_content_source` - Content source to use for live deployment
 * `preserve_bootstrap_node` - Preserve the bootstrap node rather than deleting it after deployment (Default: false)
