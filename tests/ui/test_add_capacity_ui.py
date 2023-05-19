@@ -54,7 +54,7 @@ class TestAddCapacityUI(object):
         osd_count = len(osd_pods_before_add_capacity)
 
         logger.info("Add capacity via UI")
-        infra_ui_obj = AddReplaceDeviceUI(setup_ui_class)
+        infra_ui_obj = AddReplaceDeviceUI()
         infra_ui_obj.add_capacity_ui()
 
         logger.info("Wait for osd pods to be in Running state")

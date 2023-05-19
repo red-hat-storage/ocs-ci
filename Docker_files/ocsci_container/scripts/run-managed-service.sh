@@ -14,7 +14,7 @@ $AWS_PATH_ARG:/root/.aws $IMAGE_NAME_ARG $RUN_CI
 
 if [ "$PROVIDER_NAME" != "" ]; then
    $ENGINE_ARG run -v $CLUSTER_PATH:/opt/cluster $IMAGE_NAME_ARG \
-   $PYTHON_VERSION_ARG /opt/ocs-ci/Docker_files/ocsci_container/scripts/edit_yaml.py $PROVIDER_NAME
+   python3 /opt/ocs-ci/Docker_files/ocsci_container/scripts/edit_yaml.py $PROVIDER_NAME
 fi
 
 #provider:

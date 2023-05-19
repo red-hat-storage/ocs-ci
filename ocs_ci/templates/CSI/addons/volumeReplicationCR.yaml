@@ -1,0 +1,13 @@
+apiVersion: replication.storage.openshift.io/v1alpha1
+kind: VolumeReplication
+metadata:
+  name: volumereplication-sample
+  namespace: default
+spec:
+  volumeReplicationClass: volumereplicationclass-sample
+  replicationState: primary
+  autoResync: false
+  dataSource:
+    kind: PersistentVolumeClaim
+    name: myPersistentVolumeClaim
+

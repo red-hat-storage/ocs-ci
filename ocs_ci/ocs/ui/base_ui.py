@@ -5,6 +5,7 @@ import os
 import gc
 import time
 import zipfile
+from functools import reduce
 
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -53,8 +54,10 @@ class BaseUI:
 
     """
 
-    def __init__(self, driver: WebDriver):
-        self.driver = driver
+    def __init__(self):
+        self.driver = SeleniumDriver()
+        if self.__class__.__name__ != BaseUI.__name__:
+            logger.info(f"You are on {repr(self)}")
         base_ui_logs_dir = os.path.join(
             os.path.expanduser(ocsci_config.RUN["log_dir"]),
             f"ui_logs_dir_{ocsci_config.RUN['run_id']}",
@@ -77,6 +80,35 @@ class BaseUI:
         if not os.path.isdir(self.dom_folder):
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
         logger.info(f"screenshots pictures:{self.dom_folder}")
+
+        self.ocp_version = get_ocp_version()
+        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
+        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
+        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
+
+        self.page_nav = self.deep_get(locators, self.ocp_version, "page")
+        self.generic_locators = self.deep_get(locators, self.ocp_version, "generic")
+        self.validation_loc = self.deep_get(locators, self.ocp_version, "validation")
+        self.dep_loc = self.deep_get(locators, self.ocp_version, "deployment")
+        self.pvc_loc = self.deep_get(locators, self.ocp_version, "pvc")
+        self.bp_loc = self.deep_get(locators, self.ocp_version, "block_pool")
+        self.sc_loc = self.deep_get(locators, self.ocp_version, "storageclass")
+        self.ocs_loc = self.deep_get(locators, self.ocp_version, "ocs_operator")
+        self.bucketclass = self.deep_get(locators, self.ocp_version, "bucketclass")
+        self.mcg_stores = self.deep_get(locators, self.ocp_version, "mcg_stores")
+        self.acm_page_nav = self.deep_get(locators, self.ocp_version, "acm_page")
+        self.obc_loc = self.deep_get(locators, self.ocp_version, "obc")
+        self.add_capacity_ui_loc = self.deep_get(
+            locators, self.ocp_version, "add_capacity"
+        )
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} Web Page"
+
+    @classmethod
+    def deep_get(cls, dictionary, *keys):
+        return reduce(lambda d, key: d.get(key) if d else None, keys, dictionary)
 
     def do_click(
         self,
@@ -358,7 +390,7 @@ class BaseUI:
             if sample == attribute_value:
                 break
 
-    def page_has_loaded(self, retries=5, sleep_time=1):
+    def page_has_loaded(self, retries=5, sleep_time=2):
         """
         Waits for page to completely load by comparing current page hash values.
         Not suitable for pages that use frequent dynamically content (less than sleep_time)
@@ -369,13 +401,13 @@ class BaseUI:
 
         """
 
+        @retry(TimeoutException)
         def get_page_hash():
             """
             Get dom html hash
             """
-            dom = self.driver.find_element_by_tag_name("html").get_attribute(
-                "innerHTML"
-            )
+            self.check_element_presence((By.TAG_NAME, "html"))
+            dom = self.get_element_attribute(("html", By.TAG_NAME), "innerHTML")
             dom_hash = hash(dom.encode("utf-8"))
             return dom_hash
 
@@ -405,6 +437,13 @@ class BaseUI:
 
         """
         self.driver.refresh()
+
+    def navigate_backward(self):
+        """
+        Navigate to a previous Web Page
+
+        """
+        self.driver.back()
 
     def scroll_into_view(self, locator):
         """
@@ -543,29 +582,21 @@ class PageNavigator(BaseUI):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.ocp_version = get_ocp_version()
-        self.ocp_version_full = version.get_semantic_ocp_version_from_config()
-        self.page_nav = locators[self.ocp_version]["page"]
-        self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-        self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
-        self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
+    def __init__(self):
+        super().__init__()
+
         self.operator_name = (
             ODF_OPERATOR
             if self.ocs_version_semantic >= version.VERSION_4_9
             else OCS_OPERATOR
         )
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
-            self.generic_locators = locators[self.ocp_version]["generic"]
-
         if config.DEPLOYMENT.get("local_storage", False):
             self.storage_class = "localblock_sc"
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
-            if self.ocs_version_semantic <= version.VERSION_4_12:
-                self.storage_class = "thin_sc"
-            else:
+            if self.ocs_version_semantic >= version.VERSION_4_13:
                 self.storage_class = "thin-csi_sc"
+            else:
+                self.storage_class = "thin_sc"
         elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
             if aws_sc == "gp3-csi":
@@ -587,43 +618,54 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
+        self.page_has_loaded(5, 5)
 
-    def navigate_overview_page(self):
+    def navigate_OCP_home_page(self):
         """
-        Navigate to Overview Page
+        Navigate to Home Page
+        """
+        logger.info("Navigate to OCP Home Page")
+        self.driver.get(get_ocp_url())
+        self.page_has_loaded()
+
+    def navigate_storage(self):
+        logger.info("Navigate to ODF tab under Storage section")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        return DataFoundationDefaultTab()
+
+    def navigate_cluster_overview_page(self):
+        """
+        Navigate to Cluster Overview Page
 
         """
-        logger.info("Navigate to Overview Page")
+        logger.info("Navigate to Cluster Overview Page")
         if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
             self.choose_expanded_mode(mode=False, locator=self.page_nav["Home"])
-            self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+            self.navigate_storage()
         else:
             self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
         self.do_click(locator=self.page_nav["overview_page"])
 
-    def navigate_odf_overview_page(self):
+    def nav_odf_default_page(self):
         """
-        Navigate to OpenShift Data Foundation Overview Page
+        Navigate to OpenShift Data Foundation default page
+        Default Data foundation page is Overview at ODF 4.13
         """
-        logger.info("Navigate to ODF tab under Storage section")
+
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        if (
-            self.ocp_version_full >= version.VERSION_4_10
-            and ocs_version >= version.VERSION_4_10
-        ):
-            self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
-        else:
-            self.do_click(locator=self.page_nav["odf_tab"], timeout=90)
+        self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
         self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
+        default_tab = OverviewTab()
+        logger.info(f"Default page is {self.driver.title}")
+        return default_tab
 
     def navigate_quickstarts_page(self):
         """
         Navigate to Quickstarts Page
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         logger.info("Navigate to Quickstarts Page")
         self.scroll_into_view(self.page_nav["quickstarts"])
         self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=False)
@@ -682,6 +724,7 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to Installed Operators Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
+        self.page_has_loaded(retries=25, sleep_time=5)
         self.do_click(
             self.page_nav["installed_operators_page"], enable_screenshot=False
         )
@@ -858,7 +901,7 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        if version.VERSION_4_10 <= self.ocp_version_full < version.VERSION_4_12:
+        if self.ocp_version_full in (version.VERSION_4_10, version.VERSION_4_11):
             default_projects_is_checked = self.driver.find_element_by_xpath(
                 "//span[@class='pf-c-switch__toggle']"
             )
@@ -880,15 +923,16 @@ class PageNavigator(BaseUI):
                 logger.info("Show default projects")
                 self.do_click(self.page_nav["show-default-projects"])
 
-        pvc_loc = locators[self.ocp_version]["pvc"]
         logger.info(f"Wait and select namespace {project_name}")
         wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(pvc_loc["test-project-link"], project_name),
+            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
             expected_text=f"{project_name}",
             timeout=10,
         )
         if wait_for_project:
-            self.do_click(format_locator(pvc_loc["test-project-link"], project_name))
+            self.do_click(
+                format_locator(self.pvc_loc["test-project-link"], project_name)
+            )
             logger.info(f"Namespace {project_name} selected")
         else:
             raise NoSuchElementException(f"Namespace {project_name} not found on UI")
@@ -932,38 +976,119 @@ class PageNavigator(BaseUI):
             return False
 
 
-class StorageSystemNavigator(PageNavigator):
-    """
-    Storage Navigator Class
+class DataFoundationTabBar(PageNavigator):
+    def __init__(self):
+        super().__init__()
 
-    """
-
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.validation_loc = locators[self.ocp_version]["validation"]
-
-    def navigate_cephblockpool(self):
+    def nav_storage_systems_tab(self):
         """
-        Initial page OCP Home page
-        Navigate to StorageSystem details / ocs-storagecluster-cephblockpool
-
+        Navigate to Storage Systems tab. Accessible from any Data Foundation tabs
         """
-        self.navigate_odf_storagesystems()
-        self.navigate_storagecluster_storagesystem()
-        self.navigate_cephblockpool_verify_statusready()
-
-    def navigate_odf_storagesystems(self):
-        """
-        Initial page OCP Home page
-        Navigate to Storage Systems tab
-
-        """
-        self.navigate_odf_overview_page()
-        logger.info("Click on 'Storage Systems' tab")
+        logger.info("Navigate to Data Foundation - Storage Systems")
         self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=2)
+        return StorageSystemTab()
 
-    def navigate_storagecluster_storagesystem(self):
+    def nav_overview_tab(self):
+        """
+        Navigate to Overview tab. Accessible from any Data Foundation tabs
+        """
+        logger.info("Navigate to Data Foundation - Overview")
+        # pay attention Overview loc will show twice if Home Page nav extended
+        self.do_click(locator=self.page_nav["overview_page"])
+        return OverviewTab()
+
+    def nav_backing_store_tab(self):
+        """
+        Navigate to Backing Store tab. Accessible from any Data Foundation tabs
+        """
+        logger.info("Navigate to Data Foundation - Backing Store tab")
+        self.do_click(locator=self.validation_loc["osc_backing_store_tab"])
+        return BackingStoreTab()
+
+    def nav_bucket_class_tab(self):
+        """
+        Navigate to Bucket class tab. Accessible from any Data Foundation tabs
+        """
+        logger.info("Navigate to Data Foundation - Bucket class tab")
+        self.do_click(locator=self.validation_loc["osc_bucket_class_tab"])
+        return BucketClassTab()
+
+    def nav_namespace_store_tab(self):
+        """
+        Navigate to Namespace Store tab. Accessible from any Data Foundation tabs
+        """
+        logger.info("Navigate to Data Foundation - Namespace Store tab")
+        self.do_click(locator=self.validation_loc["namespacestore_page"])
+        return NameStoreTab()
+
+    # noinspection PyUnreachableCode
+    def nav_topology_tab(self):
+        """
+        Navigate to ODF Topology tab. Accessible from any Data Foundation tabs
+        """
+        raise NotImplementedError(
+            "ODF Topology view not ready. Feature awaited at ODF 4.13"
+        )
+        return TopologyTab()
+
+
+class DataFoundationDefaultTab(DataFoundationTabBar):
+
+    """
+    Default Foundation default Tab: TopologyTab | OverviewTab
+    """
+
+    def __init__(self):
+        DataFoundationTabBar.__init__(self)
+
+
+class TopologyTab(DataFoundationDefaultTab):
+    """
+    Topology tab Class
+    Content of Data Foundation/Topology tab (default for ODF 4.13 and above)
+    """
+
+    def __init__(self):
+        super().__init__()
+
+
+class OverviewTab(DataFoundationDefaultTab):
+    """
+    Overiview tab Class
+    Content of Data Foundation/Overview tab (default for ODF bellow 4.12)
+    """
+
+    def __init__(self):
+        DataFoundationDefaultTab.__init__(self)
+
+    def open_quickstarts_page(self):
+        logger.info("Navigate to Quickstarts Page")
+        self.scroll_into_view(self.page_nav["quickstarts"])
+        self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=False)
+
+    def wait_storagesystem_popup(self) -> bool:
+        logger.info(
+            "Wait and check for Storage System under Status card on Overview page"
+        )
+        return self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["storagesystem-status-card"],
+            timeout=30,
+            expected_text="Storage System",
+        )
+
+
+class StorageSystemTab(DataFoundationTabBar):
+    """
+    Storage System tab Class
+    Content of Data Foundation/Storage Systems tab
+
+    """
+
+    def __init__(self):
+        DataFoundationTabBar.__init__(self)
+
+    def nav_storagecluster_storagesystem_details(self):
         """
         Initial page - Data Foundation / Storage Systems tab
         Navigate to StorageSystem details
@@ -986,8 +1111,58 @@ class StorageSystemNavigator(PageNavigator):
                 self.validation_loc["ocs-external-storagecluster-storagesystem"],
                 enable_screenshot=True,
             )
+        return StorageSystemDetails()
 
-    def navigate_cephblockpool_verify_statusready(self):
+
+class StorageSystemDetails(StorageSystemTab):
+    def __init__(self):
+        StorageSystemTab.__init__(self)
+
+    def nav_details_overview(self):
+        logger.info("Click on Overview tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["overview_odf_4_10"], enable_screenshot=True
+            )
+        else:
+            self.do_click(self.validation_loc["overview"], enable_screenshot=True)
+
+    def nav_details_object(self):
+        """
+        Accessible only at StorageSystems / StorageSystem details / Overview
+        ! At 'StorageSystems / StorageSystem details / BlockPools' Object page is not accessible
+        """
+        logger.info("Click on 'Object' tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["object-odf-4-10"], enable_screenshot=True
+            )
+        else:
+            self.do_click(self.validation_loc["object"], enable_screenshot=True)
+
+    def nav_block_and_file(self):
+        """
+        Accessible only at StorageSystems / StorageSystem details / Overview
+        ! At 'StorageSystems / StorageSystem details / BlockPools' Block and file page is not accessible
+        """
+        logger.info("Click on 'Block and File' tab")
+        if (
+            self.ocp_version_semantic == version.VERSION_4_11
+            and self.ocs_version_semantic == version.VERSION_4_10
+        ):
+            self.do_click(
+                self.validation_loc["blockandfile-odf-4-10"], enable_screenshot=True
+            )
+        else:
+            self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
+
+    def nav_cephblockpool_verify_statusready(self):
         """
         Initial page - Data Foundation / Storage Systems tab / StorageSystem details
         Navigate to ocs-storagecluster-cephblockpool
@@ -996,6 +1171,11 @@ class StorageSystemNavigator(PageNavigator):
         Raises:
             CephHealthException if cephblockpool_status != 'Ready'
         """
+        self.page_has_loaded(5, 5)
+        self.nav_ceph_blockpool()
+        self.verify_cephblockpool_status()
+
+    def nav_ceph_blockpool(self):
         logger.info("Click on 'BlockPools' tab")
         if (
             self.ocp_version_semantic == version.VERSION_4_11
@@ -1008,15 +1188,66 @@ class StorageSystemNavigator(PageNavigator):
         else:
             self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=2)
+
+    def verify_cephblockpool_status(self, status_exp: str = "Ready"):
+
         logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHBLOCKPOOL}'")
         cephblockpool_status = self.get_element_text(
             self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}-status"]
         )
-        if not "Ready" == cephblockpool_status:
+        if not status_exp == cephblockpool_status:
             raise CephHealthException(
                 f"cephblockpool status error | expected status:Ready \n "
                 f"actual status:{cephblockpool_status}"
             )
+
+    def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+        Get compression status from storagesystem details and ocs-storagecluster-cephblockpool
+
+        Returns:
+            tuple: String representation of 'Compression status' from StorageSystem details page and
+            String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
+
+        """
+
+        logger.info(
+            f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
+        )
+        compression_status_blockpools_tab = self.get_element_text(
+            self.validation_loc["storagesystem-details-compress-state"]
+        )
+        logger.info(
+            f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
+        )
+        self.do_click(
+            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
+            enable_screenshot=True,
+        )
+        compression_status_blockpools_details = self.get_element_text(
+            self.validation_loc["storagecluster-blockpool-details-compress-status"]
+        )
+        return compression_status_blockpools_tab, compression_status_blockpools_details
+
+    def navigate_backward(self):
+        BaseUI.navigate_backward(self)
+        return StorageSystemTab()
+
+
+class BackingStoreTab(DataFoundationDefaultTab):
+    def __init__(self):
+        DataFoundationTabBar.__init__(self)
+
+
+class BucketClassTab(DataFoundationDefaultTab):
+    def __init__(self):
+        DataFoundationTabBar.__init__(self)
+
+
+class NameStoreTab(DataFoundationDefaultTab):
+    def __init__(self):
+        DataFoundationTabBar.__init__(self)
 
 
 def screenshot_dom_location(type_loc="screenshot"):
@@ -1046,12 +1277,9 @@ def screenshot_dom_location(type_loc="screenshot"):
         )
 
 
-def copy_dom(driver):
+def copy_dom():
     """
     Copy DOM using python code
-
-    Args:
-        driver (Selenium WebDriver)
 
     """
     dom_folder = screenshot_dom_location(type_loc="dom")
@@ -1063,18 +1291,15 @@ def copy_dom(driver):
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
     )
     logger.info(f"Copy DOM file: {filename}")
-    html = driver.page_source
+    html = SeleniumDriver().page_source
     with open(filename, "w") as f:
         f.write(html)
     time.sleep(0.5)
 
 
-def take_screenshot(driver):
+def take_screenshot():
     """
     Take screenshot using python code
-
-    Args:
-        driver (Selenium WebDriver)
 
     """
     screenshots_folder = screenshot_dom_location(type_loc="screenshot")
@@ -1086,7 +1311,7 @@ def take_screenshot(driver):
         f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
     )
     logger.debug(f"Creating screenshot: {filename}")
-    driver.save_screenshot(filename)
+    SeleniumDriver().save_screenshot(filename)
     time.sleep(0.5)
 
 
@@ -1099,9 +1324,114 @@ def garbage_collector_webdriver():
     for obj in collected_objs:
         if str(type(obj)) == constants.WEB_DRIVER_CHROME_OBJ_TYPE:
             try:
+                logger.debug(
+                    f"garbage collector to quit webdriver session id {obj.session_id}"
+                )
                 obj.quit()
+                SeleniumDriver.remove_instance()
             except WebDriverException as e:
                 logger.error(e)
+
+
+class SeleniumDriver(WebDriver):
+
+    # noinspection PyUnresolvedReferences
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(SeleniumDriver, cls).__new__(cls)
+            cls.instance.driver = cls._set_driver()
+        return cls.instance.driver
+
+    @classmethod
+    def _set_driver(cls) -> WebDriver:
+        browser = ocsci_config.UI_SELENIUM.get("browser_type")
+        if browser == "chrome":
+            logger.info("chrome browser")
+            chrome_options = Options()
+
+            ignore_ssl = ocsci_config.UI_SELENIUM.get("ignore_ssl")
+            if ignore_ssl:
+                chrome_options.add_argument("--ignore-ssl-errors=yes")
+                chrome_options.add_argument("--ignore-certificate-errors")
+                chrome_options.add_argument("--allow-insecure-localhost")
+                if config.ENV_DATA.get("import_clusters_to_acm"):
+                    # Dev shm should be disabled when sending big amonut characters,
+                    # like the cert sections of a kubeconfig
+                    chrome_options.add_argument("--disable-dev-shm-usage")
+                capabilities = chrome_options.to_capabilities()
+                capabilities["acceptInsecureCerts"] = True
+
+            # headless browsers are web browsers without a GUI
+            headless = ocsci_config.UI_SELENIUM.get("headless")
+            if headless:
+                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("window-size=1920,1400")
+
+            # use proxy server, if required
+            if (
+                config.DEPLOYMENT.get("proxy")
+                or config.DEPLOYMENT.get("disconnected")
+                or config.ENV_DATA.get("private_link")
+            ) and config.ENV_DATA.get("client_http_proxy"):
+                client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
+                # there is a big difference between configuring not authenticated
+                # and authenticated proxy server for Chrome:
+                # * not authenticated proxy can be configured via --proxy-server
+                #   command line parameter
+                # * authenticated proxy have to be provided through customly
+                #   created Extension and it doesn't work in headless mode!
+                if not client_proxy.username:
+                    # not authenticated proxy
+                    logger.info(
+                        f"Configuring not authenticated proxy ('{client_proxy.geturl()}') for browser"
+                    )
+                    chrome_options.add_argument(
+                        f"--proxy-server={client_proxy.geturl()}"
+                    )
+                elif not headless:
+                    # authenticated proxy, not headless mode
+                    # create Chrome extension with proxy settings
+                    logger.info(
+                        f"Configuring authenticated proxy ('{client_proxy.geturl()}') for browser"
+                    )
+                    _templating = Templating()
+                    manifest_json = _templating.render_template(
+                        constants.CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE, {}
+                    )
+                    background_js = _templating.render_template(
+                        constants.CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE,
+                        {"proxy": client_proxy},
+                    )
+                    pluginfile = "/tmp/proxy_auth_plugin.zip"
+                    with zipfile.ZipFile(pluginfile, "w") as zp:
+                        zp.writestr("manifest.json", manifest_json)
+                        zp.writestr("background.js", background_js)
+                    chrome_options.add_extension(pluginfile)
+                else:
+                    # authenticated proxy, headless mode
+                    logger.error(
+                        "It is not possible to configure authenticated proxy "
+                        f"('{client_proxy.geturl()}') for browser in headless mode"
+                    )
+                    raise NotSupportedProxyConfiguration(
+                        "Unable to configure authenticated proxy in headless browser mode!"
+                    )
+
+            chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
+            driver = webdriver.Chrome(
+                ChromeDriverManager(chrome_type=chrome_browser_type).install(),
+                options=chrome_options,
+            )
+        else:
+            raise ValueError(f"No Support on {browser}")
+        return driver
+
+    @classmethod
+    def remove_instance(cls):
+        if hasattr(cls, "instance"):
+            delattr(cls, "instance")
+        else:
+            logger.info("SeleniumDriver instance attr not found")
 
 
 @retry(
@@ -1134,91 +1464,13 @@ def login_ui(console_url=None, username=None, password=None):
         password = password.rstrip()
     ocp_version = get_ocp_version()
     login_loc = locators[ocp_version]["login"]
-
-    browser = ocsci_config.UI_SELENIUM.get("browser_type")
-    if browser == "chrome":
-        logger.info("chrome browser")
-        chrome_options = Options()
-
-        ignore_ssl = ocsci_config.UI_SELENIUM.get("ignore_ssl")
-        if ignore_ssl:
-            chrome_options.add_argument("--ignore-ssl-errors=yes")
-            chrome_options.add_argument("--ignore-certificate-errors")
-            chrome_options.add_argument("--allow-insecure-localhost")
-            if config.ENV_DATA.get("import_clusters_to_acm"):
-                # Dev shm should be disabled when sending big amonut characters, like the cert sections of a kubeconfig
-                chrome_options.add_argument("--disable-dev-shm-usage")
-            capabilities = chrome_options.to_capabilities()
-            capabilities["acceptInsecureCerts"] = True
-
-        # headless browsers are web browsers without a GUI
-        headless = ocsci_config.UI_SELENIUM.get("headless")
-        if headless:
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("window-size=1920,1400")
-
-        # use proxy server, if required
-        if (
-            config.DEPLOYMENT.get("proxy")
-            or config.DEPLOYMENT.get("disconnected")
-            or config.ENV_DATA.get("private_link")
-        ) and config.ENV_DATA.get("client_http_proxy"):
-            client_proxy = urlparse(config.ENV_DATA.get("client_http_proxy"))
-            # there is a big difference between configuring not authenticated
-            # and authenticated proxy server for Chrome:
-            # * not authenticated proxy can be configured via --proxy-server
-            #   command line parameter
-            # * authenticated proxy have to be provided through customly
-            #   created Extension and it doesn't work in headless mode!
-            if not client_proxy.username:
-                # not authenticated proxy
-                logger.info(
-                    f"Configuring not authenticated proxy ('{client_proxy.geturl()}') for browser"
-                )
-                chrome_options.add_argument(f"--proxy-server={client_proxy.geturl()}")
-            elif not headless:
-                # authenticated proxy, not headless mode
-                # create Chrome extension with proxy settings
-                logger.info(
-                    f"Configuring authenticated proxy ('{client_proxy.geturl()}') for browser"
-                )
-                _templating = Templating()
-                manifest_json = _templating.render_template(
-                    constants.CHROME_PROXY_EXTENSION_MANIFEST_TEMPLATE, {}
-                )
-                background_js = _templating.render_template(
-                    constants.CHROME_PROXY_EXTENSION_BACKGROUND_TEMPLATE,
-                    {"proxy": client_proxy},
-                )
-                pluginfile = "/tmp/proxy_auth_plugin.zip"
-                with zipfile.ZipFile(pluginfile, "w") as zp:
-                    zp.writestr("manifest.json", manifest_json)
-                    zp.writestr("background.js", background_js)
-                chrome_options.add_extension(pluginfile)
-            else:
-                # authenticated proxy, headless mode
-                logger.error(
-                    "It is not possible to configure authenticated proxy "
-                    f"('{client_proxy.geturl()}') for browser in headless mode"
-                )
-                raise NotSupportedProxyConfiguration(
-                    "Unable to configure authenticated proxy in headless browser mode!"
-                )
-
-        chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
-        driver = webdriver.Chrome(
-            ChromeDriverManager(chrome_type=chrome_browser_type).install(),
-            options=chrome_options,
-        )
-    else:
-        raise ValueError(f"Not Support on {browser}")
-
+    driver = SeleniumDriver()
     wait = WebDriverWait(driver, 40)
     driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
-    proceed_to_login_console(driver)
+    proceed_to_login_console()
     try:
         if username is not None:
             element = wait.until(
@@ -1240,14 +1492,14 @@ def login_ui(console_url=None, username=None, password=None):
             )
         element.click()
     except TimeoutException as e:
-        take_screenshot(driver)
-        copy_dom(driver)
+        take_screenshot()
+        copy_dom()
         logger.error(e)
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
-    take_screenshot(driver)
-    copy_dom(driver)
+    take_screenshot()
+    copy_dom()
     if username is None:
         username = constants.KUBEADMIN
     element.send_keys(username)
@@ -1269,35 +1521,31 @@ def login_ui(console_url=None, username=None, password=None):
     return driver
 
 
-def close_browser(driver):
+def close_browser():
     """
     Close Selenium WebDriver
 
-    Args:
-        driver (Selenium WebDriver)
-
     """
     logger.info("Close browser")
-    take_screenshot(driver)
-    copy_dom(driver)
-    driver.quit()
+    take_screenshot()
+    copy_dom()
+    SeleniumDriver().quit()
+    SeleniumDriver.remove_instance()
     time.sleep(10)
     garbage_collector_webdriver()
 
 
-def proceed_to_login_console(driver: WebDriver):
+def proceed_to_login_console():
     """
     Proceed to the login console, if needed to confirm this action in a page that appears before.
     This is required to be as a solo function, because the driver initializes in the login_ui function.
     Function needs to be called just before login
 
-    Args:
-        driver (Selenium WebDriver)
-
     Returns:
         None
 
     """
+    driver = SeleniumDriver()
     login_loc = locators[get_ocp_version()]["login"]
     if driver.title == login_loc["pre_login_page_title"]:
         proceed_btn = driver.find_element(

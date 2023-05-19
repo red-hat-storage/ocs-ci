@@ -71,6 +71,8 @@ DEPLOYMENT:
   # UI deployment is not part of this framework, it will just do preparation
   # steps for openshift-console.
   ui_deployment: False
+  # Import clusters to ACM via UI
+  ui_acm_import: False
   # Following options are defaults for deployment from live content
   live_deployment: False
   preserve_bootstrap_node: False
@@ -133,6 +135,7 @@ ENV_DATA:
   storage_device_sets_name: "storageDeviceSets"
   sno: false
   cluster_namespace: 'openshift-storage'
+  service_namespace: 'openshift-storage'
   local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
   persistent-monitoring: true
@@ -223,6 +226,7 @@ ENV_DATA:
   rosa_billing_model: 'standard'
   appliance_mode: true
   ms_osd_pod_memory: "6Gi"
+  ms_osd_pod_cpu: "1650m"
 
   # used in external mode deployment
   restricted-auth-permission: false
@@ -297,3 +301,4 @@ MULTICLUSTER:
   multicluster_index: 0
   acm_cluster: False
   primary_cluster: False
+  active_acm_cluster: False

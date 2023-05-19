@@ -102,7 +102,7 @@ class TestCapacityBreakdownUI(ManageTest):
         logger.info(f"Read: {reads}")
         logger.info(f"Write: {writes}")
 
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         assert validation_ui_obj.check_capacity_breakdown(
             project_name=project_name, pod_name=pod_name
         ), "The Project/Pod not created on Capacity Breakdown"

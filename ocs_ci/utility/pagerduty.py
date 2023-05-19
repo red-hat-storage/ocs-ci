@@ -23,9 +23,10 @@ def set_pagerduty_integration_secret(integration_key):
     """
     logger.info("Setting up PagerDuty integration")
     kubeconfig = os.getenv("KUBECONFIG")
+    ns_name = config.ENV_DATA["service_namespace"]
     cmd = (
         f"oc create secret generic {managedservice.get_pagerduty_secret_name()} "
-        f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
+        f"--from-literal=PAGERDUTY_KEY={integration_key} -n {ns_name} "
         f"--kubeconfig {kubeconfig} --dry-run=client -o yaml"
     )
     secret_data = exec_cmd(

@@ -7,14 +7,12 @@ The containers are expected to run with a service account that has admin credent
 ### Build Image
 * Build Image on your local machine
 * PARAMS:
-  * BRANCH - branch name [e.g: release-4.12]
   * IMAGE_NAME - image name [e.g. quay.io/ocsci/ocs-ci-container:release-4.12]
   * ENGINE - engine name [podman/docker]
 * Example:
   ```
   make build-image \
-  BRANCH=release-4.12 \
-  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
+  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:stable \
   ENGINE=podman
   ```
 
@@ -38,18 +36,6 @@ The containers are expected to run with a service account that has admin credent
   ```
   make run-odf CLUSTER_PATH=~/ClusterPath \
   RUN_CI="run-ci ..." \
-  ENGINE=podman \
-  PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
-  IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
-  AWS_PATH=~/.aws
-  ```
-
-### Debug ODF tests
-  * In this mode we can develop new tests/code on our local machine and run the local-code via container
-  * In this example we added a new test in our local machine `test_new_code.py`:
-  ```
-  make debug-odf CLUSTER_PATH=~/ClusterPath \
-  RUN_CI="run-ci ... tests/manage/z_cluster/test_new_code.py" \
   ENGINE=podman \
   PULL_IMAGE=quay.io/ocsci/ocs-ci-container:release-4.12 \
   IMAGE_NAME=quay.io/ocsci/ocs-ci-container:release-4.12 \
@@ -111,6 +97,15 @@ docker/podman push ocsci-container quay.io/ocsci/ocs-ci-container:<tag_name>
 docker/podman pull quay.io/ocsci/ocs-ci-container:<tag_name>
 ```
 
+**Running OCS-CI container**
+```
+podman/docker run
+-v <cluster-path>:/opt/cluster:Z
+-v <repo-path>:ocs-ci/data:/opt/ocs-ci/data:Z
+quay.io/ocsci/ocs-ci-container:<tag_name>
+run-ci --cluster-path /opt/cluster --ocp-version 4.13 --ocs-version 4.13 --cluster-name <cluster-name>
+<test_path>
+```
 ******************************************************************************
 **We can add `--ocsci-conf /opt/cluster/logs.yaml` and we will get logs**
 

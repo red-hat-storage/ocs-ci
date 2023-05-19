@@ -3,8 +3,8 @@ import time
 
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators, generic_locators
-from ocs_ci.utility.utils import get_ocp_version, get_running_ocp_version
+from ocs_ci.ocs.ui.views import generic_locators
+from ocs_ci.utility.utils import get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
 from ocs_ci.utility import version
@@ -17,11 +17,9 @@ class PvcUI(PageNavigator):
     User Interface Selenium
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        ocp_version = get_ocp_version()
+    def __init__(self):
+        super().__init__()
         self.driver.implicitly_wait(5)
-        self.pvc_loc = locators[ocp_version]["pvc"]
 
     def create_pvc_ui(
         self, project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode

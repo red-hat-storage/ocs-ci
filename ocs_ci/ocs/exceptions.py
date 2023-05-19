@@ -598,3 +598,11 @@ class VolumesExistError(Exception):
 
 class UnexpectedODFAccessException(Exception):
     pass
+
+
+class UnknownOperationForTerraformVariableUpdate(Exception):
+    pass
+
+
+class TerrafromFileNotFoundException(Exception):
+    pass

@@ -6,7 +6,7 @@ import random
 import traceback
 import re
 
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_infra_id
@@ -1692,6 +1692,67 @@ class AWS(object):
 
         """
         return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
+
+    def wait_for_instances_to_stop(self, instances):
+        """
+        Wait for the instances to reach status stopped
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status stopped
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(f"Waiting for instance {instance_name} to reach status stopped")
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_stopped()
+
+    def wait_for_instances_to_terminate(self, instances):
+        """
+        Wait for the instances to reach status terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_terminated()
+
+    def wait_for_instances_to_stop_or_terminate(self, instances):
+        """
+        Wait for the instances to reach statuses stopped or terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected statuses stopped or terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status stopped or terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            try:
+                instance.wait_until_stopped()
+            except WaiterError as e:
+                logger.warning(
+                    f"Failed to reach the status stopped due to the error {str(e)}"
+                )
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status terminated"
+                )
+                instance.wait_until_terminated()
 
 
 def get_instances_ids_and_names(instances):

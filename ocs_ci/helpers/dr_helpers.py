@@ -6,7 +6,6 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.resources.deployment import get_deployments_having_label
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
@@ -111,18 +110,6 @@ def failover(failover_cluster, namespace):
 
     """
     restore_index = config.cur_index
-
-    # WA for Bug 2007376, Scale down the RBD mirror daemon deployment on failover_cluster to 0
-    config.switch_to_cluster_by_name(failover_cluster)
-    rbd_mirror_deployment = get_deployments_having_label(
-        constants.RBD_MIRROR_APP_LABEL, config.ENV_DATA["cluster_namespace"]
-    )[0]
-    logger.info(
-        f"Scaling down RBD mirror daemon deployment {rbd_mirror_deployment.name} to 0"
-    )
-    rbd_mirror_deployment.scale(replicas=0)
-    rbd_mirror_deployment.wait_for_available_replicas()
-
     config.switch_acm_ctx()
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
     drpc_obj = DRPC(namespace=namespace)
@@ -231,9 +218,6 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
 
     """
     restore_index = config.cur_index
-    if not replaying_images:
-        replaying_images = config.ENV_DATA["dr_workload_pvc_count"]
-
     for cluster in get_non_acm_cluster_config():
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(
@@ -542,22 +526,11 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
         sleep=5,
     )
 
-    # WA for Bug 2007376, Scale RBD mirror daemon deployment back to 1
-    rbd_mirror_deployment = get_deployments_having_label(
-        constants.RBD_MIRROR_APP_LABEL, config.ENV_DATA["cluster_namespace"]
-    )[0]
-    if rbd_mirror_deployment.replicas == 0:
-        logger.info(
-            f"Scaling up RBD mirror daemon deployment {rbd_mirror_deployment.name} back to 1"
-        )
-        rbd_mirror_deployment.scale(replicas=1)
-        rbd_mirror_deployment.wait_for_available_replicas()
-
     wait_for_replication_resources_creation(pvc_count, namespace, timeout)
 
 
 def wait_for_all_resources_deletion(
-    namespace, check_replication_resources_state=True, timeout=900
+    namespace, check_replication_resources_state=True, timeout=1000
 ):
     """
     Wait for workload and replication resources to be deleted

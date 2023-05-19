@@ -77,6 +77,7 @@ anywhere else.
 * `force_deploy_multiple_clusters` - Allow multiple clusters to be deployed with the same prefix (vmware)
 * `allow_lower_instance_requirements` Allow instance requirements lower than the documented recommended values (Default: false)
 * `ui_deployment` - Utilize openshift-console to deploy OCS via the UI (Default: false)
+* `ui_acm_import` - Import clusters to ACM via the UI (Default: false)
 * `live_deployment` - Deploy OCS from live content (Default: false)
 * `live_content_source` - Content source to use for live deployment
 * `preserve_bootstrap_node` - Preserve the bootstrap node rather than deleting it after deployment (Default: false)
@@ -253,6 +254,16 @@ This section of the config is used for storing secret data that is read from a l
 auth file or pulled from s3.
 
 * `test_quay_auth` - Config variable used during unit_testing
+
+#### MULTICLUSTER
+
+This section of the config is used for multicluster specific configuration data.
+Scenarios that use this data include MDR and RDR deployments.
+
+* `multicluster_index` - Index of the cluster, used to differentiate between other cluster configurations.
+* `acm_cluster` - True if the cluster is an ACM hub cluster, otherwise False.
+* `primary_cluster` - True if the cluster is the primary cluster, otherwise False.
+* `active_acm_cluster` - True if the cluster is the active ACM hub cluster, False if passive.
 
 ##### ibmcloud
 

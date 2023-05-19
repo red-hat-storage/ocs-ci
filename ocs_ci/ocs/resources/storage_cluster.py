@@ -14,6 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
+    verify_faas_resources,
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
@@ -50,7 +51,11 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
-from ocs_ci.helpers.helpers import get_secret_names, get_cephfs_name
+from ocs_ci.helpers.helpers import (
+    get_secret_names,
+    get_cephfs_name,
+    get_logs_rook_ceph_operator,
+)
 from ocs_ci.utility import (
     localstorage,
     utils,
@@ -173,9 +178,13 @@ def ocs_install_verification(
     external = config.DEPLOYMENT["external_mode"] or (
         managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
     )
+    fusion_aas = config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+    fusion_aas_consumer = fusion_aas and consumer_cluster
+    fusion_aas_provider = fusion_aas and provider_cluster
 
     # Basic Verification for cluster
-    basic_verification(ocs_registry_image)
+    if not fusion_aas_consumer:
+        basic_verification(ocs_registry_image)
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
@@ -248,6 +257,10 @@ def ocs_install_verification(
             }
         )
 
+    if fusion_aas_consumer:
+        del resources_dict[constants.OCS_OPERATOR_LABEL]
+        del resources_dict[constants.OPERATOR_LABEL]
+
     if ocs_version >= version.VERSION_4_9:
         resources_dict.update(
             {
@@ -267,6 +280,18 @@ def ocs_install_verification(
             continue
         if "mds" in label and disable_cephfs:
             continue
+        if label == constants.MANAGED_CONTROLLER_LABEL:
+            if fusion_aas_provider:
+                service_pod = OCP(
+                    kind=constants.POD, namespace=config.ENV_DATA["service_namespace"]
+                )
+                assert service_pod.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=label,
+                    resource_count=count,
+                    timeout=timeout,
+                )
+                continue
 
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
@@ -333,7 +358,13 @@ def ocs_install_verification(
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
     if not provider_cluster:
-        assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+        if fusion_aas_consumer:
+            {
+                f"{namespace}.cephfs.csi.ceph.com",
+                f"{namespace}.rbd.csi.ceph.com",
+            }.issubset(csi_drivers)
+        else:
+            assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -367,7 +398,10 @@ def ocs_install_verification(
                 config.DEPLOYMENT["external_mode"]
                 and config.ENV_DATA["restricted-auth-permission"]
             ):
-                rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+                if config.ENV_DATA.get("alias_rbd_name"):
+                    rbd_name = config.ENV_DATA["alias_rbd_name"]
+                else:
+                    rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
                 rbd_node_secret = (
                     f"{constants.RBD_NODE_SECRET}-{cluster_name}-{rbd_name}"
                 )
@@ -436,7 +470,9 @@ def ocs_install_verification(
 
     log.info("Verified node and provisioner secret names in storage class.")
 
-    ct_pod = get_ceph_tools_pod()
+    # TODO: Enable the tools pod check when a solution is identified for tools pod on FaaS consumer
+    if not fusion_aas_consumer:
+        ct_pod = get_ceph_tools_pod()
 
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
     # Verify ceph osd tree output
@@ -533,7 +569,8 @@ def ocs_install_verification(
         log.info("Verified: CSI snapshotter is not present.")
 
     # Verify pool crush rule is with "type": "zone"
-    if utils.get_az_count() == 3:
+    # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
+    if utils.get_az_count() == 3 and not fusion_aas_consumer:
         log.info("Verifying pool crush rule is with type: zone")
         crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
         pool_names = [
@@ -563,10 +600,18 @@ def ocs_install_verification(
         # health OK. See discussion in BZ:
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
-    assert utils.ceph_health_check(namespace, health_check_tries, health_check_delay)
+
+    # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
+    if not fusion_aas_consumer:
+        assert utils.ceph_health_check(
+            namespace, health_check_tries, health_check_delay
+        )
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
-    verify_storage_system()
+
+    if not fusion_aas:
+        verify_storage_system()
+
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
         # a verification of the installation of it will run
@@ -580,21 +625,54 @@ def ocs_install_verification(
             if config.ENV_DATA.get("VAULT_CA_ONLY", None):
                 verify_kms_ca_only()
 
-    storage_cluster_obj = get_storage_cluster()
-    is_flexible_scaling = (
-        storage_cluster_obj.get()["items"][0].get("spec").get("flexibleScaling", False)
-    )
-    if is_flexible_scaling is True:
-        failure_domain = storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
-        assert failure_domain == "host", (
-            f"The expected failure domain on cluster with flexible scaling is 'host',"
-            f" the actaul failure domain is {failure_domain}"
+    if not fusion_aas_consumer:
+        storage_cluster_obj = get_storage_cluster()
+        is_flexible_scaling = (
+            storage_cluster_obj.get()["items"][0]
+            .get("spec")
+            .get("flexibleScaling", False)
         )
+        if is_flexible_scaling is True:
+            failure_domain = storage_cluster_obj.data["items"][0]["status"][
+                "failureDomain"
+            ]
+            assert failure_domain == "host", (
+                f"The expected failure domain on cluster with flexible scaling is 'host',"
+                f" the actaul failure domain is {failure_domain}"
+            )
 
     if config.ENV_DATA.get("is_multus_enabled"):
         verify_multus_network()
-    if managed_service:
-        verify_managed_service_resources()
+
+    if fusion_aas:
+        verify_faas_resources()
+
+    # validation in case of openshift-cert-manager installed
+    if config.DEPLOYMENT.get("install_cert_manager"):
+        # get webhooks
+        webhook = OCP(kind=constants.WEBHOOK, namespace=defaults.CERT_MANAGER_NAMESPACE)
+        webhook_names = [
+            each_webhook["metadata"]["name"] for each_webhook in webhook.get()["items"]
+        ]
+        log.debug(f"webhooks in the cluster: {webhook_names}")
+        assert (
+            constants.ROOK_CEPH_WEBHOOK not in webhook_names
+        ), f"webhook {constants.ROOK_CEPH_WEBHOOK} should be disabled"
+        log.info(f"[Expected]: {constants.ROOK_CEPH_WEBHOOK} not found in webhooks")
+
+        # check rook-ceph-operator logs
+        rook_ceph_operator_logs = get_logs_rook_ceph_operator()
+        for line in rook_ceph_operator_logs.splitlines():
+            if "delete webhook resources since webhook is disabled" in line:
+                break
+        else:
+            assert (
+                False
+            ), "deleting webhook messages not found in rook-ceph-operator logs"
+
+    # Verify in-transit encryption is enabled.
+    if config.ENV_DATA.get("in_transit_encryption"):
+        in_transit_encryption_verification()
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
@@ -734,7 +812,11 @@ def verify_storage_cluster():
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
-    storage_cluster.wait_for_phase(phase="Ready", timeout=600)
+    if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+        timeout = 1000
+    else:
+        timeout = 600
+    storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
 
 def verify_noobaa_endpoint_count():
@@ -854,16 +936,47 @@ def osd_encryption_verification():
         log.info("Luks header info found for all the encrypted osds")
 
 
+def ceph_config_dump():
+    """
+    Get the 'ceph config dump' output.
+
+    Returns:
+        dict: The output of the 'ceph config dump' command as a dict.
+
+    """
+    log.info("Getting 'ceph config dump' output.")
+    toolbox = get_ceph_tools_pod()
+
+    return toolbox.exec_ceph_cmd("ceph config dump")
+
+
+def ceph_mon_dump():
+    """
+    Get the 'ceph mon dump' output.
+
+    Returns:
+        dict: The output of the 'ceph mon dump' command as a dictionary.
+
+    """
+    log.info("Getting 'ceph mon dump' output.")
+    toolbox = get_ceph_tools_pod()
+
+    return toolbox.exec_ceph_cmd("ceph mon dump")
+
+
 def in_transit_encryption_verification():
     """
-    Verify in-transit encryption is enabled.
+    Verifies in-transit encryption is enabled and ceph mons are configured with 'v2' protocol version.
+
+    Raises:
+        ValueError: if in-transit encryption is not configured or ceph mon protocol is not configured with 'v2' version.
+
     """
     log.info("in-transit encryption is about to be validated.")
-    toolbox = get_ceph_tools_pod(skip_creating_pod=True)
-    output = toolbox.exec_ceph_cmd("ceph config dump")
+    ceph_dump_data = ceph_config_dump()
     keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
     keys_found = [
-        record["name"] for record in output if record["name"] in keys_to_match
+        record["name"] for record in ceph_dump_data if record["name"] in keys_to_match
     ]
 
     if len(keys_to_match) != len(keys_found):
@@ -878,6 +991,88 @@ def in_transit_encryption_verification():
         "'ceph config dump' output has"
         f" {','.join(keys_found)} keys configured."
     )
+
+    # Verify ceph monitor protocol version
+    log.info("Verifying ceph monitor protocol version.")
+    ceph_mon_data = ceph_mon_dump()
+    v2_protocol_mon = sum(
+        1
+        for mon in ceph_mon_data["mons"]
+        if mon["public_addrs"]["addrvec"][0]["type"] == "v2"
+    )
+
+    if not v2_protocol_mon:
+        log.error("ceph mons are not configured with v2 protocol version. ")
+        raise ValueError(
+            "ceph mon protocol is not configured with 'v2' version which is recomended for in-transit encryption."
+        )
+
+    log.info("Ceph mons are configured with 'v2' protocol version.")
+    return True
+
+
+def get_in_transit_encryption_config_state():
+    """
+    Returns the state of in-transit encryption for the OCS cluster.
+
+    Returns:
+        bool: True if in-transit encryption is enabled, False if it is disabled, or None if an error occurred.
+
+    """
+    ocp_obj = StorageCluster(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    try:
+        return ocp_obj.data["spec"]["network"]["connections"]["encryption"]["enabled"]
+    except KeyError as e:
+        log.error(f"In-transit Encryption key {e}. not present in the storagecluster.")
+        return False
+
+
+def set_in_transit_encryption(enabled=True):
+    """
+    Enable or disable in-transit encryption for the default storage cluster.
+
+    Args:
+        enabled (bool, optional): A boolean indicating whether to enable or disable in-transit encryption.
+            Defaults to True, i.e., enabling in-transit encryption.
+
+    Returns:
+        bool: True if in-transit encryption was successfully enabled or disabled, False otherwise.
+
+    """
+
+    # First confirming the existing status of the in-transit encryption
+    # on storage cluster If its same as desire state then returning.
+    if get_in_transit_encryption_config_state() == enabled:
+        log.info("Existing in-transit encryption state is same as desire state.")
+        return True
+
+    ocp_obj = StorageCluster(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    patch = [
+        {
+            "op": "replace",
+            "path": "/spec/network/connections/encryption/enabled",
+            "value": enabled,
+        }
+    ]
+    action = "enable" if enabled else "disable"
+    log.info(f"Patching storage class to {action} in-transit encryption.")
+
+    if not ocp_obj.patch(params=patch, format_type="json"):
+        log.error(f"Error {action} in-transit encryption.")
+        return False
+
+    log.info(f"In-transit encryption is {action}d successfully.")
+    ocp_obj.wait_for_phase("Progressing", timeout=60)
+    verify_storage_cluster()
+    return True
 
 
 def verify_kms_ca_only():
@@ -1307,7 +1502,7 @@ def verify_multus_network():
 def verify_managed_service_resources():
     """
     Verify creation and status of resources specific to OSD and ROSA deployments:
-    1. ocs-operator, ocs-osd-deployer, ose-prometheus-operator csvs are Succeeded
+    1. ocs-operator, ose-prometheus-operator csvs are Succeeded
     2. 1 prometheus and 1 alertmanager pods are in Running state
     3. Managedocs components alertmanager, prometheus, storageCluster are in Ready state
     4. Verify that noobaa-operator replicas is set to 0
@@ -1320,7 +1515,6 @@ def verify_managed_service_resources():
     # Verify CSV status
     for managed_csv in {
         constants.OCS_CSV_PREFIX,
-        constants.OSD_DEPLOYER,
         constants.OSE_PROMETHEUS_OPERATOR,
     }:
         csvs = csv.get_csvs_start_with_prefix(
@@ -1431,6 +1625,7 @@ def verify_consumer_resources():
     Verify resources specific to managed OCS consumer:
     1. MGR endpoint
     2. monitoring endpoint in cephcluster yaml
+    3. Verify the default Storageclassclaims
     """
     mgr_endpoint = OCP(
         kind="endpoints",
@@ -1451,6 +1646,28 @@ def verify_consumer_resources():
     ][0]["ip"]
     log.info(f"Monitoring endpoint of cephcluster yaml: {monitoring_endpoint}")
     assert re.match("\\d+(\\.\\d+){3}", monitoring_endpoint)
+
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
+    # Verify the default Storageclassclaims
+    if ocs_version >= version.VERSION_4_11:
+        storage_class_claim = OCP(
+            kind=constants.STORAGECLASSCLAIM,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        for sc_claim in [
+            constants.DEFAULT_STORAGECLASS_RBD,
+            constants.DEFAULT_STORAGECLASS_CEPHFS,
+        ]:
+            sc_claim_phase = storage_class_claim.get_resource(
+                resource_name=sc_claim, column="PHASE"
+            )
+            assert sc_claim_phase == constants.STATUS_READY, (
+                f"The phase of the storageclassclaim {sc_claim} is {sc_claim_phase}. "
+                f"Expected phase is '{constants.STATUS_READY}'"
+            )
+            log.info(f"Storageclassclaim {sc_claim} is {constants.STATUS_READY}")
+        log.info("Verified the status of the default storageclassclaims")
 
 
 def verify_managed_service_networkpolicy():

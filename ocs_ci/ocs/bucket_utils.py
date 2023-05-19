@@ -760,7 +760,7 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=300,
+        timeout=360,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,

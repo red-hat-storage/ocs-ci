@@ -162,10 +162,10 @@ def ui_add_capacity(osd_size_capacity_requested):
         device_sets_required + old_storage_devices_sets_count
     )
     logger.info("Add capacity via UI")
-    setup_ui = login_ui()
-    add_ui_obj = AddReplaceDeviceUI(setup_ui)
+    login_ui()
+    add_ui_obj = AddReplaceDeviceUI()
     add_ui_obj.add_capacity_ui()
-    close_browser(setup_ui)
+    close_browser()
     return new_storage_devices_sets_count
 
 

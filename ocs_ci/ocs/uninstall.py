@@ -190,10 +190,11 @@ def uninstall_ocs():
         log.info(f"Deleting PVC: {pvc.name}")
         pvc.delete()
 
+    ns_name = config.ENV_DATA["cluster_namespace"]
     storage_cluster = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace="openshift-storage",
+        namespace=ns_name,
     )
 
     log.info("Checking for local storage")
@@ -233,9 +234,9 @@ def uninstall_ocs():
     else:
         log.info("Cleanup policy set to retain. skipping nodes cleanup")
 
-    log.info("Deleting openshift-storage namespace")
-    ocp_obj.delete_project(config.ENV_DATA["cluster_namespace"])
-    ocp_obj.wait_for_delete(config.ENV_DATA["cluster_namespace"])
+    log.info(f"Deleting cluster namespace {ns_name}")
+    ocp_obj.delete_project(ns_name)
+    ocp_obj.wait_for_delete(ns_name)
     switch_to_project(constants.DEFAULT_NAMESPACE)
 
     # step 10: TODO remove crypto from nodes.

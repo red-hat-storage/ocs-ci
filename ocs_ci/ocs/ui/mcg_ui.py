@@ -10,9 +10,7 @@ from ocs_ci.framework import config
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility import version
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
 from tests.conftest import delete_projects
 
 logger = logging.getLogger(__name__)
@@ -24,12 +22,9 @@ class MCGStoreUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.wait = WebDriverWait(self.driver, 30)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.ocs_loc = locators[ocs_version]["ocs_operator"]
-        self.mcg_stores = locators[ocs_version]["mcg_stores"]
 
     def create_store_ui(self, kind, store_name, secret_name, target_bucket):
         """
@@ -102,11 +97,8 @@ class BucketClassUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.ocs_loc = locators[ocs_version]["ocs_operator"]
-        self.bucketclass = locators[ocs_version]["bucketclass"]
+    def __init__(self):
+        super().__init__()
 
     def create_standard_bucketclass_ui(self, bc_name, policy, store_list):
         """
@@ -258,10 +250,8 @@ class BucketsUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.ocs_version = str(version.get_ocs_version_from_csv(only_major_minor=True))
-        self.obc_loc = locators[self.ocs_version]["obc"]
+    def __init__(self):
+        super().__init__()
 
     def select_openshift_storage_project(self, cluster_namespace):
         """
@@ -286,15 +276,20 @@ class BucketsUI(PageNavigator):
             resource (str): resource name to delete. It may be Object Bucket Claim name both for OBC or OB,
                 and it may be Object Bucket Name. Object Bucket name consists from Object Bucket Claim and prefix
         """
+        logger.info(f"Find resource by name '{resource}' using search-bar")
+        self.page_has_loaded()
+        self.do_send_keys(self.generic_locators["search_resource_field"], resource)
+
         if delete_via == "Actions":
             logger.info(f"Go to {resource} Page")
             # delete specific resource by its dynamic name. Works both for OBC and OB
             self.do_click(
-                (f"//td[@id='name']//a[contains(text(),'{resource}')]", By.XPATH)
+                (f"//td[@id='name']//a[contains(text(),'{resource}')]", By.XPATH),
+                enable_screenshot=True,
             )
 
             logger.info(f"Click on '{delete_via}'")
-            self.do_click(self.generic_locators["actions"])
+            self.do_click(self.generic_locators["actions"], enable_screenshot=True)
         else:
             logger.info(f"Click on '{delete_via}'")
             # delete specific resource by its dynamic name. Works both for OBC and OB
@@ -303,16 +298,17 @@ class BucketsUI(PageNavigator):
                     f"//td[@id='name']//a[contains(text(), '{resource}')]"
                     "/../../..//button[@aria-label='Actions']",
                     By.XPATH,
-                )
+                ),
+                enable_screenshot=True,
             )
 
         logger.info(f"Click on 'Delete {resource}'")
         # works both for OBC and OB, both from three_dots icon and Actions dropdown list
-        self.do_click(self.obc_loc["delete_resource"])
+        self.do_click(self.obc_loc["delete_resource"], enable_screenshot=True)
 
         logger.info(f"Confirm {resource} Deletion")
         # same PopUp both for OBC and OB
-        self.do_click(self.generic_locators["confirm_action"])
+        self.do_click(self.generic_locators["confirm_action"], enable_screenshot=True)
 
 
 class ObcUI(BucketsUI):
@@ -321,9 +317,8 @@ class ObcUI(BucketsUI):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.obc_loc = locators[self.ocs_version]["obc"]
+    def __init__(self):
+        super().__init__()
 
     def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
         """
@@ -335,6 +330,8 @@ class ObcUI(BucketsUI):
             bucketclass (str): The bucketclass to be used by the OBC
 
         """
+        # create_obc_ui procedure should start from home page even if prev test failed in the middle
+        self.navigate_OCP_home_page()
         self.navigate_object_bucket_claims_page()
 
         self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
@@ -361,6 +358,18 @@ class ObcUI(BucketsUI):
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
 
+    def select_openshift_storage_default_project(self):
+        """
+        Helper function to select openshift-storage project
+
+        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
+        """
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_locators["project_selector"])
+        self.wait_for_namespace_selection(
+            project_name=config.ENV_DATA["cluster_namespace"]
+        )
+
     def delete_obc_ui(self, obc_name, delete_via):
         """
         Delete an OBC via the UI
@@ -376,9 +385,9 @@ class ObcUI(BucketsUI):
 
 
 class ObcUi(ObcUI):
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.sc_loc = locators[self.ocp_version]["obc"]
+    def __init__(self):
+        super().__init__()
+        self.sc_loc = self.obc_loc
 
     def check_obc_option(self, text="Object Bucket Claims"):
         """check OBC is visible to user after giving admin access"""
@@ -407,8 +416,8 @@ class ObcUi(ObcUI):
 
 
 class ObUI(BucketsUI):
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
 
     def delete_object_bucket_ui(self, delete_via, expect_fail, resource_name):
         """

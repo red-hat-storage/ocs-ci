@@ -7,13 +7,14 @@ import json
 import logging
 import os
 
-from azure.common.credentials import ServicePrincipalCredentials
+from azure.identity import ClientSecretCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.storage import StorageManagementClient
 
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, TerrafromFileNotFoundException
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
@@ -21,32 +22,44 @@ logger = logging.getLogger(name=__file__)
 
 # default location of files with necessary azure cluster details
 SERVICE_PRINCIPAL_FILEPATH = os.path.expanduser("~/.azure/osServicePrincipal.json")
-TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
+TERRRAFORM_FILENAME = "terraform.platform.auto.tfvars.json"
+OLD_TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 
 
-def load_cluster_resource_group(cluster_path, terraform_filename=TERRRAFORM_FILENAME):
+def load_cluster_resource_group():
     """
     Read terraform tfvars.json file created by ``openshift-installer`` in a
     cluster dir to get azure ``resource group`` of an OCP cluster. All Azure
     resources of the cluster are placed in this group.
 
-    Args:
-        cluster_path (str): full file path of the openshift cluster directory
-        terraform_filename (str): name of azure terraform vars file, this is
-            optional and you need to specify this only if you want to override
-            the default
-
     Returns:
         string with resource group name
+
+    Raises:
+        TerrafromFileNotFoundException: When the terraform tfvars file is not found
     """
-    filepath = os.path.join(cluster_path, terraform_filename)
-    with open(filepath, "r") as tf_file:
+    cluster_path = config.ENV_DATA["cluster_path"]
+    terraform_files = [
+        os.path.join(cluster_path, f)
+        for f in [OLD_TERRRAFORM_FILENAME, TERRRAFORM_FILENAME]
+    ]
+    terraform_filename = None
+    for tf_file in terraform_files:
+        if os.path.exists(tf_file):
+            terraform_filename = os.path.join(cluster_path, tf_file)
+
+    if not terraform_filename:
+        raise TerrafromFileNotFoundException(
+            f"None of terraform file path from {','.join(terraform_files)} exists!"
+        )
+
+    with open(terraform_filename, "r") as tf_file:
         tf_dict = json.load(tf_file)
     resource_group = tf_dict.get("azure_network_resource_group_name")
     logger.debug(
         "fetching azure resource group (%s) from %s file",
         tf_dict.get("clientId"),
-        filepath,
+        terraform_filename,
     )
     return resource_group
 
@@ -81,6 +94,7 @@ class AZURE:
 
     _compute_client = None
     _resource_client = None
+    _storage_client = None
     _credentials = None
     _cluster_resource_group = None
 
@@ -139,9 +153,7 @@ class AZURE:
             config.ENV_DATA["cluster_path"]
         ):
             try:
-                self._cluster_resource_group = load_cluster_resource_group(
-                    config.ENV_DATA["cluster_path"]
-                )
+                self._cluster_resource_group = load_cluster_resource_group()
             except Exception as ex:
                 logger.warning("failed to load azure resource group: %s", ex)
         return self._cluster_resource_group
@@ -173,10 +185,10 @@ class AZURE:
         if self._client_secret is None:
             self._client_secret = sp_dict["clientSecret"]
         # create azure SP Credentials object
-        self._credentials = ServicePrincipalCredentials(
+        self._credentials = ClientSecretCredential(
             client_id=self._client_id,
-            secret=self._client_secret,
-            tenant=self._tenant_id,
+            client_secret=self._client_secret,
+            tenant_id=self._tenant_id,
         )
         return self._credentials
 
@@ -203,6 +215,17 @@ class AZURE:
                 credentials=self.credentials, subscription_id=self._subscription_id
             )
         return self._resource_client
+
+    @property
+    def storage_client(self):
+        """
+        Azure Stroage Management Client instance
+        """
+        if not self._storage_client:
+            self._storage_client = StorageManagementClient(
+                credential=self.credentials, subscription_id=self._subscription_id
+            )
+        return self._storage_client
 
     def get_vm_instance(self, vm_name):
         """
@@ -388,3 +411,80 @@ class AZURE:
         """
         self.stop_vm_instances(vm_names, force=force)
         self.start_vm_instances(vm_names)
+
+    def get_storage_accounts(self):
+        """
+        Get list of storage accounts in azure resource group
+
+        Returns:
+           list: list of Azure storage accounts
+
+        """
+        storage_accounts_list = (
+            self.storage_client.storage_accounts.list_by_resource_group(
+                resource_group_name=self.cluster_resource_group
+            )
+        )
+        return storage_accounts_list
+
+    def get_storage_accounts_names(self):
+        """
+        Get list of names of storage accounts in azure resource group
+
+        Returns:
+           list: list of Azure storage accounts name
+
+        """
+        storage_accounts_list = (
+            self.storage_client.storage_accounts.list_by_resource_group(
+                resource_group_name=self.cluster_resource_group
+            )
+        )
+        storage_accounts_name_list = [account.name for account in storage_accounts_list]
+        return storage_accounts_name_list
+
+    def get_storage_account_properties(self, storage_account_name):
+        """
+        Get the properties of the storage account whose name is passed.
+
+        Args:
+            storage_account_name (str): Name of the storage account
+
+        Returns:
+            str: Properties of the storage account in string format.
+        """
+        storage_account_properties = (
+            self.storage_client.storage_accounts.get_properties(
+                resource_group_name=self.cluster_resource_group,
+                account_name=storage_account_name,
+            )
+        )
+        return str(storage_account_properties)
+
+
+def azure_storageaccount_check():
+    """
+    Testing that Azure storage account, post deployment.
+
+    Testing for property 'allow_blob_public_access' to be 'false'
+    """
+    logger.info(
+        "Checking if the 'allow_blob_public_access property of storage account is 'false'"
+    )
+    azure = AZURE()
+    storage_account_names = azure.get_storage_accounts_names()
+    for storage in storage_account_names:
+        if "noobaaaccount" in storage:
+            property = azure.get_storage_account_properties(storage)
+            pat = r"'allow_blob_public_access': (True|False),"
+
+            from re import findall
+
+            match = findall(pat, property)
+
+            if match:
+                assert (
+                    match[0] == "False"
+                ), "Property allow_blob_public_access is set to True"
+            else:
+                assert False, "Property allow_blob_public_access not found."

@@ -2,11 +2,22 @@
 Managed Services related functionalities
 """
 import logging
+import re
 
+from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.resources import csv
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility.managedservice import get_storage_provider_endpoint
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_worker_nodes, get_node_objs, get_node_zone_dict
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    get_node_objs,
+    get_node_zone_dict,
+    verify_worker_nodes_security_groups,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_pod_node
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
@@ -109,8 +120,8 @@ def verify_provider_topology():
     log.info(f"Verified that the OSD count is {size_map[size]['osd_count']}")
 
     # Verify OSD CPU and memory
-    osd_cpu_limit = "1650m"
-    osd_cpu_request = "1650m"
+    osd_cpu_limit = config.ENV_DATA["ms_osd_pod_cpu"]
+    osd_cpu_request = config.ENV_DATA["ms_osd_pod_cpu"]
     osd_pods = get_osd_pods()
     osd_memory_size = config.ENV_DATA["ms_osd_pod_memory"]
     log.info("Verifying OSD CPU and memory")
@@ -184,7 +195,8 @@ def get_ocs_osd_deployer_version():
          Version: OCS OSD deployer version
 
     """
-    csv_kind = OCP(kind="ClusterServiceVersion", namespace="openshift-storage")
+    ns_name = config.ENV_DATA["cluster_namespace"]
+    csv_kind = OCP(kind="ClusterServiceVersion", namespace=ns_name)
     deployer_csv = csv_kind.get(selector=constants.OCS_OSD_DEPLOYER_CSV_LABEL)
     assert (
         "ocs-osd-deployer" in deployer_csv["items"][0]["metadata"]["name"]
@@ -219,3 +231,377 @@ def verify_osd_distribution_on_provider():
         assert (
             osd_count == int(size) / 4
         ), f"Zone {zone} does not have {size/4} osd, but {osd_count}"
+
+
+def verify_storageclient(
+    storageclient_name=None, namespace=None, provider_name=None, verify_sc=True
+):
+    """
+    Verify status, values and resources related to a storageclient
+
+    Args:
+        storageclient_name (str): Name of the storageclient to be verified. If the name is not given, it will be
+            assumed that only one storageclient is present in the cluster.
+        namespace (str): Namespace where the storageclient is present.
+            Default value will be taken from ENV_DATA["cluster_namespace"]
+        provider_name (str): Name of the provider cluster to which the storageclient is connected.
+        verify_sc (bool): True to verify the storageclassclaims and storageclasses associated with the storageclient.
+
+    """
+    storageclient_obj = OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=namespace or config.ENV_DATA["cluster_namespace"],
+    )
+    storageclient = (
+        storageclient_obj.get(resource_name=storageclient_name)
+        if storageclient_name
+        else storageclient_obj.get()["items"][0]
+    )
+    storageclient_name = storageclient["metadata"]["name"]
+    provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
+    endpoint_actual = get_storage_provider_endpoint(provider_name)
+    assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
+        f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
+        f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
+        f"Value in the provider cluster {provider_name} is {endpoint_actual}"
+    )
+    log.info(
+        f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
+    )
+
+    # Verify storageclient status
+    assert storageclient["status"]["phase"] == "Connected"
+    log.info(f"Storageclient {storageclient_name} is Connected.")
+
+    if verify_sc:
+        # Verify storageclassclaims and the presence of storageclasses
+        verify_storageclient_storageclass_claims(storageclient_name)
+        log.info(
+            f"Verified the status of the storageclassclaims associated with the storageclient {storageclient_name}"
+        )
+
+
+def get_storageclassclaims_of_storageclient(storageclient_name):
+    """
+    Get all storageclassclaims associated with a storageclient
+
+    Args:
+        storageclient_name (str): Name of the storageclient
+
+    Returns:
+         List: OCS objects of kind Storageclassclaim
+
+    """
+    sc_claims = get_all_storageclassclaims()
+    return [
+        sc_claim
+        for sc_claim in sc_claims
+        if sc_claim.data["spec"]["storageClient"]["name"] == storageclient_name
+    ]
+
+
+def get_all_storageclassclaims():
+    """
+    Get all storageclassclaims
+
+    Returns:
+         List: OCS objects of kind Storageclassclaim
+
+    """
+    sc_claim_obj = OCP(
+        kind=constants.STORAGECLASSCLAIM, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    sc_claims_data = sc_claim_obj.get()["items"]
+    return [OCS(**claim_data) for claim_data in sc_claims_data]
+
+
+def verify_storageclient_storageclass_claims(storageclient):
+    """
+    Verify the status of storageclassclaims and the presence of the storageclass associated with the storageclient
+
+    Args:
+        storageclient_name (str): Name of the storageclient
+
+    """
+    sc_claim_objs = get_storageclassclaims_of_storageclient(storageclient)
+    for sc_claim in sc_claim_objs:
+        if sc_claim.data["status"]["phase"] == constants.STATUS_READY:
+            log.info(
+                f"Storageclassclaim {sc_claim.name} associated with the storageclient {storageclient} is "
+                f"{constants.STATUS_READY}"
+            )
+        else:
+            raise ResourceWrongStatusException(sc_claim.name, sc_claim.ocp.describe())
+
+        # Create OCS object of kind Storageclass
+        sc_obj = create_ocs_object_from_kind_and_name(
+            kind=constants.STORAGECLASS,
+            resource_name=sc_claim.name,
+        )
+        # Verify that the Storageclass is present
+        sc_obj.get()
+        log.info(f"Verified Storageclassclaim and Storageclass {sc_claim.name}")
+
+
+def verify_pods_in_managed_fusion_namespace():
+    """
+    Verify the status of pods in the namespace managed-fusion
+
+    """
+    log.info(
+        f"Verifying the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}"
+    )
+    pods_dict = {
+        constants.MANAGED_FUSION_ALERTMANAGER_LABEL: 1,
+        constants.MANAGED_FUSION_AWS_DATA_GATHER: 1,
+        constants.MANAGED_CONTROLLER_LABEL: 1,
+        constants.MANAGED_FUSION_PROMETHEUS_LABEL: 1,
+        constants.PROMETHEUS_OPERATOR_LABEL: 1,
+    }
+    pod = OCP(kind=constants.POD, namespace=constants.MANAGED_FUSION_NAMESPACE)
+    for label, count in pods_dict.items():
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=label,
+            resource_count=count,
+            timeout=600,
+        )
+    log.info(
+        f"Verified the status of the pods in the namespace {constants.MANAGED_FUSION_NAMESPACE}"
+    )
+
+
+def verify_faas_resources():
+    """
+    Verify the presence and status of resources in FaaS clusters
+
+    """
+    # Verify pods in managed-fusion namespace
+    verify_pods_in_managed_fusion_namespace()
+
+    # Verify secrets
+    verify_faas_cluster_secrets()
+
+    # Verify attributes specific to cluster types
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        sc_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        sc_data = sc_obj.get()["items"][0]
+        verify_faas_provider_storagecluster(sc_data)
+        verify_faas_provider_resources()
+        verify_provider_topology()
+    else:
+        verify_storageclient()
+        verify_faas_consumer_resources()
+
+    # Verify security
+    if config.ENV_DATA["cluster_type"].lower() == "consumer":
+        verify_client_operator_security()
+
+
+def verify_faas_provider_resources():
+    """
+    Verify resources specific to FaaS provider cluster
+
+    1. Verify CSV phase
+    2. Verify ocs-provider-server pod is Running
+    3. Verify ocs-metrics-exporter pod is Running
+    4. Verify that Cephcluster is Ready and hostNetworking is True
+    5. Verify that the security groups are set up correctly
+
+    """
+    # Verify CSV phase
+    for csv_prefix in {
+        constants.MANAGED_FUSION_AGENT,
+        constants.OCS_CSV_PREFIX,
+        constants.OSE_PROMETHEUS_OPERATOR,
+    }:
+        csvs = csv.get_csvs_start_with_prefix(
+            csv_prefix, config.ENV_DATA["cluster_namespace"]
+        )
+        assert (
+            len(csvs) == 1
+        ), f"Unexpected number of CSVs with name prefix {csv_prefix}: {len(csvs)}"
+        csv_name = csvs[0]["metadata"]["name"]
+        csv_obj = csv.CSV(
+            resource_name=csv_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        log.info(f"Verify that the CSV {csv_name} is in Succeeded phase.")
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
+
+    # Verify ocs-provider-server pod is Running
+    pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    pod_obj.wait_for_resource(
+        condition="Running", selector=constants.PROVIDER_SERVER_LABEL, resource_count=1
+    )
+    # Verify ocs-metrics-exporter pod is Running
+    pod_obj.wait_for_resource(
+        condition="Running", selector=constants.OCS_METRICS_EXPORTER, resource_count=1
+    )
+
+    # Verify that Cephcluster is Ready and hostNetworking is True
+    cephcluster = OCP(
+        kind=constants.CEPH_CLUSTER, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    cephcluster_yaml = cephcluster.get().get("items")[0]
+    log.info("Verifying that Cephcluster is Ready and hostNetworking is True")
+    assert (
+        cephcluster_yaml["status"]["phase"] == "Ready"
+    ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
+    assert cephcluster_yaml["spec"]["network"][
+        "hostNetwork"
+    ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']} in Cephcluster"
+
+    # Verify that the security groups are set up correctly
+    assert verify_worker_nodes_security_groups()
+
+
+def verify_faas_consumer_resources():
+    """
+    Verify resources specific to FaaS consumer
+
+    1. Verify CSV phase
+    2. Verify client endpoint
+
+    """
+
+    # Verify CSV phase
+    for csv_prefix in {
+        constants.MANAGED_FUSION_AGENT,
+        constants.OCS_CLIENT_OPERATOR,
+        constants.ODF_CSI_ADDONS_OPERATOR,
+        constants.OSE_PROMETHEUS_OPERATOR,
+    }:
+        csvs = csv.get_csvs_start_with_prefix(
+            csv_prefix, config.ENV_DATA["cluster_namespace"]
+        )
+        assert (
+            len(csvs) == 1
+        ), f"Unexpected number of CSVs with name prefix {csv_prefix}: {len(csvs)}"
+        csv_name = csvs[0]["metadata"]["name"]
+        csv_obj = csv.CSV(
+            resource_name=csv_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        log.info(f"Verify that the CSV {csv_name} is in Succeeded phase.")
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
+
+    # Verify client endpoint
+    client_endpoint = OCP(
+        kind=constants.ENDPOINTS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector="operators.coreos.com/ocs-client-operator.fusion-storage",
+    )
+    client_ep_yaml = client_endpoint.get().get("items")[0]
+    log.info("Verifying that The client endpoint has an IP address")
+    ep_ip = client_ep_yaml["subsets"][0]["addresses"][0]["ip"]
+    log.info(f"Client endpoint IP is {ep_ip}")
+    assert re.match("\\d+(\\.\\d+){3}", ep_ip)
+
+
+def verify_faas_cluster_secrets():
+    """
+    Verify the secrets present in FaaS cluster
+
+    """
+    secret_cluster_namespace_obj = OCP(
+        kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    secret_service_namespace_obj = OCP(
+        kind=constants.SECRET, namespace=config.ENV_DATA["service_namespace"]
+    )
+    managed_fusion_secret_names = [
+        "alertmanager-managed-fusion-alertmanager-generated",
+        "managed-fusion-agent-config",
+        "managed-fusion-alertmanager-secret",
+        "prometheus-managed-fusion-prometheus",
+    ]
+    for secret_name in managed_fusion_secret_names:
+        assert secret_service_namespace_obj.is_exist(
+            resource_name=secret_name
+        ), f"Secret {secret_name} does not exist in {config.ENV_DATA['service_namespace']} namespace"
+
+    if config.ENV_DATA["cluster_type"].lower() == "provider":
+        secret_names = [
+            constants.MANAGED_ONBOARDING_SECRET,
+            constants.MANAGED_PROVIDER_SERVER_SECRET,
+            constants.MANAGED_MON_SECRET,
+        ]
+        for secret_name in secret_names:
+            assert secret_cluster_namespace_obj.is_exist(
+                resource_name=secret_name
+            ), f"Secret {secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
+
+
+def verify_faas_provider_storagecluster(sc_data):
+    """
+    Verify provider storagecluster
+
+    1. allowRemoteStorageConsumers: true
+    2. hostNetwork: true
+    3. matchExpressions:
+        key: node-role.kubernetes.io/worker
+        operator: Exists
+        key: node-role.kubernetes.io/infra
+        operator: DoesNotExist
+    4. storageProviderEndpoint
+    5. annotations:
+        uninstall.ocs.openshift.io/cleanup-policy: delete
+        uninstall.ocs.openshift.io/mode: graceful
+
+    Args:
+        sc_data (dict): storagecluster data dictionary
+
+    """
+    log.info(
+        f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
+    )
+    assert sc_data["spec"]["allowRemoteStorageConsumers"]
+    log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
+    assert sc_data["spec"]["hostNetwork"]
+    expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]
+    for item in expressions:
+        log.info(f"Verifying {item}")
+        if item["key"] == "node-role.kubernetes.io/worker":
+            assert item["operator"] == "Exists"
+        else:
+            assert item["operator"] == "DoesNotExist"
+    log.info(f"storageProviderEndpoint: {sc_data['status']['storageProviderEndpoint']}")
+    assert re.match(
+        "(\\w+\\-\\w+\\.\\w+\\-\\w+\\-\\w+\\.elb.amazonaws.com):50051",
+        sc_data["status"]["storageProviderEndpoint"],
+    )
+    annotations = sc_data["metadata"]["annotations"]
+    log.info(f"Annotations: {annotations}")
+    assert annotations["uninstall.ocs.openshift.io/cleanup-policy"] == "delete"
+    assert annotations["uninstall.ocs.openshift.io/mode"] == "graceful"
+
+
+def verify_client_operator_security():
+    """
+    Check ocs-client-operator-controller-manager permissions
+
+    1. Verify `runAsUser` is not 0
+    2. Verify `SecurityContext.allowPrivilegeEscalation` is set to false
+    3. Verify `SecurityContext.capabilities.drop` contains ALL
+
+    """
+    pod_obj = OCP(
+        kind=constants.POD,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.MANAGED_CONTROLLER_LABEL,
+    )
+    client_operator_yaml = pod_obj.get().get("items")[0]
+    containers = client_operator_yaml["spec"]["containers"]
+    for container in containers:
+        log.info(f"Checking container {container['name']}")
+        userid = container["securityContext"]["runAsUser"]
+        log.info(f"runAsUser is {userid}. Verifying it is not 0")
+        assert userid > 0
+        escalation = container["securityContext"]["allowPrivilegeEscalation"]
+        log.info("Verifying allowPrivilegeEscalation is False")
+        assert not escalation
+        dropped_capabilities = container["securityContext"]["capabilities"]["drop"]
+        log.info(f"Dropped capabilities: {dropped_capabilities}")
+        assert "ALL" in dropped_capabilities

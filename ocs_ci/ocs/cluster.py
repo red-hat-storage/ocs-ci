@@ -77,7 +77,10 @@ class CephCluster(object):
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
-        if config.ENV_DATA["mcg_only_deployment"]:
+        if config.ENV_DATA["mcg_only_deployment"] or (
+            config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+            and config.ENV_DATA["cluster_type"].lower() == "consumer"
+        ):
             return
         # cluster_name is name of cluster in rook of type CephCluster
         self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])

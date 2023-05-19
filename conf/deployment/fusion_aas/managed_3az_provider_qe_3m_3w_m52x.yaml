@@ -4,6 +4,7 @@ ENV_DATA:
   deployment_type: 'managed'
   cluster_type: 'provider'
   cluster_namespace: 'fusion-storage'
+  service_namespace: 'managed-fusion'
   multi_availability_zones: True
   worker_replicas: 3
   master_replicas: 3

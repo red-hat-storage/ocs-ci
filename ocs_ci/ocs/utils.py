@@ -1109,7 +1109,7 @@ def _collect_ocs_logs(
             try:
                 if (
                     ocsci_config.multicluster
-                    and ocsci_config.get_acm_index()
+                    and ocsci_config.get_active_acm_index()
                     == cluster_config.MULTICLUSTER["multicluster_index"]
                 ):
                     break
@@ -1395,7 +1395,7 @@ def get_non_acm_cluster_config():
     """
     non_acm_list = []
     for i in range(len(ocsci_config.clusters)):
-        if i == ocsci_config.get_acm_index():
+        if i == ocsci_config.get_active_acm_index():
             continue
         else:
             non_acm_list.append(ocsci_config.clusters[i])
@@ -1459,7 +1459,7 @@ def label_pod_security_admission(namespace=None, upgrade_version=None):
 
 def collect_pod_container_rpm_package(dir_name):
     """
-    Collect information about rpm packages from all containers
+    Collect information about rpm packages from all containers + go version
 
     Args:
         dir_name(str): directory to store container rpm package info
@@ -1489,16 +1489,26 @@ def collect_pod_container_rpm_package(dir_name):
         pod_status = ocp_pod_obj.get_resource_status(pod_obj.name)
         if pod_status == constants.STATUS_RUNNING:
             for container in pod_containers:
+                container_output = ""
+                go_output = ""
                 container_name = container["name"]
                 command = f"exec -i {pod_obj.name} -c {container_name} -- rpm -qa"
+                go_command = (
+                    f"exec -i {pod_obj.name} -c {container_name} --"
+                    " /bin/bash -c '[ -f /go.version ] && cat /go.version || exit 0'"
+                )
                 try:
                     container_output = ocp_obj.exec_oc_cmd(command)
+                    go_output = ocp_obj.exec_oc_cmd(go_command)
                 except Exception as e:
                     log.warning(
                         f"Following exception {e} was raised for pod {pod_obj.name} and container {container_name}"
                     )
-                log_file_name = (
-                    f"{package_log_dir_path}/{pod_obj.name}-{container_name}-rpm.log"
-                )
-                with open(log_file_name, "w") as f:
-                    f.write(container_output)
+                if container_output:
+                    log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-rpm.log"
+                    with open(log_file_name, "w") as f:
+                        f.write(container_output)
+                if go_output:
+                    go_log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-go-version.log"
+                    with open(go_log_file_name, "w") as f:
+                        f.write(go_output)

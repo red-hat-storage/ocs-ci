@@ -24,14 +24,16 @@ from ocs_ci.utility.utils import (
     string_chunkify,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
-from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.ui.base_ui import login_ui
+from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
 from ocs_ci.utility.version import compare_versions
+from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
     UnexpectedDeploymentConfiguration,
 )
-from ocs_ci.utility import version
+from ocs_ci.utility import templating
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.helpers.helpers import create_project
 
 log = logging.getLogger(__name__)
 
@@ -42,9 +44,9 @@ class AcmAddClusters(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.page_nav = locators[self.ocp_version]["acm_page"]
+    def __init__(self):
+        super().__init__()
+        self.page_nav = self.acm_page_nav
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """
@@ -244,6 +246,7 @@ class AcmAddClusters(AcmPageNavigator):
         This is a mandatory pre-check for Regional DR.
 
         """
+
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
             locator=self.page_nav["cluster-sets"],
@@ -302,20 +305,25 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Submariner is healthy, check passed")
 
 
-def copy_kubeconfig(file):
+def copy_kubeconfig(file=None, return_str=False):
     """
 
     Args:
         file: (str): kubeconfig file location
+        return_str: (bool): if True return kubeconfig content as string
+        else return list of lines of kubeconfig content
 
     Returns:
-        list: with kubeconfig lines
+        list/str: kubeconfig content
 
     """
 
     try:
         with open(file, "r") as f:
-            txt = f.readlines()
+            if return_str is True:
+                txt = f.read()
+            else:
+                txt = f.readlines()
             return txt
 
     except FileNotFoundError as e:
@@ -340,15 +348,13 @@ def get_acm_url():
     return f"https://{url}"
 
 
-def validate_page_title(driver, title):
+def validate_page_title(title):
     """
     Validates Page HTML Title
     Args:
-        driver: driver (Selenium WebDriver)
         title (str): required title
-
     """
-    WebDriverWait(driver, 60).until(ec.title_is(title))
+    WebDriverWait(SeleniumDriver(), 60).until(ec.title_is(title))
     log.info(f"page title: {title}")
 
 
@@ -370,7 +376,7 @@ def login_to_acm():
         url = get_acm_url()
     log.info(f"URL: {url}")
     driver = login_ui(url)
-    page_nav = AcmPageNavigator(driver)
+    page_nav = AcmPageNavigator()
     if not compare_versions(cmp_str):
         page_nav.navigate_from_ocp_to_acm_cluster_page()
 
@@ -378,7 +384,7 @@ def login_to_acm():
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
-    validate_page_title(driver, title=page_title)
+    validate_page_title(title=page_title)
 
     return driver
 
@@ -451,6 +457,60 @@ def get_clusters_env():
     return clusters_env
 
 
+def import_clusters_via_cli(clusters):
+    """
+    Import clusters via cli
+
+    Args:
+        clusters (list): list of tuples (cluster name, kubeconfig path)
+
+    """
+    for cluster in clusters:
+        log.info("Importing clusters via CLI method")
+        log.info(f"**** clustername={cluster[0]}")
+        log.info(f"**** kubeconfig={cluster[1]}")
+        create_project(cluster[0])
+
+        log.info("Create and apply managed-cluster.yaml")
+        managed_cluster = templating.load_yaml(
+            "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
+        )
+        managed_cluster["metadata"]["name"] = cluster[0]
+        managed_cluster_obj = OCS(**managed_cluster)
+        managed_cluster_obj.apply(**managed_cluster)
+
+        log.info("Create and Apply the auto-import-secret.yaml")
+        auto_import_secret = templating.load_yaml(
+            "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
+        )
+        auto_import_secret["metadata"]["namespace"] = cluster[0]
+        auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
+        auto_import_secret_obj = OCS(**auto_import_secret)
+        auto_import_secret_obj.apply(**auto_import_secret)
+
+        log.info("Wait managedcluster move to Available state")
+        time.sleep(60)
+        ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+        ocp_obj.wait_for_resource(
+            timeout=600,
+            condition="True",
+            column="AVAILABLE",
+            resource_name=cluster[0],
+        )
+        ocp_obj.wait_for_resource(
+            timeout=600,
+            condition="True",
+            column="JOINED",
+            resource_name=cluster[0],
+        )
+        ocp_obj.wait_for_resource(
+            timeout=600,
+            condition="true",
+            column="HUB ACCEPTED",
+            resource_name=cluster[0],
+        )
+
+
 def import_clusters_with_acm():
     """
     Run Procedure of: detecting acm, login to ACM console, import 2 clusters
@@ -459,19 +519,22 @@ def import_clusters_with_acm():
     # TODO: Import action should be dynamic per cluster count (Use config.nclusters loop)
     clusters_env = get_clusters_env()
     log.info(clusters_env)
-    kubeconfig_a = clusters_env.get("kubeconfig_location_c1")
-    kubeconfig_b = clusters_env.get("kubeconfig_location_c2")
+    kubeconfig_a = copy_kubeconfig(
+        file=clusters_env.get("kubeconfig_location_c1"), return_str=True
+    )
+    kubeconfig_b = copy_kubeconfig(
+        file=clusters_env.get("kubeconfig_location_c2"), return_str=True
+    )
     cluster_name_a = clusters_env.get("cluster_name_1")
     cluster_name_b = clusters_env.get("cluster_name_2")
+    clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
     verify_running_acm()
-    driver = login_to_acm()
-    acm_nav = AcmAddClusters(driver)
-    acm_nav.import_cluster(
-        cluster_name=cluster_name_a,
-        kubeconfig_location=kubeconfig_a,
-    )
-
-    acm_nav.import_cluster(
-        cluster_name=cluster_name_b,
-        kubeconfig_location=kubeconfig_b,
-    )
+    if config.DEPLOYMENT.get("ui_acm_import"):
+        login_to_acm()
+        acm_nav = AcmAddClusters()
+        acm_nav.import_cluster(
+            cluster_name=cluster_name_a,
+            kubeconfig_location=kubeconfig_a,
+        )
+    else:
+        import_clusters_via_cli(clusters)

@@ -79,7 +79,7 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui_class)
+        pvc_ui_obj = PvcUI()
 
         # Creating PVC via UI
         pvc_name = create_unique_resource_name("test", "pvc")
@@ -245,7 +245,7 @@ class TestPvcUserInterface(object):
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
-        pvc_ui_obj = PvcUI(setup_ui_class)
+        pvc_ui_obj = PvcUI()
 
         if config.DEPLOYMENT["external_mode"]:
             if sc_name == constants.CEPHFILESYSTEM_SC:

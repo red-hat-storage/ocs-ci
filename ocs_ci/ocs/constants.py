@@ -11,7 +11,6 @@ and with consideration of the entire project.
 
 import os
 
-
 # Logging
 LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -26,6 +25,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER = os.path.join(TEMPLATE_DIR, "cert-manager")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
@@ -33,6 +33,7 @@ TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
 TEMPLATE_CSI_FS_DIR = os.path.join(TEMPLATE_CSI_DIR, "cephfs")
+TEMPLATE_CSI_ADDONS_DIR = os.path.join(TEMPLATE_CSI_DIR, "addons")
 TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
 TEMPLATE_SECURITY_DIR = os.path.join(TEMPLATE_DIR, "security")
 TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
@@ -66,7 +67,7 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 )
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
-DATA_DIR = os.path.join(TOP_DIR, "data")
+DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
     ROOK_REPO_DIR, "cluster", "examples", "kubernetes", "ceph"
@@ -159,6 +160,12 @@ LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
 MACHINEHEALTHCHECK = "machinehealthcheck"
+STORAGECLIENT = "StorageClient"
+MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
+CEPH_CLUSTER = "CephCluster"
+ENDPOINTS = "Endpoints"
+WEBHOOK = "ValidatingWebhookConfiguration"
+ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -225,6 +232,12 @@ KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
+
+# ODF monitoring tool
+ODF_MONITORING_TOOL_REPO = "https://github.com/red-hat-storage/odf-monitoring-tools.git"
+
+OCS_OPERATOR_REPO = "https://github.com/red-hat-storage/ocs-operator.git"
+CEPH_UPSTREAM_REPO = "https://github.com/ceph/ceph.git"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
@@ -329,6 +342,8 @@ CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-ver
 CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )
+CSI_ADDONS_CONTROLLER_MANAGER_LABEL = "app.kubernetes.io/name=csi-addons"
+
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
@@ -345,6 +360,9 @@ S3CLI_LABEL = "app=s3cli"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
 PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
 MUST_GATHER_HELPER_LABEL = "must-gather-helper-pod"
+MANAGED_FUSION_ALERTMANAGER_LABEL = "alertmanager=managed-fusion-alertmanager"
+MANAGED_FUSION_AWS_DATA_GATHER = "name=aws-data-gather"
+MANAGED_FUSION_PROMETHEUS_LABEL = "prometheus=managed-fusion-prometheus"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -607,6 +625,9 @@ EO_RBAC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-rbac.yaml")
 EO_SUB_YAML = os.path.join(TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml")
 
 OLM_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml")
+CERT_MANAGER_NS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER, "namespace_opg_cert_manager.yaml"
+)
 
 CATALOG_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml")
 
@@ -619,6 +640,10 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
 
 SUBSCRIPTION_ODF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription_odf.yaml")
+
+SUBSCRIPTION_CERT_MANAGER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER, "subscription_cert_manager.yaml"
+)
 
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
 
@@ -792,7 +817,7 @@ RBD_SIDECAR_PATCH_CMD = (
 RBD_SIDECAR_COUNT = 18
 RBD_SIDECAR_COUNT_4_12 = 14
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
-DR_WORKLOAD_REPO_BASE_DIR = "ocm-ramen-samples"
+DR_WORKLOAD_REPO_BASE_DIR = "ocs-workloads"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 DRPOLICY_STATUS = "Validated"
 RDR_REPLICATION_POLICY = "async"
@@ -1064,6 +1089,9 @@ MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
+MANAGED_FUSION_AGENT = "managed-fusion-agent"
+OCS_CLIENT_OPERATOR = "ocs-client-operator"
+ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1937,6 +1965,28 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
+ACM_MANAGEDCLUSTER = "managedclusters.cluster.open-cluster-management.io"
+ACM_LOCAL_CLUSTER = "local-cluster"
+ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
+
+# GitOps
+GITOPS_NAMESPACE = "openshift-gitops"
+GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
+GITOPS_CLUSTER_NAME = "gitops-cluster"
+GITOPS_CLUSTER = "GitOpsCluster"
+GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
+GITOPS_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_cluster.yaml"
+)
+GITOPS_PLACEMENT_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_placement.yaml"
+)
+GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "managedcluster_setbinding.yaml"
+)
+GITOPS_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
+)
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
@@ -1963,8 +2013,8 @@ ACM_CSV_LABEL = (
 )
 # Concatenated CA file for vcenter
 VSPHERE_CA_FILE_PATH = os.path.join(DATA_DIR, "vsphere_ca.crt")
-SSH_PRIV_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pem"))
-SSH_PUB_KEY = os.path.expanduser(os.path.join(".ssh", "openshift-dev.pub"))
+SSH_PRIV_KEY = os.path.expanduser(os.path.join("~", ".ssh", "openshift-dev.pem"))
+SSH_PUB_KEY = os.path.expanduser(os.path.join("~", ".ssh", "openshift-dev.pub"))
 SPACE = " "
 
 # DR actions

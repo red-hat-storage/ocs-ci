@@ -22,6 +22,7 @@ import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.exceptions import UnexpectedVolumeType
 from ocs_ci.ocs.resources import pod
@@ -311,7 +312,9 @@ def get_pool_name(fixture_name):
     """
     Return ceph pool name based on fixture name suffix.
     """
-    if fixture_name.endswith("rbd"):
+    if config.DEPLOYMENT["external_mode"]:
+        ceph_pool_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+    elif fixture_name.endswith("rbd"):
         ceph_pool_name = "ocs-storagecluster-cephblockpool"
     elif fixture_name.endswith("cephfs"):
         ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"

@@ -2,7 +2,7 @@ import logging
 import time
 
 
-from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
+from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
@@ -26,9 +26,8 @@ class DeploymentUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.dep_loc = locators[self.ocp_version]["deployment"]
+    def __init__(self):
+        super().__init__()
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """

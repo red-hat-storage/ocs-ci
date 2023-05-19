@@ -40,7 +40,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_9:
             validation_ui_obj.odf_overview_ui()
@@ -61,7 +61,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         validation_ui_obj.odf_storagesystems_ui()
 
     @ui
@@ -82,10 +82,16 @@ class TestUserInterfaceValidation(object):
 
         """
 
-        validation_ui_obj = ValidationUI(setup_ui_class)
-        validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
+        storage_system_details = (
+            ValidationUI()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
+        )
+        storage_system_details.nav_cephblockpool_verify_statusready()
+
         compression_statuses = (
-            validation_ui_obj.get_blockpools_compression_status_from_storagesystem()
+            storage_system_details.get_blockpools_compression_status_from_storagesystem()
         )
         compression_status_expected = "Disabled"
         assert all(
@@ -96,3 +102,13 @@ class TestUserInterfaceValidation(object):
             f"'Compression status' from ocs-storagecluster-cephblockpool = {compression_statuses[1]}\n"
             f"Expected: {compression_status_expected}"
         )
+
+    @ui
+    @pytest.mark.bugzilla("1994584")
+    def test_ocs_operator_is_not_present(self, setup_ui_class):
+        """
+        Validate odf operator is present in the installed operator tab in ui.
+        """
+
+        validation_ui_obj = ValidationUI()
+        assert validation_ui_obj.verify_odf_without_ocs_in_installed_operator()

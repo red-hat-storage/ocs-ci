@@ -631,7 +631,7 @@ class AWSUPI(AWSBase):
             self.cluster_path, config.RUN.get("kubeconfig_location")
         )
         pod.upload(rhel_pod_obj.name, kubeconfig, "/")
-        pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         pod.upload(rhel_pod_obj.name, pull_secret_path, "/tmp/")
         host_file = self.build_ansible_inventory(hosts)
         pod.upload(rhel_pod_obj.name, host_file, "/")

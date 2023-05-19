@@ -319,7 +319,7 @@ skipif_ibm_cloud = pytest.mark.skipif(
 )
 
 skipif_ibm_cloud_managed = pytest.mark.skipif(
-    config.ENV_DATA["deployment_type"].lower() != "managed"
+    config.ENV_DATA["deployment_type"].lower() == "managed"
     and config.ENV_DATA["platform"].lower() == IBMCLOUD_PLATFORM,
     reason="Test will not run on IBM Cloud aka ROKS (managed deployment type)",
 )
@@ -417,6 +417,12 @@ skipif_no_kms = pytest.mark.skipif_no_kms
 skipif_ibm_flash = pytest.mark.skipif(
     config.ENV_DATA.get("ibm_flash"),
     reason="This test doesn't work correctly on IBM Flash system",
+)
+
+# Skipif intransit encryption is not set.
+skipif_intransit_encryption_notset = pytest.mark.skipif(
+    not config.ENV_DATA.get("in_transit_encryption"),
+    reason="Skipping test due to intransit encryption is not set in config.",
 )
 
 # Squad marks

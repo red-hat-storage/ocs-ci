@@ -4,35 +4,31 @@ import time
 
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
-from ocs_ci.ocs.ui.base_ui import StorageSystemNavigator
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility import version
-from ocs_ci.utility.utils import get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
 
-class ValidationUI(StorageSystemNavigator):
+class ValidationUI(PageNavigator):
     """
     User Interface Validation Selenium
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.dep_loc = locators[self.ocp_version]["deployment"]
-        self.ocp_version = get_ocp_version()
+    def __init__(self):
+        super().__init__()
         self.err_list = list()
-        self.validation_loc = locators[self.ocp_version]["validation"]
 
     def verify_object_service_page(self):
         """
         Verify Object Service Page UI
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.do_click(self.validation_loc["object_service_tab"], enable_screenshot=True)
         platform = config.ENV_DATA.get("platform").lower()
         if platform in constants.ON_PREM_PLATFORMS:
@@ -54,7 +50,7 @@ class ValidationUI(StorageSystemNavigator):
         Verify Persistent Storage Page
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         self.do_click(
             self.validation_loc["persistent_storage_tab"], enable_screenshot=True
         )
@@ -243,6 +239,10 @@ class ValidationUI(StorageSystemNavigator):
                             self.validation_loc["refresh-web-console"],
                             enable_screenshot=True,
                         )
+                else:
+                    logger.info("Console plugin status Enabled")
+            else:
+                logger.info("Plugin availability check skipped")
 
     def odf_overview_ui(
         self,
@@ -253,16 +253,8 @@ class ValidationUI(StorageSystemNavigator):
         """
 
         self.odf_console_plugin_check()
-        self.navigate_odf_overview_page()
-        logger.info(
-            "Wait and check for Storage System under Status card on Overview page"
-        )
-        storage_system_presence = self.wait_until_expected_text_is_found(
-            locator=self.validation_loc["storagesystem-status-card"],
-            timeout=30,
-            expected_text="Storage System",
-        )
-        if storage_system_presence:
+        odf_overview_page = self.nav_odf_default_page().nav_overview_tab()
+        if odf_overview_page.wait_storagesystem_popup():
             logger.info("Click on 'Storage System' under Status card on Overview page")
             self.do_click(self.validation_loc["storagesystem-status-card"])
             block_and_file_health_message_check = (
@@ -435,46 +427,22 @@ class ValidationUI(StorageSystemNavigator):
 
         """
         self.odf_console_plugin_check()
-        self.navigate_odf_storagesystems()
-        self.navigate_storagecluster_storagesystem()
-        logger.info("Click on Overview tab")
-        if (
-            self.ocp_version_semantic == version.VERSION_4_11
-            and self.ocs_version_semantic == version.VERSION_4_10
-        ):
-            self.do_click(
-                self.validation_loc["overview_odf_4_10"], enable_screenshot=True
-            )
-        else:
-            self.do_click(self.validation_loc["overview"], enable_screenshot=True)
-        logger.info("Click on 'Object' tab")
-        if (
-            self.ocp_version_semantic == version.VERSION_4_11
-            and self.ocs_version_semantic == version.VERSION_4_10
-        ):
-            self.do_click(
-                self.validation_loc["object-odf-4-10"], enable_screenshot=True
-            )
-        else:
-            self.do_click(self.validation_loc["object"], enable_screenshot=True)
+        storage_systems_page = (
+            PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
+        )
+        storage_system_details = (
+            storage_systems_page.nav_storagecluster_storagesystem_details()
+        )
+        storage_system_details.nav_details_overview()
+        storage_system_details.nav_details_object()
+
         if not config.ENV_DATA["mcg_only_deployment"]:
-            logger.info("Click on 'Block and File' tab")
-            if (
-                self.ocp_version_semantic == version.VERSION_4_11
-                and self.ocs_version_semantic == version.VERSION_4_10
-            ):
-                self.do_click(
-                    self.validation_loc["blockandfile-odf-4-10"], enable_screenshot=True
-                )
-            else:
-                self.do_click(
-                    self.validation_loc["blockandfile"], enable_screenshot=True
-                )
+            storage_system_details.nav_block_and_file()
         if not (
             config.DEPLOYMENT.get("external_mode")
             or config.ENV_DATA["mcg_only_deployment"]
         ):
-            self.navigate_cephblockpool_verify_statusready()
+            storage_system_details.nav_cephblockpool_verify_statusready()
 
     def check_capacity_breakdown(self, project_name, pod_name):
         """
@@ -488,7 +456,7 @@ class ValidationUI(StorageSystemNavigator):
             bool: True if project_name and pod_name exist on capacity_breakdown, False otherwise
 
         """
-        self.navigate_overview_page()
+        self.navigate_cluster_overview_page()
         if self.ocp_version == "4.7":
             self.do_click(self.validation_loc["persistent_storage_tab"])
         self.choose_expanded_mode(
@@ -531,7 +499,7 @@ class ValidationUI(StorageSystemNavigator):
         self.do_click(self.validation_loc["developer_dropdown"])
         self.do_click(self.validation_loc["select_administrator"], timeout=5)
         try:
-            self.navigate_odf_overview_page()
+            self.nav_odf_default_page()
         except TimeoutException:
             logger.info(
                 "As expected, ODF dashboard is not available for the unprivileged user"
@@ -539,31 +507,28 @@ class ValidationUI(StorageSystemNavigator):
         else:
             raise UnexpectedODFAccessException
 
-    def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
+    def verify_odf_without_ocs_in_installed_operator(self) -> bool:
         """
-        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
-        Get compression status from storagesystem details and ocs-storagecluster-cephblockpool
+        Function to validate ODF operator is present post ODF installation,
+        expectation is only ODF operator should be present in Installed operators tab and
+        OCS operator shouldn't be present. This function is only written for 4.9+ versions
 
         Returns:
-            tuple: String representation of 'Compression status' from StorageSystem details page and
-            String representation of 'Compression status' from ocs-storagecluster-cephblockpool page
-
+        True: If only odf operator is present in the UI
+        False: If ocs operator is also present in the UI
         """
-        self.navigate_cephblockpool()
-        logger.info(
-            f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
+        logger.info("Navigating to Installed Operator Page")
+        self.navigate_installed_operators_page()
+        logger.info("Searching for Openshift Data Foundation Operator")
+        odf_operator_presence = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["odf-operator"],
+            timeout=1,
+            expected_text="OpenShift Data Foundation",
         )
-        compression_status_blockpools_tab = self.get_element_text(
-            self.validation_loc["storagesystem-details-compress-state"]
+        logger.info("Searching for Openshift Container Storage Operator")
+        ocs_operator_presence = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["ocs-operator"],
+            timeout=1,
+            expected_text="OpenShift Container Storage",
         )
-        logger.info(
-            f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
-        )
-        self.do_click(
-            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
-            enable_screenshot=True,
-        )
-        compression_status_blockpools_details = self.get_element_text(
-            self.validation_loc["storagecluster-blockpool-details-compress-status"]
-        )
-        return compression_status_blockpools_tab, compression_status_blockpools_details
+        return odf_operator_presence and not ocs_operator_presence

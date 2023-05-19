@@ -1,0 +1,10 @@
+apiVersion: csiaddons.openshift.io/v1alpha1
+kind: ReclaimSpaceJob
+metadata:
+  name: sample-1
+spec:
+  target:
+     persistentVolumeClaim: pvc-1
+  backOffLimit: 10
+  retryDeadlineSeconds: 900
+

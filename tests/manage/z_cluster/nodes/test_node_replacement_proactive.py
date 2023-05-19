@@ -20,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_external_mode,
     skipif_ms_consumer,
+    brown_squad,
 )
 
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -68,7 +69,13 @@ def check_node_replacement_verification_steps(
             f"of osd nodes. Wait for the new created worker node to appear in the osd nodes"
         )
         timeout = 1500
-        new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        # In vSphere platform, we are creating new node with same name as deleted
+        # node using terraform
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            new_osd_node_name = old_node_name
+        else:
+            new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        log.info(f"Newly created OSD name: {new_osd_node_name}")
         assert new_osd_node_name, (
             f"New osd node not found after the node replacement process "
             f"while waiting for {timeout} seconds"
@@ -279,6 +286,7 @@ class TestNodeReplacement(ManageTest):
 
 
 @tier4a
+@brown_squad
 @ignore_leftovers
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")

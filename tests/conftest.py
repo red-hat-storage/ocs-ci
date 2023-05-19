@@ -39,6 +39,7 @@ from ocs_ci.ocs.exceptions import (
     StorageclassNotCreated,
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
+    ResourceNotDeleted,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -120,7 +121,7 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
     run_cmd,
 )
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
@@ -1081,7 +1082,6 @@ def pod_factory_fixture(request, pvc_factory):
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
-                deploy_pod_status=status,
             )
             assert pod_obj, "Failed to create pod"
         if deployment_config:
@@ -1421,7 +1421,7 @@ def health_checker(request, tier_marks_name):
     if config.multicluster:
         if (
             config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-            == config.get_acm_index()
+            == config.get_active_acm_index()
         ):
             return
 
@@ -4344,7 +4344,7 @@ def login_factory_fixture(request):
 
     def finalizer():
         for driver in drivers:
-            close_browser(driver)
+            close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4578,7 +4578,7 @@ def setup_ui_fixture(request):
     driver = login_ui()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4594,7 +4594,7 @@ def setup_acm_ui_fixture(request):
     driver = login_to_acm()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4901,7 +4901,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             (ocs_ci.ocs.resource.ocs) ocs object of the CephBlockPool.
 
         """
-        blockpool_ui_object = BlockPoolUI(setup_ui)
+        blockpool_ui_object = BlockPoolUI()
         pool_name, pool_status = blockpool_ui_object.create_pool(
             replica=replica, compression=compression
         )
@@ -4940,7 +4940,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             except CommandFailed:
                 log.warning("Pool is already deleted")
                 continue
-            blockpool_ui_obj = BlockPoolUI(setup_ui)
+            blockpool_ui_obj = BlockPoolUI()
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
@@ -5012,7 +5012,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
 
         """
         global sc_name
-        storageclass_ui_object = StorageClassUI(setup_ui)
+        storageclass_ui_object = StorageClassUI()
         if encryption:
             sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
                 backend_path=backend_path,
@@ -5055,7 +5055,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             except CommandFailed:
                 log.warning("Storageclass is already deleted")
                 continue
-            storageclass_ui_obj = StorageClassUI(setup_ui)
+            storageclass_ui_obj = StorageClassUI()
             if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
                 instance.delete()
                 raise StorageClassNotDeletedFromUI(
@@ -6054,18 +6054,58 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
 
 
 @pytest.fixture()
-def rdr_workload(request):
+def dr_workload(request):
     """
     Setup Busybox workload for RDR setup
+
     """
-    workload = BusyBox()
+    instances = []
+
+    def factory(num_of_subscription=1, num_of_appset=0):
+        """
+        Args:
+            num_of_subscription (int): Number of Subscription type workload to be created
+            num_of_appset (int): Number of ApplicationSet type workload to be created
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class.
+
+        """
+        total_pvc_count = 0
+        for index in range(num_of_subscription):
+            workload_details = config.ENV_DATA["dr_workload_subscription"][index]
+            workload = BusyBox(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        # TODO: Deploy Appset workload
+
+        dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        return instances
 
     def teardown():
-        workload.delete_workload(force=True)
+        failed_to_delete = False
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                failed_to_delete = True
+
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
+            )
 
     request.addfinalizer(teardown)
-    workload.deploy_workload()
-    return workload
+    return factory
 
 
 @pytest.fixture(scope="class")

@@ -45,7 +45,9 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
     UnsupportedFeatureError,
+    UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
@@ -75,7 +77,6 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
-    in_transit_encryption_verification,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -199,6 +200,103 @@ class Deployment(object):
             submariner = Submariner()
             submariner.deploy()
 
+    def do_gitops_deploy(self):
+        """
+        Deploy GitOps operator
+
+        Returns:
+
+        """
+        if not config.ENV_DATA.get("deploy_gitops_operator"):
+            return
+
+        # Multicluster operations
+        if config.multicluster:
+            config.switch_acm_ctx()
+            logger.info("Creating GitOps Operator Subscription")
+            gitops_subscription_yaml_data = templating.load_yaml(
+                constants.GITOPS_SUBSCRIPTION_YAML
+            )
+            package_manifest = PackageManifest(
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+            )
+            gitops_subscription_yaml_data["spec"][
+                "startingCSV"
+            ] = package_manifest.get_current_csv(
+                channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
+            )
+
+            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="gitops_subscription_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                gitops_subscription_yaml_data, gitops_subscription_manifest.name
+            )
+            run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
+
+            self.wait_for_subscription(
+                constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
+            )
+            logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
+            time.sleep(90)
+            subscriptions = ocp.OCP(
+                kind=constants.SUBSCRIPTION_WITH_ACM,
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+                namespace=constants.OPENSHIFT_OPERATORS,
+            ).get()
+            gitops_csv_name = subscriptions["status"]["currentCSV"]
+            csv = CSV(
+                resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE
+            )
+            csv.wait_for_phase("Succeeded", timeout=720)
+            logger.info("GitOps Operator Deployment Succeeded")
+
+            logger.info("Creating GitOps CLuster Resource")
+            run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")
+
+            logger.info("Creating GitOps CLuster Placement Resource")
+            run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
+
+            logger.info("Creating ManagedClusterSetBinding")
+
+            cluster_set = []
+            managed_clusters = (
+                ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+            )
+            # ignore local-cluster here
+            for i in managed_clusters:
+                if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+                    cluster_set.append(
+                        i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL]
+                    )
+            if all(x == cluster_set[0] for x in cluster_set):
+                logger.info(f"Found the uniq clusterset {cluster_set[0]}")
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    "There are more then one clusterset added to multiple managedcluters"
+                )
+
+            managedclustersetbinding_obj = templating.load_yaml(
+                constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
+            )
+            managedclustersetbinding_obj["metadata"]["name"] = cluster_set[0]
+            managedclustersetbinding_obj["spec"]["clusterSet"] = cluster_set[0]
+            managedclustersetbinding = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="managedcluster_setbinding", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                managedclustersetbinding_obj, managedclustersetbinding.name
+            )
+            run_cmd(f"oc create -f {managedclustersetbinding.name}")
+
+            gitops_obj = ocp.OCP(
+                resource_name=constants.GITOPS_CLUSTER_NAME,
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                kind=constants.GITOPS_CLUSTER,
+            )
+            gitops_obj._has_phase = True
+            gitops_obj.wait_for_phase("successful", timeout=720)
+
     def do_deploy_ocs(self):
         """
         Deploy OCS/ODF and run verification as well
@@ -206,7 +304,7 @@ class Deployment(object):
         """
         if not config.ENV_DATA["skip_ocs_deployment"]:
             for i in range(config.nclusters):
-                if config.multicluster and config.get_acm_index() == i:
+                if config.multicluster and config.get_active_acm_index() == i:
                     continue
                 config.switch_ctx(i)
                 try:
@@ -227,7 +325,7 @@ class Deployment(object):
             # For single cluster, test_deployment will take care.
             if config.multicluster:
                 for i in range(config.multicluster):
-                    if config.get_acm_index() == i:
+                    if config.get_active_acm_index() == i:
                         continue
                     else:
                         config.switch_ctx(i)
@@ -259,6 +357,33 @@ class Deployment(object):
         """
         self.deploy_lvmo()
 
+    def do_deploy_cert_manager(self):
+        """
+        Installs cert-manager operator
+
+        """
+        if not config.ENV_DATA["skip_ocp_deployment"]:
+            cert_manager_operator = defaults.CERT_MANAGER_OPERATOR_NAME
+            cert_manager_namespace = defaults.CERT_MANAGER_NAMESPACE
+            cert_manager_operator_csv = f"openshift-{cert_manager_operator}"
+
+            # creating Namespace and operator group for cert-manager
+            logger.info("Creating namespace and operator group for cert-manager")
+            run_cmd(f"oc create -f {constants.CERT_MANAGER_NS_YAML}")
+
+            deploy_cert_manager()
+            self.wait_for_subscription(cert_manager_operator, cert_manager_namespace)
+            self.wait_for_csv(cert_manager_operator, cert_manager_namespace)
+            logger.info(
+                f"Sleeping for 30 seconds after {cert_manager_operator} created"
+            )
+            time.sleep(30)
+            package_manifest = PackageManifest(resource_name=cert_manager_operator_csv)
+            package_manifest.wait_for_resource(timeout=120)
+            csv_name = package_manifest.get_current_csv()
+            csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
+            csv.wait_for_phase("Succeeded", timeout=300)
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -272,6 +397,9 @@ class Deployment(object):
         # ocs-deployment, not just here in this particular case
         tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
         logger.debug("created temporary directory %s", tmp_path)
+
+        if config.DEPLOYMENT.get("install_cert_manager"):
+            self.do_deploy_cert_manager()
 
         # Deployment of network split and or extra latency scripts via
         # machineconfig API happens after OCP but before OCS deployment.
@@ -313,6 +441,7 @@ class Deployment(object):
             self.deploy_acm_hub()
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
+        self.do_gitops_deploy()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
 
@@ -543,21 +672,25 @@ class Deployment(object):
         logger.info("Sleeping for 30 seconds after CSV created")
         time.sleep(30)
 
-    def wait_for_subscription(self, subscription_name):
+    def wait_for_subscription(self, subscription_name, namespace=None):
         """
         Wait for the subscription to appear
 
         Args:
             subscription_name (str): Subscription name pattern
+            namespace (str): Namespace name for checking subscription if None then default from ENV_data
 
         """
+        if not namespace:
+            namespace = self.namespace
+
         if config.multicluster:
             resource_kind = constants.SUBSCRIPTION_WITH_ACM
         else:
             resource_kind = constants.SUBSCRIPTION
-        ocp.OCP(kind=resource_kind, namespace=self.namespace)
+        ocp.OCP(kind=resource_kind, namespace=namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind=resource_kind, namespace=self.namespace
+            300, 10, ocp.OCP, kind=resource_kind, namespace=namespace
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
@@ -569,18 +702,18 @@ class Deployment(object):
                     return
                 logger.debug(f"Still waiting for the subscription: {subscription_name}")
 
-    def wait_for_csv(self, csv_name):
+    def wait_for_csv(self, csv_name, namespace=None):
         """
         Wait for the CSV to appear
 
         Args:
             csv_name (str): CSV name pattern
+            namespace (str): Namespace where CSV exists
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
-        for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind="csv", namespace=self.namespace
-        ):
+        namespace = namespace or self.namespace
+        ocp.OCP(kind="subscription", namespace=namespace)
+        for sample in TimeoutSampler(300, 10, ocp.OCP, kind="csv", namespace=namespace):
             csvs = sample.get().get("items", [])
             for csv in csvs:
                 found_csv_name = csv.get("metadata", {}).get("name", "")
@@ -1063,10 +1196,10 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
             create_catalog_source()
-        setup_ui = login_ui()
-        deployment_obj = DeploymentUI(setup_ui)
+        login_ui()
+        deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()
-        close_browser(setup_ui)
+        close_browser()
 
     def deploy_with_external_mode(self):
         """
@@ -1263,10 +1396,6 @@ class Deployment(object):
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
-
-        # Verify in-transit encryption is enabled.
-        if config.ENV_DATA.get("in_transit_encryption"):
-            in_transit_encryption_verification()
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
@@ -1755,7 +1884,7 @@ class RBDDRDeployOps(object):
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=config.get_acm_index()
+            query_mirroring, skip_index=config.get_active_acm_index()
         )
         index = 0
         for out in out_list:
@@ -1849,7 +1978,10 @@ class RBDDRDeployOps(object):
         # on all participating clusters except HUB
         # We will switch config ctx to Participating clusters
         for cluster in config.clusters:
-            if cluster.MULTICLUSTER["multicluster_index"] == config.get_acm_index():
+            if (
+                cluster.MULTICLUSTER["multicluster_index"]
+                == config.get_active_acm_index()
+            ):
                 continue
             else:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -2105,7 +2237,7 @@ class MultiClusterDROperatorsDeploy(object):
             # Create s3 secret on all clusters except ACM
             for secret_yaml in secret_yaml_files:
                 cmd = f"oc create -f {secret_yaml}"
-                run_cmd_multicluster(cmd, skip_index=config.get_acm_index())
+                run_cmd_multicluster(cmd, skip_index=config.get_active_acm_index())
 
         def get_participating_regions(self):
             """

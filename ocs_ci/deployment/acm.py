@@ -90,8 +90,8 @@ class Submariner(object):
         # Using import here, to avoid partly circular import
         from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
 
-        get_driver = login_to_acm()
-        acm_obj = AcmAddClusters(get_driver)
+        login_to_acm()
+        acm_obj = AcmAddClusters()
         acm_obj.install_submariner_ui()
         acm_obj.submariner_validation_ui()
 
@@ -162,7 +162,7 @@ class Submariner(object):
         for cluster in config.clusters:
             print(len(config.clusters))
             cluster_index = cluster.MULTICLUSTER["multicluster_index"]
-            if cluster_index != config.get_acm_index():
+            if cluster_index != config.get_active_acm_index():
                 join_cmd = (
                     f"join --kubeconfig {cluster.RUN['kubeconfig']} "
                     f"{config.ENV_DATA['submariner_info_file']} "

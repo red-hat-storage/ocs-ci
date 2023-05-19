@@ -736,6 +736,7 @@ def workload_idle(measurement_dir):
     the workload in such case.
     """
 
+    @retry(CommandFailed, text_in_exception="failed to get OSD and MON pods")
     def count_ceph_components():
         ceph_osd_ls_list = get_osd_pods()
         osd_num = len(ceph_osd_ls_list)

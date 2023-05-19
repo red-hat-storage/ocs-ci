@@ -983,6 +983,10 @@ validation = {
         'a[data-test-id="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
+    "namespacestore_page": (
+        'a[data-test-id="horizontal-link-Namespace Store"]',
+        By.CSS_SELECTOR,
+    ),
     "capacity_breakdown_options": (
         'button[class="pf-c-select__toggle"]',
         By.CSS_SELECTOR,
@@ -1011,6 +1015,7 @@ validation_4_8 = {
         'a[data-test-id="horizontal-link-Block and File"]',
         By.CSS_SELECTOR,
     ),
+    "ocs-operator": ("//h1[normalize-space()='OpenShift Container Storage']", By.XPATH),
 }
 
 validation_4_9 = {
@@ -1221,6 +1226,13 @@ locators = {
             **deployment_4_10,
             **deployment_4_11,
             **deployment_4_12,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
         },
         "obc": obc,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
