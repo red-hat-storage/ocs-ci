@@ -6,6 +6,7 @@ on Fusion aaS
 
 import logging
 import os
+from time import sleep
 
 from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment import rosa as rosa_deployment
@@ -118,6 +119,9 @@ class FUSIONAAS(rosa_deployment.ROSA):
             # status of machineconfigpool
             wait_for_machineconfigpool_status("all", timeout=2800)
             update_pull_secret()
+            # Add an initial wait time for the change. Otherwise wait_for_machineconfigpool_status will return
+            # before the starting of update
+            sleep(20)
             wait_for_machineconfigpool_status("all", timeout=900)
         deploy_odf()
 
