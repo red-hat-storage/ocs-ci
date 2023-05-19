@@ -162,7 +162,7 @@ class Submariner(object):
         for cluster in config.clusters:
             print(len(config.clusters))
             cluster_index = cluster.MULTICLUSTER["multicluster_index"]
-            if cluster_index != config.get_acm_index():
+            if cluster_index != config.get_active_acm_index():
                 join_cmd = (
                     f"join --kubeconfig {cluster.RUN['kubeconfig']} "
                     f"{config.ENV_DATA['submariner_info_file']} "

@@ -301,3 +301,4 @@ MULTICLUSTER:
   multicluster_index: 0
   acm_cluster: False
   primary_cluster: False
+  active_acm_cluster: False
