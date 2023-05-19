@@ -2111,9 +2111,9 @@ class MultiClusterDROperatorsDeploy(object):
         """
 
         # Create openshift-dr-system namespace
-        # run_cmd_multicluster(
-        #     f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
-        # )
+        run_cmd_multicluster(
+            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
+        )
         self.deploy_dr_multicluster_orchestrator()
         # create this only on ACM
         run_cmd(
@@ -2258,7 +2258,7 @@ class MultiClusterDROperatorsDeploy(object):
         )
         templating.dump_data_to_temp_yaml(dr_policy_hub_data, dr_policy_hub_yaml.name)
         self.dr_policy_name = dr_policy_hub_data["metadata"]["name"]
-        #run_cmd(f"oc create -f {dr_policy_hub_yaml.name}")
+        run_cmd(f"oc create -f {dr_policy_hub_yaml.name}")
         # Check the status of DRPolicy and wait for 'Reason' field to be set to 'Succeeded'
         dr_policy_resource = ocp.OCP(
             kind="DRPolicy",
@@ -2437,7 +2437,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
             config.switch_ctx(i)
-            #self.deploy_dr_multicluster_orchestrator()
+            self.deploy_dr_multicluster_orchestrator()
 
         # Deploy dr policy
         self.deploy_dr_policy()
@@ -2445,13 +2445,13 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
             config.switch_ctx(i)
-            #self.enable_cluster_backup()
+            self.enable_cluster_backup()
         # Configuring s3 bucket
-        #self.meta_obj.get_meta_access_secret_keys()
+        self.meta_obj.get_meta_access_secret_keys()
         # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
         self.meta_obj.bucket_name = self.build_bucket_name()
         # create s3 bucket
-        #self.create_s3_bucket()
+        self.create_s3_bucket()
         self.create_generic_credentials()
         # Reconfigure OADP on all ACM clusters
         old_ctx = config.cur_index
@@ -2466,15 +2466,18 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def create_backup_schedule(self):
         """
-        Create backupschedule resource
+        Create backupschedule resource only on active hub
 
         """
+        old_ctx = config.cur_index
+        config.switch_ctx(get_active_acm_index())
         backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
         backup_schedule_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="bkp", delete=False
         )
         templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
         run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+        config.switch_ctx(old_ctx)
 
     def enable_managed_serviceaccount(self):
         """
@@ -2486,8 +2489,6 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         """
         old_ctx = config.cur_index
         config.switch_ctx(get_active_acm_index)
-        import pdb
-        pdb.set_trace()
 
         multicluster_engine = ocp.OCP(
             kind="MultiClusterEngine",
@@ -2521,14 +2522,11 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         ] = self.meta_obj.bucket_name
         oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
         templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
-        try:
-            run_cmd(f"oc create -f {oadp_yaml.name}")
-        except:
-            pass
+        run_cmd(f"oc create -f {oadp_yaml.name}")
         # Validation
         self.validate_dpa()
 
-    @retry(CommandFailed, tries=10, delay=10 )
+    @retry(CommandFailed, tries=10, delay=10)
     def validate_dpa(self):
         """
         Validate
@@ -2571,9 +2569,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def create_generic_credentials(self):
         s3_cred_str = (
-            "[default]"
-            f"aws_access_key_id={self.meta_obj.access_key}"
-            f"aws_secret_access_key={self.meta_obj.secret_key}"
+            "[default]\n"
+            f"aws_access_key_id={self.meta_obj.access_key}\n"
+            f"aws_secret_access_key={self.meta_obj.secret_key}\n"
         )
         cred_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="s3_creds", delete=False
@@ -2598,8 +2596,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     raise
             try:
                 run_cmd(cmd)
-            except:
-                pass
+            except CommandFailed:
+                logger.error("Failed to create generic secrets cloud-credentials")
         config.switch_ctx(old_index)
 
     def create_s3_bucket(self):
