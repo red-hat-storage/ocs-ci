@@ -1,20 +1,22 @@
 import pytest
 import logging
 import boto3
-import time
+
+# import time
 
 from ocs_ci.ocs.bucket_utils import patch_replication_policy_to_bucket
 
 # from ocs_ci.ocs import constants
 
-# from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.rgw import RGW
-from ocs_ci.helpers.sc_utils import start_mcg_bi_replication
+
+# from ocs_ci.helpers.sc_utils import start_mcg_bi_replication
 
 # from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
 # from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -33,7 +35,7 @@ def setup_mcg_bucket_replication(request, bucket_factory):
 
     second_bucket_class_dict = {
         "interface": "OC",
-        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+        "backingstore_dict": {"rgw": [(1, None)]},
     }
     first_bucket = bucket_factory(bucketclass=first_bucket_class_dict)[0].name
     replication_policy = ("basic-replication-rule", first_bucket, None)
@@ -51,26 +53,7 @@ def setup_mcg_bucket_replication(request, bucket_factory):
 
 @pytest.fixture
 def setup_noobaa_caching(request, bucket_factory):
-    ttl = 300000  # 300 seconds
-    cache_bucketclass = {
-        "interface": "OC",
-        "namespace_policy_dict": {
-            "type": "Cache",
-            "ttl": ttl,
-            "namespacestore_dict": {
-                "rgw": [(1, "eu-central-1")],
-            },
-        },
-        "placement_policy": {
-            "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
-        },
-    }
-
-    cached_bucket_obj = bucket_factory(bucketclass=cache_bucketclass)[0]
-    cached_bucket = cached_bucket_obj.name
-    hub_bucket = cached_bucket_obj.bucketclass.namespacestores[0].uls_name
-
-    return cached_bucket, hub_bucket
+    pass
 
 
 class TestFITonSC:
@@ -147,28 +130,39 @@ class TestFITonSC:
         request.addfinalizer(teardown)
         return self.amq
 
-    def test_fit_on_sc(
-        self, setup_mcg_bucket_replication, setup_noobaa_caching, setup_kafka
-    ):
+    def test_fit_on_sc(self, start_noobaa_cache_io):
 
-        # MCG bucket replication on RGW bucket and any other cloud provider. Both uni-directional & bi-directional
-        first_bucket, second_bucket = setup_mcg_bucket_replication
-        logger.info(f"First bucket: {first_bucket} Second bucket: {second_bucket}")
+        # first_bucket_class_dict = {
+        #     "interface": "cli",
+        #     "backingstore_dict": {"rgw": [(1, None)]},
+        # }
+        #
+        # second_bucket_class_dict = {
+        #     "interface": "OC",
+        #     "backingstore_dict": {"rgw": [(1, None)]},
+        # }
+        #
+        # executor_1 = ThreadPoolExecutor(max_workers=1)
+        # thread_1 = executor_1.submit(start_mcg_bucket_replication,
+        # first_bucket_class_dict, second_bucket_class_dict, 5)
 
-        # Noobaa caching
-        cached_bucket, hub_bucket = setup_noobaa_caching
-        logger.info(f"Cached bucket: {cached_bucket} Hub bucket: {hub_bucket}")
+        ttl = 300000  # 300 seconds
+        cache_bucketclass = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Cache",
+                "ttl": ttl,
+                "namespacestore_dict": {
+                    "rgw": [(1, None)],
+                },
+            },
+            "placement_policy": {
+                "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
+            },
+        }
 
-        # MCG NSFS
-
-        # RGW kafka notification
-
-        start_mcg_bi_replication(first_bucket, second_bucket, duration=2)
-
-    def random_func(self):
-        time.sleep(30)
-        logger.info("Inside this function")
-        assert False, "Here failed!"
-
-    def test_sample(self):
-        start_mcg_bi_replication("test1", "test2", duration=2)
+        executor_2 = ThreadPoolExecutor(max_workers=1)
+        thread_2 = executor_2.submit(start_noobaa_cache_io, cache_bucketclass, 3)
+        #
+        result = thread_2.result()
+        logger.info(f"Result: {result}")
