@@ -543,7 +543,6 @@ class OCSUpgrade(object):
 
 
 def run_ocs_upgrade(
-    setup_ui_class,
     operation=None,
     *operation_args,
     **operation_kwargs,
@@ -552,7 +551,6 @@ def run_ocs_upgrade(
     Run upgrade procedure of OCS cluster
 
     Args:
-        setup_ui_class: login function on conftest file
         operation: (function): Function to run
         operation_args: (iterable): Function's arguments
         operation_kwargs: (map): Function's keyword arguments
@@ -581,7 +579,7 @@ def run_ocs_upgrade(
     # refresh the web console is pop-up is found
     semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
     if semantic_upgrade_version >= version.VERSION_4_9:
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         validation_ui_obj.refresh_web_console()
         validation_ui_obj.odf_console_plugin_check()
 
@@ -754,7 +752,7 @@ def run_ocs_upgrade(
     # Login to OCP console and enable console plugin if not already,
     # refresh the web console is pop-up is found
     if semantic_upgrade_version >= version.VERSION_4_9:
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         validation_ui_obj.refresh_web_console()
         validation_ui_obj.odf_console_plugin_check()
 
@@ -772,7 +770,7 @@ def run_ocs_upgrade(
     # Login to OCP console and run ODF dashboard validation check
     semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
     if semantic_upgrade_version >= version.VERSION_4_9:
-        validation_ui_obj = ValidationUI(setup_ui_class)
+        validation_ui_obj = ValidationUI()
         validation_ui_obj.validate_storage_cluster_ui()
         validation_ui_obj.refresh_web_console()
         validation_ui_obj.odf_overview_ui()

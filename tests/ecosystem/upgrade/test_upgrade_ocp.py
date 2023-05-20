@@ -105,7 +105,7 @@ class TestUpgradeOCP(ManageTest):
                 ocp_upgrade_version, True
             )
             if version_post_upgrade >= version.VERSION_4_9:
-                validation_ui_obj = ValidationUI(setup_ui_class)
+                validation_ui_obj = ValidationUI()
                 validation_ui_obj.refresh_web_console()
                 validation_ui_obj.odf_console_plugin_check()
 
@@ -143,7 +143,7 @@ class TestUpgradeOCP(ManageTest):
                 ocp_upgrade_version, True
             )
             if version_post_upgrade >= version.VERSION_4_9:
-                validation_ui_obj = ValidationUI(setup_ui_class)
+                validation_ui_obj = ValidationUI()
                 validation_ui_obj.refresh_web_console()
 
             # Upgrade OCP
@@ -210,7 +210,7 @@ class TestUpgradeOCP(ManageTest):
         # Login to OCP console and run ODF dashboard validation
         version_post_upgrade = version.get_semantic_version(ocp_upgrade_version, True)
         if version_post_upgrade >= version.VERSION_4_9:
-            validation_ui_obj = ValidationUI(setup_ui_class)
+            validation_ui_obj = ValidationUI()
             validation_ui_obj.refresh_web_console()
             validation_ui_obj.odf_overview_ui()
             validation_ui_obj.odf_storagesystems_ui()

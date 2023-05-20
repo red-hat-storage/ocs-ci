@@ -65,4 +65,4 @@ def test_upgrade(setup_ui_class):
 
     """
 
-    run_ocs_upgrade(setup_ui_class)
+    run_ocs_upgrade()
