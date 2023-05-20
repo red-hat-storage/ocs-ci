@@ -11,6 +11,10 @@ from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 from ocs_ci.framework import config
 
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_external_cluster_client,
+)
 from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
@@ -535,6 +539,16 @@ def ocs_install_verification(
             not ceph_csi_users
         ), f"CSI users {ceph_csi_users} not created in external cluster"
         log.debug("All CSI users exists and have expected caps")
+
+        if config.ENV_DATA.get("rgw-realm"):
+            log.info("Verify user is created in realm")
+            object_store_user = defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER
+            realm = config.ENV_DATA.get("rgw-realm")
+            host, user, password, ssh_key = get_external_cluster_client()
+            external_cluster = ExternalCluster(host, user, password, ssh_key)
+            assert external_cluster.is_object_store_user_exists(
+                user=object_store_user, realm=realm
+            ), f"{object_store_user} doesn't exist in realm {realm}"
 
     # Verify CSI snapshotter sidecar container is not present
     # if the OCS version is < 4.6

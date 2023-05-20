@@ -284,15 +284,21 @@ class ExternalCluster(object):
         config.EXTERNAL_MODE["access_key_rgw-admin-ops-user"] = access_key
         config.EXTERNAL_MODE["secret_key_rgw-admin-ops-user"] = secret_key
 
-    def is_object_store_user_exists(self, user):
+    def is_object_store_user_exists(self, user, realm=None):
         """
         Checks whether user exists in external cluster
+
+        Args:
+            user (str): Object store user name
+            realm (str): Name of realm to check
 
         Returns:
             bool: True if user exists, otherwise false
 
         """
         cmd = "radosgw-admin user list"
+        if realm:
+            cmd = f"{cmd} --rgw-realm {realm}"
         _, out, _ = self.rhcs_conn.exec_cmd(cmd)
         objectstore_user_list = json.loads(out)
         if user in objectstore_user_list:
