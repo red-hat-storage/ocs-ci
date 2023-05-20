@@ -181,7 +181,7 @@ class ValidationUI(PageNavigator):
         )
         if refresh_web_console_popup:
             logger.info(
-                "Refresh web console option is now available, click on it to see the changes"
+                "Refresh web console option is now available, click on it to see the console changes"
             )
             self.do_click(
                 self.validation_loc["refresh-web-console"],
