@@ -286,15 +286,20 @@ class BucketsUI(PageNavigator):
             resource (str): resource name to delete. It may be Object Bucket Claim name both for OBC or OB,
                 and it may be Object Bucket Name. Object Bucket name consists from Object Bucket Claim and prefix
         """
+        logger.info(f"Find resource by name '{resource}' using search-bar")
+        self.page_has_loaded()
+        self.do_send_keys(self.generic_locators["search_resource_field"], resource)
+
         if delete_via == "Actions":
             logger.info(f"Go to {resource} Page")
             # delete specific resource by its dynamic name. Works both for OBC and OB
             self.do_click(
-                (f"//td[@id='name']//a[contains(text(),'{resource}')]", By.XPATH)
+                (f"//td[@id='name']//a[contains(text(),'{resource}')]", By.XPATH),
+                enable_screenshot=True,
             )
 
             logger.info(f"Click on '{delete_via}'")
-            self.do_click(self.generic_locators["actions"])
+            self.do_click(self.generic_locators["actions"], enable_screenshot=True)
         else:
             logger.info(f"Click on '{delete_via}'")
             # delete specific resource by its dynamic name. Works both for OBC and OB
@@ -303,16 +308,17 @@ class BucketsUI(PageNavigator):
                     f"//td[@id='name']//a[contains(text(), '{resource}')]"
                     "/../../..//button[@aria-label='Actions']",
                     By.XPATH,
-                )
+                ),
+                enable_screenshot=True,
             )
 
         logger.info(f"Click on 'Delete {resource}'")
         # works both for OBC and OB, both from three_dots icon and Actions dropdown list
-        self.do_click(self.obc_loc["delete_resource"])
+        self.do_click(self.obc_loc["delete_resource"], enable_screenshot=True)
 
         logger.info(f"Confirm {resource} Deletion")
         # same PopUp both for OBC and OB
-        self.do_click(self.generic_locators["confirm_action"])
+        self.do_click(self.generic_locators["confirm_action"], enable_screenshot=True)
 
 
 class ObcUI(BucketsUI):
@@ -335,6 +341,8 @@ class ObcUI(BucketsUI):
             bucketclass (str): The bucketclass to be used by the OBC
 
         """
+        # create_obc_ui procedure should start from home page even if prev test failed in the middle
+        self.navigate_OCP_home_page()
         self.navigate_object_bucket_claims_page()
 
         self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
