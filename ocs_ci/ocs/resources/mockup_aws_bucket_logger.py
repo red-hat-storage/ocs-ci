@@ -12,16 +12,23 @@ class MockupAwsBucketLogger:
     directly to a bucket on AWS in the same region.
     """
 
-    def __init__(self, awscli_pod, mcg_bucket, aws_logs_bucket) -> None:
+    def __init__(self, awscli_pod, cloud_uls_factory, region) -> None:
         """
         Args:
             awscli_pod(Pod): A pod running the AWS CLI
-            mcg_bucket(TODO): An MCG bucket that is backed by AWS ULS
-            aws_logs_bucket(TODO): AWS logs-bucket in the same region as mcg_bucket
+            cloud_uls_factory: TODO
         """
+
         self.awscli_pod = awscli_pod
-        self.mcg_bucket = mcg_bucket
-        self.aws_logs_bucket = aws_logs_bucket
+
+        logger.info("Creating the AWS logs bucket")
+        self.logs_bucket_name = self._create_logs_bucket(cloud_uls_factory, region)
+
+    def _create_logs_bucket(self, cloud_uls_factory, region) -> str:
+        uls_dict = cloud_uls_factory({"aws": [(1, region)]})
+        aws_buckets_set = uls_dict["aws"]
+        bucket_name = next(iter(aws_buckets_set))
+        return bucket_name
 
     def upload_from_dir_and_log(files_dir):
         """
