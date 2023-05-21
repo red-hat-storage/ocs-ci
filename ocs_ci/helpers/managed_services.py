@@ -549,6 +549,8 @@ def verify_faas_provider_storagecluster(sc_data):
     5. annotations:
         uninstall.ocs.openshift.io/cleanup-policy: delete
         uninstall.ocs.openshift.io/mode: graceful
+    6. Check the storagecluster resources limits and requests are valid
+    7. Verify the Faas provider storagecluster storages
 
     Args:
         sc_data (dict): storagecluster data dictionary
@@ -627,6 +629,20 @@ def verify_client_operator_security():
 
 
 def verify_faas_provider_storagecluster_storages(sc_data):
+    """
+    Verify the Faas provider storagecluster storages
+
+    1. Check the storagecluster backingStorageClasses.
+    2. Check that the default ocs storage class is exist in the backingStorageClasses.
+    3. Check that the type of the default ocs storage class is "gp3".
+    4. Check the defaultStorageProfile value
+    5. Check that the default storage profile is found in the StorageProfiles.
+    6. Check that the values in the storage profile are correct
+
+    Args:
+        sc_data (dict): The storagecluster data
+
+    """
     # Check the backingStorageClasses
     log.info(f"sc backingStorageClasses = {sc_data['spec']['backingStorageClasses']}")
     backing_storage_classes = sc_data["spec"]["backingStorageClasses"]
