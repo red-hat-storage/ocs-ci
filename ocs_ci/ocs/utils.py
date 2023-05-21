@@ -747,10 +747,10 @@ def get_namespce_name_by_pattern(
     namespace_list = []
     for namespace_name in namespace_names:
         if filter is not None and re.search(filter, namespace_name):
-            log.info(f"Pod name filtered {namespace_name}")
+            log.info(f"Namespace name filtered {namespace_name}")
         elif re.search(pattern, namespace_name):
             (_, name) = namespace_name.split("/")
-            log.info(f"pod name match found appending {namespace_name}")
+            log.info(f"namespace name match found appending {namespace_name}")
             namespace_list.append(name)
     return namespace_list
 
@@ -960,32 +960,27 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
-        export_mg_pods_logs(log_dir_path=log_dir_path, mg_output=mg_output)
+        export_mg_pods_logs(log_dir_path=log_dir_path)
 
     except TimeoutExpired as ex:
         log.error(
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
-        export_mg_pods_logs(log_dir_path=log_dir_path, mg_output=mg_output)
+        export_mg_pods_logs(log_dir_path=log_dir_path)
     return mg_output
 
 
-def export_mg_pods_logs(log_dir_path, mg_output=None):
+def export_mg_pods_logs(log_dir_path):
     """
     Export must gather pods logs
 
     Args:
-        mg_output (str): the output of "oc adm must-gather --image=quay.io/rhceph-dev/ocs-must-gather:tag" command
         log_dir_path (str): the path of copying the logs
 
     Returns:
 
     """
-    file_mg_cmd_output = os.path.join(log_dir_path, "mg_cmd_output.log")
-    with open(file_mg_cmd_output, "w") as df:
-        df.write(mg_output)
-    log.error(f"Print must gather command output:{mg_output}")
     get_logs_ocp_mg_pods(log_dir_path)
     get_helper_pods_output(log_dir_path)
 
