@@ -36,12 +36,11 @@ class TestUserInterfaceValidation(object):
     @black_squad
     @bugzilla("2155743")
     @polarion_id("OCS-2575")
-    @polarion_id("OCS-4876")
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui_class):
         """
         Validate User Interface of OCS/ODF dashboard
-        Verify GET requests initiated by kube-probe on odf-console pod
+        Verify GET requests initiated by kube-probe on odf-console pod [cover bz-2155743]
 
 
         Args:
