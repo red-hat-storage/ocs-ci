@@ -4,7 +4,7 @@ import pytest
 from time import sleep
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.testlib import tier3
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -18,7 +18,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version
 logger = logging.getLogger(__name__)
 
 
-@tier1
+@tier3
 @skipif_ocs_version("<4.13")
 class TestNegativeFailoverRelocate:
     """
@@ -31,9 +31,7 @@ class TestNegativeFailoverRelocate:
     def test_failover_to_same_cluster(
         self,
         setup_acm_ui,
-        nodes_multicluster,
         dr_workload,
-        node_restart_teardown,
     ):
         """
         Tests to verify if application failover to same cluster where it's running is blocked
@@ -73,10 +71,8 @@ class TestNegativeFailoverRelocate:
                 failover_or_preferred_cluster=primary_cluster_name,
                 move_workloads_to_same_cluster=True,
             )
-            if result:
-                logger.info("Test passed!")
-            else:
-                logger.info("Test failed!")
+            assert result, "Failover negative scenario test via ACM UI failed"
+            logger.info("Failover negative scenario test via ACM UI passed")
 
     @pytest.mark.polarion_id("OCS-4747")
     def test_relocate_to_same_cluster(self, setup_acm_ui, dr_workload):
@@ -115,7 +111,5 @@ class TestNegativeFailoverRelocate:
                 action=constants.ACTION_RELOCATE,
                 move_workloads_to_same_cluster=True,
             )
-            if result:
-                logger.info("Test passed!")
-            else:
-                logger.info("Test failed!")
+            assert result, "Relocate negative scenario test via ACM UI failed"
+            logger.info("Relocate negative scenario test via ACM UI passed")
