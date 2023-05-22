@@ -44,7 +44,7 @@ class TestSequentialFailover:
         when primary cluster is Up/Down
 
         """
-        workloads = dr_workload(num_of_subscription=3)
+        workloads = dr_workload(num_of_subscription=5)
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             workloads[0].workload_namespace
