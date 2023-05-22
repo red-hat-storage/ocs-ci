@@ -229,9 +229,9 @@ class TestSelinuxrelabel(E2ETest):
         oc_cmd = ocp.OCP(namespace=self.project_namespace)
 
         # Check SeLinux Relabeling
-        cmd1 = f"crictl inspect $(crictl ps --name fedora -q)"
+        cmd1 = "crictl inspect $(crictl ps --name fedora -q)"
         output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
-        key = f'"selinuxRelabel": false'
+        key = '"selinuxRelabel": false'
         assert key in output
         log.info(f"{key} is present in inspect logs of node")
         log.info(
