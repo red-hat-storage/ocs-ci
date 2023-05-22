@@ -258,6 +258,18 @@ def failover_relocate_ui(
                 ),
                 enable_screenshot=True,
             )
+        if not move_workloads_to_same_cluster:
+            log.info("Click on subscription dropdown")
+            acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
+            clear_selection = acm_obj.find_an_element_by_xpath(
+                "//button[@class='pf-c-button pf-m-plain pf-c-select__toggle-clear']"
+            )
+            aria_label = clear_selection.get_attribute("aria-label")
+            if aria_label == "Clear all":
+                log.info("Subscription is already selected")
+            else:
+                log.info("Subscription is not selected, click on it to select")
+                acm_obj.do_click(acm_loc["select-subscription"], enable_screenshot=True)
         log.info("Check operation readiness")
         if action == constants.ACTION_FAILOVER:
             if move_workloads_to_same_cluster:
@@ -302,15 +314,6 @@ def failover_relocate_ui(
                 )
                 acm_obj.take_screenshot()
                 return True
-        log.info("Click on subscription dropdown")
-        acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
-        # TODO: Commented below lines due to Regression BZ2208637
-        # log.info("Check peer readiness")
-        # assert acm_obj.wait_until_expected_text_is_found(
-        #     locator=acm_loc["peer-ready"],
-        #     expected_text=constants.PEER_READY,
-        # ), f"Peer is not ready, can not initiate {action}"
-        acm_obj.take_screenshot()
         if aria_disabled == "true":
             log.error("Initiate button in not enabled to failover/relocate")
             return False

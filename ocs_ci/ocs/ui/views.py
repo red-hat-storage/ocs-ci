@@ -750,6 +750,7 @@ acm_configuration_4_12 = {
     "failover-preferred-cluster-name": ("//button[text()='{}']", By.XPATH),
     "operation-readiness": ("//*[contains(text(), 'Ready')]", By.XPATH),
     "subscription-dropdown": (".pf-c-select__toggle.pf-m-typeahead", By.CSS_SELECTOR),
+    "select-subscription": ("//input[@class='pf-c-check__input']", By.XPATH),
     "peer-ready": ("//i[normalize-space()='Peer ready']", By.XPATH),
     "initiate-action": ("#modal-intiate-action", By.CSS_SELECTOR),
     "close-action-modal": ("//button[normalize-space()='Close']", By.XPATH),
