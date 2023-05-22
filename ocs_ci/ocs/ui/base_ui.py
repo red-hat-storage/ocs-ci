@@ -783,6 +783,7 @@ class PageNavigator(BaseUI):
         self.do_click(
             locator=self.page_nav["storageclasses_page"], enable_screenshot=False
         )
+        self.page_has_loaded(retries=15, sleep_time=2)
 
     def navigate_volumesnapshots_page(self):
         """
@@ -882,8 +883,18 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to block pools page")
-        self.navigate_to_ocs_operator_page()
-        self.do_click(locator=self.page_nav["block_pool_link"])
+        self.nav_odf_default_page()
+        logger.info("Navigate to Data Foundation - Storage Systems")
+        self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
+        self.page_has_loaded(retries=15, sleep_time=2)
+        self.do_click(
+            self.generic_locators["ocs-storagecluster-storagesystem"],
+            enable_screenshot=False,
+        )
+        self.page_has_loaded(retries=15, sleep_time=2)
+        self.do_click(self.generic_locators["block_pool_tab"], enable_screenshot=False)
+        self.page_has_loaded(retries=15, sleep_time=2)
+        logger.info("Now at Block pool page")
 
     def wait_for_namespace_selection(self, project_name):
         """

@@ -228,6 +228,11 @@ generic_locators = {
     "check_first_row_checkbox": ('input[name="checkrow0"]', By.CSS_SELECTOR),
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
+    "ocs-storagecluster-storagesystem": (
+        '//a[text()="ocs-storagecluster-storagesystem"]',
+        By.XPATH,
+    ),
+    "block_pool_tab": ('//span[normalize-space()="BlockPools"]', By.XPATH),
 }
 
 ocs_operator_locators = {
@@ -832,6 +837,16 @@ block_pool_4_12 = {
         By.XPATH,
     ),
 }
+block_pool_4_13 = {
+    "actions_inside_pool": (
+        "//span[text()='Actions']/..",
+        By.XPATH,
+    ),
+    "delete_pool_inside_pool": (
+        "//a[text()='Delete BlockPool']",
+        By.XPATH,
+    ),
+}
 
 block_pool = {
     "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
@@ -1254,6 +1269,8 @@ locators = {
             **acm_configuration_4_12,
             **acm_configuration_4_13,
         },
+        "block_pool": {**block_pool, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
     },
     "4.12": {
         "login": {**login, **login_4_11},
