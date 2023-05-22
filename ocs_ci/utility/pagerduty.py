@@ -1,11 +1,13 @@
+import base64
 import logging
 import os
 import requests
 import tempfile
 import time
+import yaml
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import managedservice
+from ocs_ci.ocs import constants, managedservice
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import exec_cmd
 
@@ -43,6 +45,39 @@ def set_pagerduty_integration_secret(integration_key):
         secret_file.flush()
         exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
     logger.info("New integration key was set.")
+
+
+def set_pagerduty_faas_secret(service_endpoint, service_key):
+    """
+    Update managed-fusion-agent-config secret. This is valid only on Fusion aaS platform.
+    managed-fusion-agent-config secret is expected to be present prior to the update.
+
+    Args:
+        service_endpoint (str): Service endpoint for the service created for the cluster
+        service_key (str): Key for the service created for the cluster
+
+    """
+    logger.info("Setting up PagerDuty")
+    kubeconfig = os.getenv("KUBECONFIG")
+    ns_name = config.ENV_DATA["service_namespace"]
+    pd_configuration = (
+        f"    sopEndpoint: {service_endpoint}\n"
+        f"    serviceKey: {service_key}"
+    )
+    pd_configuration = base64.b64encode(pd_configuration)
+    cmd = f"oc get secret {constants.FUSION_AGENT_CONFIG_SECRET} -n {ns_name} -o yaml"
+    secret_data = exec_cmd(cmd).stdout
+    secret_data = yaml.loads(secret_data)
+    secret_data["pager_duty_config"] = pd_configuration
+    secret_data = yaml.dump(secret_data)
+
+    with tempfile.NamedTemporaryFile(
+        prefix=f"{constants.FUSION_AGENT_CONFIG_SECRET}_"
+    ) as secret_file:
+        secret_file.write(secret_data)
+        secret_file.flush()
+        exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
+    logger.info("New PagerDuty service was set.")
 
 
 def check_incident_list(summary, urgency, incidents, status="triggered"):
