@@ -1541,7 +1541,11 @@ def environment_checker(request):
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
     # app labels of resources to be excluded for leftover check
-    exclude_labels = [constants.must_gather_pod_label, constants.S3CLI_APP_LABEL]
+    exclude_labels = [
+        constants.must_gather_pod_label,
+        constants.S3CLI_APP_LABEL,
+        constants.MUST_GATHER_HELPER_LABEL,
+    ]
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return
