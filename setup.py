@@ -23,7 +23,7 @@ setup(
         # More https://stackoverflow.com/questions/71443345/gevent-cant-be-installed-on-m1-mac-using-poetry
         "gevent==21.12.0",
         "reportportal-client==3.2.3",
-        "requests==2.23.0",
+        "requests==2.31.0",
         "paramiko==2.11.0",
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
