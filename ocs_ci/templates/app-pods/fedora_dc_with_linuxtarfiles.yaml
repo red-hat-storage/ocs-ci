@@ -1,0 +1,45 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: fedorapod
+  labels:
+    app: fedorapod
+spec:
+  template:
+    metadata:
+      labels:
+        name: fedorapod
+    spec:
+      securityContext:
+        fsGroup: 2000
+      serviceAccountName: admin
+      restartPolicy: Always
+      volumes:
+      - name: fedora-vol
+        persistentVolumeClaim:
+          claimName: tet-2
+      containers:
+      - name: fedora
+        image: quay.io/ocsci/perf:latest
+        resources:
+          limits:
+            memory: "2048Mi"
+            cpu: "150m"
+        command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /mnt
+          name: fedora-vol
+        livenessProbe:
+          exec:
+            command:
+            - 'sh'
+            - '-ec'
+            - 'df /mnt'
+          initialDelaySeconds: 3
+          timeoutSeconds: 3
+
+  replicas: 1
+  triggers:
+    - type: ConfigChange
+  paused: false
