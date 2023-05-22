@@ -68,7 +68,7 @@ class TestFailover:
         pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
 
         """
-        if config.RUN.get("rdr_relocate_via_ui"):
+        if config.RUN.get("rdr_failover_via_ui"):
             ocs_version = version.get_semantic_ocs_version_from_config()
             if ocs_version <= version.VERSION_4_12:
                 logger.error("ODF/ACM version isn't supported for Failover operation")
@@ -160,7 +160,7 @@ class TestFailover:
             replaying_images=rdr_workload.workload_pvc_count
         )
 
-        if config.RUN.get("rdr_relocate_via_ui"):
+        if config.RUN.get("rdr_failover_via_ui"):
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(acm_obj)
 

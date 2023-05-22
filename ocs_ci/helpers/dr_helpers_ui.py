@@ -189,6 +189,7 @@ def failover_relocate_ui(
     failover_or_preferred_cluster=None,
     action=constants.ACTION_FAILOVER,
     timeout=120,
+    move_workloads_to_same_cluster=False,
 ):
     """
     Function to perform Failover/Relocate operations via ACM UI
@@ -196,12 +197,13 @@ def failover_relocate_ui(
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
         workload_to_move (str): Name of running workloads on which action to be taken
-        policy_name (str): Name of the DR policy applied to the running workloads
+        policy_name (str): Name of the DR policy applied to the running workload
         failover_or_preferred_cluster (str): Name of the failover cluster or preferred cluster to which workloads
                                             will be moved
         action (str): action could be "Failover" or "Relocate", "Failover" is set to default
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
-
+        move_workloads_to_same_cluster (bool): Bool condition to test negative failover/relocate scenarios to move
+                                            running workloads to same cluster
     Returns:
             bool: True if the action is triggered, raises Exception if any of the mandatory argument is not provided
 
@@ -211,13 +213,12 @@ def failover_relocate_ui(
         acm_loc = locators[ocp_version]["acm_page"]
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         acm_obj.navigate_applications_page()
-        workload_check = acm_obj.wait_until_expected_text_is_found(
-            format_locator(acm_loc["workload-name"], workload_to_move),
-            expected_text=workload_to_move,
-            timeout=timeout,
-        )
-        assert workload_check, f"Workload {workload_to_move} not found on ACM UI"
-        log.info(f"Workload {workload_to_move} found on ACM UI")
+        log.info("Click on search bar")
+        acm_obj.do_click(acm_loc["search-bar"])
+        log.info("Clear existing text from search bar if any")
+        acm_obj.do_clear(acm_loc["search-bar"])
+        log.info("Enter the workload to be searched")
+        acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_move)
         log.info("Click on kebab menu option")
         acm_obj.do_click(acm_loc["kebab-action"], enable_screenshot=True)
         if action == constants.ACTION_FAILOVER:
@@ -239,43 +240,91 @@ def failover_relocate_ui(
         )
         log.info("Click on target cluster dropdown")
         acm_obj.do_click(acm_loc["target-cluster-dropdown"], enable_screenshot=True)
-        log.info("Select target cluster on ACM UI")
-        acm_obj.do_click(
-            format_locator(
-                acm_loc["failover-preferred-cluster-name"],
-                failover_or_preferred_cluster,
-            ),
-            enable_screenshot=True,
-        )
+        if move_workloads_to_same_cluster:
+            log.info("Select target cluster same as current primary cluster on ACM UI")
+            acm_obj.do_click(
+                format_locator(
+                    acm_loc["failover-preferred-cluster-name"],
+                    failover_or_preferred_cluster,
+                ),
+                enable_screenshot=True,
+            )
+        else:
+            log.info("Select target cluster on ACM UI")
+            acm_obj.do_click(
+                format_locator(
+                    acm_loc["failover-preferred-cluster-name"],
+                    failover_or_preferred_cluster,
+                ),
+                enable_screenshot=True,
+            )
         log.info("Check operation readiness")
         if action == constants.ACTION_FAILOVER:
-            assert acm_obj.wait_until_expected_text_is_found(
-                locator=acm_loc["operation-readiness"],
-                expected_text=constants.STATUS_READY,
-            ), "Failover Operation readiness check failed"
+            if move_workloads_to_same_cluster:
+                assert not acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                    timeout=30,
+                ), "Failover Operation readiness check failed"
+                log.info("Failover readiness is False as expected")
+            else:
+                assert acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                ), "Failover Operation readiness check failed"
         else:
-            assert acm_obj.wait_until_expected_text_is_found(
-                locator=acm_loc["operation-readiness"],
-                expected_text=constants.STATUS_READY,
-            ), "Relocate Operation readiness check failed"
+            if move_workloads_to_same_cluster:
+                assert not acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                    timeout=30,
+                ), "Relocate Operation readiness check failed"
+                log.info("Relocate readiness is False as expected")
+            else:
+                assert acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["operation-readiness"],
+                    expected_text=constants.STATUS_READY,
+                ), "Relocate Operation readiness check failed"
+        initiate_btn = acm_obj.find_an_element_by_xpath(
+            "//button[@id='modal-intiate-action']"
+        )
+        aria_disabled = initiate_btn.get_attribute("aria-disabled")
+        if move_workloads_to_same_cluster:
+            if aria_disabled == "false":
+                log.error(
+                    "Initiate button in enabled to failover/relocate on the same cluster"
+                )
+                acm_obj.take_screenshot()
+                return False
+            else:
+                log.info(
+                    "As expected, initiate button is disabled to failover/relocate on the same cluster"
+                )
+                acm_obj.take_screenshot()
+                return True
         log.info("Click on subscription dropdown")
         acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
-        log.info("Check peer readiness")
-        assert acm_obj.wait_until_expected_text_is_found(
-            locator=acm_loc["peer-ready"],
-            expected_text=constants.PEER_READY,
-        ), f"Peer is not ready, can not initiate {action}"
+        # TODO: Commented below lines due to Regression BZ2208637
+        # log.info("Check peer readiness")
+        # assert acm_obj.wait_until_expected_text_is_found(
+        #     locator=acm_loc["peer-ready"],
+        #     expected_text=constants.PEER_READY,
+        # ), f"Peer is not ready, can not initiate {action}"
         acm_obj.take_screenshot()
-        log.info("Click on Initiate button to failover/relocate")
-        acm_obj.do_click(acm_loc["initiate-action"], enable_screenshot=True)
-        if action == constants.ACTION_FAILOVER:
-            log.info("Failover trigerred from ACM UI")
+        if aria_disabled == "true":
+            log.error("Initiate button in not enabled to failover/relocate")
+            return False
         else:
-            log.info("Relocate trigerred from ACM UI")
-        acm_obj.take_screenshot()
-        log.info("Close the action modal")
-        acm_obj.do_click(acm_loc["close-action-modal"], enable_screenshot=True)
-        return True
+            log.info("Click on Initiate button to failover/relocate")
+            acm_obj.do_click(acm_loc["initiate-action"], enable_screenshot=True)
+            if action == constants.ACTION_FAILOVER:
+                log.info("Failover trigerred from ACM UI")
+            else:
+                log.info("Relocate trigerred from ACM UI")
+            acm_obj.take_screenshot()
+            log.info("Close the action modal")
+            acm_obj.do_click(acm_loc["close-action-modal"], enable_screenshot=True)
+            return True
     else:
         log.error(
             "Incorrect or missing params to perform Failover/Relocate operation from ACM UI"
