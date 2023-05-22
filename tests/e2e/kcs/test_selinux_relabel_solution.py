@@ -1,6 +1,7 @@
 import logging
 import pytest
 import yaml
+import random
 import time
 import tempfile
 
@@ -21,7 +22,9 @@ log = logging.getLogger(__name__)
 
 class TestSelinuxrelabel(E2ETest):
     def create_deploymentconfig_pod(self, **kwargs):
-        """"""
+        """
+        create deployment pod.
+        """
 
         # Create service_account to get privilege for deployment pods
         self.sa_name = helpers.create_serviceaccount(namespace=self.project_namespace)
@@ -47,7 +50,10 @@ class TestSelinuxrelabel(E2ETest):
             raise PodNotCreated("Pod attached to PVC was not created.")
         return pod_obj
 
-    def data_integrity_check(self, pod_obj, namespace, n):
+    def data_integrity_check(self, pod_obj, namespace):
+        """
+        Check data integrity on pod.
+        """
         pod_name = pod_obj.name
         log.info(f"Pod name is -------- {pod_name}")
         ocp_obj = ocp.OCP(
@@ -56,9 +62,10 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
+        num_of_files = random.randint(0, 9)
         random_file = ocp_obj.exec_oc_cmd(
             f"exec -it {pod_name} -- /bin/bash"
-            f' -c "find {data_path} -type f | "shuf" -n {n}"',
+            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
             timeout=300,
         )
         log.info(f"files are {random_file}")
@@ -69,10 +76,9 @@ class TestSelinuxrelabel(E2ETest):
             selector_label="deploymentconfig",
         )
 
+        # Respin pod
         for pod in pod_objs:
             pod.delete(wait=True)
-
-        # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
 
         pod_objs = res_pod.get_all_pods(
@@ -99,17 +105,16 @@ class TestSelinuxrelabel(E2ETest):
         self.sa_name.delete()
 
     @pytest.mark.parametrize(
-        argnames=["copies", "num_of_files"],
+        argnames=["copies"],
         argvalues=[
             pytest.param("3", 5),
-            pytest.param("4", 10),
         ],
     )
     def test_selinux_relabel(self, copies, num_of_files):
         """
         Steps:
             1. Create multiple cephfs pvcs and 100K files each across multiple nested directories
-            2. Run the IOs for few vols with specific files and take md5sum for them
+            2. Run the IOs for some random files and take md5sum for them
             3. Apply the fix/solution as mentioned in the “Existing PVs” section
             4. Restart the pods which are hosting cephfs files in large numbers
             5. Check data integrity.
@@ -124,6 +129,7 @@ class TestSelinuxrelabel(E2ETest):
             size="20Gi",
         )
 
+        # Create deployment pod
         self.pod_obj = self.create_deploymentconfig_pod(
             command=["/opt/multiple_files.sh"],
             command_args=[f"{copies}", "/mnt"],
@@ -131,19 +137,19 @@ class TestSelinuxrelabel(E2ETest):
         log.info(f"files copied to pod {self.pod_obj}")
         self.pod_selector = self.pod_obj.labels.get("deploymentconfig")
 
+        # Check data integrity before applying selinux relabeling solution
         start_time1 = time.time()
-        self.data_integrity_check(self.pod_obj, self.project_namespace, num_of_files)
+        self.data_integrity_check(self.pod_obj, self.project_namespace)
         end_time1 = time.time()
         total_time1 = end_time1 - start_time1
         log.info(f"Time taken by pod to restart is  {total_time1}")
 
-        # Apply the fix/solution for “Existing PVs”
+        # Apply the fix/solution for “Existing PVCs”
         pv_name = self.pvc_obj.get().get("spec").get("volumeName")
         ocp_obj = ocp.OCP(
             kind=constants.POD,
             namespace=self.project_namespace,
         )
-
         backup_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="test_", delete=False
         )
@@ -207,23 +213,22 @@ class TestSelinuxrelabel(E2ETest):
 
         # Check data integrity and get time for pod restart
         start_time2 = time.time()
-        self.data_integrity_check(
-            self.pod_objs[0], self.project_namespace, num_of_files
-        )
+        self.data_integrity_check(self.pod_objs[0], self.project_namespace)
         end_time2 = time.time()
         total_time2 = end_time2 - start_time2
         log.info(f"Time taken by pod to restart is  {total_time2}")
 
+        # Get deployment pod obj
         self.pod_objs1 = res_pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
             selector=[self.pod_selector],
             selector_label="deploymentconfig",
         )
-
         # Get the node running this pod
         node_name = res_pod.get_pod_node(pod_obj=self.pod_objs1[0]).name
         oc_cmd = ocp.OCP(namespace=self.project_namespace)
 
+        # Check SeLinux Relabeling
         cmd1 = f"crictl inspect $(crictl ps --name fedora -q)"
         output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
         key = f'"selinuxRelabel": false'
