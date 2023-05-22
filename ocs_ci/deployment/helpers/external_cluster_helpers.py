@@ -107,6 +107,15 @@ class ExternalCluster(object):
             config.ENV_DATA["restricted-auth-permission"] = True
             config.ENV_DATA["alias_rbd_name"] = alias_rbd_name
 
+        if config.ENV_DATA.get("rgw-realm"):
+            rgw_realm = config.ENV_DATA["rgw-realm"]
+            rgw_zonegroup = config.ENV_DATA["rgw-zonegroup"]
+            rgw_zone = config.ENV_DATA["rgw-zone"]
+            params = (
+                f"{params} --rgw-realm-name {rgw_realm} --rgw-zonegroup-name {rgw_zonegroup} "
+                f"--rgw-zone-name {rgw_zone}"
+            )
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
@@ -275,15 +284,21 @@ class ExternalCluster(object):
         config.EXTERNAL_MODE["access_key_rgw-admin-ops-user"] = access_key
         config.EXTERNAL_MODE["secret_key_rgw-admin-ops-user"] = secret_key
 
-    def is_object_store_user_exists(self, user):
+    def is_object_store_user_exists(self, user, realm=None):
         """
         Checks whether user exists in external cluster
+
+        Args:
+            user (str): Object store user name
+            realm (str): Name of realm to check
 
         Returns:
             bool: True if user exists, otherwise false
 
         """
         cmd = "radosgw-admin user list"
+        if realm:
+            cmd = f"{cmd} --rgw-realm {realm}"
         _, out, _ = self.rhcs_conn.exec_cmd(cmd)
         objectstore_user_list = json.loads(out)
         if user in objectstore_user_list:
