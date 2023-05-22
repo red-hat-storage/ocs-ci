@@ -236,7 +236,7 @@ class ExternalCluster(object):
         # run the exporter script on external RHCS cluster
         cmd = f"{python_version} {script_path} {params}"
         retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
-        if retcode != 0:
+        if retcode != 0 or err != "":
             logger.error(
                 f"Failed to run {script_path} with parameters {params}. Error: {err}"
             )
