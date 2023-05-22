@@ -106,14 +106,31 @@ order_ocs_upgrade = pytest.mark.run(order=ORDER_OCS_UPGRADE)
 order_post_upgrade = pytest.mark.run(order=ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.run(order=ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.run(order=ORDER_AFTER_OCS_UPGRADE)
-ocp_upgrade = compose(pytest.mark.ocp_upgrade, order_ocp_upgrade)
-ocs_upgrade = compose(pytest.mark.ocs_upgrade, order_ocs_upgrade)
-pre_upgrade = compose(pytest.mark.pre_upgrade, order_pre_upgrade)
-pre_ocp_upgrade = compose(pytest.mark.pre_ocp_upgrade, order_pre_ocp_upgrade)
-pre_ocs_upgrade = compose(pytest.mark.pre_ocs_upgrade, order_pre_ocs_upgrade)
-post_upgrade = compose(pytest.mark.post_upgrade, order_post_upgrade)
-post_ocp_upgrade = compose(pytest.mark.post_ocp_upgrade, order_post_ocp_upgrade)
-post_ocs_upgrade = compose(pytest.mark.post_ocs_upgrade, order_post_ocs_upgrade)
+ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
+ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
+pre_ocp_upgrade = compose(
+    order_pre_ocp_upgrade,
+    pytest.mark.pre_ocp_upgrade,
+)
+pre_ocs_upgrade = compose(
+    order_pre_ocs_upgrade,
+    pytest.mark.pre_ocs_upgrade,
+)
+post_upgrade = compose(order_post_upgrade, pytest.mark.post_upgrade)
+post_ocp_upgrade = compose(order_post_ocp_upgrade, pytest.mark.post_ocp_upgrade)
+post_ocs_upgrade = compose(order_post_ocs_upgrade, pytest.mark.post_ocs_upgrade)
+
+upgrade_marks = [
+    ocp_upgrade,
+    ocs_upgrade,
+    pre_upgrade,
+    pre_ocp_upgrade,
+    pre_ocs_upgrade,
+    post_upgrade,
+    post_ocp_upgrade,
+    post_ocs_upgrade,
+]
 
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers
