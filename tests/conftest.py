@@ -24,6 +24,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     tier_marks,
     ignore_leftover_label,
+    upgrade_marks,
 )
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
@@ -1406,8 +1407,26 @@ def tier_marks_name():
     return tier_marks_name
 
 
+@pytest.fixture(scope="session")
+def upgrade_marks_name():
+    """
+    Gets the upgrade mark names
+
+    Returns:
+        list: list of upgrade mark names
+
+    """
+    upgrade_marks_name = []
+    for upgrade_mark in upgrade_marks:
+        try:
+            upgrade_marks_name.append(upgrade_mark().args[0].name)
+        except AttributeError:
+            log.error("upgrade mark does not exist")
+    return upgrade_marks_name
+
+
 @pytest.fixture(scope="function", autouse=True)
-def health_checker(request, tier_marks_name):
+def health_checker(request, tier_marks_name, upgrade_marks_name):
     skipped = False
     dev_mode = config.RUN["cli_params"].get("dev_mode")
     mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
@@ -1459,7 +1478,9 @@ def health_checker(request, tier_marks_name):
 
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
-        if mark.name in tier_marks_name and config.RUN.get("cephcluster"):
+        if mark.name in tier_marks_name + upgrade_marks_name and config.RUN.get(
+            "cephcluster"
+        ):
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
