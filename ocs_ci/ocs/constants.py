@@ -336,6 +336,7 @@ MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 S3CLI_LABEL = "app=s3cli"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
 PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
+MUST_GATHER_HELPER_LABEL = "must-gather-helper-pod"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
