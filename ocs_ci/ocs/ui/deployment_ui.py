@@ -52,8 +52,7 @@ class DeploymentUI(PageNavigator):
             expected_text=capacity_str,
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error(f" after {timeout} seconds")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError(f"Disks are not attached after {timeout} seconds")
 
     def install_ocs_operator(self):
         """
@@ -240,8 +239,7 @@ class DeploymentUI(PageNavigator):
             expected_text="Memory",
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error("Nodes not found after 600 seconds")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError("Nodes not found after 600 seconds")
 
         if self.operator_name == OCS_OPERATOR:
             logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
