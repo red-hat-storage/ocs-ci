@@ -14,7 +14,8 @@ ENV_DATA:
   fio_storageutilization_min_mbps: 10.0
   is_multus_enabled: true
   multus_create_public_net: true
-  multus_create_cluster_net: true
+  multus_create_cluster_net: false
+  multus_public_net_namespace: "default"
 REPORTING:
   polarion:
     deployment_id: 'OCS-2510'
