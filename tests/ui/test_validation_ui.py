@@ -47,13 +47,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI()
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_9:
-            validation_ui_obj.odf_overview_ui()
-        else:
-            validation_ui_obj.verification_ui()
-
         if ocs_version >= version.VERSION_4_13:
             logger.info(
                 "Verify GET requests initiated by kube-probe on odf-console pod"
@@ -67,6 +61,12 @@ class TestUserInterfaceValidation(object):
                 is None
             ):
                 raise ValueError("GET request initiated by kube-probe does not exist")
+
+        validation_ui_obj = ValidationUI()
+        if ocs_version >= version.VERSION_4_9:
+            validation_ui_obj.odf_overview_ui()
+        else:
+            validation_ui_obj.verification_ui()
 
     @ui
     @tier1
