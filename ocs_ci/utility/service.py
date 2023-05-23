@@ -53,7 +53,8 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         result = exec_cmd(
-            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} "
+            f"ssh -o StrictHostKeyChecking=no core@{nodeip} "
             f"sudo systemctl is-active {self.service_name}.service",
             ignore_error=True,
         )
@@ -85,7 +86,8 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         cmd = (
-            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} "
+            f"ssh -o StrictHostKeyChecking=no core@{nodeip} "
             f"sudo systemctl stop {self.service_name}.service"
         )
         if self.force:
@@ -119,7 +121,8 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         cmd = (
-            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} "
+            f"ssh -o StrictHostKeyChecking=no core@{nodeip} "
             f"sudo systemctl start {self.service_name}.service"
         )
         result = exec_cmd(cmd)
@@ -147,7 +150,8 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         cmd = (
-            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} "
+            f"ssh -o StrictHostKeyChecking=no core@{nodeip} "
             f"sudo systemctl kill {self.service_name}.service"
         )
         result = exec_cmd(cmd)
@@ -171,7 +175,8 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         cmd = (
-            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} "
+            f"ssh -o StrictHostKeyChecking=no core@{nodeip} "
             f"sudo systemctl restart {self.service_name}.service"
         )
         result = exec_cmd(cmd)
@@ -199,7 +204,8 @@ class Service(object):
         """
         nodeip = self.nodes[node.name]
         cmd = (
-            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} ssh core@{nodeip} "
+            f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{self.bastion_ip} "
+            f"ssh -o StrictHostKeyChecking=no core@{nodeip} "
             f"sudo systemctl status {self.service_name}.service"
         )
         result = exec_cmd(cmd)
