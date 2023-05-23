@@ -55,13 +55,17 @@ class TestFailoverAndRelocate:
             pytest.param(
                 constants.APPLICATION_SET,
                 False,
-                marks=pytest.mark.polarion_id(polarion_id_primary_up), # TODO change polarion id
+                marks=pytest.mark.polarion_id(
+                    polarion_id_primary_up
+                ),  # TODO change polarion id
                 id="primary_up",
             ),
             pytest.param(
                 constants.APPLICATION_SET,
                 True,
-                marks=pytest.mark.polarion_id(polarion_id_primary_down), # TODO change polarion id
+                marks=pytest.mark.polarion_id(
+                    polarion_id_primary_down
+                ),  # TODO change polarion id
                 id="primary_down",
             ),
         ],
@@ -150,7 +154,9 @@ class TestFailoverAndRelocate:
             )
         else:
             # Failover action via CLI
-            dr_helpers.failover(secondary_cluster_name, rdr_workload.workload_namespace,workload_type)
+            dr_helpers.failover(
+                secondary_cluster_name, rdr_workload.workload_namespace, workload_type
+            )
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -207,7 +213,9 @@ class TestFailoverAndRelocate:
             )
         else:
             # Relocate action via CLI
-            dr_helpers.relocate(primary_cluster_name, rdr_workload.workload_namespace,workload_type)
+            dr_helpers.relocate(
+                primary_cluster_name, rdr_workload.workload_namespace, workload_type
+            )
 
         # Verify resources deletion from secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)

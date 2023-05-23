@@ -65,7 +65,9 @@ def get_current_secondary_cluster_name(namespace, workload_type=constants.SUBSCR
             return cluster_name
 
 
-def set_current_primary_cluster_context(namespace, workload_type=constants.SUBSCRIPTION):
+def set_current_primary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
     """
     Set current primary cluster context based on workload namespace
 
@@ -80,7 +82,9 @@ def set_current_primary_cluster_context(namespace, workload_type=constants.SUBSC
     config.switch_to_cluster_by_name(cluster_name)
 
 
-def set_current_secondary_cluster_context(namespace, workload_type=constants.SUBSCRIPTION):
+def set_current_secondary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
     """
     Set secondary cluster context based on workload namespace
 
@@ -521,7 +525,9 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         sample.wait_for_func_value(0)
 
 
-def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900, skip_vr=False):
+def wait_for_all_resources_creation(
+    pvc_count, pod_count, namespace, timeout=900, skip_vr=False
+):
     """
     Wait for workload and replication resources to be created
 
