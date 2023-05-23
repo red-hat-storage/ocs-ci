@@ -1218,6 +1218,11 @@ class VSPHEREUPI(VSPHEREBASE):
                 logger.warning(
                     "Failed to setup the Ceph toolbox pod. Probably due to installation was not successful"
                 )
+            except CommandFailed:
+                logger.warning(
+                    "Failed to remove CSI users. Probably ceph toolbox is not in running state due to "
+                    "installation was not successful or it is not configured correctly"
+                )
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
