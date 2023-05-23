@@ -577,8 +577,6 @@ class Cosbench(object):
         workload_csv = self.get_result_csv(
             workload_id=workload_id, workload_name=workload_name
         )
-        logger.info(f"workload_csv ******************{workload_csv}")
-        logger.info(type(workload_csv))
         with open(workload_csv, "r") as file:
             reader = csv.reader(file)
             header = next(reader)
