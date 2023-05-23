@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import bugzilla
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.cosbench import Cosbench
 
 log = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ def cosbench(request):
 
 
 @workloads
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-2529")
 class TestCosbenchWorkload(E2ETest):
     """

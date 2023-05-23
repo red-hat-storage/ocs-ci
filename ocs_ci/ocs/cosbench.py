@@ -2,7 +2,7 @@ import csv
 import logging
 import os
 import re
-from tempfile import mkdtemp, NamedTemporaryFile
+from tempfile import NamedTemporaryFile
 from xml.etree import ElementTree
 from datetime import datetime
 
@@ -42,7 +42,7 @@ class Cosbench(object):
         self.ocp_obj = OCP(namespace=self.namespace)
         self.cosbench_config = None
         self.cosbench_pod = None
-        self.cosbench_dir = mkdtemp(prefix="cosbench-tool-")
+        self.cosbench_dir = "/home"
         self.xml_file = ""
         self.workload_id = ""
         self.init_container = 1
@@ -577,6 +577,8 @@ class Cosbench(object):
         workload_csv = self.get_result_csv(
             workload_id=workload_id, workload_name=workload_name
         )
+        logger.info(f"workload_csv ******************{workload_csv}")
+        logger.info(type(workload_csv))
         with open(workload_csv, "r") as file:
             reader = csv.reader(file)
             header = next(reader)
