@@ -410,7 +410,7 @@ def verify_faas_provider_resources():
     4. Verify that Cephcluster is Ready and hostNetworking is True
     5. Verify that the security groups are set up correctly
     6. Check the presence of catalogsource and its state
-    7. Check the presence of subscription
+    7. Check the presence of subscription and its health
 
     """
     # Verify CSV phase
@@ -459,20 +459,26 @@ def verify_faas_provider_resources():
     assert verify_worker_nodes_security_groups()
 
     # Check the presence of catalogsource and its state
-    catsrc = OCP(kind=constants.CATSRC, namespace=config.ENV_DATA["cluster_namespace"])
+    catsrc = OCP(kind=constants.CATSRC, namespace=config.ENV_DATA["service_namespace"])
     catsrc_info = catsrc.get().get("items")[0]
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith("Managed Fusion Agent")
     assert catsrc_info["status"]["connectionState"]["lastObservedState"] == "READY"
 
-    # Check the presence of subscription
+    # Check the presence of subscription and its health
     subscr = OCP(
-        kind=constants.CATSRC,
-        namespace=config.ENV_DATA["cluster_namespace"],
+        "subscription",
+        namespace=config.ENV_DATA["service_namespace"],
         selector="operators.coreos.com/managed-fusion-agent.managed-fusion",
     )
     subscr_info = subscr.get().get("items")[0]
     assert subscr_info["spec"]["name"] == "managed-fusion-agent"
+    subscr_health = subscr_info["status"]["catalogHealth"]
+    for sub_ref in subscr_health:
+        log.info(
+            f"Verifying Healthy state of subscription {sub_ref['catalogSourceRef']['name']}"
+        )
+        assert sub_ref["healthy"]
 
 
 def verify_faas_consumer_resources():
