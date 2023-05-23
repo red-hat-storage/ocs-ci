@@ -20,7 +20,9 @@ from libcloud.compute.types import Provider
 from paramiko.ssh_exception import SSHException
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.helpers.managed_services import create_toolbox_on_faas_consumer
+from ocs_ci.helpers.managed_services import (
+    create_toolbox_on_faas_consumer as create_tools_on_consumer,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
@@ -838,7 +840,7 @@ def setup_ceph_toolbox(force_setup=False):
             and ocsci_config.ENV_DATA["cluster_type"].lower()
             == constants.MS_CONSUMER_TYPE
         ):
-            create_toolbox_on_faas_consumer()
+            create_tools_on_consumer()
             return
 
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
