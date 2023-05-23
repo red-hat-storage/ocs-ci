@@ -5567,6 +5567,7 @@ def patch_consumer_toolbox_with_secret():
         and config.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
         and not config.RUN["cli_params"].get("deploy")
+        and config.ENV_DATA.get("platform").lower() != constants.FUSIONAAS_PLATFORM
     ):
         return
 
