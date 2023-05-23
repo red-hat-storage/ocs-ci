@@ -137,10 +137,9 @@ class BenchmarkOperatorFIO(object):
             expected_status=constants.STATUS_RUNNING,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error(
+            raise TimeoutExpiredError(
                 "benchmark-controller-manager pod did not move to running state after 40 sec"
             )
-            raise TimeoutExpiredError
 
     def create_benchmark_operator(self):
         """
@@ -164,8 +163,9 @@ class BenchmarkOperatorFIO(object):
             expected_status=constants.STATUS_RUNNING,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("fio-server pods did not move to running state after 100 sec")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError(
+                "fio-server pods did not move to running state after 100 sec"
+            )
 
     def wait_for_wl_to_complete(self):
         """
@@ -181,10 +181,9 @@ class BenchmarkOperatorFIO(object):
             expected_status=constants.STATUS_COMPLETED,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error(
+            raise TimeoutExpiredError(
                 f"fio-client pod did not move to running state after {self.timeout_completed} sec"
             )
-            raise TimeoutExpiredError
 
     def run_fio_benchmark_operator(self, is_completed=True):
         """

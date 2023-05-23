@@ -2299,7 +2299,7 @@ def create_multiple_pvc_parallel(sc_obj, namespace, number_of_pvc, size, access_
                         executor.submit(wait_for_resource_state, objs, "Bound", 90)
                     )
     if False in [obj.result() for obj in obj_status_list]:
-        raise TimeoutExpiredError
+        raise TimeoutExpiredError("Not all PVC are in bound state")
     return pvc_objs_list
 
 
@@ -2383,7 +2383,7 @@ def create_pods_parallel(
             )
     # If pods not up raise exception/failure
     if False in [obj.result() for obj in future_pod_objs]:
-        raise TimeoutExpiredError
+        raise TimeoutExpiredError("Not all pods are in running state")
     return pod_objs
 
 
