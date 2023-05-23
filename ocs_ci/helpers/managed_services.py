@@ -4,7 +4,7 @@ Managed Services related functionalities
 import logging
 import re
 
-from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
+from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name, create_resource
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
@@ -694,3 +694,50 @@ def verify_faas_provider_storagecluster_storages(sc_data):
 
     log.info(f"The values in the storage profile {default_sp_name} are correct")
     log.info("Finish Verifying all the storages in the provider faas storagecluster")
+
+
+def create_toolbox_on_faas_consumer():
+    """
+    Create toolbox on FaaS consumer cluster
+
+    """
+    current_cluster = config.cluster_ctx
+    assert (
+        current_cluster.ENV_DATA.get("cluster_type").lower()
+        == constants.MS_CONSUMER_TYPE
+    ), "This function is applicable for consumer cluster only"
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    # Switch to provider cluster and get the required secret, configmap and tools pod
+    config.switch_to_provider()
+    secret_obj = OCP(
+        kind=constants.SECRET, namespace=namespace, resource_name="rook-ceph-mon"
+    )
+    secret_data = secret_obj.get()
+
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=namespace,
+        resource_name=constants.ROOK_CEPH_MON_ENDPOINTS,
+    )
+    configmap_data = configmap_obj.get()
+
+    provider_tools_pod = get_ceph_tools_pod()
+    provider_tools_data = provider_tools_pod.get()
+
+    # Switch to current consumer cluster
+    config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
+
+    # Create secret, configmap and tools pod on consumer cluster
+    create_resource(**secret_data)
+    create_resource(**configmap_data)
+    toolbox_pod = create_resource(**provider_tools_data)
+
+    # Wait for tools pod to reach Running state
+    toolbox_pod.ocp.wait_for_resource(
+        resource_name=toolbox_pod.name,
+        condition=constants.STATUS_RUNNING,
+        selector=constants.TOOL_APP_LABEL,
+        timeout=180,
+    )
