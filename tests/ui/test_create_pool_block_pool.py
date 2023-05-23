@@ -29,9 +29,9 @@ need_to_delete = []
     argnames=["replica", "compression"],
     argvalues=[
         pytest.param(*[3, True], marks=pytest.mark.polarion_id("OCS-2589")),
-        # pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
-        # pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
-        # pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
+        pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
+        pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
+        pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
     ],
 )
 class TestPoolUserInterface(ManageTest):
@@ -50,7 +50,10 @@ class TestPoolUserInterface(ManageTest):
     @pytest.fixture()
     def storage(self, storageclass_factory_ui, replica, compression):
         self.sc_obj = storageclass_factory_ui(
-            create_new_pool=True, replica=replica, compression=compression
+            create_new_pool=True,
+            replica=replica,
+            compression=compression,
+            vol_binding_mode="Immediate",
         )
         self.pool_name = self.sc_obj.get()["parameters"]["pool"]
 
