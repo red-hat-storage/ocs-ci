@@ -135,6 +135,7 @@ class TestScaleRespinOperatorPods(E2ETest):
 
     def test_respin_operator_pods(
         self,
+        fioscale,
         resource_to_delete,
     ):
         """
