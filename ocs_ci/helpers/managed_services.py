@@ -5,7 +5,7 @@ import logging
 import re
 
 from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name, create_resource
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException, ClusterNotFoundException
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
@@ -710,7 +710,14 @@ def create_toolbox_on_faas_consumer():
     namespace = config.ENV_DATA["cluster_namespace"]
 
     # Switch to provider cluster and get the required secret, configmap and tools pod
-    config.switch_to_provider()
+    try:
+        config.switch_to_provider()
+    except ClusterNotFoundException:
+        log.warning(
+            "Provider cluster is not available. Skipping toolbox creation on consumer cluster."
+        )
+        return
+
     secret_obj = OCP(
         kind=constants.SECRET, namespace=namespace, resource_name="rook-ceph-mon"
     )
