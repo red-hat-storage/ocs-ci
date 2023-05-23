@@ -118,10 +118,10 @@ class TestScaleRespinCephPods(E2ETest):
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[
-        pytest.param(*["noobaa_operator"], marks=[pytest.mark.polarion_id("OCS-766")]),
-        pytest.param(*["ocs_operator"], marks=[pytest.mark.polarion_id("OCS-764")]),
-        pytest.param(*["odf_operator"], marks=[pytest.mark.polarion_id("OCS-765")]),
-        pytest.param(*["operator"], marks=[pytest.mark.polarion_id("OCS-613")]),
+        pytest.param(*["noobaa_operator"], marks=[pytest.mark.polarion_id("OCS-4880")]),
+        pytest.param(*["ocs_operator"], marks=[pytest.mark.polarion_id("OCS-4880")]),
+        pytest.param(*["odf_operator"], marks=[pytest.mark.polarion_id("OCS-4880")]),
+        pytest.param(*["operator"], marks=[pytest.mark.polarion_id("OCS-4880")]),
     ],
 )
 class TestScaleRespinOperatorPods(E2ETest):
