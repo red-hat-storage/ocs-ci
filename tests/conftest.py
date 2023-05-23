@@ -26,6 +26,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
 )
+from ocs_ci.helpers.managed_services import create_toolbox_on_faas_consumer
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -5648,6 +5649,29 @@ def patch_consumer_toolbox_with_secret():
 
     log.info("Switching back to the initial cluster context")
     config.switch_ctx(restore_ctx_index)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def toolbox_on_faas_consumer():
+    """
+    Create tools pod on FaaS consumer cluster at the start of a test run while using multicluster configuration
+
+    """
+    if not (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+        and config.ENV_DATA["cluster_type"].lower() == constants.MS_CONSUMER_TYPE
+        and not config.RUN["cli_params"].get("deploy")
+    ):
+        return
+
+    try:
+        get_pods_having_label(
+            label=constants.TOOL_APP_LABEL,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+    except CommandFailed:
+        create_toolbox_on_faas_consumer()
 
 
 @pytest.fixture(scope="function", autouse=True)
