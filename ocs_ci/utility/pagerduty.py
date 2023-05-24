@@ -295,7 +295,7 @@ class PagerDutyAPI(object):
         # timestamp is added to service name to ensure unique name of service
         timestamp = time.time()
         policy = None
-        policy_name = config.AUTH.get("pagerduty_escalation_policy")
+        policy_name = config.AUTH["pagerduty"].get("escalation_policy")
         if policy_name:
             policy = self.get_escalation_policy_id(policy_name)
             if not policy:
