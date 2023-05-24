@@ -833,6 +833,7 @@ def get_noobaa_operator_pod(
 
     Returns:
         Pod object: ocs_operator pod object
+
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     noobaa_operator = get_pods_having_label(ocs_label, namespace)
@@ -840,7 +841,7 @@ def get_noobaa_operator_pod(
     return noobaa_operator_pod
 
 
-def get_odf_operator_pod(
+def get_odf_operator_controller_manager(
     ocs_label=constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL, namespace=None
 ):
     """
@@ -854,6 +855,7 @@ def get_odf_operator_pod(
 
     Returns:
         Pod object: ocs_operator pod object
+
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     odf_operator = get_pods_having_label(ocs_label, namespace)
