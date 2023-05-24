@@ -524,7 +524,7 @@ def pagerduty_integration(request, pagerduty_service):
         if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
             pagerduty.set_pagerduty_faas_secret(integration_key)
         else:
-        pagerduty.set_pagerduty_integration_secret(integration_key)
+            pagerduty.set_pagerduty_integration_secret(integration_key)
 
     def update_pagerduty_integration_secret():
         """
