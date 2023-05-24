@@ -1576,14 +1576,14 @@ def environment_checker(request):
             return
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
-    request.addfinalizer(
-        partial(get_status_after_execution, exclude_labels=exclude_labels)
-    )
     if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
         log.error(
             "Environment checker is NOT IMPLEMENTED for Fusion service. This needds to be updated"
         )
     else:
+        request.addfinalizer(
+            partial(get_status_after_execution, exclude_labels=exclude_labels)
+        )
         get_status_before_execution(exclude_labels=exclude_labels)
 
 
