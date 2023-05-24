@@ -833,6 +833,18 @@ def setup_ceph_toolbox(force_setup=False):
             rook_toolbox.create()
             return
 
+        if (
+            ocsci_config.ENV_DATA.get("platform").lower()
+            == constants.FUSIONAAS_PLATFORM
+            and ocsci_config.ENV_DATA["cluster_type"].lower()
+            == constants.MS_CONSUMER_TYPE
+        ):
+            log.warning(
+                f"Skipping toolbox creation on {constants.MS_CONSUMER_TYPE} cluster on "
+                f"{constants.FUSIONAAS_PLATFORM} platform."
+            )
+            return
+
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")

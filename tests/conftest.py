@@ -5570,6 +5570,7 @@ def patch_consumer_toolbox_with_secret():
         and config.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
         and not config.RUN["cli_params"].get("deploy")
+        and config.ENV_DATA.get("platform").lower() != constants.FUSIONAAS_PLATFORM
     ):
         return
 
@@ -5652,6 +5653,30 @@ def patch_consumer_toolbox_with_secret():
 
     log.info("Switching back to the initial cluster context")
     config.switch_ctx(restore_ctx_index)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def toolbox_on_faas_consumer():
+    """
+    Create tools pod on FaaS consumer cluster at the start of a test run while using multicluster configuration
+
+    """
+    from ocs_ci.helpers.managed_services import create_toolbox_on_faas_consumer
+
+    if not (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+        and config.ENV_DATA["cluster_type"].lower() == constants.MS_CONSUMER_TYPE
+        and not config.RUN["cli_params"].get("deploy")
+    ):
+        return
+
+    tools_pod = get_pods_having_label(
+        label=constants.TOOL_APP_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not tools_pod:
+        create_toolbox_on_faas_consumer()
 
 
 @pytest.fixture(scope="function", autouse=True)
