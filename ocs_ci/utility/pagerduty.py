@@ -69,7 +69,9 @@ def set_pagerduty_faas_secret(integration_key):
     cmd = f"oc get secret {constants.FUSION_AGENT_CONFIG_SECRET} -n {ns_name} -o yaml"
     secret_data = exec_cmd(cmd).stdout
     secret_data = yaml.safe_load(secret_data)
-    secret_data["pager_duty_config"] = pd_configuration
+    secret_data["data"]["pager_duty_config"] = pd_configuration
+    secret_data["metadata"].pop("resourceVersion", None)
+    secret_data["metadata"].pop("uid", None)
 
     with tempfile.NamedTemporaryFile(
         mode="w+", prefix=f"{constants.FUSION_AGENT_CONFIG_SECRET}_"
