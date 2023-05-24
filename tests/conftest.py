@@ -480,15 +480,6 @@ def pagerduty_service(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def pagerduty_faas(request, pagerduty_service):
-    """
-    Configure PagerDuty for Fusion aaS platform. Update
-    managed-fusion-agent-config secret with correct integration key.
-    """
-    set_pagerduty_faas_secret()
-
-
-@pytest.fixture(scope="session", autouse=True)
 def pagerduty_integration(request, pagerduty_service):
     """
     Create a new Pagerduty integration for service from pagerduty_service
@@ -543,7 +534,10 @@ def pagerduty_integration(request, pagerduty_service):
         """
         while config.RUN["thread_pagerduty_secret_update"] != "finished":
             if config.RUN["thread_pagerduty_secret_update"] == "required":
-                pagerduty.set_pagerduty_integration_secret(integration_key)
+                if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+                    pagerduty.set_pagerduty_faas_secret(integration_key)
+                else:
+                    pagerduty.set_pagerduty_integration_secret(integration_key)
             time.sleep(60)
 
     config.RUN["thread_pagerduty_secret_update"] = "not required"

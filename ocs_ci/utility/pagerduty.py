@@ -47,27 +47,26 @@ def set_pagerduty_integration_secret(integration_key):
     logger.info("New integration key was set.")
 
 
-def set_pagerduty_faas_secret(service_endpoint, service_key):
+def set_pagerduty_faas_secret(integration_key):
     """
     Update managed-fusion-agent-config secret. This is valid only on Fusion aaS platform.
     managed-fusion-agent-config secret is expected to be present prior to the update.
 
     Args:
-        service_endpoint (str): Service endpoint for the service created for the cluster
-        service_key (str): Key for the service created for the cluster
+        integration_key (str): Integration key taken from PagerDuty Prometheus integration
 
     """
     logger.info("Setting up PagerDuty")
     kubeconfig = os.getenv("KUBECONFIG")
     ns_name = config.ENV_DATA["service_namespace"]
     pd_configuration = (
-        f"    sopEndpoint: {service_endpoint}\n"
-        f"    serviceKey: {service_key}"
+        f"    sopEndpoint: <pager duty service endpoint>\n"
+        f"    serviceKey: {integration_key}"
     )
     pd_configuration = base64.b64encode(pd_configuration)
     cmd = f"oc get secret {constants.FUSION_AGENT_CONFIG_SECRET} -n {ns_name} -o yaml"
     secret_data = exec_cmd(cmd).stdout
-    secret_data = yaml.loads(secret_data)
+    secret_data = yaml.load(secret_data)
     secret_data["pager_duty_config"] = pd_configuration
     secret_data = yaml.dump(secret_data)
 
