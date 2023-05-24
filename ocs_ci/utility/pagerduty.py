@@ -70,12 +70,11 @@ def set_pagerduty_faas_secret(integration_key):
     secret_data = exec_cmd(cmd).stdout
     secret_data = yaml.safe_load(secret_data)
     secret_data["pager_duty_config"] = pd_configuration
-    secret_data = yaml.dump(secret_data)
 
     with tempfile.NamedTemporaryFile(
         prefix=f"{constants.FUSION_AGENT_CONFIG_SECRET}_"
     ) as secret_file:
-        secret_file.write(secret_data)
+        yaml.dump(secret_data, secret_file)
         secret_file.flush()
         exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
     logger.info("New PagerDuty service was set.")
