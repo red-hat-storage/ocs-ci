@@ -462,6 +462,7 @@ def get_and_apply_rgw_cert_ca():
 
     Returns:
         str: path to the downloaded RGW Cert CA
+
     """
     rgw_cert_ca_path = tempfile.NamedTemporaryFile(
         mode="w+",

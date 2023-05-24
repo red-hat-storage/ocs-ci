@@ -270,6 +270,7 @@ def configure_trusted_ca_bundle(ca_cert_path):
 
     Args:
         ca_cert_path (str): path to CA Certificate(s) bundle file
+
     """
     ocs_ca_bundle_name = "ocs-ca-bundle"
     # check if ocs-ca-bundle configmap already exists, if yes, concatenate
