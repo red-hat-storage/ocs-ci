@@ -26,7 +26,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
 )
-from ocs_ci.helpers.managed_services import create_toolbox_on_faas_consumer
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -5658,6 +5657,8 @@ def toolbox_on_faas_consumer():
     Create tools pod on FaaS consumer cluster at the start of a test run while using multicluster configuration
 
     """
+    from ocs_ci.helpers.managed_services import create_toolbox_on_faas_consumer
+
     if not (
         config.multicluster
         and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
