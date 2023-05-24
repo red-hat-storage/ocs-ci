@@ -1925,39 +1925,9 @@ class RBDDRDeployOps(object):
     """
 
     def deploy(self):
-        self.configure_mirror_peer()
+        self.configure_rbd()
 
-    def configure_mirror_peer(self):
-        # Current CTX: ACM
-        # Create mirror peer
-        mirror_peer_data = templating.load_yaml(constants.MIRROR_PEER)
-        mirror_peer_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="mirror_peer", delete=False
-        )
-        # Update all the participating clusters in mirror_peer_yaml
-        non_acm_clusters = get_non_acm_cluster_config()
-        primary = get_primary_cluster_config()
-        non_acm_clusters.remove(primary)
-        for cluster in non_acm_clusters:
-            logger.info(f"{cluster.ENV_DATA['cluster_name']}")
-        index = -1
-        # First entry should be the primary cluster
-        # in the mirror peer
-        for cluster_entry in mirror_peer_data["spec"]["items"]:
-            if index == -1:
-                cluster_entry["clusterName"] = primary.ENV_DATA["cluster_name"]
-            else:
-                cluster_entry["clusterName"] = non_acm_clusters[index].ENV_DATA[
-                    "cluster_name"
-                ]
-            index += 1
-        templating.dump_data_to_temp_yaml(mirror_peer_data, mirror_peer_yaml.name)
-        # Current CTX: ACM
-        # Just being explicit here to make code more readable
-        config.switch_acm_ctx()
-        run_cmd(f"oc create -f {mirror_peer_yaml.name}")
-        self.validate_mirror_peer(mirror_peer_data["metadata"]["name"])
-
+    def configure_rbd(self):
         st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
         query_mirroring = (
             f"oc get CephBlockPool -n {config.ENV_DATA['cluster_namespace']}"
@@ -2138,9 +2108,13 @@ class MultiClusterDROperatorsDeploy(object):
             resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
         )
 
-        retry((ResourceNameNotSpecifiedException, ChannelNotFound), tries=20, delay=10)(
-            package_manifest.get_current_csv
-        )(self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE)
+        retry(
+            (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
+            tries=50,
+            delay=20,
+        )(package_manifest.get_current_csv)(
+            self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+        )
 
         current_csv = package_manifest.get_current_csv(
             channel=self.channel,
@@ -2165,6 +2139,97 @@ class MultiClusterDROperatorsDeploy(object):
         orchestrator_controller.wait_for_resource(
             condition="1", column="AVAILABLE", resource_count=1, timeout=600
         )
+
+    def configure_mirror_peer(self):
+        # Current CTX: ACM
+        # Create mirror peer
+        if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            mirror_peer = constants.MIRROR_PEER_MDR
+        else:
+            mirror_peer = constants.MIRROR_PEER_RDR
+        mirror_peer_data = templating.load_yaml(mirror_peer)
+        mirror_peer_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="mirror_peer", delete=False
+        )
+        # Update all the participating clusters in mirror_peer_yaml
+        non_acm_clusters = get_non_acm_cluster_config()
+        primary = get_primary_cluster_config()
+        non_acm_clusters.remove(primary)
+        for cluster in non_acm_clusters:
+            logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+        index = -1
+        # First entry should be the primary cluster
+        # in the mirror peer
+        for cluster_entry in mirror_peer_data["spec"]["items"]:
+            if index == -1:
+                cluster_entry["clusterName"] = primary.ENV_DATA["cluster_name"]
+            else:
+                cluster_entry["clusterName"] = non_acm_clusters[index].ENV_DATA[
+                    "cluster_name"
+                ]
+            index += 1
+        templating.dump_data_to_temp_yaml(mirror_peer_data, mirror_peer_yaml.name)
+        # Current CTX: ACM
+        # Just being explicit here to make code more readable
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -f {mirror_peer_yaml.name}")
+        self.validate_mirror_peer(mirror_peer_data["metadata"]["name"])
+
+    def validate_mirror_peer(self, resource_name):
+        """
+        Validate mirror peer,
+        Begins with CTX: ACM
+
+        1. Check phase: if RDR then state =  'ExchangedSecret'
+                        if MDR then state = 'S3ProfileSynced'
+        2. Check token-exchange-agent pod in 'Running' phase
+
+        Raises:
+            ResourceWrongStatusException: If pod is not in expected state
+
+        """
+        # Check mirror peer status only on HUB
+        mirror_peer = ocp.OCP(
+            kind="MirrorPeer",
+            namespace=constants.DR_DEFAULT_NAMESPACE,
+            resource_name=resource_name,
+        )
+        mirror_peer._has_phase = True
+        mirror_peer.get()
+        if config.MULTICLUSTER["multicluster_mode"] == "regional-dr":
+            expected_phase = "ExchangedSecret"
+        elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            expected_phase = "S3ProfileSynced"
+
+        try:
+            # Need high timeout in case of MDR
+            mirror_peer.wait_for_phase(phase=expected_phase, timeout=2400)
+            logger.info(f"Mirror peer is in expected phase {expected_phase}")
+        except ResourceWrongStatusException:
+            logger.exception("Mirror peer couldn't attain expected phase")
+            raise
+
+        # Check for token-exchange-agent pod and its status has to be running
+        # on all participating clusters except HUB
+        # We will switch config ctx to Participating clusters
+        for cluster in config.clusters:
+            if cluster.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes():
+                continue
+            else:
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                token_xchange_agent = get_pods_having_label(
+                    constants.TOKEN_EXCHANGE_AGENT_LABEL,
+                    config.ENV_DATA["cluster_namespace"],
+                )
+                pod_status = token_xchange_agent[0]["status"]["phase"]
+                pod_name = token_xchange_agent[0]["metadata"]["name"]
+                if pod_status != "Running":
+                    logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
+                    ResourceWrongStatusException(
+                        pod_name, expected="Running", got=pod_status
+                    )
+        # Switching back CTX to ACM
+        config.switch_acm_ctx()
 
     def update_ramen_config_misc(self):
         config_map_data = self.meta_obj.get_ramen_resource()
@@ -2420,6 +2485,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
+            self.configure_mirror_peer()
             rbddops.deploy()
         self.deploy_dr_policy()
 
@@ -2438,7 +2504,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         for i in acm_indexes:
             config.switch_ctx(i)
             self.deploy_dr_multicluster_orchestrator()
-
+        # Configure mirror peer
+        self.configure_mirror_peer()
         # Deploy dr policy
         self.deploy_dr_policy()
 
@@ -2456,7 +2523,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Reconfigure OADP on all ACM clusters
         old_ctx = config.cur_index
         for i in acm_indexes:
-            config.switch_acm_ctx()
+            config.switch_ctx(i)
             self.create_dpa()
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
@@ -2488,14 +2555,15 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         """
         old_ctx = config.cur_index
-        config.switch_ctx(get_active_acm_index)
+        config.switch_ctx(get_active_acm_index())
 
         multicluster_engine = ocp.OCP(
             kind="MultiClusterEngine",
             resource_name=constants.MDR_MULTICLUSTER_ENGINE,
         )
+        multicluster_engine._has_phase = True
         resource = multicluster_engine.get()
-        for item in resource["items"][0]["spec"]["overrides"]["components"]:
+        for item in resource["spec"]["overrides"]["components"]:
             if item["name"] == "managedserviceaccount-preview":
                 item["enabled"] = True
         multicluster_engine_yaml = tempfile.NamedTemporaryFile(
@@ -2526,7 +2594,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Validation
         self.validate_dpa()
 
-    @retry(CommandFailed, tries=10, delay=10)
+    @retry((CommandFailed, MDRDeploymentException), tries=10, delay=10)
     def validate_dpa(self):
         """
         Validate
@@ -2561,7 +2629,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
         )
         resource = backupstorage.get()
-        if resource["status"]["phase"] != "Available":
+        if resource["status"].get("phase") != "Available":
             raise MDRDeploymentException(
                 "Backupstoragelocation resource is no in 'Avaialble' phase"
             )

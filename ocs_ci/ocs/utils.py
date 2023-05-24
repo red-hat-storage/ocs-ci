@@ -1409,7 +1409,7 @@ def get_non_acm_cluster_config():
     """
     non_acm_list = []
     for i in range(len(ocsci_config.clusters)):
-        if i == ocsci_config.get_active_acm_index():
+        if i in get_all_acm_indexes():
             continue
         else:
             non_acm_list.append(ocsci_config.clusters[i])

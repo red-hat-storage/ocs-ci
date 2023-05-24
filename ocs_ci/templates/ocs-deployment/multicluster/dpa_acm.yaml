@@ -21,7 +21,7 @@ spec:
           bucket: PLACE_HOLDER 
           prefix: acm
         config:
-          region: us-east-2
+          region: eu-central-1
           profile: "default"
         credential:
           key: cloud
@@ -31,5 +31,5 @@ spec:
       velero:
         provider: aws
         config:
-          region: us-east-2
+          region: eu-central-1
           profile: "default"

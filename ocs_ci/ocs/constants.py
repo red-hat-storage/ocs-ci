@@ -774,7 +774,9 @@ ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
 ODF_ORCHESTRATOR_OPERATOR_GROUP = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_orchestrator_operatorgroup.yaml"
 )
-MIRROR_PEER = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "mirror_peer.yaml")
+MIRROR_PEER_RDR = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "mirror_peer_rdr.yaml")
+MIRROR_PEER_MDR = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "mirror_peer_mdr.yaml")
+
 VOLUME_REPLICATION_CLASS = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "volume_replication_class.yaml"
 )
