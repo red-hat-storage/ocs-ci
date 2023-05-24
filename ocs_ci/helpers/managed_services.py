@@ -4,10 +4,11 @@ Managed Services related functionalities
 import logging
 import re
 
-from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name, create_resource
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException, ClusterNotFoundException
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
@@ -694,3 +695,72 @@ def verify_faas_provider_storagecluster_storages(sc_data):
 
     log.info(f"The values in the storage profile {default_sp_name} are correct")
     log.info("Finish Verifying all the storages in the provider faas storagecluster")
+
+
+@switch_to_orig_index_at_last
+def create_toolbox_on_faas_consumer():
+    """
+    Create toolbox on FaaS consumer cluster
+
+    """
+    current_cluster = config.cluster_ctx
+    assert (
+        current_cluster.ENV_DATA.get("cluster_type").lower()
+        == constants.MS_CONSUMER_TYPE
+    ), "This function is applicable for consumer cluster only"
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    # Switch to provider cluster and get the required secret, configmap and tools deployment
+    try:
+        config.switch_to_provider()
+    except ClusterNotFoundException:
+        log.warning(
+            "Provider cluster is not available. Skipping toolbox creation on consumer cluster."
+        )
+        return
+
+    secret_obj = OCP(
+        kind=constants.SECRET, namespace=namespace, resource_name="rook-ceph-mon"
+    )
+    secret_data = secret_obj.get()
+
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=namespace,
+        resource_name=constants.ROOK_CEPH_MON_ENDPOINTS,
+    )
+    configmap_data = configmap_obj.get()
+
+    deployment_obj = OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=namespace,
+        resource_name="rook-ceph-tools",
+    )
+    tools_deployment_data = deployment_obj.get()
+
+    # Switch to current consumer cluster
+    config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
+
+    # Remove the values that are not relevant
+    for data in [secret_data, configmap_data, tools_deployment_data]:
+        del data["metadata"]["ownerReferences"]
+        del data["metadata"]["uid"]
+    del tools_deployment_data["spec"]["template"]["spec"]["containers"][0][
+        "securityContext"
+    ]
+    del tools_deployment_data["status"]
+
+    # Create secret, configmap and tools deployment on consumer cluster
+    create_resource(**secret_data)
+    create_resource(**configmap_data)
+    create_resource(**tools_deployment_data)
+
+    # Wait for tools pod to reach Running state
+    toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
+    toolbox_pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.TOOL_APP_LABEL,
+        resource_count=1,
+        timeout=180,
+    )
