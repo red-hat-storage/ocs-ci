@@ -5666,12 +5666,11 @@ def toolbox_on_faas_consumer():
     ):
         return
 
-    try:
-        get_pods_having_label(
-            label=constants.TOOL_APP_LABEL,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-    except CommandFailed:
+    tools_pod = get_pods_having_label(
+        label=constants.TOOL_APP_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not tools_pod:
         create_toolbox_on_faas_consumer()
 
 

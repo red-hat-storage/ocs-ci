@@ -709,7 +709,7 @@ def create_toolbox_on_faas_consumer():
 
     namespace = config.ENV_DATA["cluster_namespace"]
 
-    # Switch to provider cluster and get the required secret, configmap and tools pod
+    # Switch to provider cluster and get the required secret, configmap and tools deployment
     try:
         config.switch_to_provider()
     except ClusterNotFoundException:
@@ -730,21 +730,35 @@ def create_toolbox_on_faas_consumer():
     )
     configmap_data = configmap_obj.get()
 
-    provider_tools_pod = get_ceph_tools_pod()
-    provider_tools_data = provider_tools_pod.get()
+    deployment_obj = OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=namespace,
+        resource_name="rook-ceph-tools",
+    )
+    tools_deployment_data = deployment_obj.get()
 
     # Switch to current consumer cluster
     config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
 
-    # Create secret, configmap and tools pod on consumer cluster
+    # Remove the values that are not relevant
+    for data in [secret_data, configmap_data, tools_deployment_data]:
+        del data["metadata"]["ownerReferences"]
+        del data["metadata"]["uid"]
+    del tools_deployment_data["spec"]["template"]["spec"]["containers"][0][
+        "securityContext"
+    ]
+    del tools_deployment_data["status"]
+
+    # Create secret, configmap and tools deployment on consumer cluster
     create_resource(**secret_data)
     create_resource(**configmap_data)
-    toolbox_pod = create_resource(**provider_tools_data)
+    create_resource(**tools_deployment_data)
 
     # Wait for tools pod to reach Running state
-    toolbox_pod.ocp.wait_for_resource(
-        resource_name=toolbox_pod.name,
+    toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
+    toolbox_pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.TOOL_APP_LABEL,
+        resource_count=1,
         timeout=180,
     )
