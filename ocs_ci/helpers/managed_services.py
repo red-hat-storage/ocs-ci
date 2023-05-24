@@ -467,7 +467,7 @@ def verify_faas_provider_resources():
 
     # Check the presence of subscription and its health
     subscr = OCP(
-        "subscription",
+        kind="subscription",
         namespace=config.ENV_DATA["service_namespace"],
         selector="operators.coreos.com/managed-fusion-agent.managed-fusion",
     )
