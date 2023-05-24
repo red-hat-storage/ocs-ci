@@ -1458,13 +1458,17 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    if "test_add_capacity" in node.name:
+                    ceph_health_retry = False
+                    for mark in node.iter_markers():
+                        if "ceph_health_retry" == mark.name:
+                            ceph_health_retry = True
+                    if ceph_health_retry:
                         ceph_health_check(
                             namespace=config.ENV_DATA["cluster_namespace"]
                         )
                         log.info(
-                            "Ceph health check passed at teardown. (After Add capacity "
-                            "TC we allow more re-tries)"
+                            "Ceph health check passed at teardown. (After test "
+                            "marked with @ceph_health_retry. For such TC we allow more re-tries)"
                         )
                     else:
                         ceph_health_check_base()
