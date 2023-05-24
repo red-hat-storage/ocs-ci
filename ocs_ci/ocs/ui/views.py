@@ -846,6 +846,7 @@ block_pool_4_13 = {
         "//a[text()='Delete BlockPool']",
         By.XPATH,
     ),
+    "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
 }
 
 block_pool = {
