@@ -8,6 +8,7 @@ from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name, create_
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, ClusterNotFoundException
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
@@ -696,6 +697,7 @@ def verify_faas_provider_storagecluster_storages(sc_data):
     log.info("Finish Verifying all the storages in the provider faas storagecluster")
 
 
+@switch_to_orig_index_at_last
 def create_toolbox_on_faas_consumer():
     """
     Create toolbox on FaaS consumer cluster
