@@ -234,14 +234,24 @@ class PagerDutyAPI(object):
             str: Escalation policy id
 
         """
-        default = None
+        return self.get_escalation_policy_id("Default")
+
+    def get_escalation_policy_id(self, name):
+        """
+        Get account escalation policy from PagerDuty API by name.
+
+        Returns:
+            str: Escalation policy id
+
+        """
+        policy_id = None
         policies = self.get("escalation_policies").json()
         for policy in policies["escalation_policies"]:
-            if policy["name"] == "Default":
-                default = policy["id"]
-        if not default:
-            logger.warning("PagerDuty default escalation policy was not found")
-        return default
+            if policy["name"] == name:
+                policy_id = policy["id"]
+        if not policy_id:
+            logger.warning(f"PagerDuty escalation policy {name} was not found")
+        return policy_id
 
     def get_vendor_id(self, name):
         """
@@ -284,7 +294,13 @@ class PagerDutyAPI(object):
         cluster_name = config.ENV_DATA["cluster_name"]
         # timestamp is added to service name to ensure unique name of service
         timestamp = time.time()
-        default_policy = self.get_default_escalation_policy_id()
+        policy = None
+        policy_name = config.AUTH.get("pagerduty_escalation_policy")
+        if policy_name:
+            policy = self.get_escalation_policy_id(policy_name)
+            if not policy:
+                logger.error(f"Policy {policy_name} not found")
+        policy = policy or self.get_default_escalation_policy_id()
         return {
             "service": {
                 "type": "service",
@@ -292,7 +308,7 @@ class PagerDutyAPI(object):
                 "description": f"Service for cluster {cluster_name}",
                 "status": "active",
                 "escalation_policy": {
-                    "id": default_policy,
+                    "id": policy,
                     "type": "escalation_policy_reference",
                 },
                 "alert_creation": "create_alerts_and_incidents",
