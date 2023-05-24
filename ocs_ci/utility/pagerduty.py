@@ -68,7 +68,7 @@ def set_pagerduty_faas_secret(integration_key):
     pd_configuration = pd_configuration.decode("utf-8")
     cmd = f"oc get secret {constants.FUSION_AGENT_CONFIG_SECRET} -n {ns_name} -o yaml"
     secret_data = exec_cmd(cmd).stdout
-    secret_data = yaml.load(secret_data)
+    secret_data = yaml.safe_load(secret_data)
     secret_data["pager_duty_config"] = pd_configuration
     secret_data = yaml.dump(secret_data)
 
