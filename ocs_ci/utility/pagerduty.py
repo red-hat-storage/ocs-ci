@@ -72,7 +72,7 @@ def set_pagerduty_faas_secret(integration_key):
     secret_data["pager_duty_config"] = pd_configuration
 
     with tempfile.NamedTemporaryFile(
-        prefix=f"{constants.FUSION_AGENT_CONFIG_SECRET}_"
+        mode="w+", prefix=f"{constants.FUSION_AGENT_CONFIG_SECRET}_"
     ) as secret_file:
         yaml.dump(secret_data, secret_file)
         secret_file.flush()
