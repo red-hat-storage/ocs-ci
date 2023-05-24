@@ -829,7 +829,7 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//div[@class='pf-c-dropdown pf-m-align-right']",
+        "//span[text()='Actions']/..",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
