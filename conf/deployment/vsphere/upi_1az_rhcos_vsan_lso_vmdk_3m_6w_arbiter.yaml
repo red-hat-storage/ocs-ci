@@ -16,7 +16,7 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
-  worker_replicas: 6
+  worker_replicas: 7
   master_replicas: 3
   worker_availability_zones:
     - 'data-1'
@@ -28,6 +28,6 @@ ENV_DATA:
   worker_num_cpus: '16'
   master_num_cpus: '4'
   master_memory: '16384'
-  compute_memory: '65536'
+  compute_memory: '24576'
   extra_disks: 2
   fio_storageutilization_min_mbps: 10.0
