@@ -521,7 +521,10 @@ def pagerduty_integration(request, pagerduty_service):
         assert integration_response.ok, msg
         integration = integration_response.json().get("integration")
         integration_key = integration["integration_key"]
-    pagerduty.set_pagerduty_integration_secret(integration_key)
+        if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+            pagerduty.set_pagerduty_faas_secret(integration_key)
+        else:
+        pagerduty.set_pagerduty_integration_secret(integration_key)
 
     def update_pagerduty_integration_secret():
         """

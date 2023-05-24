@@ -63,7 +63,9 @@ def set_pagerduty_faas_secret(integration_key):
         f"    sopEndpoint: <pager duty service endpoint>\n"
         f"    serviceKey: {integration_key}"
     )
+    pd_configuration = pd_configuration.encode("utf-8")
     pd_configuration = base64.b64encode(pd_configuration)
+    pd_configuration = pd_configuration.decode("utf-8")
     cmd = f"oc get secret {constants.FUSION_AGENT_CONFIG_SECRET} -n {ns_name} -o yaml"
     secret_data = exec_cmd(cmd).stdout
     secret_data = yaml.load(secret_data)
