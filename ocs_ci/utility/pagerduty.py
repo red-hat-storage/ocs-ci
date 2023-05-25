@@ -226,16 +226,6 @@ class PagerDutyAPI(object):
         )
         return response
 
-    def get_default_escalation_policy_id(self):
-        """
-        Get default account escalation policy from PagerDuty API.
-
-        Returns:
-            str: Escalation policy id
-
-        """
-        return self.get_escalation_policy_id("Default")
-
     def get_escalation_policy_id(self, name):
         """
         Get account escalation policy from PagerDuty API by name.
@@ -246,7 +236,8 @@ class PagerDutyAPI(object):
         """
         policy_id = None
         payload = {"query": name}
-        policies = self.get("escalation_policies", payload=payload).json()
+        policies = self.get("escalation_policies", payload=payload)
+        policies = policies.json()
         for policy in policies["escalation_policies"]:
             if policy["name"] == name:
                 policy_id = policy["id"]
@@ -301,8 +292,8 @@ class PagerDutyAPI(object):
         if policy_name:
             policy = self.get_escalation_policy_id(policy_name)
             if not policy:
-                logger.error(f"Policy {policy_name} not found")
-        policy = policy or self.get_default_escalation_policy_id()
+                raise ValueError(f"Policy {policy_name} not found")
+        policy = policy
         return {
             "service": {
                 "type": "service",

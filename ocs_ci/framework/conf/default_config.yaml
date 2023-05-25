@@ -245,6 +245,8 @@ UPGRADE:
 # or ping in ocs infra chat room.
 AUTH:
   test_quay_auth: test_secret
+  pagerduty:
+    escalation_policy: "Default"
 
 # This section is for FLEXY, any variable in this section will be copied into
 # flexy env file
