@@ -883,13 +883,13 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to block pools page")
-        blockpool_page = (
+        storage_system_details = (
             PageNavigator()
             .nav_odf_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )
-        blockpool_page.nav_ceph_blockpool()
+        storage_system_details.nav_ceph_blockpool()
         logger.info("Now at Block pool page")
 
     def wait_for_namespace_selection(self, project_name):
