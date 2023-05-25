@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
     ignore_leftovers,
     skipif_external_mode,
+    skipif_ibm_cloud,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import machine, constants
@@ -214,6 +215,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ignore_leftovers
 @tier4a
 @ipi_deployment_required
+@skipif_ibm_cloud
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
