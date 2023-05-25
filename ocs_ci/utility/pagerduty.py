@@ -245,10 +245,19 @@ class PagerDutyAPI(object):
 
         """
         policy_id = None
-        policies = self.get("escalation_policies").json()
-        for policy in policies["escalation_policies"]:
-            if policy["name"] == name:
-                policy_id = policy["id"]
+        offset = 0
+        more = True
+        while more:
+            payload = {"limit": 100, "offset": offset}
+            policies = self.get("escalation_policies", payload=payload).json()
+            for policy in policies["escalation_policies"]:
+                if policy["name"] == name:
+                    policy_id = policy["id"]
+                    break
+            if vendors["more"] and not policy_id:
+                offset = int(vendors["offset"]) + 100
+            else:
+                more = False
         if not policy_id:
             logger.warning(f"PagerDuty escalation policy {name} was not found")
         return policy_id
@@ -274,7 +283,7 @@ class PagerDutyAPI(object):
                 if vendor["name"] == name:
                     vendor_id = vendor["id"]
                     break
-            if vendors["more"]:
+            if vendors["more"] and not vendor_id:
                 offset = int(vendors["offset"]) + 100
             else:
                 more = False
