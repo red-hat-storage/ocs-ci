@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import ManageTest, workloads, polarion_id, bugzill
 from ocs_ci.ocs import constants, node
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.pod import Pod
-from ocs_ci.ocs.resources import pod as res_pod
+from ocs_ci.ocs.resources import pod as cephfs_pod
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class TestJenkinsSimulation(ManageTest):
         Added test coverage for BZ #2096395
         """
         if interface_iterate == constants.CEPHFILESYSTEM:
-            csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
+            csi_cephfsplugin_pod_objs = cephfs_pod.get_all_pods(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
                 selector=["csi-cephfsplugin"],
             )
@@ -60,14 +60,14 @@ class TestJenkinsSimulation(ManageTest):
             kubelet_volume_stats = "kubelet_volume_stats_inodes"
 
             # Get the node running this pod
-            node_name = res_pod.get_pod_node(pod_obj=pod).name
+            node_name = cephfs_pod.get_pod_node(pod_obj=pod).name
 
             # Get the csi_cephfsplugin pod running on this node
             cephfsplugin_pod = node.get_node_pods(
                 node_name=node_name, pods_to_search=csi_cephfsplugin_pod_objs
             )[0]
 
-            pod_log = res_pod.get_pod_logs(
+            pod_log = cephfs_pod.get_pod_logs(
                 pod_name=cephfsplugin_pod.name, container="csi-cephfsplugin"
             )
             for f_call in func_calls:
