@@ -608,5 +608,5 @@ class TerrafromFileNotFoundException(Exception):
     pass
 
 
-class IncorrectUiOptionRequested(Exception):
+class IncorrectUIOptionRequested(Exception):
     pass

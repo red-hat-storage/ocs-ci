@@ -2098,9 +2098,8 @@ WARP_CLIENT_PORT = 7761
 UI_INPUT_RULES_GENERAL = {
     "rule1": "Starts and ends with a lowercase letter or number",
     "rule2": "Only lowercase letters, numbers, non-consecutive periods, or hyphens",
-    "rule3": "A unique name for the BackingStore within the project",
-    "rule4": "Cannot be used before",
-    "rule5": "No more than 253 characters",
+    "rule3": "Cannot be used before",
+    "rule4": "No more than 253 characters",
 }
 
 UI_INPUT_RULES_BACKING_STORE = {
@@ -2119,10 +2118,10 @@ UI_INPUT_RULES_BUCKET_CLASS = {
 }
 
 UI_INPUT_RULES_OBJECT_BUCKET_CLAIM = {
-    "rule1": UI_INPUT_RULES_GENERAL["rule5"],
+    "rule1": UI_INPUT_RULES_GENERAL["rule4"],
     "rule2": UI_INPUT_RULES_GENERAL["rule1"],
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
-    "rule4": UI_INPUT_RULES_GENERAL["rule4"],
+    "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }
 
 UI_INPUT_RULES_NAMESPACE_STORE = {
@@ -2133,15 +2132,15 @@ UI_INPUT_RULES_NAMESPACE_STORE = {
 }
 
 UI_INPUT_RULES_BLOCKING_POOL = {
-    "rule1": UI_INPUT_RULES_GENERAL["rule5"],
+    "rule1": UI_INPUT_RULES_GENERAL["rule4"],
     "rule2": UI_INPUT_RULES_GENERAL["rule1"],
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
-    "rule4": UI_INPUT_RULES_GENERAL["rule4"],
+    "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }
 
 UI_INPUT_RULES_STORAGE_SYSTEM = {
-    "rule1": UI_INPUT_RULES_GENERAL["rule5"],
+    "rule1": UI_INPUT_RULES_GENERAL["rule4"],
     "rule2": UI_INPUT_RULES_GENERAL["rule1"],
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
-    "rule4": UI_INPUT_RULES_GENERAL["rule4"],
+    "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }

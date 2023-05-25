@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class TestErrorMessageImprovements(ManageTest):
     @bugzilla("2193109")
     @polarion_id("OCS-4865")
-    def test_backing_store_create_rules(self, setup_ui_class):
+    def test_backing_store_creation_rules(self, setup_ui_class):
         """
         Test to verify error rules for the name when creating a new backing store
             No more than 43 characters
@@ -38,7 +38,7 @@ class TestErrorMessageImprovements(ManageTest):
 
     @bugzilla("2193109")
     @polarion_id("OCS-4867")
-    def test_obc_create_rules(self, setup_ui_class):
+    def test_obc_creation_rules(self, setup_ui_class):
         """
         Test to verify error rules for the name when creating a new object bucket claim
             No more than 253 characters
@@ -54,7 +54,7 @@ class TestErrorMessageImprovements(ManageTest):
 
     @bugzilla("2193109")
     @polarion_id("OCS-4869")
-    def test_bucket_class_create_rules(self, setup_ui_class):
+    def test_bucket_class_creation_rules(self, setup_ui_class):
         """
         Test to verify error rules for the name when creating a new bucket class
             3-63 characters
@@ -71,7 +71,7 @@ class TestErrorMessageImprovements(ManageTest):
 
     @bugzilla("2193109")
     @polarion_id("OCS-4871")
-    def test_namespace_store_create_rules(
+    def test_namespace_store_creation_rules(
         self, cld_mgr, namespace_store_factory, setup_ui_class
     ):
         """
@@ -100,7 +100,7 @@ class TestErrorMessageImprovements(ManageTest):
 
     @bugzilla("2193109")
     @polarion_id("OCS-4873")
-    def test_blocking_pool_create_rules(self, setup_ui_class):
+    def test_blocking_pool_creation_rules(self, setup_ui_class):
         """
         Test to verify error rules for the name when creating a new blocking pool
             No more than 253 characters
@@ -120,7 +120,7 @@ class TestErrorMessageImprovements(ManageTest):
 
     @bugzilla("2193109")
     @polarion_id("OCS-4875")
-    def test_storage_class_create_rules(self, setup_ui_class):
+    def test_storage_class_creation_rules(self, setup_ui_class):
         """
         Test to verify error rules for the name when creating a new storage class
             No more than 253 characters

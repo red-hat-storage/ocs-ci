@@ -39,7 +39,7 @@ from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
     TimeoutExpiredError,
     CephHealthException,
-    IncorrectUiOptionRequested,
+    IncorrectUIOptionRequested,
 )
 from ocs_ci.ocs.ui.views import OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ocp import get_ocp_url, OCP
@@ -1021,6 +1021,9 @@ class CreateResourceForm(PageNavigator):
         Method to proceed to resource creation form, when Create button is visible
         """
         self.page_has_loaded()
+        self.wait_for_element_to_be_visible(
+            self.generic_locators["create_resource_button"]
+        )
         self.do_click(self.generic_locators["create_resource_button"])
 
     def check_error_messages(self):
@@ -1558,7 +1561,7 @@ class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
         option_2 = "Create a new StorageClass using local storage devices"
         option_3 = "Connect an external storage platform"
         if backing_store_type not in [option_1, option_2, option_3]:
-            raise IncorrectUiOptionRequested(
+            raise IncorrectUIOptionRequested(
                 f"Choose one of the existed option: '{[option_1, option_2, option_3]}'"
             )
 
@@ -1572,7 +1575,7 @@ class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
         btn_2 = "Back"
         btn_3 = "Cancel"
         if btn_text not in [btn_1, btn_2, btn_3]:
-            raise IncorrectUiOptionRequested(
+            raise IncorrectUIOptionRequested(
                 f"Choose one of the existed option: '{[btn_1, btn_2, btn_3]}'"
             )
 
