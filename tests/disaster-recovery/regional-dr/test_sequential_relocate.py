@@ -20,7 +20,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
-# TODO: Specify polarion id when available for UI test case. This test case is added in ODF 4.13 test plan.
+# TODO: Specify polarion id when available for UI test case. This test case has been added in ODF 4.13 test plan.
 @tier1
 @pytest.mark.polarion_id("OCS-4772")
 class TestSequentialRelocate:
