@@ -332,7 +332,7 @@ class Deployment(object):
             # For single cluster, test_deployment will take care.
             if config.multicluster:
                 for i in range(config.multicluster):
-                    if config.get_active_acm_index() == i:
+                    if i in get_all_acm_indexes():
                         continue
                     else:
                         config.switch_ctx(i)
