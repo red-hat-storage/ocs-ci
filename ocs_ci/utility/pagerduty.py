@@ -254,8 +254,8 @@ class PagerDutyAPI(object):
                 if policy["name"] == name:
                     policy_id = policy["id"]
                     break
-            if vendors["more"] and not policy_id:
-                offset = int(vendors["offset"]) + 100
+            if policies["more"] and not policy_id:
+                offset = int(policies["offset"]) + 100
             else:
                 more = False
         if not policy_id:
