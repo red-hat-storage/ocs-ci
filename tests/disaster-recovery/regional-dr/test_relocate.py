@@ -99,7 +99,9 @@ class TestRelocate:
 
         if config.RUN.get("rdr_relocate_via_ui"):
             verify_failover_relocate_status_ui(
-                acm_obj, action=constants.ACTION_RELOCATE
+                acm_obj,
+                action=constants.ACTION_RELOCATE,
+                workload_to_check=f"{rdr_workload.workload_name}-1",
             )
 
         # TODO: Add data integrity checks

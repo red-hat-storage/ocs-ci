@@ -168,7 +168,9 @@ class TestFailoverAndRelocate:
 
         if config.RUN.get("rdr_relocate_via_ui"):
             config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(acm_obj)
+            verify_failover_relocate_status_ui(
+                acm_obj, workload_to_check=f"{rdr_workload.workload_name}-1"
+            )
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
@@ -210,7 +212,9 @@ class TestFailoverAndRelocate:
         if config.RUN.get("rdr_relocate_via_ui"):
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(
-                acm_obj, action=constants.ACTION_RELOCATE
+                acm_obj,
+                action=constants.ACTION_RELOCATE,
+                workload_to_check=f"{rdr_workload.workload_name}-1",
             )
 
         # TODO: Add data integrity checks

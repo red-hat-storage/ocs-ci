@@ -162,6 +162,8 @@ class TestFailover:
 
         if config.RUN.get("rdr_failover_via_ui"):
             config.switch_acm_ctx()
-            verify_failover_relocate_status_ui(acm_obj)
+            verify_failover_relocate_status_ui(
+                acm_obj, workload_to_check=f"{rdr_workload.workload_name}-1"
+            )
 
         # TODO: Add data integrity checks

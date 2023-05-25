@@ -319,9 +319,13 @@ def failover_relocate_ui(
             log.info("Click on Initiate button to failover/relocate")
             acm_obj.do_click(acm_loc["initiate-action"], enable_screenshot=True)
             if action == constants.ACTION_FAILOVER:
-                log.info("Failover trigerred from ACM UI")
+                log.info(
+                    f"Failover for workload {workload_to_move} triggered from ACM UI"
+                )
             else:
-                log.info("Relocate trigerred from ACM UI")
+                log.info(
+                    f"Relocate for workload {workload_to_move} triggered from ACM UI"
+                )
             acm_obj.take_screenshot()
             log.info("Close the action modal")
             acm_obj.do_click(acm_loc["close-action-modal"], enable_screenshot=True)
@@ -334,7 +338,7 @@ def failover_relocate_ui(
 
 
 def verify_failover_relocate_status_ui(
-    acm_obj, action=constants.ACTION_FAILOVER, timeout=120
+    acm_obj, action=constants.ACTION_FAILOVER, timeout=120, workload_to_check=None
 ):
     """
     Function to verify current status of in progress Failover/Relocate operation on ACM UI
@@ -344,10 +348,18 @@ def verify_failover_relocate_status_ui(
         action (str): action "Failover" or "Relocate" which was taken on the workloads,
                     "Failover" is set to default
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
+        workload_to_check (str): Name of workload whose status needs to be checked on the ACM UI
 
     """
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
+    acm_obj.navigate_applications_page()
+    log.info("Click on search bar")
+    acm_obj.do_click(acm_loc["search-bar"])
+    log.info("Clear existing text from search bar if any")
+    acm_obj.do_clear(acm_loc["search-bar"])
+    log.info("Enter the workload to be searched")
+    acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_check)
     data_policy_hyperlink = acm_obj.wait_until_expected_text_is_found(
         locator=acm_loc["data-policy-hyperlink"],
         expected_text="1 policy",
@@ -375,7 +387,9 @@ def verify_failover_relocate_status_ui(
         )
         fetch_status = acm_obj.get_element_text(acm_loc["action-status-failover"])
         assert action_status, "Failover verification from ACM UI failed"
-        log.info(f"{action} successfully verified on ACM UI, status is {fetch_status}")
+        log.info(
+            f"{action} successfully verified for workload {workload_to_check} on ACM UI, status is {fetch_status}"
+        )
     else:
         action_status = acm_obj.wait_until_expected_text_is_found(
             acm_loc["action-status-relocate"],
@@ -384,11 +398,19 @@ def verify_failover_relocate_status_ui(
         )
         fetch_status = acm_obj.get_element_text(acm_loc["action-status-relocate"])
         assert action_status, "Relocate verification from ACM UI failed"
-        log.info(f"{action} successfully verified on ACM UI, status is {fetch_status}")
+        log.info(
+            f"{action} successfully verified for workload {workload_to_check} on ACM UI, status is {fetch_status}"
+        )
     close_action_modal = acm_obj.wait_until_expected_text_is_found(
         acm_loc["close-action-modal"], expected_text="Close", timeout=120
     )
     if close_action_modal:
         log.info("Close button found")
+        acm_obj.take_screenshot()
         acm_obj.do_click_by_xpath("//*[text()='Close']")
-        log.info("Data policy modal page closed")
+        log.info(
+            f"Data policy modal page closed, {action} on workload {workload_to_check} completed"
+        )
+    else:
+        log.error("Close button not found, next iteration may fail")
+        acm_obj.take_screenshot()
