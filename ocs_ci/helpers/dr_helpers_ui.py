@@ -240,6 +240,7 @@ def failover_relocate_ui(
             format_locator(acm_loc["select-policy"], policy_name),
             enable_screenshot=True,
         )
+
         log.info("Click on target cluster dropdown")
         acm_obj.do_click(acm_loc["target-cluster-dropdown"], enable_screenshot=True)
         if move_workloads_to_same_cluster:
@@ -256,7 +257,6 @@ def failover_relocate_ui(
             xpath = f"//button[text()='{failover_or_preferred_cluster}']"
             element = acm_obj.find_an_element_by_xpath(xpath)
             element.click()
-
         log.info("Check operation readiness")
         if action == constants.ACTION_FAILOVER:
             if move_workloads_to_same_cluster:
