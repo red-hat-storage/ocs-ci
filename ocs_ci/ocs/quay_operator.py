@@ -119,8 +119,7 @@ class QuayOperator(object):
             func=self.check_quay_registry_endpoint,
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error("Quay registry endpoint did not get created.")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError("Quay registry endpoint did not get created.")
         else:
             logger.info("Quay registry endpoint is up")
 
