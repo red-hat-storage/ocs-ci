@@ -459,8 +459,12 @@ def verify_faas_provider_resources():
     assert verify_worker_nodes_security_groups()
 
     # Check the presence of catalogsource and its state
-    catsrc = OCP(kind=constants.CATSRC, namespace=config.ENV_DATA["service_namespace"])
-    catsrc_info = catsrc.get().get("items")[0]
+    catsrc = OCP(
+        kind=constants.CATSRC,
+        namespace=config.ENV_DATA["service_namespace"],
+        resource_name="managed-fusion-catsrc",
+    )
+    catsrc_info = catsrc.get()
     log.info(f"Catalogsource: {catsrc_info}")
     assert catsrc_info["spec"]["displayName"].startswith("Managed Fusion Agent")
     assert catsrc_info["status"]["connectionState"]["lastObservedState"] == "READY"
