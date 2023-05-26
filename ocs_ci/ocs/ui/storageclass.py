@@ -30,12 +30,13 @@ class StorageClassUI(PageNavigator):
             sc_name (str): the name of the storageclass created, otherwise return None.
 
         """
-        self.navigate_cluster_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         sc_name = create_unique_resource_name("test", "storageclass")
         self.do_click(self.sc_loc["create_storageclass_button"])
         self.do_send_keys(self.sc_loc["input_storageclass_name"], sc_name)
+        self.do_click(self.sc_loc["volume_binding_mode"])
+        self.do_click(self.sc_loc["immediate"])
         self.do_click(self.sc_loc["provisioner_dropdown"])
         self.do_click(self.sc_loc["rbd_provisioner"])
         self.do_click(self.sc_loc["pool_dropdown"])
@@ -58,7 +59,6 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_cluster_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         sc_existence = self.wait_until_expected_text_is_found(
@@ -78,7 +78,6 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_cluster_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         logger.info(f"sc_name is {sc_name}")

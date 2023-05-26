@@ -823,6 +823,20 @@ add_capacity_4_12 = {
     "confirm_add_capacity": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
 }
 
+block_pool_4_12 = {
+    "actions_inside_pool": (
+        "//span[text()='Actions']/..",
+        By.XPATH,
+    ),
+    "delete_pool_inside_pool": (
+        "//a[text()='Delete BlockPool']",
+        By.XPATH,
+    ),
+}
+block_pool_4_13 = {
+    "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
+}
+
 block_pool = {
     "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
     "new_pool_name": (
@@ -1244,6 +1258,8 @@ locators = {
             **acm_configuration_4_12,
             **acm_configuration_4_13,
         },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
     },
     "4.12": {
         "login": {**login, **login_4_11},
@@ -1273,6 +1289,7 @@ locators = {
             **acm_configuration_4_12,
         },
         "obc": obc,
+        "block_pool": {**block_pool, **block_pool_4_12},
     },
     "4.11": {
         "login": {**login, **login_4_11},

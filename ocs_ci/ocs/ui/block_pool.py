@@ -64,7 +64,6 @@ class BlockPoolUI(PageNavigator):
             bool: True if pool is in the list of pools page, otherwise False
 
         """
-        self.navigate_cluster_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
         pool_existence = self.wait_until_expected_text_is_found(
@@ -85,7 +84,6 @@ class BlockPoolUI(PageNavigator):
 
         """
 
-        self.navigate_cluster_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
         self.do_click((f"{pool_name}", By.LINK_TEXT))
@@ -106,7 +104,6 @@ class BlockPoolUI(PageNavigator):
             compression (bool): True if enable compression. False otherwise.
 
         """
-        self.navigate_cluster_overview_page()
         self.navigate_block_pool_page()
         self.page_has_loaded()
         self.do_click([f"{pool_name}", By.LINK_TEXT])
