@@ -2,7 +2,7 @@ import csv
 import logging
 import os
 import re
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkdtemp
 from xml.etree import ElementTree
 from datetime import datetime
 
@@ -42,7 +42,7 @@ class Cosbench(object):
         self.ocp_obj = OCP(namespace=self.namespace)
         self.cosbench_config = None
         self.cosbench_pod = None
-        self.cosbench_dir = "/home"
+        self.cosbench_dir = mkdtemp(prefix="cosbench-tool-")
         self.xml_file = ""
         self.workload_id = ""
         self.init_container = 1
@@ -577,25 +577,26 @@ class Cosbench(object):
         workload_csv = self.get_result_csv(
             workload_id=workload_id, workload_name=workload_name
         )
-        with open(workload_csv, "r") as file:
-            reader = csv.reader(file)
-            header = next(reader)
-            if header is not None:
-                # Iterate over each row after the header
-                logger.info(
-                    f"Verifying whether each stage of workload {workload_id} completed"
-                )
-                for row in reader:
-                    if row[16] == "completed":
-                        logger.info(f"Stage {row[0]} completed successfully")
-                    else:
-                        assert (
-                            f"Failed: Stage {row[0]} did not complete. Status {row[16]}"
-                        )
-            else:
-                raise UnexpectedBehaviour(
-                    f"Workload csv is incorrect/malformed. Dumping csv {reader}"
-                )
+        if os.path.isfile(workload_csv):
+            with open(workload_csv, "r") as file:
+                reader = csv.reader(file)
+                header = next(reader)
+                if header is not None:
+                    # Iterate over each row after the header
+                    logger.info(
+                        f"Verifying whether each stage of workload {workload_id} completed"
+                    )
+                    for row in reader:
+                        if row[16] == "completed":
+                            logger.info(f"Stage {row[0]} completed successfully")
+                        else:
+                            assert f"Failed: Stage {row[0]} did not complete. Status {row[16]}"
+                else:
+                    raise UnexpectedBehaviour(
+                        f"Workload csv is incorrect/malformed. Dumping csv {reader}"
+                    )
+        else:
+            logger.error("workload_csv file not found")
 
     def get_result_csv(self, workload_id, workload_name):
         """
@@ -609,17 +610,19 @@ class Cosbench(object):
             str: Absolute path of the result csv
 
         """
+
         archive_file = f"{workload_id}-{workload_name}"
         cmd = (
             f"cp {self.cosbench_pod.name}:/cos/archive/{archive_file}/{archive_file}.csv "
             f"{self.cosbench_dir}/{archive_file}.csv "
         )
-        self.ocp_obj.exec_oc_cmd(
-            command=cmd,
-            out_yaml_format=False,
-            timeout=300,
-        )
-        return f"{self.cosbench_dir}/{archive_file}.csv"
+        while True:
+            self.ocp_obj.exec_oc_cmd(
+                command=cmd,
+                out_yaml_format=False,
+                timeout=300,
+            )
+            return f"{self.cosbench_dir}/{archive_file}.csv"
 
     def cleanup(self):
         """
