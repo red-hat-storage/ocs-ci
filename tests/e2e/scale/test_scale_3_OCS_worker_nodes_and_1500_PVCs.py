@@ -114,7 +114,7 @@ class TestScaleRespinCephPods(E2ETest):
 
 @scale
 @ignore_leftovers
-@bugzilla('2092737')
+@bugzilla("2092737")
 @skipif_external_mode
 @ipi_deployment_required
 @pytest.mark.parametrize(
