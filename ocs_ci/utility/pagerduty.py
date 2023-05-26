@@ -291,9 +291,8 @@ class PagerDutyAPI(object):
         policy_name = config.AUTH["pagerduty"].get("escalation_policy")
         if policy_name:
             policy = self.get_escalation_policy_id(policy_name)
-            if not policy:
-                raise ValueError(f"Policy {policy_name} not found")
-        policy = policy
+        if not policy:
+            raise ValueError(f"Policy {policy_name} not found")
         return {
             "service": {
                 "type": "service",
