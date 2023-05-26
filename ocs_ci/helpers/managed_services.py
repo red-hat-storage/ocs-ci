@@ -413,6 +413,7 @@ def verify_faas_provider_resources():
     5. Verify that the security groups are set up correctly
     6. Check the presence of catalogsource and its state
     7. Check the presence of subscription and its health
+    8. Check that mon PVCs have gp3-csi storageclass
 
     """
     # Verify CSV phase
@@ -485,6 +486,16 @@ def verify_faas_provider_resources():
             f"Verifying Healthy state of subscription {sub_ref['catalogSourceRef']['name']}"
         )
         assert sub_ref["healthy"]
+
+    # Check that mon PVCs have gp3-csi storageclass
+    monpvcs = OCP(
+        kind=constants.PVC,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.MON_APP_LABEL,
+    )
+    for pvc in monpvcs.get().get("items"):
+        log.info(f"pvc")
+        assert pvc["spec"]["storageClassName"] == "gp3-csi"
 
 
 def verify_faas_consumer_resources():
