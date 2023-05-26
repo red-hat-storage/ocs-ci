@@ -494,7 +494,7 @@ def verify_faas_provider_resources():
         selector=constants.MON_APP_LABEL,
     )
     for pvc in monpvcs.get().get("items"):
-        log.info(f"{pvc}")
+        log.info(f"Verifying storageclass of mon PVC {pvc['metadata']['name']}")
         assert pvc["spec"]["storageClassName"] == "gp3-csi"
 
 
