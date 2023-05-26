@@ -616,13 +616,12 @@ class Cosbench(object):
             f"cp {self.cosbench_pod.name}:/cos/archive/{archive_file}/{archive_file}.csv "
             f"{self.cosbench_dir}/{archive_file}.csv "
         )
-        while True:
-            self.ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-                timeout=300,
-            )
-            return f"{self.cosbench_dir}/{archive_file}.csv"
+        self.ocp_obj.exec_oc_cmd(
+            command=cmd,
+            out_yaml_format=False,
+            timeout=300,
+        )
+        return f"{self.cosbench_dir}/{archive_file}.csv"
 
     def cleanup(self):
         """
