@@ -1257,6 +1257,22 @@ def _collect_ocs_logs(
                 acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
             )
 
+        # Check if subctl exists
+        # If we have deployed submariner then we should have binary in the
+        # path else submariner may not be in the picture and we will skip log collection
+        try:
+            run_cmd("submariner -h")
+        except FileNotFoundError:
+            log.warning(
+                "Submariner binary doesn't exists, checking if submariner pods exists..."
+            )
+            out = run_cmd("oc get pods -n submariner-operator")
+            if "No resources" in out:
+                log.warning(
+                    "Not able to find submariner resources, skipping submariner log collection"
+                )
+            return
+
         submariner_log_path = os.path.join(
             log_dir_path,
             "submariner",
