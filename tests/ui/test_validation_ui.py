@@ -1,12 +1,16 @@
 import logging
-
 import pytest
+import re
+
+from ocs_ci.ocs.resources.pod import get_pod_logs
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework.testlib import (
     tier1,
     skipif_ui_not_support,
     skipif_ocs_version,
     polarion_id,
     ui,
+    bugzilla,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
@@ -30,18 +34,35 @@ class TestUserInterfaceValidation(object):
     @ui
     @tier1
     @black_squad
+    @bugzilla("2155743")
     @polarion_id("OCS-2575")
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui_class):
         """
         Validate User Interface of OCS/ODF dashboard
+        Verify GET requests initiated by kube-probe on odf-console pod [cover bz-2155743]
+
 
         Args:
             setup_ui_class: login function on conftest file
 
         """
-        validation_ui_obj = ValidationUI()
         ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_13:
+            logger.info(
+                "Verify GET requests initiated by kube-probe on odf-console pod"
+            )
+            pod_odf_console_name = get_pod_name_by_pattern("odf-console")
+            pod_odf_console_logs = get_pod_logs(pod_name=pod_odf_console_name[0])
+            if (
+                re.search(
+                    "GET /plugin-manifest.json HTTP.*kube-probe", pod_odf_console_logs
+                )
+                is None
+            ):
+                raise ValueError("GET request initiated by kube-probe does not exist")
+
+        validation_ui_obj = ValidationUI()
         if ocs_version >= version.VERSION_4_9:
             validation_ui_obj.odf_overview_ui()
         else:
