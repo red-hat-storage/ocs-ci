@@ -3699,7 +3699,7 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=900):
+def wait_for_machineconfigpool_status(node_type, timeout=900, skip_tls_verify=False):
     """
     Check for Machineconfigpool status
 
@@ -3708,6 +3708,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
             status is updated.
             e.g: worker, master and all if we want to check for all nodes
         timeout (int): Time in seconds to wait
+        skip_tls_verify (bool): True if allow skipping TLS verification
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -3721,7 +3722,11 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
 
     for role in node_types:
         log.info(f"Checking machineconfigpool status for {role} nodes")
-        ocp_obj = ocp.OCP(kind=constants.MACHINECONFIGPOOL, resource_name=role)
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL,
+            resource_name=role,
+            skip_tls_verify=skip_tls_verify,
+        )
         machine_count = ocp_obj.get()["status"]["machineCount"]
 
         assert ocp_obj.wait_for_resource(

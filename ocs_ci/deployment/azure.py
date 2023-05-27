@@ -5,11 +5,15 @@ on Azure platform.
 """
 
 import logging
+import json
 
+from ocs_ci.framework import config
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.cloud import IPIOCPDeployment
+from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.utility import version
-from ocs_ci.utility.azure_utils import AZURE as AzureUtil
+from ocs_ci.utility.azure_utils import AZURE as AzureUtil, AzureAroUtil
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +86,94 @@ class AZUREIPI(AZUREBase):
 
     # For Azure IPI there is no need to implement custom:
     # - deploy_ocp() method (as long as we don't tweak host network)
+
+
+class AzureCloudAroOCPDeployment(BaseOCPDeployment):
+    """
+    Azure ARO Managed deployment class.
+
+    """
+
+    def __init__(self):
+        super(AzureCloudAroOCPDeployment, self).__init__()
+        self.azure_util = AzureAroUtil()
+
+    def deploy_prereq(self):
+        """
+        Overriding deploy_prereq from parent. Perform all necessary
+        prerequisites for Azure ARO cloud deployment.
+        """
+        super(AzureCloudAroOCPDeployment, self).deploy_prereq()
+
+    def deploy(self, log_level=""):
+        """
+        Deployment specific to OCP cluster on a cloud platform.
+
+        Args:
+            log_cli_level (str): openshift installer's log level
+
+        """
+        # TODO: Add log level to az command
+
+        self.azure_util.create_cluster(self.cluster_name)
+        self.test_cluster()
+
+    def destroy(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific
+
+        Args:
+            log_level (str): log level openshift-installer (default: DEBUG)
+
+        """
+        # TODO: Add log level to az command
+        self.azure_util.destroy_cluster(
+            self.cluster_name,
+            config.ENV_DATA["azure_base_domain_resource_group_name"],
+        )
+
+
+class AZUREAroManaged(AZUREBase):
+    """
+    Deployment class for Azure Aro
+    """
+
+    OCPDeployment = AzureCloudAroOCPDeployment
+
+    def __init__(self):
+        self.name = self.__class__.__name__
+        self.azure_util = AzureAroUtil()
+        super(AZUREAroManaged, self).__init__()
+
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        """
+        Deployment specific to OCP cluster on a cloud platform.
+
+        Args:
+            log_cli_level (str): openshift installer's log level
+                (default: "DEBUG")
+
+        """
+        super(AZUREAroManaged, self).deploy_ocp(log_cli_level)
+
+    def check_cluster_existence(self, cluster_name_prefix):
+        """
+        Check cluster existence based on a cluster name prefix.
+
+        Args:
+            cluster_name_prefix (str): name prefix which identifies a cluster
+
+        Returns:
+            bool: True if a cluster with the same name prefix already exists,
+                False otherwise
+
+        """
+        logger.info(
+            "checking existence of Azure cluster with prefix %s",
+            cluster_name_prefix,
+        )
+        data = json.loads(exec_cmd("az aro list -o json").stdout)
+        for cluster in data:
+            if cluster_name_prefix in cluster["name"]:
+                return True
+        return False
