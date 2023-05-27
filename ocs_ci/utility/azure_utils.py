@@ -3,9 +3,13 @@
 Module for interactions with OCP/OCS Cluster on Azure platform level.
 """
 
+import base64
 import json
 import logging
 import os
+import time
+from datetime import datetime
+
 
 from azure.identity import ClientSecretCredential
 from azure.mgmt.compute import ComputeManagementClient
@@ -14,8 +18,19 @@ from azure.mgmt.storage import StorageManagementClient
 
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, TerrafromFileNotFoundException
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    TerrafromFileNotFoundException,
+    UnsupportedPlatformVersionError,
+)
+from ocs_ci.utility import version as version_util
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+)
+from ocs_ci.utility.ssl_certs import configure_ingress_and_api_certificates
 
 logger = logging.getLogger(name=__file__)
 
@@ -127,10 +142,11 @@ class AZURE:
             client_secret (str): password of the Service Principal
             cluster_resource_group (str): Azure Resource Group of the cluster
         """
-        self._subscription_id = subscription_id
-        self._tenant_id = tenant_id
-        self._client_id = client_id
-        self._client_secret = client_secret
+        azure_auth = config.AUTH.get("azure_auth", {})
+        self._subscription_id = subscription_id or azure_auth.get("subscription_id")
+        self._tenant_id = tenant_id or azure_auth.get("tenant_id")
+        self._client_id = client_id or azure_auth.get("client_id")
+        self._client_secret = client_secret or azure_auth.get("client_secret")
         self._cluster_resource_group = cluster_resource_group
 
     @property
@@ -460,6 +476,322 @@ class AZURE:
             )
         )
         return str(storage_account_properties)
+
+    def az_login(self):
+        login_cmd = (
+            f"az login --service-principal --username {self._client_id} --password "
+            f"{self._client_secret} --tenant {self._tenant_id}"
+        )
+        exec_cmd(login_cmd, secrets=[self._client_secret, self._tenant_id])
+
+
+class AzureAroUtil(AZURE):
+    """
+    Utility wrapper class for Azure ARO OCP cluster.
+    """
+
+    def __init__(
+        self,
+        subscription_id=None,
+        tenant_id=None,
+        client_id=None,
+        client_secret=None,
+        cluster_resource_group=None,
+    ):
+        super(AzureAroUtil, self).__init__(
+            subscription_id, tenant_id, client_id, client_secret, cluster_resource_group
+        )
+        self.az_login()
+
+    def get_aro_ocp_version(self):
+        """
+        Get OCP version available in Azure ARO.
+
+        Returns:
+            str: version of ARO OCP currently available, matching the version from config.
+
+        Raises:
+            UnsupportedPlatformVersionError: In case the version is not supported yet available
+                for the Azure ARO.
+
+        """
+        out = exec_cmd(
+            f"az aro get-versions --location {config.ENV_DATA['region']}"
+        ).stdout
+        data = json.loads(out)
+        ocp_config_version = version_util.get_semantic_ocp_version_from_config()
+        versions = []
+        for version in data:
+            semantic_version = version_util.get_semantic_version(version, False)
+            if (
+                ocp_config_version.major == semantic_version.major
+                and ocp_config_version.minor == semantic_version.minor
+            ):
+                versions.append(semantic_version)
+        if versions:
+            versions.sort()
+            return str(versions[-1])
+        raise UnsupportedPlatformVersionError(
+            f"OCP version {ocp_config_version.major}.{ocp_config_version.minor} is not supported on Azure ARO platform!"
+        )
+
+    def create_cluster(self, cluster_name):
+        """
+        Create OCP cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        Raises:
+            UnexpectedBehaviour: in the case, the cluster is not installed
+                successfully.
+
+        """
+        worker_flavor = config.ENV_DATA["worker_instance_type"]
+        master_flavor = config.ENV_DATA["master_instance_type"]
+        worker_replicas = config.ENV_DATA["worker_replicas"]
+        ocp_version = self.get_aro_ocp_version()
+        resource_group = config.ENV_DATA.get("azure_base_domain_resource_group_name")
+        cluster_resource_group = config.ENV_DATA.get(
+            "azure_cluster_resource_group_name", f"aro-{cluster_name}"
+        )
+        vnet = config.ENV_DATA.get("aro_vnet", "aro-vnet")
+        master_subnet = config.ENV_DATA.get(
+            "aro_master_subnet", constants.ARO_MASTER_SUBNET
+        )
+        worker_subnet = config.ENV_DATA.get(
+            "aro_worker_subnet", constants.ARO_WORKER_SUBNET
+        )
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        base_domain = config.ENV_DATA["base_domain"]
+        self.create_network()
+        cmd = (
+            f"az aro create --resource-group {resource_group} --cluster-resource-group {cluster_resource_group} "
+            f"--name {cluster_name} --version {ocp_version} --vnet {vnet} --master-subnet {master_subnet} "
+            f"--worker-subnet {worker_subnet} --pull-secret @{pull_secret_path} "
+            f"--worker-vm-size {worker_flavor} --master-vm-size {master_flavor}  "
+            f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain}"
+        )
+        logger.info("Creating Azure ARO cluster.")
+        out = exec_cmd(cmd, timeout=3600).stdout
+        self.set_dns_records(cluster_name, resource_group, base_domain)
+        logger.info(f"Cluster deployed: {out}")
+        cluster_info = self.get_cluster_details(cluster_name)
+        # Create metadata file to store the cluster name
+        cluster_info["clusterName"] = cluster_name
+        cluster_info["clusterID"] = cluster_info["id"]
+        cluster_path = config.ENV_DATA["cluster_path"]
+        metadata_file = os.path.join(cluster_path, "metadata.json")
+        with open(metadata_file, "w+") as f:
+            json.dump(cluster_info, f)
+        installer_log_file = os.path.join(cluster_path, ".openshift_install.log")
+        formatted_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        cluster_address = (
+            f"http://console-openshift-console.apps.{cluster_name}.{base_domain}"
+        )
+        logger.info(f"Cluster URL: {cluster_address}")
+        with open(installer_log_file, "w+") as f:
+            f.writelines(
+                [
+                    "W/A for our CI to get URL to the cluster in jenkins job. "
+                    "Cluster is deployed via az aro command!\n"
+                    f'time="{formatted_time}" level=info msg="Access the OpenShift web-console here: '
+                    f"{cluster_address}\"\n'",
+                ]
+            )
+        self.get_kubeconfig(cluster_name, resource_group)
+        self.write_kubeadmin_password(cluster_name, resource_group)
+        configure_ingress_and_api_certificates(skip_tls_verify=True)
+        attempts = 0
+        maximum_attempts = 100
+        successful_connections = 0
+        successful_connections_in_row = 10
+        while successful_connections != successful_connections_in_row:
+            try:
+                exec_cmd("oc cluster-info")
+                successful_connections += 1
+                logger.info(
+                    f"{successful_connections}. successful connection to the cluster in row"
+                )
+                time.sleep(2)
+                if successful_connections == successful_connections_in_row:
+                    logger.info(
+                        f"Reached {successful_connections_in_row} successful connection to the cluster!"
+                    )
+                    break
+            except CommandFailed:
+                logger.exception("Failed to connect to the cluster!")
+                logger.warning(
+                    "Waiting till TLS certificates will get propagated for ARO cluster!"
+                    f"Attempt: {attempts} out of {maximum_attempts}."
+                )
+                time.sleep(5)
+                successful_connections = 0
+                if attempts >= maximum_attempts:
+                    raise
+
+    def create_network(self):
+        """
+        Create network related stuff for the cluster.
+        """
+        vnet = config.ENV_DATA.get("aro_vnet", "aro-vnet")
+        vnet_address_prefixes = config.ENV_DATA.get(
+            "aro_vnet_address_prefixes", constants.ARO_VNET_ADDRESS_PREFIXES
+        )
+        master_subnet = config.ENV_DATA.get(
+            "aro_master_subnet", constants.ARO_MASTER_SUBNET
+        )
+        master_subnet_address_prefixes = config.ENV_DATA.get(
+            "aro_master_subnet_address_prefixes",
+            constants.ARO_MASTER_SUBNET_ADDRESS_PREFIXES,
+        )
+        worker_subnet = config.ENV_DATA.get(
+            "aro_worker_subnet", constants.ARO_WORKER_SUBNET
+        )
+        worker_subnet_address_prefixes = config.ENV_DATA.get(
+            "aro_worker_subnet_address_prefixes",
+            constants.ARO_WORKER_SUBNET_ADDRESS_PREFIXES,
+        )
+        resource_group = config.ENV_DATA.get("azure_base_domain_resource_group_name")
+        vnet_cmd = (
+            f"az network vnet create --resource-group {resource_group} --name {vnet} "
+            f"--address-prefixes {vnet_address_prefixes}"
+        )
+        exec_cmd(vnet_cmd)
+        for subnet, prefixes_address in {
+            master_subnet: master_subnet_address_prefixes,
+            worker_subnet: worker_subnet_address_prefixes,
+        }.items():
+            subnet_prefixes_cmd = (
+                f"az network vnet subnet create --resource-group {resource_group} --vnet-name {vnet} "
+                f"--name {subnet} --address-prefixes {prefixes_address} --service-endpoints Microsoft.ContainerRegistry"
+            )
+
+            exec_cmd(subnet_prefixes_cmd)
+
+    def get_cluster_details(self, cluster_name):
+        """
+        Returns info about the cluster which is taken from the az command.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        Returns:
+            dict: Cluster details
+
+        """
+        resource_group = config.ENV_DATA.get("azure_base_domain_resource_group_name")
+        out = exec_cmd(
+            f"az aro show --name {cluster_name} --resource-group {resource_group} -o json"
+        ).stdout
+        return json.loads(out)
+
+    def write_kubeadmin_password(self, cluster_name, resource_group):
+        """
+        Get kubeadmin password for cluster
+        """
+        cmd = f"az aro list-credentials --name {cluster_name} --resource-group {resource_group}"
+        password = json.loads(exec_cmd(cmd).stdout)["kubeadminPassword"]
+        password_file = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+        )
+        with open(password_file, "w+") as fd:
+            fd.write(password)
+
+    def set_dns_records(self, cluster_name, resource_group, base_domain):
+        """
+        Set DNS records for Azure ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+            resource_group (str): Base resource group
+            base_domain (str): Base domain for the ARO Cluster
+
+        """
+        cmd = (
+            f"az aro show -n {cluster_name} -g {resource_group} --query "
+            f"'{{api:apiserverProfile.ip, ingress:ingressProfiles[0].ip}}' --only-show-errors"
+        )
+        data = json.loads(exec_cmd(cmd).stdout)
+        dns_data = {
+            "api": data["api"],
+            "*.apps": data["ingress"],
+        }
+        self.delete_dns_records(cluster_name, resource_group, base_domain)
+        for entry, ip in dns_data.items():
+            logger.debug("Creating DNS records")
+            create_dns_record_cmd = (
+                f"az network dns record-set a add-record -g {resource_group} "
+                f"-z {base_domain} -n {entry}.{cluster_name} -a {ip}"
+            )
+            exec_cmd(create_dns_record_cmd)
+
+    def delete_dns_records(self, cluster_name, resource_group, base_domain):
+        """
+        Delete DNS records for Azure ARO cluster
+
+        Args:
+            cluster_name (str): Cluster name.
+            resource_group (str): Base resource group
+            base_domain (str): Base domain for the ARO Cluster
+
+        """
+        for each in ["api", "*.apps"]:
+            logger.debug("Deleting DNS records")
+            delete_dns_record_cmd = (
+                f"az network dns record-set a delete -g {resource_group} -z "
+                f"{base_domain} --name {each}.{cluster_name} -y"
+            )
+            exec_cmd(delete_dns_record_cmd)
+
+    def get_kubeconfig(self, cluster_name, resource_group, path=None):
+        """
+        Export kubeconfig to provided path.
+
+        Args:
+            cluster_name (str): Cluster name or ID.
+            resource_group (str): Base resource group
+            path (str): Path where to create kubeconfig file.
+
+        """
+        if path:
+            path = os.path.expanduser(path)
+        else:
+            path = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+            )
+        base_path = os.path.dirname(path)
+        os.makedirs(base_path, exist_ok=True)
+        cmd = (
+            f"az rest --method post --url '/subscriptions/{self._subscription_id}/resourceGroups/{resource_group}/"
+            f"providers/Microsoft.RedHatOpenShift/openShiftClusters/{cluster_name}/"
+            "listAdminCredentials?api-version=2022-09-04'"
+        )
+        output_data = json.loads(exec_cmd(cmd).stdout)
+        encoded_kubeconfig_data = output_data["kubeconfig"]
+        decoded_kubeconfig_data = base64.b64decode(encoded_kubeconfig_data).decode(
+            "utf-8"
+        )
+        with open(path, "w+") as fd:
+            fd.write(decoded_kubeconfig_data)
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        os.environ["KUBECONFIG"] = kubeconfig_path
+
+    def destroy_cluster(self, cluster_name, resource_group):
+        """
+        Destroy the cluster in Azure ARO.
+
+        Args:
+            cluster_name (str): Cluster name .
+
+        """
+        base_domain = config.ENV_DATA["base_domain"]
+        self.delete_dns_records(cluster_name, resource_group, base_domain)
+        cmd = f"az aro delete --resource-group {resource_group} --name {cluster_name} --yes"
+        out = exec_cmd(cmd, timeout=3600).stdout
+        logger.info(f"Destroy command output: {out}")
 
 
 def azure_storageaccount_check():

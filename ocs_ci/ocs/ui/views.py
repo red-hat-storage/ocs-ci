@@ -1,4 +1,7 @@
 from selenium.webdriver.common.by import By
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+
 
 osd_sizes = ("512", "2048", "4096")
 
@@ -20,9 +23,14 @@ login = {
     ),
     "skip_tour": (By.CSS_SELECTOR, 'button[data-test="tour-step-footer-secondary"]'),
 }
-
+azure_managed = ""
+if (
+    config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
+    and config.ENV_DATA["deployment_type"] == "managed"
+):
+    azure_managed = "Azure "
 login_4_11 = {
-    "ocp_page": "Overview · Red Hat OpenShift",
+    "ocp_page": f"Overview · {azure_managed}Red Hat OpenShift",
     "login_page_title": "Log in · Red Hat OpenShift",
 }
 

@@ -1128,6 +1128,12 @@ ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
 MANAGED_FUSION_AGENT = "managed-fusion-agent"
 OCS_CLIENT_OPERATOR = "ocs-client-operator"
 ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
+ARO_VNET = "aro-vnet"
+ARO_VNET_ADDRESS_PREFIXES = "10.0.0.0/22"
+ARO_WORKER_SUBNET = "worker-subnet"
+ARO_MASTER_SUBNET = "master-subnet"
+ARO_WORKER_SUBNET_ADDRESS_PREFIXES = "10.0.2.0/23"
+ARO_MASTER_SUBNET_ADDRESS_PREFIXES = "10.0.0.0/23"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
