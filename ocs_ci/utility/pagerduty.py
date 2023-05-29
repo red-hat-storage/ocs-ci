@@ -79,7 +79,10 @@ def set_pagerduty_faas_secret(integration_key):
         yaml.dump(secret_data, secret_file)
         secret_file.flush()
         exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
-    logger.info("New PagerDuty service was set.")
+    logger.info(
+        f"Secret {constants.FUSION_AGENT_CONFIG_SECRET} in namespace "
+        f"{ns_name} was updated with a new integration key"
+    )
 
 
 def check_incident_list(summary, urgency, incidents, status="triggered"):
