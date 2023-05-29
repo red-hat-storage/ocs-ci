@@ -222,8 +222,8 @@ NON_MS_CLUSTER_TYPE = "non_ms"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
-must_gather_pod_label = "must-gather"
-drain_canary_pod_label = "rook-ceph-drain-canary"
+must_gather_pod_label = "app=must-gather"
+drain_canary_pod_label = "app=rook-ceph-drain-canary"
 OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 
 # AMQ
@@ -1126,7 +1126,7 @@ REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
-S3CLI_APP_LABEL = "s3cli"
+S3CLI_APP_LABEL = "app=s3cli"
 OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
 OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-storage"
 

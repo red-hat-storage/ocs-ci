@@ -74,7 +74,14 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
         ns = item.get("metadata", {}).get("namespace")
         if item.get("kind") == constants.PV:
             ns = item.get("spec").get("claimRef").get("namespace")
-        app_label = item.get("metadata", {}).get("labels", {}).get("app")
+
+        item_labels = item.get("metadata", {}).get("labels", {})
+        excluded_item_labels = [
+            f"{key}={value}"
+            for key, value in item_labels.items()
+            if f"{key}={value}" in exclude_labels
+        ]
+
         if (
             ns is not None
             and ns.startswith(("openshift-", defaults.BG_LOAD_NAMESPACE))
@@ -82,8 +89,10 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
         ):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
-        if app_label in exclude_labels:
-            log.debug("ignoring item with app label %s: %s", app_label, item)
+        if excluded_item_labels:
+            log.debug(
+                "ignoring item with app label %s: %s", excluded_item_labels[0], item
+            )
             continue
         if item.get("kind") == constants.POD:
             name = item.get("metadata", {}).get("name", "")
