@@ -151,7 +151,7 @@ class TestScaleRespinOperatorPods(E2ETest):
             pod_scale_list = file_data.get("POD_SCALE_LIST")
             pvc_scale_list = file_data.get("PVC_SCALE_LIST")
         else:
-            raise FileNotFoundError
+            raise FileNotFoundError("scale data file unavailable")
 
         for itr in range(5):
             disruption = disruption_helpers.Disruptions()

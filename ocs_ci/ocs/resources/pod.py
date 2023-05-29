@@ -832,7 +832,7 @@ def get_noobaa_operator_pod(
             (default: none)
 
     Returns:
-        Pod object: ocs_operator pod object
+        Pod object: noobaa_operator pod object
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
@@ -854,7 +854,7 @@ def get_odf_operator_controller_manager(
             (default: none)
 
     Returns:
-        Pod object: ocs_operator pod object
+        Pod object: odf_operator_controller_manager pod object
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
