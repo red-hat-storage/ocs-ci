@@ -9,7 +9,10 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException, ClusterNotFoundE
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-from ocs_ci.utility.managedservice import get_storage_provider_endpoint
+from ocs_ci.utility.managedservice import (
+    get_storage_provider_endpoint,
+    remove_header_footer_from_key,
+)
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -414,6 +417,7 @@ def verify_faas_provider_resources():
     6. Check the presence of catalogsource and its state
     7. Check the presence of subscription and its health
     8. Check that mon PVCs have gp3-csi storageclass
+    9. Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
 
     """
     # Verify CSV phase
@@ -496,6 +500,27 @@ def verify_faas_provider_resources():
     for pvc in monpvcs.get().get("items"):
         log.info(f"Verifying storageclass of mon PVC {pvc['metadata']['name']}")
         assert pvc["spec"]["storageClassName"] == "gp3-csi"
+
+    # Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
+    offering = OCP(
+        kind="managedFusionOffering",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.MON_APP_LABEL,
+    )
+    offering_info = offering.get().get("items")[0]
+    # Check managedFusionOffering release
+
+    # Check managedFusionOffering usableCapacityInTiB
+    log.info("Verifying managedFusionOffering usableCapacityInTiB")
+    assert (
+        offering_info["spec"]["config"]["usableCapacityInTiB"]
+        == config.ENV_DATA["size"]
+    )
+
+    # Check managedFusionOffering onboardingValidationKey
+    public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
+    validation_key = remove_header_footer_from_key(public_key)
+    assert offering_info["spec"]["config"]["onboardingValidationKey"] == validation_key
 
 
 def verify_faas_consumer_resources():
