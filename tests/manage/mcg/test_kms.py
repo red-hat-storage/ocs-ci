@@ -37,7 +37,7 @@ class TestNoobaaKMS(MCGTest):
 
         target_log = "setKMSConditionType " + config.ENV_DATA["KMS_PROVIDER"]
         operator_logs = pod.get_pod_logs(pod_name=operator_pod_name)
-        target_log_found = target_log not in operator_logs
+        target_log_found = target_log in operator_logs
 
         if not target_log_found and restart_count > 0:
             logger.info("Checking the logs before the last pod restart")
