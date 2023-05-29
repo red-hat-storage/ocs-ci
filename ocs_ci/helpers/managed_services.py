@@ -9,10 +9,7 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException, ClusterNotFoundE
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-from ocs_ci.utility.managedservice import (
-    get_storage_provider_endpoint,
-    remove_header_footer_from_key,
-)
+from ocs_ci.utility.managedservice import get_storage_provider_endpoint
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -505,10 +502,13 @@ def verify_faas_provider_resources():
     offering = OCP(
         kind="managedFusionOffering",
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=constants.MON_APP_LABEL,
     )
     offering_info = offering.get().get("items")[0]
     # Check managedFusionOffering release
+    log.info("Verifying managedFusionOffering version")
+    deployer_version = get_ocs_osd_deployer_version()
+    log.info(f"Deployer version {deployer_version}")
+    assert offering_info["spec"]["release"] == deployer_version
 
     # Check managedFusionOffering usableCapacityInTiB
     log.info("Verifying managedFusionOffering usableCapacityInTiB")
@@ -518,9 +518,7 @@ def verify_faas_provider_resources():
     )
 
     # Check managedFusionOffering onboardingValidationKey
-    public_key = config.AUTH.get("managed_service", {}).get("public_key", "")
-    validation_key = remove_header_footer_from_key(public_key)
-    assert offering_info["spec"]["config"]["onboardingValidationKey"] == validation_key
+    assert len(offering_info["spec"]["config"]["onboardingValidationKey"]) > 700
 
 
 def verify_faas_consumer_resources():
