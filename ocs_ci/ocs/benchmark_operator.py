@@ -17,11 +17,12 @@ import re
 from subprocess import run, CalledProcessError
 
 # Local modules
+from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import mirror_image, TimeoutSampler
 
 # BMO stand for : BenchMark Operator
 # The benchmark operator name used for path / namespace etc.
@@ -149,8 +150,11 @@ class BenchmarkOperator(object):
         """
         log.info("Deploy the benchmark-operator project")
         try:
+            bmo_img = "quay.io/ocsci/benchmark-operator:testing"
+            if config.DEPLOYMENT.get("disconnected"):
+                bmo_img = mirror_image(bmo_img)
             run(
-                "make deploy IMG=quay.io/ocsci/benchmark-operator:testing",
+                f"make deploy IMG={bmo_img}",
                 shell=True,
                 check=True,
                 cwd=self.dir,
