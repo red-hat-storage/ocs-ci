@@ -10,7 +10,10 @@ from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
-from ocs_ci.utility.version import get_semantic_version
+from ocs_ci.utility.version import (
+    get_semantic_version,
+    get_semantic_ocs_version_from_config,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -506,9 +509,9 @@ def verify_faas_provider_resources():
     offering_info = offering.get().get("items")[0]
     # Check managedFusionOffering release
     log.info("Verifying managedFusionOffering version")
-    deployer_version = get_ocs_osd_deployer_version()
-    log.info(f"Deployer version {deployer_version}")
-    assert offering_info["spec"]["release"] == deployer_version
+    odf_version = get_semantic_ocs_version_from_config()
+    log.info(f"ODF version {odf_version}")
+    assert offering_info["spec"]["release"] == odf_version
 
     # Check managedFusionOffering usableCapacityInTiB
     log.info("Verifying managedFusionOffering usableCapacityInTiB")
@@ -518,6 +521,7 @@ def verify_faas_provider_resources():
     )
 
     # Check managedFusionOffering onboardingValidationKey
+    log.info("Verifying managedFusionOffering onboardingValidationKey")
     assert len(offering_info["spec"]["config"]["onboardingValidationKey"]) > 700
 
 
