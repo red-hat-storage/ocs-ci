@@ -522,7 +522,10 @@ def pagerduty_integration(request, pagerduty_service):
         assert integration_response.ok, msg
         integration = integration_response.json().get("integration")
         integration_key = integration["integration_key"]
-    pagerduty.set_pagerduty_integration_secret(integration_key)
+        if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+            pagerduty.set_pagerduty_faas_secret(integration_key)
+        else:
+            pagerduty.set_pagerduty_integration_secret(integration_key)
 
     def update_pagerduty_integration_secret():
         """
@@ -535,7 +538,10 @@ def pagerduty_integration(request, pagerduty_service):
         """
         while config.RUN["thread_pagerduty_secret_update"] != "finished":
             if config.RUN["thread_pagerduty_secret_update"] == "required":
-                pagerduty.set_pagerduty_integration_secret(integration_key)
+                if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+                    pagerduty.set_pagerduty_faas_secret(integration_key)
+                else:
+                    pagerduty.set_pagerduty_integration_secret(integration_key)
             time.sleep(60)
 
     config.RUN["thread_pagerduty_secret_update"] = "not required"
