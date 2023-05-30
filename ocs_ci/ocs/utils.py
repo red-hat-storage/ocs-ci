@@ -1261,17 +1261,24 @@ def _collect_ocs_logs(
         # If we have deployed submariner then we should have binary in the
         # path else submariner may not be in the picture and we will skip log collection
         try:
-            run_cmd("submariner -h")
+            run_cmd("subctl -h")
         except FileNotFoundError:
             log.warning(
-                "Submariner binary doesn't exists, checking if submariner pods exists..."
+                "Subctl binary doesn't exists, checking if submariner pods exists..."
             )
             out = run_cmd("oc get pods -n submariner-operator")
             if "No resources" in out:
                 log.warning(
                     "Not able to find submariner resources, skipping submariner log collection"
                 )
-            return
+                return
+            else:
+                # submariner resources exists but subctl binary missing
+                # download subctl
+                # Importing here to avoid circular imports issue and tox failure
+                from ocs_ci.deployment.acm import download_subctl_binary
+
+                download_subctl_binary()
 
         submariner_log_path = os.path.join(
             log_dir_path,

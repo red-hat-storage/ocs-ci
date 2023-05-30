@@ -83,7 +83,7 @@ class Submariner(object):
             raise Exception(f"The Submariner source: {self.source} is not recognized")
 
     def deploy_upstream(self):
-        self.download_binary()
+        download_subctl_binary()
         self.submariner_configure_upstream()
 
     def deploy_downstream(self):
@@ -249,3 +249,35 @@ class Submariner(object):
         """
         # Always return the first worker node
         return get_typed_worker_nodes()[0]
+
+
+def download_subctl_binary(source="upstream"):
+    if source == "upstream":
+        # This script puts the platform specific binary in ~/.local/bin
+        # we need to move the subctl binary to ocs-ci/bin dir
+        try:
+            resp = requests.get(constants.SUBMARINER_DOWNLOAD_URL)
+        except requests.ConnectionError:
+            logger.exception(
+                "Failed to download the downloader script from submariner site"
+            )
+            raise
+        tempf = tempfile.NamedTemporaryFile(
+            dir=".", mode="wb", prefix="submariner_downloader_", delete=False
+        )
+        tempf.write(resp.content)
+
+        # Actual submariner binary download
+        cmd = f"bash {tempf.name}"
+        try:
+            run_cmd(cmd)
+        except CommandFailed:
+            logger.exception("Failed to download submariner binary")
+            raise
+
+        # Copy submariner from ~/.local/bin to ocs-ci/bin
+        # ~/.local/bin is the default path selected by submariner script
+        shutil.copyfile(
+            os.path.expanduser("~/.local/bin/subctl"),
+            os.path.join(config.RUN["bin_dir"], "subctl"),
+        )
