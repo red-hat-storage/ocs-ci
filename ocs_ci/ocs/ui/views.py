@@ -754,7 +754,6 @@ acm_configuration_4_12 = {
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
     "search-bar": ("//input[@class='pf-c-text-input-group__text-input']", By.XPATH),
-
     "kebab-action": (
         "//button[@class='pf-c-dropdown__toggle pf-m-plain']",
         By.XPATH,
