@@ -322,7 +322,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         temp_osd = get_node_pods(self.osd_worker_node.name, pods_to_search=osd_pods)[0]
         osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
 
-        nodes.stop_nodes([self.osd_worker_node], wait=True)
+        nodes.stop_nodes([self.osd_worker_node])
         log.info(f"Successfully powered off node: {self.osd_worker_node.name}")
 
         timeout = 420
