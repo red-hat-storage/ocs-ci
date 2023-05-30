@@ -10,7 +10,7 @@ import requests
 from OpenSSL import crypto
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.utils import (
     download_file,
     exec_cmd,
@@ -247,16 +247,7 @@ def configure_custom_ingress_cert():
     ssl_ca_cert = get_root_ca_cert()
     if ssl_ca_cert:
         logger.debug(f"Configure '{ssl_ca_cert}' for proxy configuration object")
-        cmd = (
-            "oc create configmap ocs-ca -n openshift-config "
-            f"--from-file=ca-bundle.crt={ssl_ca_cert}"
-        )
-        exec_cmd(cmd)
-        cmd = (
-            "oc patch proxy/cluster --type=merge "
-            '--patch=\'{"spec":{"trustedCA":{"name":"ocs-ca"}}}\''
-        )
-        exec_cmd(cmd)
+        configure_trusted_ca_bundle(ssl_ca_cert)
 
     logger.debug(f"Configuring '{ssl_key}' and '{ssl_cert}' for ingress")
     cmd = (
@@ -271,6 +262,41 @@ def configure_custom_ingress_cert():
     )
     exec_cmd(cmd)
     wait_for_machineconfigpool_status("all", timeout=1800)
+
+
+def configure_trusted_ca_bundle(ca_cert_path):
+    """
+    Configure cluster-wide trusted CA bundle in Proxy object
+
+    Args:
+        ca_cert_path (str): path to CA Certificate(s) bundle file
+
+    """
+    ocs_ca_bundle_name = "ocs-ca-bundle"
+    # check if ocs-ca-bundle configmap already exists, if yes, concatenate
+    # existing ca-bundle.crt with the new CA bundle (ca_cert_path) and delete
+    # the old configmap before the new one is created
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+        resource_name=ocs_ca_bundle_name,
+    )
+    if configmap_obj.is_exist():
+        existing_ca_bundle = configmap_obj.get()["data"]["ca-bundle.crt"]
+        with open(ca_cert_path, "a") as fd:
+            fd.write(existing_ca_bundle)
+        configmap_obj.delete(resource_name=ocs_ca_bundle_name, wait=True)
+
+    cmd = (
+        f"oc create configmap {ocs_ca_bundle_name} -n openshift-config "
+        f"--from-file=ca-bundle.crt={ca_cert_path}"
+    )
+    exec_cmd(cmd)
+    cmd = (
+        "oc patch proxy/cluster --type=merge "
+        f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{ocs_ca_bundle_name}"}}}}}}\''
+    )
+    exec_cmd(cmd)
 
 
 def init_arg_parser():
