@@ -511,7 +511,8 @@ def verify_faas_provider_resources():
     log.info("Verifying managedFusionOffering version")
     odf_version = get_semantic_ocs_version_from_config()
     log.info(f"ODF version {odf_version}")
-    assert offering_info["spec"]["release"] == odf_version
+    log.info(f"Offering version {offering_info['spec']['release']}")
+    assert offering_info["spec"]["release"] == str(odf_version)
 
     # Check managedFusionOffering usableCapacityInTiB
     log.info("Verifying managedFusionOffering usableCapacityInTiB")
