@@ -819,6 +819,50 @@ def get_ocs_operator_pod(ocs_label=constants.OCS_OPERATOR_LABEL, namespace=None)
     return ocs_operator_pod
 
 
+def get_noobaa_operator_pod(
+    ocs_label=constants.NOOBAA_OPERATOR_POD_LABEL, namespace=None
+):
+    """
+    Fetches info about noobaa operator pod in the cluster
+
+    Args:
+        ocs_label (str): label associated with noobaa_operator pod
+            (default: defaults.NOOBAA_OPERATOR_POD_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: none)
+
+    Returns:
+        Pod object: noobaa_operator pod object
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    noobaa_operator = get_pods_having_label(ocs_label, namespace)
+    noobaa_operator_pod = Pod(**noobaa_operator[0])
+    return noobaa_operator_pod
+
+
+def get_odf_operator_controller_manager(
+    ocs_label=constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL, namespace=None
+):
+    """
+    Fetches info about odf operator control manager pod in the cluster
+
+    Args:
+        ocs_label (str): label associated with ocs_operator pod
+            (default: defaults.ODF_OPERATOR_CONTROL_MANAGER_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: none)
+
+    Returns:
+        Pod object: odf_operator_controller_manager pod object
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    odf_operator = get_pods_having_label(ocs_label, namespace)
+    odf_operator_pod = Pod(**odf_operator[0])
+    return odf_operator_pod
+
+
 def get_alertmanager_managed_ocs_alertmanager_pods(
     label=constants.MANAGED_ALERTMANAGER_LABEL, namespace=None
 ):
