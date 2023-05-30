@@ -1378,6 +1378,13 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     # add run_id
     record_testsuite_property("run_id", config.RUN["run_id"])
 
+    # add cluster dir full path (on NFS share, if configured, it should contain
+    # full path to cluster dir on NFS share, starting with `/mnt/`)
+    if config.RUN.get("cluster_dir_full_path"):
+        record_testsuite_property(
+            "cluster_dir_full_path", config.RUN.get("cluster_dir_full_path")
+        )
+
     # Report Portal
     launch_name = reporting.get_rp_launch_name()
     record_testsuite_property("rp_launch_name", launch_name)
