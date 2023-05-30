@@ -106,6 +106,12 @@ class Disruptions:
         if self.resource == "ocs_operator":
             self.resource_obj = [pod.get_ocs_operator_pod()]
             self.selector = constants.OCS_OPERATOR_LABEL
+        if self.resource == "noobaa_operator":
+            self.resource_obj = [pod.get_noobaa_operator_pod()]
+            self.selector = constants.NOOBAA_OPERATOR_POD_LABEL
+        if self.resource == "odf_operator":
+            self.resource_obj = [pod.get_odf_operator_controller_manager()]
+            self.selector = constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL
         if self.resource == "alertmanager_managed_ocs_alertmanager":
             self.resource_obj = pod.get_alertmanager_managed_ocs_alertmanager_pods()
             self.selector = constants.MANAGED_ALERTMANAGER_LABEL
