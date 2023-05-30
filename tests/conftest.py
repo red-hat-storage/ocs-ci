@@ -5435,6 +5435,17 @@ def nsfs_bucket_factory_fixture(
             )[0]
         )
         wait_for_pods_to_be_running(pod_names=[nsfs_interface_pod.name])
+
+        # Wait for the nooba-endpoint pods to reset and mount the PVC
+        nb_endpoint_pods = [
+            Pod(**pod_dict)
+            for pod_dict in get_pods_having_label(
+                constants.NOOBAA_ENDPOINT_POD_LABEL,
+                config.ENV_DATA["cluster_namespace"],
+            )
+        ]
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in nb_endpoint_pods])
+
         # Apply the necessary permissions on the filesystem
         nsfs_interface_pod.exec_cmd_on_pod(f"chmod -R 777 {nsfs_obj.mount_path}")
         nsfs_interface_pod.exec_cmd_on_pod(f"groupadd -g {nsfs_obj.gid} nsfs-group")
