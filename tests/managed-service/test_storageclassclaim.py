@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ms_consumer_required,
     skipif_ocs_version,
 )
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, ResourceWrongStatusException
 from ocs_ci.ocs.resources.storageclassclaim import create_storageclassclaim
 from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
 from ocs_ci.utility.utils import TimeoutSampler
@@ -49,12 +50,25 @@ class TestStorageClassClaim(ManageTest):
         )
 
         for sc_claim in [sc_claim_obj_rbd, sc_claim_obj_cephfs]:
-            for claim_info in TimeoutSampler(timeout=60, sleep=3, func=sc_claim.get):
-                if claim_info.get("status", {}).get("phase") == constants.STATUS_READY:
-                    log.info(
-                        f"Storageclassclaim {sc_claim.name} {constants.STATUS_READY}"
-                    )
-                    break
+            try:
+                for claim_info in TimeoutSampler(
+                    timeout=60, sleep=3, func=sc_claim.get
+                ):
+                    if (
+                        claim_info.get("status", {}).get("phase")
+                        == constants.STATUS_READY
+                    ):
+                        log.info(
+                            f"Storageclassclaim {sc_claim.name} {constants.STATUS_READY}"
+                        )
+                        break
+            except TimeoutExpiredError:
+                raise ResourceWrongStatusException(
+                    sc_claim,
+                    describe_out=sc_claim.describe(),
+                    column="PHASE",
+                    expected=constants.STATUS_READY,
+                )
 
         # Get OCS object of kind storageclass for both the storageclasses created by storageclassclaims
         sc_obj_rbd = create_ocs_object_from_kind_and_name(
