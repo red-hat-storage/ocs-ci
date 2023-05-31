@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier3,
 )
-from ocs_ci.framework.pytest_customization.marks import system_test
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
