@@ -75,13 +75,6 @@ def deploy_odf():
     Create openshift-storage namespace and deploy managedFusionOffering CR there.
     """
 
-    # TODO: Remove this workaround when the build is fixed.
-    # Temporary workaround to create storageclassclaim CRD.
-    storageclassclaim_crd = (
-        "https://raw.githubusercontent.com/red-hat-storage/ocs-client-operator/release-4.12/config/crd/"
-        "bases/ocs.openshift.io_storageclassclaims.yaml"
-    )
-    exec_cmd(f"oc create -f {storageclassclaim_crd}")
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
     ns_name = config.ENV_DATA["cluster_namespace"]
     logger.info(f"Creating {ns_name} namespace")
