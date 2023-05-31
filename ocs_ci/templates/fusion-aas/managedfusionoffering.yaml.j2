@@ -7,5 +7,5 @@ spec:
   kind: DF
   release: "{{ ocp_version }}"
   config: |
-    usableCapacityInTiB: "{{ size }}"
+    usableCapacityInTiB: {{ size }}
     onboardingValidationKey: "{{ onboarding_validation_key }}"
