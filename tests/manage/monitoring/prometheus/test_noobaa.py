@@ -52,7 +52,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
                 "warning",
             ),
         ]
-    else:
+    elif version.get_semantic_ocs_version_from_config() < version.VERSION_4_13:
         expected_alerts = [
             (
                 constants.ALERT_BUCKETREACHINGQUOTASTATE,
@@ -69,6 +69,27 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
             (
                 constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
                 "A NooBaa Bucket Is In Exceeding Quota State",
+                ["pending", "firing"],
+                "warning",
+            ),
+        ]
+    else:
+        expected_alerts = [
+            (
+                constants.ALERT_BUCKETREACHINGQUANTITYQUOTASTATE,
+                "A NooBaa Bucket Is In Reaching Quantity Quota State",
+                ["pending", "firing"],
+                "warning",
+            ),
+            (
+                constants.ALERT_BUCKETERRORSTATE,
+                "A NooBaa Bucket Is In Error State",
+                ["pending", "firing"],
+                "warning",
+            ),
+            (
+                constants.ALERT_BUCKETEXCEEDINGQUANTITYQUOTASTATE,
+                "A NooBaa Bucket Is In Exceeding Quantity Quota State",
                 ["pending", "firing"],
                 "warning",
             ),
