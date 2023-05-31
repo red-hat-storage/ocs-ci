@@ -4,10 +4,12 @@ metadata:
   name: volume-replication-sample
   namespace: default
 spec:
-  volumeReplicationClass: volumereplicationclass-sample
+  volumeReplicationClass: volume-replication-class-sample
   replicationState: primary
+  replicationHandle: ""
   autoResync: false
   dataSource:
+    apiGroup: ""
     kind: PersistentVolumeClaim
     name: myPersistentVolumeClaim
 

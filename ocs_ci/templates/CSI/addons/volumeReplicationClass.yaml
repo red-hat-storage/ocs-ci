@@ -3,6 +3,7 @@ kind: VolumeReplicationClass
 metadata:
   name: volume-replication-class-sample
 spec:
+  mirroringMode: snapshot
   provisioner: example.provisioner.io
   parameters:
     replication.storage.openshift.io/replication-secret-name: secret-name

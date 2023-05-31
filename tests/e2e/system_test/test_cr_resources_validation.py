@@ -3,7 +3,12 @@ import os
 import pytest
 from tempfile import NamedTemporaryFile
 
-from ocs_ci.framework.testlib import skipif_ocp_version, skipif_ocs_version, E2ETest
+from ocs_ci.framework.testlib import (
+    skipif_ocp_version,
+    skipif_ocs_version,
+    E2ETest,
+    tier3,
+)
 from ocs_ci.framework.pytest_customization.marks import system_test
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.ocs import constants
@@ -14,7 +19,7 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
-@system_test
+@tier3
 @skipif_ocp_version("<4.13")
 @skipif_ocs_version("<4.13")
 class TestCRRsourcesValidation(E2ETest):
@@ -27,7 +32,7 @@ class TestCRRsourcesValidation(E2ETest):
         self.object_name_to_delete = ""
 
     def cr_resource_not_editable(
-        self, cr_object_kind, yaml_name, patches_non_editable, patches_editable
+        self, cr_object_kind, yaml_name, non_editable_patches, editable_patches
     ):
         """
         Test that cr object is not editable once created
@@ -35,9 +40,9 @@ class TestCRRsourcesValidation(E2ETest):
         Args:
             cr_object_kind (str): cr object kind
             yaml_name (str): name of the yaml file from which the object is to be created
-            patches_non_editable (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
+            non_editable_patches (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
                     have no effect. If such a patch is sucessfully applied, the test should fail
-            patches_editable (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
+            editable_patches (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
                     have an effect. If such a patch is not sucessfully applied, the test should fail
 
         """
@@ -55,8 +60,8 @@ class TestCRRsourcesValidation(E2ETest):
         # test that all non editable properties are really not editable
         non_editable_properties_errors = {}
         cr_resource_prev_yaml = cr_resource_original_yaml
-        for patch in patches_non_editable:
-            params = "'" + f"{patches_non_editable[patch]}" + "'"
+        for patch in non_editable_patches:
+            params = "'" + f"{non_editable_patches[patch]}" + "'"
             command = f"oc -n openshift-storage patch {cr_resource_name} -p {params} --type merge"
 
             temp_file = NamedTemporaryFile(
@@ -103,8 +108,8 @@ class TestCRRsourcesValidation(E2ETest):
         # test that all editable properties are really editable
         editable_properties_errors = {}
         cr_resource_prev_yaml = cr_resource_original_yaml
-        for patch in patches_editable:
-            params = "'" + f"{patches_editable[patch]}" + "'"
+        for patch in editable_patches:
+            params = "'" + f"{editable_patches[patch]}" + "'"
             command = f"oc -n openshift-storage patch {cr_resource_name} -p {params} --type merge"
 
             temp_file = NamedTemporaryFile(
@@ -146,7 +151,7 @@ class TestCRRsourcesValidation(E2ETest):
         Test case to check that some properties of network fence object are not editable once object is created
         """
 
-        patches_non_editable = {  # dictionary: patch_name --> patch
+        non_editable_patches = {  # dictionary: patch_name --> patch
             "apiVersion": {"apiVersion": "csiaddons.openshift.io/v1alpha2"},
             "kind": {"kind": "newNetworkFence"},
             "generation": '{"metadata": {"generation": 6456456 }}',
@@ -159,12 +164,12 @@ class TestCRRsourcesValidation(E2ETest):
             "new_property": '{"spec": {"new_property": "new_value"}}',
         }
 
-        patches_editable = {  # dictionary: patch_name --> patch
+        editable_patches = {  # dictionary: patch_name --> patch
             "fenceState": '{"spec": {"fenceState": "Unfenced"}}',
         }
 
         self.cr_resource_not_editable(
-            "Network fence", "NetworkFence.yaml", patches_non_editable, patches_editable
+            "Network fence", "NetworkFence.yaml", non_editable_patches, editable_patches
         )
 
     def test_reclaim_space_cron_job_editable(self):
@@ -206,7 +211,8 @@ class TestCRRsourcesValidation(E2ETest):
         """
 
         non_editable_patches = {  # dictionary: patch_name --> patch
-            "provisioner": '{"spec": {"provisioner": "edited.provisioner.io"}}}',
+            "provisioner": '{"spec": {"provisioner": "edited.provisioner.io"}}',
+            "mirroringMode": '{"spec": {"mirroringMode": "clone"}}',
             "replication-secret-name": '{"spec": {"parameters" : '
             '{"replication.storage.openshift.io/replication-secret-name": "my-secret"}}}',
             "replication-secret-namespace": '{"spec": {"parameters" :'
