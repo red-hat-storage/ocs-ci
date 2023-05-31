@@ -68,6 +68,7 @@ class TestStorageClassClaim(ManageTest):
                     describe_out=sc_claim.describe(),
                     column="PHASE",
                     expected=constants.STATUS_READY,
+                    got=sc_claim.get().get("status", {}).get("phase"),
                 )
 
         # Get OCS object of kind storageclass for both the storageclasses created by storageclassclaims
