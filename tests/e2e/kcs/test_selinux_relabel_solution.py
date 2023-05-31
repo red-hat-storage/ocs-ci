@@ -40,7 +40,7 @@ class TestSelinuxrelabel(E2ETest):
                 namespace=self.project_namespace,
                 sa_name=self.sa_name.name,
                 dc_deployment=True,
-                pod_dict_path=constants.FEDORA_DC_LINUXTAR_FILES_YAML,
+                pod_dict_path=constants.PERF_DC_LINUXTAR_FILES_YAML,
                 **kwargs,
             )
         except Exception as e:
@@ -54,8 +54,6 @@ class TestSelinuxrelabel(E2ETest):
         """
         Check data integrity on pod.
         """
-        pod_name = pod_obj.name
-        log.info(f"Pod name is -------- {pod_name}")
         ocp_obj = ocp.OCP(
             kind=constants.POD,
             namespace=namespace,
@@ -63,25 +61,18 @@ class TestSelinuxrelabel(E2ETest):
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         num_of_files = random.randint(1, 9)
         random_file = ocp_obj.exec_oc_cmd(
-            f"exec -it {pod_name} -- /bin/bash"
+            f"exec -it {pod_obj.name} -- /bin/bash"
             f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
             timeout=300,
         )
         log.info(f"files are {random_file}")
         ini_md5sum_pod_data = res_pod.cal_md5sum(pod_obj=pod_obj, file_name=random_file)
-        pod_objs = res_pod.get_all_pods(
-            namespace=namespace,
-            selector=[self.pod_selector],
-            selector_label="deploymentconfig",
-        )
 
         # Respin pod
-        for pod in pod_objs:
-            pod1_name = self.pod_selector + "-1-deploy"
-            pod.ocp.wait_for_delete(resource_name=pod1_name, timeout=360)
-            pod.delete(wait=True)
-
-        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        pod_obj.delete(wait=True)
+        assert wait_for_pods_to_be_running(
+            pod_names=[pod_obj.name], timeout=600, sleep=15
+        )
         pod_objs = res_pod.get_all_pods(
             namespace=namespace,
             selector=[self.pod_selector],
@@ -131,6 +122,9 @@ class TestSelinuxrelabel(E2ETest):
         )
         log.info(f"files copied to pod {self.pod_obj}")
         self.pod_selector = self.pod_obj.labels.get("deploymentconfig")
+        pod1_name = self.pod_selector + "-1-deploy"
+        pod = ocp.OCP(kind="pod", namespace=self.project_namespace)
+        pod.delete(resource_name=pod1_name, wait=True)
 
         # Check data integrity before applying selinux relabeling solution
         start_time1 = time.time()
@@ -223,7 +217,7 @@ class TestSelinuxrelabel(E2ETest):
         oc_cmd = ocp.OCP(namespace=self.project_namespace)
 
         # Check SeLinux Relabeling
-        cmd1 = "crictl inspect $(crictl ps --name fedora -q)"
+        cmd1 = "crictl inspect $(crictl ps --name perf -q)"
         output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
         key = '"selinuxRelabel": false'
         assert key in output

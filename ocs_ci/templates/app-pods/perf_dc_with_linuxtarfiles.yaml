@@ -1,25 +1,25 @@
 kind: DeploymentConfig
 apiVersion: apps.openshift.io/v1
 metadata:
-  name: fedorapod
+  name: perfpod
   labels:
-    app: fedorapod
+    app: perfpod
 spec:
   template:
     metadata:
       labels:
-        name: fedorapod
+        name: perfpod
     spec:
       securityContext:
         fsGroup: 2000
       serviceAccountName: admin
       restartPolicy: Always
       volumes:
-      - name: fedora-vol
+      - name: perf-vol
         persistentVolumeClaim:
           claimName: tet-2
       containers:
-      - name: fedora
+      - name: perf
         image: quay.io/ocsci/perf:latest
         resources:
           limits:
@@ -29,7 +29,7 @@ spec:
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /mnt
-          name: fedora-vol
+          name: perf-vol
         livenessProbe:
           exec:
             command:
