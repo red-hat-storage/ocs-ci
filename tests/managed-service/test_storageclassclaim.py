@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources.storageclassclaim import create_storageclassclaim
 from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -43,23 +44,17 @@ class TestStorageClassClaim(ManageTest):
         teardown_factory(sc_claim_obj_rbd)
         teardown_factory(sc_claim_obj_cephfs)
 
-        log.info(f"Waiting for storageclassclaim {sc_claim_obj_rbd.name} to be Ready")
-        sc_claim_obj_rbd.ocp.wait_for_resource(
-            condition=constants.STATUS_READY,
-            resource_name=sc_claim_obj_rbd.name,
-            column="PHASE",
-            resource_count=1,
+        log.info(
+            f"Waiting for storageclassclaims {sc_claim_obj_rbd.name} and {sc_claim_obj_cephfs.name} to be Ready"
         )
 
-        log.info(
-            f"Waiting for storageclassclaim {sc_claim_obj_cephfs.name} to be Ready"
-        )
-        sc_claim_obj_cephfs.ocp.wait_for_resource(
-            condition=constants.STATUS_READY,
-            resource_name=sc_claim_obj_cephfs.name,
-            column="PHASE",
-            resource_count=1,
-        )
+        for sc_claim in [sc_claim_obj_rbd, sc_claim_obj_cephfs]:
+            for claim_info in TimeoutSampler(timeout=180, sleep=10, func=sc_claim.get):
+                if claim_info.get("status", {}).get("phase") == constants.STATUS_READY:
+                    log.info(
+                        f"Storageclassclaim {sc_claim.name} {constants.STATUS_READY}"
+                    )
+                    break
 
         # Get OCS object of kind storageclass for both the storageclasses created by storageclassclaims
         sc_obj_rbd = create_ocs_object_from_kind_and_name(
