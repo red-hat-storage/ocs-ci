@@ -6,6 +6,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
@@ -52,6 +53,8 @@ def create_storageclassclaim(
     interface_type,
     storage_class_claim_name=None,
     namespace=None,
+    storageclient_name=None,
+    storageclient_namespace=None,
 ):
     """
     Create a storageclassclaim
@@ -83,14 +86,32 @@ def create_storageclassclaim(
             f"test-{interface_type.lower()}", constants.STORAGECLASSCLAIM.lower()
         )
     )
+
+    if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+        # Get the storageclient name and namespace if not available
+        if not (storageclient_name and storageclient_namespace):
+            storageclient_obj = OCP(
+                kind=constants.STORAGECLIENT,
+                namespace=storageclient_namespace
+                or config.ENV_DATA["cluster_namespace"],
+                resource_name=storageclient_name if storageclient_name else "",
+            )
+            storageclient_data = (
+                storageclient_obj.get(resource_name=storageclient_name)
+                if storageclient_name
+                else storageclient_obj.get()["items"][0]
+            )
+            storageclient_name = storageclient_data["metadata"]["name"]
+            storageclient_namespace = storageclient_data["metadata"]["namespace"]
+        sc_claim_data["spec"]["storageClient"] = {
+            "name": storageclient_name,
+            "namespace": storageclient_namespace,
+        }
+        # Storageclassclaim is a cluster scoped resource in ODF versions supported in FaaS
+        namespace = None
+
     if namespace:
-        if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
-            sc_claim_data["spec"]["storageClient"] = {
-                "name": "storageclient",
-                "namespace": namespace,
-            }
-        else:
-            sc_claim_data["metadata"]["namespace"] = namespace
+        sc_claim_data["metadata"]["namespace"] = namespace
 
     sc_claim_obj = StorageClassClaim(**sc_claim_data)
     sc_claim_obj.create(do_reload=True)
