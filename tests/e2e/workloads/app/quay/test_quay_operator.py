@@ -45,6 +45,9 @@ def _exec_cmd(cmd):
 
 
 @workloads
+@pytest.mark.skip(
+    reason="Skipped because of issue https://github.com/red-hat-storage/ocs-ci/issues/7419"
+)
 class TestQuayWorkload(E2ETest):
     """
     Tests Quay operator
