@@ -30,6 +30,26 @@ class TestCRRsourcesValidation(E2ETest):
         self.temp_files_list = []
         self.object_name_to_delete = ""
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Cleanup the test environment
+
+        """
+
+        def finalizer():
+            for temp_file in self.temp_files_list:
+                if os.path.exists(temp_file):
+                    run_cmd(f"rm {temp_file}")
+
+            if self.object_name_to_delete != "":
+                res = run_oc_command(cmd=f"delete {self.object_name_to_delete}")
+                assert (
+                    ERRMSG not in res[0]
+                ), f"Failed to delete network fence resource with name: {self.object_name_to_delete}, got result: {res}"
+
+        request.addfinalizer(finalizer)
+
     def cr_resource_not_editable(
         self, cr_object_kind, yaml_name, non_editable_patches, editable_patches
     ):
@@ -96,11 +116,8 @@ class TestCRRsourcesValidation(E2ETest):
 
             detailed_err_msg = f"Original object yaml is {cr_resource_original_yaml}\n."
             for prop in non_editable_properties_errors:
-                detailed_err_msg += f"Changed property is {prop}. "
-                detailed_err_msg += (
-                    f"Edited object yaml is {non_editable_properties_errors[prop]}\n"
-                )
-            logger.error(detailed_err_msg)
+                detailed_err_msg += f"Changed property is {prop}. \nEdited object yaml is {non_editable_properties_errors[prop]}\n"
+                logger.error(detailed_err_msg)
 
             raise Exception(err_msg)
 
@@ -137,13 +154,10 @@ class TestCRRsourcesValidation(E2ETest):
                 editable_properties_errors[patch] = cr_resource_modified_yaml
                 continue  # just continue to the next property
 
-        if editable_properties_errors:
-            err_msg = (
-                f"{cr_object_kind} object has not been edited but it should be. \n"
-                f"Unchanged properties: {list(editable_properties_errors.keys())}"
-            )
-            logger.error(err_msg)
-            raise Exception(err_msg)
+        assert editable_properties_errors, (
+            f"{cr_object_kind} object has not been edited but it should be. \n"
+            f"Unchanged properties: {list(editable_properties_errors.keys())}"
+        )
 
     def test_network_fence_not_editable(self):
         """
@@ -211,7 +225,7 @@ class TestCRRsourcesValidation(E2ETest):
 
         non_editable_patches = {  # dictionary: patch_name --> patch
             "provisioner": '{"spec": {"provisioner": "edited.provisioner.io"}}',
-            "mirroringMode": '{"spec": {"mirroringMode": "clone"}}',
+            "mirroringMode": '{"spec": {"parameters": {"mirroringMode": "clone"}}}',
             "replication-secret-name": '{"spec": {"parameters" : '
             '{"replication.storage.openshift.io/replication-secret-name": "my-secret"}}}',
             "replication-secret-namespace": '{"spec": {"parameters" :'
@@ -224,23 +238,3 @@ class TestCRRsourcesValidation(E2ETest):
             non_editable_patches,
             {},
         )
-
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
-        """
-        Cleanup the test environment
-
-        """
-
-        def finalizer():
-            for temp_file in self.temp_files_list:
-                if os.path.exists(temp_file):
-                    run_cmd(f"rm {temp_file}")
-
-            if self.object_name_to_delete != "":
-                res = run_oc_command(cmd=f"delete {self.object_name_to_delete}")
-                assert (
-                    ERRMSG not in res[0]
-                ), f"Failed to delete network fence resource with name: {self.object_name_to_delete}, got result: {res}"
-
-        request.addfinalizer(finalizer)
