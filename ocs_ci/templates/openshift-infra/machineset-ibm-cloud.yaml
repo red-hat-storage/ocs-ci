@@ -1,0 +1,44 @@
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+metadata:
+  labels:
+    machine.openshift.io/cluster-api-cluster: infraID
+    machine.openshift.io/cluster-api-machine-role: role
+    machine.openshift.io/cluster-api-machine-type: role
+  name: infraID-app-1
+  namespace: openshift-machine-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: infraID
+      machine.openshift.io/cluster-api-machineset: infraID-app-1
+  template:
+    metadata:
+      labels:
+        machine.openshift.io/cluster-api-cluster: infraID
+        machine.openshift.io/cluster-api-machine-role: role
+        machine.openshift.io/cluster-api-machine-type: role
+        machine.openshift.io/cluster-api-machineset: infraID-app-1
+    spec:
+      metadata:
+        labels:
+      providerSpec:
+        value:
+          apiVersion: ibmcloudproviderconfig.openshift.io/v1beta1
+          credentialsSecret:
+            name: ibmcloud-credentials
+          image: infraID-rhcos
+          kind: IBMCloudMachineProviderSpec
+          primaryNetworkInterface:
+              securityGroups:
+              - infraID-sg-cluster-wide
+              - infraID-sg-openshift-net
+              subnet: infraID-subnet-compute-zone
+          profile: bx2-16x64
+          region: ibmCloudRegion
+          resourceGroup: infraID
+          userDataSecret:
+              name: worker-user-data
+          vpc: infraID-vpc
+          zone: ibmCloudZone
