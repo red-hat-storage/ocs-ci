@@ -9,13 +9,16 @@ spec:
     type: JenkinsPipeline
     jenkinsPipelineStrategy:
       jenkinsfile: |-
-        podTemplate(label: 'maven-s',
+        podTemplate(label: 'maven-build-pod',
                     cloud: 'openshift',
-                    inheritFrom: 'maven',
-                    name: 'maven-s',
+                    containers: [
+                    containerTemplate(
+                        name: 'jnlp', image: 'quay.io/openshift/origin-jenkins-agent-maven:4.13'
+                    )
+                    ],
                     volumes: [persistentVolumeClaim(mountPath: '/home/jenkins/.m2', claimName: 'dependencies', readOnly: false) ]
               ) {
-          node("maven-s") {
+          node("maven-build-pod") {
             stage('Source Checkout') {
               git url: "https://github.com/red-hat-storage/ocs-workloads.git"
               script {
