@@ -23,6 +23,7 @@ spec:
     spec:
       metadata:
         labels:
+          node-role.kubernetes.io/app: app-scale
       providerSpec:
         value:
           apiVersion: ibmcloudproviderconfig.openshift.io/v1beta1
