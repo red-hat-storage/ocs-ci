@@ -532,7 +532,7 @@ def verify_faas_provider_resources():
     )
     prometheus_version = prometheus_csv[0]["spec"]["version"]
     log.info(f"Verifying Prometheus version: {prometheus_version}")
-    assert prometheus_version == "4.10.0"
+    assert prometheus_version == config.ENV_DATA["prometheus_version"]
 
 
 def verify_faas_consumer_resources():
