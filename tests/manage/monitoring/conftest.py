@@ -652,7 +652,7 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     mcg_obj.send_rpc_query(
         "bucket_api",
         "update_bucket",
-        {"name": bucket_name, "quota": {"unit": "GIGABYTE", "size": 2}},
+        {"name": bucket_name, "size_quota": {"unit": "GIGABYTE", "size": 2}},
     )
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
