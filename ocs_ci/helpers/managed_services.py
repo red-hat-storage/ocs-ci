@@ -516,7 +516,7 @@ def verify_faas_provider_resources():
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.DEFAULT_OCS_STORAGECLASS,
     )
-    defaultsc_info = defaultsc.get().get("items")[0]
+    defaultsc_info = defaultsc.get()
     assert defaultsc_info["parameters"]["type"] == "gp3"
 
     # Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
