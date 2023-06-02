@@ -531,7 +531,7 @@ def verify_faas_provider_resources():
         constants.OSE_PROMETHEUS_OPERATOR, config.ENV_DATA["cluster_namespace"]
     )
     prometheus_version = prometheus_csv[0]["spec"]["version"]
-    log.info(f"Verifying Prometheus version")
+    log.info("Verifying Prometheus version")
     assert prometheus_version == config.ENV_DATA["prometheus_version"], (
         f"Prometheus version is {prometheus_version} "
         f"but it should be {config.ENV_DATA['prometheus_version']}"
