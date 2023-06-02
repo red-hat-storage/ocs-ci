@@ -597,6 +597,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         assert prometheus_health_check(), "Prometheus cluster health is not OK"
 
     @pytest.mark.polarion_id("OCS-1535")
+    @pytest.mark.bugzilla("2203795")
     def test_monitoring_shutdown_mgr_pod(self, pods):
         """
         Montoring backed by OCS, bring mgr down(replica: 0) for some time
