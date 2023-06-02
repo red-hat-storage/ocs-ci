@@ -64,6 +64,8 @@ def create_storageclassclaim(
             (e.g. CephBlockPool, CephFileSystem)
         storage_class_claim_name (str): The name of storageclassclaim to create
         namespace(str): The namespace in which the storageclassclaim should be created
+        storageclient_name(str): Name of the storageclient
+        storageclient_namespace(str): Namespace of storageclient
 
     Returns:
         OCS: An OCS instance for the storageclassclaim
