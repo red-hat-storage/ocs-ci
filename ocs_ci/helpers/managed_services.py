@@ -418,7 +418,7 @@ def verify_faas_provider_resources():
     7. Check the presence of subscription and its health
     8. Check that mon PVCs have gp3-csi storageclass
     9. Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
-    10. Verify that version of Prometheus is 4.10.0
+    10. Verify the version of Prometheus
 
     """
     # Verify CSV phase
@@ -526,13 +526,16 @@ def verify_faas_provider_resources():
     log.info("Verifying managedFusionOffering onboardingValidationKey")
     assert len(offering_info["spec"]["config"]["onboardingValidationKey"]) > 700
 
-    # Verify that version of Prometheus is 4.10.0
+    # Verify the version of Prometheus
     prometheus_csv = csv.get_csvs_start_with_prefix(
         constants.OSE_PROMETHEUS_OPERATOR, config.ENV_DATA["cluster_namespace"]
     )
     prometheus_version = prometheus_csv[0]["spec"]["version"]
-    log.info(f"Verifying Prometheus version: {prometheus_version}")
-    assert prometheus_version == config.ENV_DATA["prometheus_version"]
+    log.info(f"Verifying Prometheus version")
+    assert prometheus_version == config.ENV_DATA["prometheus_version"], (
+        f"Prometheus version is {prometheus_version} "
+        f"but it should be {config.ENV_DATA['prometheus_version']}"
+    )
 
 
 def verify_faas_consumer_resources():
