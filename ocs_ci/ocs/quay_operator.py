@@ -47,13 +47,41 @@ class QuayOperator(object):
             else constants.DEFAULT_STORAGECLASS_RBD
         )
 
-    def setup_quay_operator(self):
+    def get_quay_default_channel(self):
         """
-        Deploys Quay operator
+        Retrieves the default channel of the Quay operator from the
+        PackageManifest in the openshift-marketplace namespace.
+
+        Returns:
+            str: The default channel of the Quay operator.
 
         """
-        quay_operator_data = templating.load_yaml(file=constants.QUAY_SUB)
-        self.quay_operator = OCS(**quay_operator_data)
+        package_manifest_obj = OCP(
+            kind="PackageManifest", namespace=constants.MARKETPLACE_NAMESPACE
+        )
+        quay_package_manifest = package_manifest_obj.get(
+            resource_name=constants.QUAY_OPERATOR
+        )
+        default_channel = quay_package_manifest.get("status").get("defaultChannel")
+        return default_channel
+
+    def setup_quay_operator(self, channel=None):
+        """
+        Deploys the Quay operator using the specified channel or the default channel if not provided
+
+        Args:
+            channel (str, optional): The channel of the Quay operator to deploy. If not provided, the default channel
+                will be used.
+
+        Raises:
+            TimeoutError: If the Quay operator pod fails to reach the 'Running' state
+            within the timeout.
+
+        """
+        channel = channel if channel else self.get_quay_default_channel()
+        quay_operator_data_dict = templating.load_yaml(file=constants.QUAY_SUB)
+        quay_operator_data_dict["spec"]["channel"] = channel
+        self.quay_operator = OCS(**quay_operator_data_dict)
         logger.info(f"Installing Quay operator: {self.quay_operator.name}")
         self.quay_operator.create()
         for quay_pod in TimeoutSampler(
