@@ -2,7 +2,6 @@ import logging
 
 from ocs_ci.framework.testlib import (
     polarion_id,
-    bugzilla,
     skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
     skipif_managed_service,
@@ -18,7 +17,6 @@ log = logging.getLogger(__name__)
 
 @tier2
 @polarion_id("OCS-1254")
-@bugzilla("2154250")
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
