@@ -2730,6 +2730,17 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         mch_resource_yaml.flush()
         run_cmd(f"oc apply -f {mch_resource_yaml.name}")
         mch_resource.wait_for_phase("Running")
+        self.backup_pod_status_check()
+
+    @retry((TimeoutExpiredError, MDRDeploymentException), tries=20, delay=10)
+    def backup_pod_status_check(self):
+        pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+        if len(pods_list) != 3:
+            raise MDRDeploymentException("backup pod count mismatch ")
+        for pod in pods_list:
+            # check pod status Running
+            if not pod.data["status"]["phase"] == "Running":
+                raise MDRDeploymentException("backup pods not in Running state")
 
 
 MULTICLUSTER_DR_MAP = {

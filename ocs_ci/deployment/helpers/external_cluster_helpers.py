@@ -541,12 +541,7 @@ def get_external_cluster_client():
         )
     nodes = config.EXTERNAL_MODE["external_cluster_node_roles"]
     node_role = None
-    if config.multicluster:
-        # In case of multicluster we need to run the commands from
-        # admin node
-        node_role = "_admin"
-    else:
-        node_role = "client"
+    node_role = "_admin" if config.multicluster else "client"
 
     try:
         return get_node_by_role(nodes, node_role, user, password, ssh_key)
