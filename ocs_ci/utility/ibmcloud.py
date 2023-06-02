@@ -266,8 +266,7 @@ class IBMCloud(object):
         cluster_id = provider_id.split("/")[5]
 
         for node in nodes:
-            provider_id = node.get()["spec"]["providerID"]
-            worker_id = provider_id.split("/")[-1]
+            worker_id = node.get()["spec"]["providerID"].split("/")[-1]
             cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {worker_id} -f"
             out = run_ibmcloud_cmd(cmd)
             logger.info(f"Node restart command output: {out}")
