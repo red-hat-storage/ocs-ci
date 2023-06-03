@@ -154,7 +154,7 @@ class TestCRRsourcesValidation(E2ETest):
                 editable_properties_errors[patch] = cr_resource_modified_yaml
                 continue  # just continue to the next property
 
-        assert editable_properties_errors, (
+        assert not editable_properties_errors, (
             f"{cr_object_kind} object has not been edited but it should be. \n"
             f"Unchanged properties: {list(editable_properties_errors.keys())}"
         )
