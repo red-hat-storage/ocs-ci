@@ -116,7 +116,8 @@ class TestCRRsourcesValidation(E2ETest):
 
             detailed_err_msg = f"Original object yaml is {cr_resource_original_yaml}\n."
             for prop in non_editable_properties_errors:
-                detailed_err_msg += f"Changed property is {prop}. \nEdited object yaml is {non_editable_properties_errors[prop]}\n"
+                detailed_err_msg += f"Changed property is {prop}. \nEdited object yaml is " \
+                                    f"{non_editable_properties_errors[prop]}\n"
                 logger.error(detailed_err_msg)
 
             raise Exception(err_msg)
