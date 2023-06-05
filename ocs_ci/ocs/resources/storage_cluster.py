@@ -306,6 +306,10 @@ def ocs_install_verification(
             timeout=timeout,
         )
 
+    # Checks for FaaS
+    if fusion_aas:
+        verify_faas_resources()
+
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")
     storage_class = OCP(kind=constants.STORAGECLASS, namespace=namespace)
@@ -659,9 +663,6 @@ def ocs_install_verification(
 
     if config.ENV_DATA.get("is_multus_enabled"):
         verify_multus_network()
-
-    if fusion_aas:
-        verify_faas_resources()
 
     # validation in case of openshift-cert-manager installed
     if config.DEPLOYMENT.get("install_cert_manager"):
