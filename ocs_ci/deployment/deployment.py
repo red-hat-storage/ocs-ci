@@ -1871,6 +1871,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
 
+    # TODO: get_and_aply_icsp_from_catalog(image)
+
 
 @retry(CommandFailed, tries=8, delay=3)
 def setup_persistent_monitoring():
@@ -1910,6 +1912,39 @@ def setup_persistent_monitoring():
     retry((CommandFailed, AssertionError), tries=3, delay=15)(
         validate_pvc_are_mounted_on_monitoring_pods
     )(pods_list)
+
+
+def get_and_aply_icsp_from_catalog(image, apply=True):
+    """
+    Get ICSP from catalog image (if exists) and apply it on the cluster (if
+    requiested).
+
+    Args:
+        image (str): catalog image of ocs registry.
+        apply (bool): controls if the ICSP should be applied or not
+            (default: true)
+
+    Returns:
+        str: path to the icsp.yaml file
+
+    """
+
+    # TODO: confirm/update the icsp file location in the image
+    icsp_file_location = "/icsp.yaml"
+    icsp_file_dest_location = os.path.join(config.ENV_DATA["cluster_path"], "icsp.yaml")
+    # TODO: handle situation (maybe exception?) when the icsp file is not
+    # present in the catalog image
+    # TODO: confirm the `oc image extract ...` command
+    exec_cmd(
+        f"oc image extract --registry-config {config.RUN['kubeconfig']} "
+        f"{image} --confirm "
+        f"--path {icsp_file_location}:{icsp_file_dest_location}"
+    )
+    if apply:
+        exec_cmd(f"oc apply -f {icsp_file_dest_location}")
+        wait_for_machineconfigpool_status("all")
+
+    return icsp_file_dest_location
 
 
 class RBDDRDeployOps(object):
