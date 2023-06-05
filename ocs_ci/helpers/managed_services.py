@@ -5,7 +5,7 @@ import logging
 import re
 
 from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name, create_resource
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, ClusterNotFoundException
+from ocs_ci.ocs.exceptions import ClusterNotFoundException
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
@@ -25,7 +25,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_pod_node
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.utility.utils import convert_device_size
+from ocs_ci.utility.utils import convert_device_size, TimeoutSampler
 import ocs_ci.ocs.cluster
 
 log = logging.getLogger(__name__)
@@ -328,14 +328,16 @@ def verify_storageclient_storageclass_claims(storageclient):
 
     """
     sc_claim_objs = get_storageclassclaims_of_storageclient(storageclient)
+
+    # Wait for the storageclassclaims to be in Ready state
     for sc_claim in sc_claim_objs:
-        if sc_claim.data["status"]["phase"] == constants.STATUS_READY:
-            log.info(
-                f"Storageclassclaim {sc_claim.name} associated with the storageclient {storageclient} is "
-                f"{constants.STATUS_READY}"
-            )
-        else:
-            raise ResourceWrongStatusException(sc_claim.name, sc_claim.ocp.describe())
+        for claim_info in TimeoutSampler(timeout=180, sleep=10, func=sc_claim.get):
+            if claim_info.get("status", {}).get("phase") == constants.STATUS_READY:
+                log.info(
+                    f"Storageclassclaim {sc_claim.name} associated with the storageclient {storageclient} is "
+                    f"{constants.STATUS_READY}"
+                )
+                break
 
         # Create OCS object of kind Storageclass
         sc_obj = create_ocs_object_from_kind_and_name(
