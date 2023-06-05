@@ -1328,6 +1328,12 @@ class Deployment(object):
 
         cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+
+        # Enable in-transit encryption.
+        if config.ENV_DATA.get("in_transit_encryption"):
+            cluster_data["spec"]["network"] = {
+                "connections": {"encryption": {"enabled": True}},
+            }
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="external_cluster_storage", delete=False
         )
