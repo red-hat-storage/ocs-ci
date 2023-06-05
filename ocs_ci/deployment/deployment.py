@@ -18,6 +18,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
+    intransit_encryption_external_mode_config,
 )
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
@@ -1333,6 +1334,11 @@ class Deployment(object):
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+
+        # Setup in-transit encryption.
+        if config.ENV_DATA.get("in_transit_encryption"):
+            intransit_encryption_external_mode_config(enable=True)
+
         self.external_post_deploy_validation()
         setup_ceph_toolbox()
 
