@@ -74,8 +74,8 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     else:
         expected_alerts = [
             (
-                constants.ALERT_BUCKETREACHINGQUANTITYQUOTASTATE,
-                "A NooBaa Bucket Is In Reaching Quantity Quota State",
+                constants.ALERT_BUCKETREACHINGSIZEQUOTASTATE,
+                "A NooBaa Bucket Is In Reaching Size Quota State",
                 ["pending", "firing"],
                 "warning",
             ),
@@ -86,8 +86,8 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
                 "warning",
             ),
             (
-                constants.ALERT_BUCKETEXCEEDINGQUANTITYQUOTASTATE,
-                "A NooBaa Bucket Is In Exceeding Quantity Quota State",
+                constants.ALERT_BUCKETEXCEEDINGSIZEQUOTASTATE,
+                "A NooBaa Bucket Is In Exceeding Size Quota State",
                 ["pending", "firing"],
                 "warning",
             ),
