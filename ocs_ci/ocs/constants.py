@@ -1732,7 +1732,7 @@ BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
 SQUADS = {
     "Aqua": ["/lvmo/"],
     "Brown": ["/z_cluster/", "/nfs_feature/"],
-    "Green": ["/pv_services/", "/storageclass/"],
+    "Green": ["/encryption/", "/pv_services/", "/storageclass/"],
     "Blue": ["/monitoring/"],
     "Red": ["/mcg/", "/rgw/"],
     "Purple": ["/ecosystem/"],
