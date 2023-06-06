@@ -16,7 +16,7 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
-  worker_replicas: 7
+  worker_replicas: 6
   master_replicas: 3
   worker_availability_zones:
     - 'data-1'
