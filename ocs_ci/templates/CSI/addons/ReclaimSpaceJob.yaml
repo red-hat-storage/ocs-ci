@@ -1,7 +1,7 @@
 apiVersion: csiaddons.openshift.io/v1alpha1
 kind: ReclaimSpaceJob
 metadata:
-  name: sample-1
+  name: reclaim-space-job-sample
 spec:
   target:
      persistentVolumeClaim: pvc-1

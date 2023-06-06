@@ -1,7 +1,7 @@
 apiVersion: csiaddons.openshift.io/v1alpha1
 kind: ReclaimSpaceCronJob
 metadata:
-  name: reclaimspacecronjob-sample
+  name: reclaim-space-cron-job-sample
 spec:
   concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
