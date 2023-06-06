@@ -457,7 +457,7 @@ def verify_faas_provider_resources():
         kind=constants.CEPH_CLUSTER, namespace=config.ENV_DATA["cluster_namespace"]
     )
     log.info("Waiting for Cephcluster to be Ready")
-    csv_obj.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
+    cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
     cephcluster_yaml = cephcluster.get().get("items")[0]
     log.info("Verifying that Cephcluster's hostNetworking is True")
     assert cephcluster_yaml["spec"]["network"][
