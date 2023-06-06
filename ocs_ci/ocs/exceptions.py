@@ -280,6 +280,10 @@ class ExternalClusterCephfsMissing(Exception):
     pass
 
 
+class ExternalClusterCommandExecutionFailed(Exception):
+    pass
+
+
 class ExternalClusterCephSSHAuthDetailsMissing(Exception):
     pass
 

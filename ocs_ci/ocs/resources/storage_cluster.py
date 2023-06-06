@@ -15,6 +15,8 @@ from ocs_ci.framework import config
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
+    external_rhcs_ceph_config_dump,
+    external_rhcs_ceph_mon_dump,
 )
 from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
@@ -964,8 +966,10 @@ def ceph_config_dump():
 
     """
     log.info("Getting 'ceph config dump' output.")
-    toolbox = get_ceph_tools_pod()
+    if config.DEPLOYMENT["external_mode"]:
+        return external_rhcs_ceph_config_dump()
 
+    toolbox = get_ceph_tools_pod()
     return toolbox.exec_ceph_cmd("ceph config dump")
 
 
@@ -978,8 +982,10 @@ def ceph_mon_dump():
 
     """
     log.info("Getting 'ceph mon dump' output.")
-    toolbox = get_ceph_tools_pod()
+    if config.DEPLOYMENT["external_mode"]:
+        return external_rhcs_ceph_mon_dump()
 
+    toolbox = get_ceph_tools_pod()
     return toolbox.exec_ceph_cmd("ceph mon dump")
 
 

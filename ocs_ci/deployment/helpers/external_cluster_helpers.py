@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterObjectStoreUserCreationFailed,
     ExternalClusterCephfsMissing,
+    ExternalClusterCommandExecutionFailed,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -397,6 +398,40 @@ class ExternalCluster(object):
             raise ExternalClusterCephfsMissing
         return ceph_fs_list[0]["name"]
 
+    def get_ceph_config_dump(self):
+        """
+        Gets the Ceph configuration dump.
+
+        Returns:
+            A JSON-serialized object containing the Ceph configuration dump.
+
+        Raises:
+            ExternalClusterCommandExecutionFailed: If the Ceph command failed to execute.
+        """
+        cmd = "ceph config dump --format json"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        ceph_config_dump = json.loads(out)
+        if not ceph_config_dump:
+            raise ExternalClusterCommandExecutionFailed
+        return ceph_config_dump
+
+    def get_ceph_mon_dump(self):
+        """
+        Gets the Ceph monitor dump.
+
+        Returns:
+            A JSON-serialized object containing the Ceph monitor dump.
+
+        Raises:
+            ExternalClusterCommandExecutionFailed: If the Ceph command failed to execute.
+        """
+        cmd = "ceph mon dump --format json"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        ceph_mon_dump = json.loads(out)
+        if not ceph_mon_dump:
+            raise ExternalClusterCommandExecutionFailed
+        return ceph_mon_dump
+
     def remove_rbd_images(self, images, pool):
         """
         Removes rbd images from external RHCS cluster
@@ -595,3 +630,35 @@ def intransit_encryption_external_mode_config(enable=True):
     host, user, password, ssh_key = get_external_cluster_client()
     external_cluster = ExternalCluster(host, user, password, ssh_key)
     external_cluster.rhcs_encryption_settings(enable=enable)
+
+
+def get_external_rhcs_config_dump():
+    """
+    Gets the Ceph configuration dump for an external Red Hat Ceph Storage (RHCs) cluster.
+
+    Returns:
+        A JSON-serialized object containing the Ceph configuration dump.
+
+    Raises:
+        ExternalClusterClientError: If the external RHCS cluster client could not be created.
+        ExternalClusterCommandExecutionFailed: If the Ceph command failed to execute.
+    """
+    host, user, password, ssh_key = get_external_cluster_client()
+    external_cluster = ExternalCluster(host, user, password, ssh_key)
+    return external_cluster.get_ceph_config_dump()
+
+
+def get_external_rhcs_mon_dump():
+    """
+    Gets the Ceph monitor dump for an external Red Hat Ceph Storage (RHCs) cluster.
+
+    Returns:
+        A JSON-serialized object containing the Ceph monitor dump.
+
+    Raises:
+        ExternalClusterClientError: If the external RHCS cluster client could not be created.
+        ExternalClusterCommandExecutionFailed: If the Ceph command failed to execute.
+    """
+    host, user, password, ssh_key = get_external_cluster_client()
+    external_cluster = ExternalCluster(host, user, password, ssh_key)
+    return external_cluster.get_ceph_mon_dump()
