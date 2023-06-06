@@ -155,7 +155,8 @@ class TestFailoverAndRelocate:
         else:
             # Failover action via CLI
             dr_helpers.failover(
-                secondary_cluster_name, rdr_workload.workload_namespace, workload_type
+                secondary_cluster_name, rdr_workload.workload_namespace,
+                workload_type, rdr_workload.appset_placement_name if workload_type == constants.SUBSCRIPTION else None
             )
 
         # Verify resources creation on secondary cluster (failoverCluster)
@@ -214,7 +215,8 @@ class TestFailoverAndRelocate:
         else:
             # Relocate action via CLI
             dr_helpers.relocate(
-                primary_cluster_name, rdr_workload.workload_namespace, workload_type
+                primary_cluster_name, rdr_workload.workload_namespace,
+                workload_type, rdr_workload.appset_placement_name if workload_type == constants.SUBSCRIPTION else None
             )
 
         # Verify resources deletion from secondary cluster

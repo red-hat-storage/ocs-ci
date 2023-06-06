@@ -120,7 +120,7 @@ def get_scheduling_interval(namespace, workload_type=constants.SUBSCRIPTION):
     return interval_value
 
 
-def failover(failover_cluster, namespace, workload_type=constants.SUBSCRIPTION):
+def failover(failover_cluster, namespace, workload_type=constants.SUBSCRIPTION, workload_placement_name=None):
     """
     Initiates Failover action to the specified cluster
 
@@ -128,6 +128,7 @@ def failover(failover_cluster, namespace, workload_type=constants.SUBSCRIPTION):
         failover_cluster (str): Cluster name to which the workload should be failed over
         namespace (str): Namespace where workload is running
         workload_type(str): Type of workload ie Subscription or ApplicationSet
+        workload_placement_name(str): Placement name
 
     """
     restore_index = config.cur_index
@@ -135,7 +136,10 @@ def failover(failover_cluster, namespace, workload_type=constants.SUBSCRIPTION):
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
-    drpc_obj = DRPC(namespace=namespace)
+        drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}-drpc")
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Failover action with failoverCluster:{failover_cluster}")
     assert drpc_obj.patch(
@@ -149,7 +153,7 @@ def failover(failover_cluster, namespace, workload_type=constants.SUBSCRIPTION):
     config.switch_ctx(restore_index)
 
 
-def relocate(preferred_cluster, namespace, workload_type=constants.SUBSCRIPTION):
+def relocate(preferred_cluster, namespace, workload_type=constants.SUBSCRIPTION, workload_placement_name=None):
     """
     Initiates Relocate action to the specified cluster
 
@@ -157,6 +161,7 @@ def relocate(preferred_cluster, namespace, workload_type=constants.SUBSCRIPTION)
         preferred_cluster (str): Cluster name to which the workload should be relocated
         namespace (str): Namespace where workload is running
         workload_type(str): Type of workload ie Subscription or ApplicationSet
+        workload_placement_name(str): Placement name
 
     """
     restore_index = config.cur_index
