@@ -5291,6 +5291,10 @@ def nsfs_interface_fixture(request):
         volumes = nsfs_deployment_data["spec"]["template"]["spec"]["volumes"][0]
         volumes["name"] = pvc_name
         volumes["persistentVolumeClaim"]["claimName"] = pvc_name
+
+        if config.DEPLOYMENT.get("disconnected"):
+            update_container_with_mirrored_image(nsfs_deployment_data)
+
         deployment_obj = helpers.create_resource(**nsfs_deployment_data)
         created_deployments.append(deployment_obj)
         return deployment_obj
