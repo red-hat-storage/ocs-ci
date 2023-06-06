@@ -502,7 +502,34 @@ def verify_faas_provider_resources():
     )
     for pvc in monpvcs.get().get("items"):
         log.info(f"Verifying storageclass of mon PVC {pvc['metadata']['name']}")
-        assert pvc["spec"]["storageClassName"] == "gp3-csi"
+        assert pvc["spec"]["storageClassName"] == constants.GP3_CSI, (
+            f"Storage class of PVC {pvc['metadata']['name']} is "
+            f"{pvc['spec']['storageClassName']}. It should be {constants.GP3_CSI}."
+        )
+
+    # Check that OSD PVCs have gp3-based storageclass
+    osdpvcs = OCP(
+        kind=constants.PVC,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.OSD_PVC_GENERIC_LABEL,
+    )
+    for pvc in osdpvcs.get().get("items"):
+        log.info(f"Verifying storageclass of OSD PVC {pvc['metadata']['name']}")
+        assert pvc["spec"]["storageClassName"] == constants.DEFAULT_OCS_STORAGECLASS, (
+            f"Storage class of PVC {pvc['metadata']['name']} is "
+            f"{pvc['spec']['storageClassName']}. "
+            f"It should be {constants.DEFAULT_OCS_STORAGECLASS}"
+        )
+    defaultsc = OCP(
+        kind=constants.STORAGECLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_OCS_STORAGECLASS,
+    )
+    defaultsc_info = defaultsc.get()
+    assert defaultsc_info["parameters"]["type"] == constants.GP3, (
+        f"Type of OSD PVC's storage class is {defaultsc_info['parameters']['type']}. "
+        f"It should be {constants.GP3}"
+    )
 
     # Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
     offering = OCP(
