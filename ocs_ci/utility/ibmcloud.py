@@ -265,15 +265,11 @@ class IBMCloud(object):
         provider_id = nodes[0].get()["spec"]["providerID"]
         cluster_id = provider_id.split("/")[5]
 
-        cmd = f"ibmcloud ks workers --cluster {cluster_id} --output json"
-        out = run_ibmcloud_cmd(cmd)
-        worker_nodes = json.loads(out)
-
-        if len(worker_nodes) > 0:
-            for node in worker_nodes:
-                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {node['id']} -f"
-                out = run_ibmcloud_cmd(cmd)
-                logger.info(f"Node restart command output: {out}")
+        for node in nodes:
+            worker_id = node.get()["spec"]["providerID"].split("/")[-1]
+            cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {worker_id} -f"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node restart command output: {out}")
 
     def attach_volume(self, volume, node):
         """
