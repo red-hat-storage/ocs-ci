@@ -399,7 +399,9 @@ class BaseUI:
             if sample == attribute_value:
                 break
 
-    def page_has_loaded(self, retries=5, sleep_time=2):
+    def page_has_loaded(
+        self, retries=5, sleep_time=2, module_loc=("html", By.TAG_NAME)
+    ):
         """
         Waits for page to completely load by comparing current page hash values.
         Not suitable for pages that use frequent dynamically content (less than sleep_time)
@@ -407,7 +409,7 @@ class BaseUI:
         Args:
             retries (int): How much time in sleep_time to wait for page to load
             sleep_time (int): Time to wait between every pool of dom hash
-
+            module_loc (tuple): locator of the module of the page awaited to be loaded
         """
 
         @retry(TimeoutException)
@@ -415,8 +417,8 @@ class BaseUI:
             """
             Get dom html hash
             """
-            self.check_element_presence((By.TAG_NAME, "html"))
-            dom = self.get_element_attribute(("html", By.TAG_NAME), "innerHTML")
+            self.check_element_presence(module_loc[::-1])
+            dom = self.get_element_attribute(module_loc, "innerHTML")
             dom_hash = hash(dom.encode("utf-8"))
             return dom_hash
 
@@ -627,7 +629,7 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
-        self.page_has_loaded(5, 5)
+        self.page_has_loaded(5, 5, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
         """
@@ -635,7 +637,7 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to OCP Home Page")
         self.driver.get(get_ocp_url())
-        self.page_has_loaded()
+        self.page_has_loaded(retries=10, sleep_time=5)
 
     def navigate_storage(self):
         logger.info("Navigate to ODF tab under Storage section")
@@ -663,7 +665,6 @@ class PageNavigator(BaseUI):
 
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
-        self.page_has_loaded(retries=15)
         logger.info("Successfully navigated to ODF tab under Storage section")
         default_tab = OverviewTab()
         logger.info(f"Default page is {self.driver.title}")
@@ -1429,7 +1430,6 @@ class DataFoundationTabBar(PageNavigator):
         """
         logger.info("Navigate to Data Foundation - Storage Systems")
         self.do_click(self.validation_loc["storage_systems"], enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=2)
         return StorageSystemTab()
 
     def nav_overview_tab(self):
@@ -1703,7 +1703,6 @@ class StorageSystemDetails(StorageSystemTab):
             )
         else:
             self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
-        self.page_has_loaded(retries=15, sleep_time=2)
         return BlockPools()
 
     def get_blockpools_compression_status_from_storagesystem(self) -> tuple:

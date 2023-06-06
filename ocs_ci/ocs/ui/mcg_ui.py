@@ -529,5 +529,5 @@ class ObUI(BucketsUI):
 
             _check_three_dots_disabled("check three dots inactive automatically")
             self.driver.refresh()
-            self.page_has_loaded(sleep_time=10)
+            self.page_has_loaded(sleep_time=2)
             _check_three_dots_disabled("check three dots inactive after refresh")

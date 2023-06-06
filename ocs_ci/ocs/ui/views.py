@@ -453,6 +453,7 @@ pvc_4_12 = {
     "resize-value": ("//input[@data-test='pvc-expand-size-input']", By.XPATH),
 }
 page_nav = {
+    "page_navigator_sidebar": ("page-sidebar", By.ID),
     "Home": ("//button[text()='Home']", By.XPATH),
     "overview_page": ("Overview", By.LINK_TEXT),
     "projects_page": ("Projects", By.LINK_TEXT),
