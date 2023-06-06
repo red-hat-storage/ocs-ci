@@ -518,15 +518,15 @@ def verify_faas_provider_resources():
             f"pvc['spec']['storageClassName']. "
             f"It should be {constants.DEFAULT_OCS_STORAGECLASS}"
         )
-        defaultsc = OCP(
-            kind=constants.STORAGECLASS,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_OCS_STORAGECLASS,
-        )
+    defaultsc = OCP(
+        kind=constants.STORAGECLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_OCS_STORAGECLASS,
+    )
     defaultsc_info = defaultsc.get()
     assert defaultsc_info["parameters"]["type"] == constants.GP3, (
         f"Type of OSD PVC's storage class is {defaultsc_info['parameters']['type']}. "
-        f"It should be constants.GP3"
+        f"It should be {constants.GP3}"
     )
 
     # Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
