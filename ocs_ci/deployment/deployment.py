@@ -1340,6 +1340,11 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
         self.external_post_deploy_validation()
+
+        # enable secure connection mode for in-transit encryption
+        if config.ENV_DATA.get("in_transit_encryption"):
+            external_cluster.enable_secure_connection_mode()
+
         setup_ceph_toolbox()
 
     def set_rook_log_level(self):
