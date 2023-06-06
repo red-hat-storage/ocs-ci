@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 
 from ocs_ci.framework.testlib import (
@@ -99,6 +100,8 @@ class TestNodesRestart(ManageTest):
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
+        # Wait for 2 minutes before creating resources to avoid server timeout error
+        time.sleep(120)
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
