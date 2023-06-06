@@ -502,7 +502,7 @@ def verify_faas_provider_resources():
         log.info(f"Verifying storageclass of mon PVC {pvc['metadata']['name']}")
         assert pvc["spec"]["storageClassName"] == constants.GP3_CSI, (
             f"Storage class of PVC {pvc['metadata']['name']} is "
-            f"pvc['spec']['storageClassName']. It should be {constants.GP3_CSI}."
+            f"{pvc['spec']['storageClassName']}. It should be {constants.GP3_CSI}."
         )
 
     # Check that OSD PVCs have gp3-based storageclass
@@ -515,7 +515,7 @@ def verify_faas_provider_resources():
         log.info(f"Verifying storageclass of OSD PVC {pvc['metadata']['name']}")
         assert pvc["spec"]["storageClassName"] == constants.DEFAULT_OCS_STORAGECLASS, (
             f"Storage class of PVC {pvc['metadata']['name']} is "
-            f"pvc['spec']['storageClassName']. "
+            f"{pvc['spec']['storageClassName']}. "
             f"It should be {constants.DEFAULT_OCS_STORAGECLASS}"
         )
     defaultsc = OCP(
