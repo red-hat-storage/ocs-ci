@@ -632,7 +632,7 @@ def intransit_encryption_external_mode_config(enable=True):
     external_cluster.rhcs_encryption_settings(enable=enable)
 
 
-def get_external_rhcs_config_dump():
+def external_rhcs_ceph_config_dump():
     """
     Gets the Ceph configuration dump for an external Red Hat Ceph Storage (RHCs) cluster.
 
@@ -648,7 +648,7 @@ def get_external_rhcs_config_dump():
     return external_cluster.get_ceph_config_dump()
 
 
-def get_external_rhcs_mon_dump():
+def external_rhcs_ceph_mon_dump():
     """
     Gets the Ceph monitor dump for an external Red Hat Ceph Storage (RHCs) cluster.
 
