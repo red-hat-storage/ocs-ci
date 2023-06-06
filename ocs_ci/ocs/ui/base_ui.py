@@ -637,7 +637,7 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to OCP Home Page")
         self.driver.get(get_ocp_url())
-        self.page_has_loaded(retries=10, sleep_time=5)
+        self.page_has_loaded(retries=10, sleep_time=1)
 
     def navigate_storage(self):
         logger.info("Navigate to ODF tab under Storage section")
