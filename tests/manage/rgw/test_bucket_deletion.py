@@ -47,7 +47,7 @@ class TestBucketDeletion:
     )
     @flaky
     def test_bucket_delete_with_objects(
-        self, rgw_endpoint, rgw_bucket_factory, interface, awscli_pod_session
+        self, rgw_bucket_factory, interface, awscli_pod_session
     ):
         """
         Negative test with deletion of bucket has objects stored in.

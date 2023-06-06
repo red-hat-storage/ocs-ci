@@ -41,7 +41,7 @@ class TestRGWBucketCreation:
         ],
     )
     def test_duplicate_bucket_creation(
-        self, rgw_endpoint, rgw_obj, rgw_bucket_factory, amount, interface
+        self, rgw_obj, rgw_bucket_factory, amount, interface
     ):
         """
         Negative test with duplicate bucket creation using OC commands
