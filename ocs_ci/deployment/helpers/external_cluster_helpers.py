@@ -411,6 +411,19 @@ class ExternalCluster(object):
             cmd = f"rbd rm {each_image} -p {pool}"
             self.rhcs_conn.exec_cmd(cmd)
 
+    def enable_secure_connection_mode(self):
+        """
+        Enables secure connection mode for RHCS cluster
+        """
+        logger.debug("Enabling secure connection mode for external RHCS cluster")
+        cmds = (
+            "ceph config set global ms_client_mode secure;"
+            "ceph config set global ms_cluster_mode secure;"
+            "ceph config set global ms_service_mode secure;"
+            "ceph config set global rbd_default_map_options ms_mode=secure"
+        )
+        self.rhcs_conn.exec_cmd(cmds)
+
 
 def generate_exporter_script():
     """
