@@ -6,7 +6,6 @@ metadata:
 spec:
   kind: DFC
   release: "{{ ocp_version }}"
-  config: '
-    onboardingTicket: "{{ onboarding_ticket }}"
-    dataFoundationProviderEndpoint: "{{ storage_provider_endpoint }}"
-    '
+  config: |
+    onboardingTicket: {{ onboarding_ticket }}
+    dataFoundationProviderEndpoint: {{ storage_provider_endpoint }}

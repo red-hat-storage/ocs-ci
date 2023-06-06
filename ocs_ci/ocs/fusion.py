@@ -1,5 +1,7 @@
 import os
 import logging
+import tempfile
+
 import yaml
 
 from ocs_ci.ocs.exceptions import ConfigurationError
@@ -127,13 +129,22 @@ def deploy_odf():
         template_file = "managedfusionoffering-dfc.yaml.j2"
 
     template = templating.render_template(template_file, offering_data)
-    template = yaml.load(template, Loader=yaml.Loader)
+
+    # TODO: Improve the creation of ManagedFusionOffering using exiting helper functions
+    with tempfile.NamedTemporaryFile(
+        mode="w+", prefix=constants.MANAGED_FUSION_OFFERING, delete=False
+    ) as temp_file:
+        temp_yaml = temp_file.name
+        temp_file.write(template)
+
     # CRDs may have not be available yet
     offering_check_cmd = ["oc", "get", "crd", "managedfusionofferings.misf.ibm.com"]
     retry(CommandFailed, tries=6, delay=10,)(
         exec_cmd
     )(offering_check_cmd)
-    helpers.create_resource(**template)
+
+    # Create ManagedFusionOffering
+    exec_cmd(cmd=f"create -f {temp_yaml}")
 
     operator_name = (
         defaults.OCS_OPERATOR_NAME
