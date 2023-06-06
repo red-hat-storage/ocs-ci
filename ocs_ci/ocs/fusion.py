@@ -1,7 +1,6 @@
 import os
 import logging
 import tempfile
-
 import yaml
 
 from ocs_ci.ocs.exceptions import ConfigurationError
@@ -144,7 +143,7 @@ def deploy_odf():
     )(offering_check_cmd)
 
     # Create ManagedFusionOffering
-    exec_cmd(cmd=f"create -f {temp_yaml}")
+    exec_cmd(cmd=f"oc create -f {temp_yaml}")
 
     operator_name = (
         defaults.OCS_OPERATOR_NAME
