@@ -587,8 +587,10 @@ def verify_faas_consumer_resources():
         kind=constants.STORAGECLUSTER,
         namespace=config.ENV_DATA["cluster_namespace"],
     )
-    log.info(f"Verifying there's no storagecluster: {sc_obj['items']}")
-    assert sc_obj["items"] == {}
+    log.info(f"Verifying there's no storagecluster: {sc_obj.get()}")
+    assert (
+        sc_obj.get()["items"] == []
+    ), f"Storagecluster found on consumer: {sc_obj.get()['items']}"
 
 
 def verify_faas_cluster_secrets():
