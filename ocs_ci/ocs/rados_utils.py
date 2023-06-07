@@ -1,12 +1,13 @@
 import json
 import logging
+import os
 import random
 import time
 import traceback
 import tempfile
 
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.helpers import run_cmd
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -353,15 +354,15 @@ def inject_corrupted_dups_into_pg_via_cot(
     for deployment in osd_deployments:
         osd_pod = deployment.pods[0]
         osd_id = osd_pod.labels["ceph-osd-id"]
-        cmd = f"oc cp {tmpfile.name} /{osd_pod.name}:/tmp -n openshift-storage"
         logger.info(
             f"Inject corrupted dups into the pgid:{pgid} for osd:{osd_id} using json file data /n {txt}"
         )
-        run_cmd(cmd=cmd)
+        target_path = f"/tmp/{os.path.basename(tmpfile.name)}"
+        osd_pod.copy_to_pod_cat(tmpfile.name, target_path)
         osd_pod.exec_sh_cmd_on_pod(
             f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
             f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
-            f"{osd_id} --pgid {pgid} --op pg-log-inject-dups --file {tmpfile.name}"
+            f"{osd_id} --pgid {pgid} --op pg-log-inject-dups --file {target_path}"
         )
 
 
@@ -389,12 +390,20 @@ def get_pg_log_dups_count_via_cot(osd_deployments, pgid):
             f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
             f"{osd_id} --op log --pgid {pgid}  > /var/log/ceph/pg_log_{pgid}.txt"
         )
-        # Install jquery in the pod and get the current pg log dups count
-        osd_pod.exec_sh_cmd_on_pod("yum install jq -y")
-        out = osd_pod.exec_sh_cmd_on_pod(
-            f"cat /var/log/ceph/pg_log_{pgid}.txt | jq  '(.pg_log_t.log|length),(.pg_log_t.dups|length)'"
+        logger.info(
+            "Copy current pg log dups file to local folder and parse dups number"
         )
-        total_dups = int(out.split("\n")[1])
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix=f"pg_log_{pgid}", delete=True
+        )
+        osd_pod.copy_from_pod_oc_exec(
+            target_path=temp_file.name, src_path=f"/var/log/ceph/pg_log_{pgid}.txt"
+        )
+        res = exec_cmd(
+            f"cat {temp_file.name} | jq  '(.pg_log_t.log|length),(.pg_log_t.dups|length)'",
+            use_shell=True,
+        )
+        total_dups = int(res.stdout.decode("utf-8").split("\n")[1])
         osd_pg_log_dups.append(total_dups)
 
     return osd_pg_log_dups

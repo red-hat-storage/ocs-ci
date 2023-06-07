@@ -3,6 +3,7 @@ Pod related functionalities and context info
 
 Each pod in the openshift cluster will have a corresponding pod object
 """
+from datetime import datetime, timedelta
 import logging
 import os
 import re
@@ -29,6 +30,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     ResourceNotFoundError,
     NotFoundError,
+    TimeoutException,
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
@@ -38,6 +40,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     check_timeout_reached,
     TimeoutSampler,
+    exec_cmd,
 )
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
@@ -194,7 +197,7 @@ class Pod(OCS):
             else None,
         )
 
-    def copy_to_pod(self, src_path, target_path, container=None):
+    def copy_to_pod_rsync(self, src_path, target_path, container=None):
         """
         Copies to pod path from the local path
 
@@ -212,7 +215,61 @@ class Pod(OCS):
             cmd = cmd + f" -c {container}"
         return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
 
-    def exec_sh_cmd_on_pod(self, command, sh="bash"):
+    def copy_to_pod_cat(self, src_path, target_path, timeout=60):
+        """
+        Copies to pod path from the local path file using standard output stream
+
+        Args:
+            src_path (str): local path
+            target_path (str): path within pod where you want to copy
+            timeout (int): timeout in seconds
+        Returns:
+            str: stdout of the command
+        """
+        cmd = f"cat {src_path} | oc exec -i {self.name} -n {self.namespace} -- sh -c 'cat > {target_path}'"
+        return exec_cmd(cmd, timeout=timeout, use_shell=True)
+
+    def copy_from_pod_oc_exec(
+        self, target_path, src_path, timeout=600, chunk_size=2000
+    ):
+        """
+        Copies to local path file from the pod using standard output stream via 'oc exec'. Good for log/json/yaml/text
+        files, not good for large files/binaries with one-line plain string
+        * Hand data from the pod over `oc exec cat`, other standard output ways will fail for the files > 1 Mb
+
+        Args:
+            target_path (str): local path
+            src_path (str): path within pod what you want to copy
+            timeout (int): timeout in seconds
+                until size of the local file will not reach the initial file size.
+                2000 lines is a maximum chunk size tested successfully
+            chunk_size (int): file will be copied by chunks, by number of lines
+        """
+        file_size = int(self.exec_cmd_on_pod(f"stat -c %s {src_path}"))
+
+        timestamp_end = datetime.now() + timedelta(seconds=timeout)
+
+        start_line = 1
+        cmd = f"oc exec -i {self.name} -n {self.namespace} -- bash -c "
+        while os.path.exists(target_path) and datetime.now() <= timestamp_end:
+            exec_cmd(
+                cmd
+                + f"\"tail -n '+{start_line}' {src_path}| head -n '{chunk_size}'\" >> {target_path}",
+                timeout=timeout,
+                use_shell=True,
+            )
+            start_line += chunk_size
+            logger.info(f"size of target file = {os.stat(target_path).st_size}b")
+            if os.stat(target_path).st_size == file_size:
+                logger.info(f"file '{target_path}' copied")
+                break
+        else:
+            raise TimeoutException(
+                f"Failed to copy file from pod {self.name}:{src_path} to local path '{target_path}'\n"
+                f"src file size = {src_path}b, target file size = {os.stat(target_path).st_size}b"
+            )
+
+    def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600, **kwargs):
         """
         Execute a pure bash command on a pod via oc exec where you can use
         bash syntaxt like &&, ||, ;, for loop and so on.
