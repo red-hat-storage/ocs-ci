@@ -18,6 +18,7 @@ from ocs_ci.ocs.acm.acm_constants import (
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_running_acm_version,
@@ -144,8 +145,15 @@ class AcmAddClusters(AcmPageNavigator):
         ocs_version = version.get_semantic_ocs_version_from_config()
 
         cluster_env = get_clusters_env()
-        cluster_name_a = cluster_env.get("cluster_name_1")
-        cluster_name_b = cluster_env.get("cluster_name_2")
+        primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+        secondary_index = [
+            s.MULTICLUSTER["multicluster_index"]
+            for s in get_non_acm_cluster_config()
+            if s.MULTICLUSTER["multicluster_index"] != primary_index
+        ][0]
+
+        cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
+        cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
         self.navigate_clusters_page()
         self.page_has_loaded(retries=15, sleep_time=5)
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
@@ -447,6 +455,7 @@ def get_clusters_env():
     clusters_env = {}
     for index in range(config.nclusters):
         config.switch_ctx(index=index)
+
         clusters_env[f"kubeconfig_location_c{index}"] = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
@@ -492,19 +501,19 @@ def import_clusters_via_cli(clusters):
         time.sleep(60)
         ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
         ocp_obj.wait_for_resource(
-            timeout=600,
+            timeout=1200,
             condition="True",
             column="AVAILABLE",
             resource_name=cluster[0],
         )
         ocp_obj.wait_for_resource(
-            timeout=600,
+            timeout=1200,
             condition="True",
             column="JOINED",
             resource_name=cluster[0],
         )
         ocp_obj.wait_for_resource(
-            timeout=600,
+            timeout=1200,
             condition="true",
             column="HUB ACCEPTED",
             resource_name=cluster[0],
@@ -518,15 +527,22 @@ def import_clusters_with_acm():
     """
     # TODO: Import action should be dynamic per cluster count (Use config.nclusters loop)
     clusters_env = get_clusters_env()
+    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+    secondary_index = [
+        s.MULTICLUSTER["multicluster_index"]
+        for s in get_non_acm_cluster_config()
+        if s.MULTICLUSTER["multicluster_index"] != primary_index
+    ][0]
     log.info(clusters_env)
     kubeconfig_a = copy_kubeconfig(
-        file=clusters_env.get("kubeconfig_location_c1"), return_str=True
+        file=clusters_env.get(f"kubeconfig_location_c{primary_index}"), return_str=True
     )
     kubeconfig_b = copy_kubeconfig(
-        file=clusters_env.get("kubeconfig_location_c2"), return_str=True
+        file=clusters_env.get(f"kubeconfig_location_c{secondary_index}"),
+        return_str=True,
     )
-    cluster_name_a = clusters_env.get("cluster_name_1")
-    cluster_name_b = clusters_env.get("cluster_name_2")
+    cluster_name_a = clusters_env.get(f"cluster_name_{primary_index}")
+    cluster_name_b = clusters_env.get(f"cluster_name_{secondary_index}")
     clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
     verify_running_acm()
     if config.DEPLOYMENT.get("ui_acm_import"):

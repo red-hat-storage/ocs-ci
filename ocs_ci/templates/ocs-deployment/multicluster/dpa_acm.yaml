@@ -1,0 +1,35 @@
+apiVersion: oadp.openshift.io/v1alpha1
+kind: DataProtectionApplication
+metadata:
+  name: dpa
+  namespace: open-cluster-management-backup
+spec:
+  backupImages: false
+  configuration:
+    velero:
+      defaultPlugins:
+      - openshift
+      - aws
+    restic:
+      enable: true
+  backupLocations:
+    - name: default
+      velero:
+        provider: aws
+        default: true
+        objectStorage:
+          bucket: PLACE_HOLDER 
+          prefix: acm
+        config:
+          region: eu-central-1
+          profile: "default"
+        credential:
+          key: cloud
+          name: cloud-credentials
+  snapshotLocations:
+    - name: default
+      velero:
+        provider: aws
+        config:
+          region: eu-central-1
+          profile: "default"

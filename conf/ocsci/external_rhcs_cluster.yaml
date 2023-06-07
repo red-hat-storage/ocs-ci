@@ -6,6 +6,7 @@ DEPLOYMENT:
 
 ENV_DATA:
   storage_cluster_name: 'ocs-external-storagecluster'
+  rbd_name: 'rbdpool'
 
 EXTERNAL_MODE:
   # base64 encoded data of json output

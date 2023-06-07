@@ -520,6 +520,10 @@ class RDRDeploymentException(Exception):
     pass
 
 
+class MDRDeploymentException(Exception):
+    pass
+
+
 class ACMClusterDestroyException(Exception):
     pass
 
@@ -593,6 +597,10 @@ class LVMOHealthException(Exception):
 
 
 class VolumesExistError(Exception):
+    pass
+
+
+class ExternalClusterNodeRoleNotFound(Exception):
     pass
 
 
