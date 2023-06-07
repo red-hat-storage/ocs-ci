@@ -18,6 +18,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
+    intransit_encryption_external_mode_config,
 )
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
@@ -1334,16 +1335,17 @@ class Deployment(object):
             cluster_data["spec"]["network"] = {
                 "connections": {"encryption": {"enabled": True}},
             }
+
+            # enable secure mode config for RHCS cluster.
+            intransit_encryption_external_mode_config(enable=True)
+
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
-        self.external_post_deploy_validation()
 
-        # enable secure connection mode for in-transit encryption
-        if config.ENV_DATA.get("in_transit_encryption"):
-            external_cluster.enable_secure_connection_mode()
+        self.external_post_deploy_validation()
 
         setup_ceph_toolbox()
 

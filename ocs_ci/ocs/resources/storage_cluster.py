@@ -74,6 +74,9 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    intransit_encryption_external_mode_config,
+)
 
 log = logging.getLogger(__name__)
 
@@ -1089,6 +1092,11 @@ def set_in_transit_encryption(enabled=True):
     log.info(f"In-transit encryption is {action}d successfully.")
     ocp_obj.wait_for_phase("Progressing", timeout=60)
     verify_storage_cluster()
+
+    # Setting config if external mode setup
+    if config.DEPLOYMENT["external_mode"]:
+        intransit_encryption_external_mode_config(enable=enabled)
+
     return True
 
 

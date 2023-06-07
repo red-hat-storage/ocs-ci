@@ -411,18 +411,31 @@ class ExternalCluster(object):
             cmd = f"rbd rm {each_image} -p {pool}"
             self.rhcs_conn.exec_cmd(cmd)
 
-    def enable_secure_connection_mode(self):
+    def rhcs_encryption_settings(self, enable=True):
         """
-        Enables secure connection mode for RHCS cluster
+        Set or remove in-transit encryption settings on RHCS cluster.
+
+        Args:
+            enable: Whether to enable (True) or disable (False) in-transit encryption.
+
+        Raises:
+            RuntimeError: If the RHEL Ceph Storage cluster is not reachable.
+
         """
-        logger.debug("Enabling secure connection mode for external RHCS cluster")
-        cmds = (
-            "ceph config set global ms_client_mode secure;"
-            "ceph config set global ms_cluster_mode secure;"
-            "ceph config set global ms_service_mode secure;"
-            "ceph config set global rbd_default_map_options ms_mode=secure"
+        action = "set" if enable else "rm"
+        rbd_mode = "secure" if enable else "prefer-crc"
+
+        logger.info(
+            f"{'Setting' if enable else 'Removing'} In-transit encryption config"
         )
-        self.rhcs_conn.exec_cmd(cmds)
+
+        cmd = (
+            f"ceph config {action} global ms_client_mode secure;"
+            f"ceph config {action} global ms_cluster_mode secure;"
+            f"ceph config {action} global ms_service_mode secure;"
+            f"ceph config set global rbd_default_map_options ms_mode={rbd_mode}"
+        )
+        self.rhcs_conn.exec_cmd(cmd)
 
 
 def generate_exporter_script():
@@ -566,3 +579,19 @@ def remove_csi_users():
     toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
     toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
     toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
+
+
+def intransit_encryption_external_mode_config(enable=True):
+    """
+    Configure in-transit encryption for an external RHEL Ceph Storage cluster.
+
+    Args:
+        enable: Whether to enable (True) or disable (False) in-transit encryption.
+
+    Raises:
+        RuntimeError: If the external RHEL Ceph Storage cluster is not reachable.
+
+    """
+    host, user, password, ssh_key = get_external_cluster_client()
+    external_cluster = ExternalCluster(host, user, password, ssh_key)
+    external_cluster.rhcs_encryption_settings(enable=enable)
