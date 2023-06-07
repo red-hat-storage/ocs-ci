@@ -34,7 +34,13 @@ def test_deployment(pvc_factory, pod_factory):
                     log.info(
                         f"Sanity check for cluster: {cluster.ENV_DATA['cluster_name']}"
                     )
-                    sanity_helpers = Sanity()
+                    if config.DEPLOYMENT.get("external_mode") and (
+                        config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
+                    ):
+                        log.info("Sanity check for external mode")
+                        sanity_helpers = SanityExternalCluster()
+                    else:
+                        sanity_helpers = Sanity()
                     sanity_helpers.health_check()
                     sanity_helpers.delete_resources()
                 config.switch_ctx(restore_ctx_index)

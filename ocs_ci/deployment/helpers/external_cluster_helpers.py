@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterObjectStoreUserCreationFailed,
     ExternalClusterCephfsMissing,
+    ExternalClusterNodeRoleNotFound,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -140,7 +141,9 @@ class ExternalCluster(object):
 
         """
         script_path = generate_exporter_script()
-        upload_file(self.host, script_path, script_path, self.user, self.password)
+        upload_file(
+            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+        )
         return script_path
 
     def upload_rgw_cert_ca(self):
@@ -550,11 +553,39 @@ def get_external_cluster_client():
             "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
         )
     nodes = config.EXTERNAL_MODE["external_cluster_node_roles"]
+    node_role = None
+    node_role = "_admin" if config.multicluster else "client"
+
+    try:
+        return get_node_by_role(nodes, node_role, user, password, ssh_key)
+    except ExternalClusterNodeRoleNotFound:
+        logger.warning(f"No {node_role} role defined, using node1 address!")
+        return (nodes["node1"]["ip_address"], user, password, ssh_key)
+
+
+def get_node_by_role(nodes, role, user, password, ssh_key):
+    """
+    Get a node (a tuple with ip, user, password, ssh_key)
+
+    Args:
+        nodes (list): List of nodes participating
+        role (str): Specific role of the nodes we are looking for
+        user (str): Login user name for the node
+        password (str): Login password for the node
+        ssh_key (str): Path to ssh key
+
+    Returns:
+        Tuple: (ip_address, user, password, ssh_key)
+
+    Raises:
+        ExternalClusterNodeRoleNotFound (Exception): if no node found with the desired role
+    """
+    node_by_role = None
     for each in nodes.values():
-        if "client" in each["role"]:
-            return (each["ip_address"], user, password, ssh_key)
-    logger.warning("No client role defined, using node1 address!")
-    return (nodes["node1"]["ip_address"], user, password, ssh_key)
+        if role in each["role"]:
+            node_by_role = (each["ip_address"], user, password, ssh_key)
+            return node_by_role
+    raise ExternalClusterNodeRoleNotFound
 
 
 def remove_csi_users():
