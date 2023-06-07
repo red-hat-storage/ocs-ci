@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     cloud_platform_required,
     bugzilla,
     skipif_no_lso,
-    skipif_vsphere_ipi,
     skipif_ibm_cloud,
     skipif_managed_service,
 )
@@ -32,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@skipif_vsphere_ipi
 @skipif_managed_service
 class TestNodesRestart(ManageTest):
     """
