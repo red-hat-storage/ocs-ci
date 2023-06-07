@@ -484,7 +484,7 @@ def workload_storageutilization_85p_rbd(
 
 
 @pytest.fixture
-def workload_storageutilization_95p_rbd(
+def workload_storageutilization_97p_rbd(
     project,
     fio_pvc_dict,
     fio_job_dict,
@@ -493,7 +493,7 @@ def workload_storageutilization_95p_rbd(
     tmp_path,
     supported_configuration,
 ):
-    fixture_name = "workload_storageutilization_95p_rbd"
+    fixture_name = "workload_storageutilization_97p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -502,7 +502,7 @@ def workload_storageutilization_95p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95,
+        target_percentage=0.97,
     )
     return measured_op
 
@@ -574,7 +574,7 @@ def workload_storageutilization_85p_cephfs(
 
 
 @pytest.fixture
-def workload_storageutilization_95p_cephfs(
+def workload_storageutilization_97p_cephfs(
     project,
     fio_pvc_dict,
     fio_job_dict,
@@ -583,7 +583,7 @@ def workload_storageutilization_95p_cephfs(
     tmp_path,
     supported_configuration,
 ):
-    fixture_name = "workload_storageutilization_95p_cephfs"
+    fixture_name = "workload_storageutilization_97p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -592,7 +592,7 @@ def workload_storageutilization_95p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95,
+        target_percentage=0.97,
     )
     return measured_op
 
