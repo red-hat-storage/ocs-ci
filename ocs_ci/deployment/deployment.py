@@ -100,6 +100,7 @@ from ocs_ci.utility.ssl_certs import configure_custom_ingress_cert
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
+    create_directory_path,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -1871,7 +1872,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
 
-    # TODO: get_and_aply_icsp_from_catalog(image)
+    get_and_aply_icsp_from_catalog(image)
 
 
 @retry(CommandFailed, tries=8, delay=3)
@@ -1929,17 +1930,21 @@ def get_and_aply_icsp_from_catalog(image, apply=True):
 
     """
 
-    # TODO: confirm/update the icsp file location in the image
     icsp_file_location = "/icsp.yaml"
-    icsp_file_dest_location = os.path.join(config.ENV_DATA["cluster_path"], "icsp.yaml")
-    # TODO: handle situation (maybe exception?) when the icsp file is not
-    # present in the catalog image
-    # TODO: confirm the `oc image extract ...` command
-    exec_cmd(
-        f"oc image extract --registry-config {config.RUN['kubeconfig']} "
-        f"{image} --confirm "
-        f"--path {icsp_file_location}:{icsp_file_dest_location}"
+    icsp_file_dest_dir = os.path.join(
+        config.ENV_DATA["cluster_path"], f"icsp-{config.RUN['run_id']}"
     )
+    icsp_file_dest_location = os.path.join(icsp_file_dest_dir, "icsp.yaml")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    create_directory_path(icsp_file_dest_dir)
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {icsp_file_location}:{icsp_file_dest_dir}"
+    )
+    if not os.path.exists(icsp_file_dest_location):
+        return False
+
     if apply:
         exec_cmd(f"oc apply -f {icsp_file_dest_location}")
         wait_for_machineconfigpool_status("all")
