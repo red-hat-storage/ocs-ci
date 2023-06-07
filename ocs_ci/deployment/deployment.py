@@ -1840,6 +1840,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
 
+    # apply icsp if present in the catalog image
+    get_and_aply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
+
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
@@ -1871,8 +1874,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
-
-    get_and_aply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
 
 
 @retry(CommandFailed, tries=8, delay=3)
