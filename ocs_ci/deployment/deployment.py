@@ -1872,7 +1872,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
 
-    get_and_aply_icsp_from_catalog(image)
+    get_and_aply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
 
 
 @retry(CommandFailed, tries=8, delay=3)
