@@ -15,6 +15,7 @@ from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.rgw import RGW
+from ocs_ci.ocs.longevity import Longevity
 
 # from ocs_ci.helpers.sc_utils import start_mcg_bi_replication
 
@@ -130,7 +131,17 @@ class TestFITonSC:
         request.addfinalizer(teardown)
         return self.amq
 
-    def test_fit_on_sc(self, start_noobaa_cache_io):
+    def test_fit_on_sc(
+        self,
+        project_factory,
+        multi_pvc_pod_lifecycle_factory,
+        multi_obc_lifecycle_factory,
+        pod_factory,
+        multi_pvc_clone_factory,
+        multi_snapshot_factory,
+        snapshot_restore_factory,
+        teardown_factory,
+    ):
 
         # first_bucket_class_dict = {
         #     "interface": "cli",
@@ -146,23 +157,74 @@ class TestFITonSC:
         # thread_1 = executor_1.submit(start_mcg_bucket_replication,
         # first_bucket_class_dict, second_bucket_class_dict, 5)
 
-        ttl = 300000  # 300 seconds
-        cache_bucketclass = {
-            "interface": "OC",
-            "namespace_policy_dict": {
-                "type": "Cache",
-                "ttl": ttl,
-                "namespacestore_dict": {
-                    "rgw": [(1, None)],
-                },
-            },
-            "placement_policy": {
-                "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
-            },
-        }
-
-        executor_2 = ThreadPoolExecutor(max_workers=1)
-        thread_2 = executor_2.submit(start_noobaa_cache_io, cache_bucketclass, 3)
+        # ttl = 300000  # 300 seconds
+        # cache_bucketclass = {
+        #     "interface": "OC",
+        #     "namespace_policy_dict": {
+        #         "type": "Cache",
+        #         "ttl": ttl,
+        #         "namespacestore_dict": {
+        #             "rgw": [(1, None)],
+        #         },
+        #     },
+        #     "placement_policy": {
+        #         "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
+        #     },
+        # }
         #
-        result = thread_2.result()
-        logger.info(f"Result: {result}")
+        # executor_2 = ThreadPoolExecutor(max_workers=1)
+        # thread_2 = executor_2.submit(start_noobaa_cache_io, cache_bucketclass, 3)
+        # #
+        # result = thread_2.result()
+        # logger.info(f"Result: {result}")
+
+        threads = []
+
+        # RUN STAGE 2
+        executor = ThreadPoolExecutor(max_workers=2)
+        thread_1 = executor.submit(
+            Longevity().stage_2,
+            project_factory,
+            multi_pvc_pod_lifecycle_factory,
+            multi_obc_lifecycle_factory,
+            5,
+            1,
+            5,
+            15,
+            False,
+            30,
+        )
+        threads.append(thread_1)
+
+        # # RUN STAGE 3
+        # thread_2 = executor.submit(
+        #     Longevity().stage_3,
+        #     project_factory,
+        #     5,
+        #     5,
+        #     1,
+        #     30,
+        #     15
+        # )
+        # threads.append(thread_2)
+        #
+        # # RUN STAGE 4
+        # thread_3 = executor.submit(
+        #     Longevity().stage_4,
+        #     project_factory,
+        #     multi_pvc_pod_lifecycle_factory,
+        #     pod_factory,
+        #     multi_pvc_clone_factory,
+        #     multi_snapshot_factory,
+        #     snapshot_restore_factory,
+        #     teardown_factory,
+        #     5,
+        #     25,
+        #     1,
+        #     15,
+        #     2
+        # )
+        # threads.append(thread_3)
+
+        for thread in threads:
+            thread.result()

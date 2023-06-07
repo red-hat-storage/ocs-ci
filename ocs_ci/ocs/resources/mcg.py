@@ -51,7 +51,7 @@ class MCG:
 
     (
         s3_resource,
-        s3_endpoint,
+        s3_external_endpoint,
         s3_internal_endpoint,
         ocp_resource,
         mgmt_endpoint,
@@ -91,7 +91,7 @@ class MCG:
 
         get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
 
-        self.s3_endpoint = (
+        self.s3_external_endpoint = (
             get_noobaa.get("items")[0]
             .get("status")
             .get("services")
@@ -144,7 +144,7 @@ class MCG:
         self.s3_resource = boto3.resource(
             "s3",
             verify=retrieve_verification_mode(),
-            endpoint_url=self.s3_endpoint,
+            endpoint_url=self.s3_external_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key,
         )
