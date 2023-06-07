@@ -24,6 +24,8 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.utils import retry
 
 
 logger = logging.getLogger(__name__)
@@ -99,9 +101,9 @@ class TestNodesRestart(ManageTest):
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
-        self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-        )
+        retry(CommandFailed, tries=3, delay=20, backoff=1)(
+            self.sanity_helpers.create_resources
+        )(pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory)
 
     @tier4b
     @pytest.mark.parametrize(
