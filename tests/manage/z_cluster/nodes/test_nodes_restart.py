@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     cloud_platform_required,
     bugzilla,
     skipif_no_lso,
+    skipif_vsphere_ipi,
     skipif_ibm_cloud,
     skipif_managed_service,
 )
@@ -124,6 +125,7 @@ class TestNodesRestart(ManageTest):
         ],
     )
     @skipif_ibm_cloud
+    @skipif_vsphere_ipi
     def test_pv_provisioning_under_degraded_state_stop_provisioner_pod_node(
         self,
         nodes,
@@ -269,6 +271,7 @@ class TestNodesRestart(ManageTest):
         ],
     )
     @skipif_ibm_cloud
+    @skipif_vsphere_ipi
     def test_pv_provisioning_under_degraded_state_stop_rook_operator_pod_node(
         self,
         nodes,
