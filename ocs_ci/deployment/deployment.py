@@ -1927,7 +1927,8 @@ def get_and_aply_icsp_from_catalog(image, apply=True):
             (default: true)
 
     Returns:
-        str: path to the icsp.yaml file
+        str: path to the icsp.yaml file or empty string, if icsp not available
+            in the catalog image
 
     """
 
@@ -1944,7 +1945,7 @@ def get_and_aply_icsp_from_catalog(image, apply=True):
         f"--path {icsp_file_location}:{icsp_file_dest_dir}"
     )
     if not os.path.exists(icsp_file_dest_location):
-        return False
+        return ""
 
     if apply:
         exec_cmd(f"oc apply -f {icsp_file_dest_location}")
