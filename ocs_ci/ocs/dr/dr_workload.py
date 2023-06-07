@@ -215,12 +215,13 @@ class BusyBox(DRWorkload):
         if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
             dr_helpers.wait_for_mirroring_status_ok()
 
-    def delete_workload(self, force=False):
+    def delete_workload(self, force=False, rbd_name="rbdpool"):
         """
         Delete busybox workload
 
         Args:
             force (bool): If True, force remove the stuck resources, default False
+            rbd_name (str): Name of the pool
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -243,11 +244,16 @@ class BusyBox(DRWorkload):
             log.info("Verify backend RBD images are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                rbd_pool_name = (
+                    (config.ENV_DATA.get("rbd_name") or rbd_name)
+                    if config.DEPLOYMENT["external_mode"]
+                    else constants.DEFAULT_CEPHBLOCKPOOL
+                )
                 for image_uuid in image_uuids:
                     status = verify_volume_deleted_in_backend(
                         interface=constants.CEPHBLOCKPOOL,
                         image_uuid=image_uuid,
-                        pool_name=constants.DEFAULT_CEPHBLOCKPOOL,
+                        pool_name=rbd_pool_name,
                     )
                     if not status:
                         raise UnexpectedBehaviour(
