@@ -92,7 +92,11 @@ class Jenkins(object):
                 jenkins_build_config["metadata"]["namespace"] = project
                 jenkins_build_config["spec"]["strategy"]["jenkinsPipelineStrategy"][
                     "jenkinsfile"
-                ] = self.get_jenkinsfile(self.ocp_version)
+                ] = jenkins_build_config["spec"]["strategy"]["jenkinsPipelineStrategy"][
+                    "jenkinsfile"
+                ].replace(
+                    "<ocp_tag>", self.ocp_version
+                )
                 jenkins_build_config_obj = OCS(**jenkins_build_config)
                 jenkins_build_config_obj.create()
             except (CommandFailed, CalledProcessError) as cf:
@@ -447,45 +451,3 @@ class Jenkins(object):
         # Wait for the resources to delete
         # https://github.com/red-hat-storage/ocs-ci/issues/2417
         time.sleep(120)
-
-    def get_jenkinsfile(self, ocp_version):
-        """
-        Get Jenkins file based on OCP version
-
-        Args:
-            ocp_version (str): ocp version
-
-        Returns:
-            str: jenkinsfile string
-
-        """
-        return (
-            """
-            podTemplate(label: 'maven-build-pod',
-                        cloud: 'openshift',
-                        containers: [
-                        containerTemplate(
-            """
-            + f" name: 'jnlp', image: 'quay.io/openshift/origin-jenkins-agent-maven:{ocp_version}')"
-            + """
-                        ],
-                        volumes: [persistentVolumeClaim(mountPath: '/home/jenkins/.m2', claimName: \
-                        'dependencies', readOnly: false) ]
-                ) {
-            node("maven-build-pod") {
-                stage('Source Checkout') {
-                git url: "https://github.com/red-hat-storage/ocs-workloads.git"
-                script {
-                    def pom = readMavenPom file: 'jenkins/maven01/pom.xml'
-                    def version = pom.version
-                }
-                }
-                // Using Maven build the war file
-                stage('Build JAX-RS') {
-                echo "Building war file"
-                sh "mvn -f jenkins/maven01/pom.xml clean package -DskipTests=true"
-                }
-            }
-            }
-            """
-        )
