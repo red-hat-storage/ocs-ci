@@ -95,7 +95,7 @@ class Jenkins(object):
                 ] = jenkins_build_config["spec"]["strategy"]["jenkinsPipelineStrategy"][
                     "jenkinsfile"
                 ].replace(
-                    "<ocp_tag>", self.ocp_version
+                    "latest", self.ocp_version
                 )
                 jenkins_build_config_obj = OCS(**jenkins_build_config)
                 jenkins_build_config_obj.create()
