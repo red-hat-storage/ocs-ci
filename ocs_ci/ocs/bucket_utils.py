@@ -55,6 +55,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_external_endpoint} "
+            f"--no-verify-ssl "
         )
         string_wrapper = '"'
     elif signed_request_creds:
