@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import (
     pre_ocs_upgrade,
     post_ocs_upgrade,
+    green_squad,
 )
 from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
 
 
+@green_squad
 @bugzilla("2125815")
 @pytest.mark.polarion_id("OCS-4689")
 @pytest.mark.skipif(
