@@ -546,10 +546,12 @@ def verify_faas_provider_resources():
 
     # Check managedFusionOffering usableCapacityInTiB
     log.info("Verifying managedFusionOffering usableCapacityInTiB")
+    for line in offering_info["spec"]["config"].split("\n"):
+        if "usableCapacityInTiB" in line:
+            capacity = line.split()[-1]
     assert (
-        offering_info["spec"]["config"]["usableCapacityInTiB"]
-        == config.ENV_DATA["size"]
-    )
+        capacity == config.ENV_DATA["size"]
+    ), f"usableCapacityInTiB expected value is {config.ENV_DATA['size']}. Actual value is {capacity}."
 
     # Check managedFusionOffering onboardingValidationKey
     log.info("Verifying managedFusionOffering onboardingValidationKey")
