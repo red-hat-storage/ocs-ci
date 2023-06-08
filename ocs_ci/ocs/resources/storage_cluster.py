@@ -1072,17 +1072,11 @@ def set_in_transit_encryption(enabled=True):
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
-    patch = [
-        {
-            "op": "replace",
-            "path": "/spec/network/connections/encryption/enabled",
-            "value": enabled,
-        }
-    ]
+    patch = {"spec": {"network": {"connections": {"encryption": {"enabled": enabled}}}}}
     action = "enable" if enabled else "disable"
     log.info(f"Patching storage class to {action} in-transit encryption.")
 
-    if not ocp_obj.patch(params=patch, format_type="json"):
+    if not ocp_obj.patch(params=json.dumps(patch), format_type="merge"):
         log.error(f"Error {action} in-transit encryption.")
         return False
 
