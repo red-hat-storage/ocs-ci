@@ -10,6 +10,8 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.helpers import helpers
+from ocs_ci.framework import config
+from ocs_ci.utility import version
 
 
 log = logging.getLogger(__name__)
@@ -568,3 +570,27 @@ def upgrade_buckets(bucket_factory_session, awscli_pod_session, mcg_obj_session)
         )
 
     return buckets
+
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to skip tests from summary report
+
+    Args:
+        items: list of collected tests
+
+    """
+    for item in items.copy():
+        if "test_upgrade_sc_allowexpansion_false" in str(item.fspath) and not (
+            config.UPGRADE.get("upgrade_ocs_version")
+            and version.get_semantic_ocs_version_from_config() == version.VERSION_4_11
+            and version.get_semantic_version(
+                config.UPGRADE.get("upgrade_ocs_version"), True
+            )
+            == version.VERSION_4_12
+        ):
+            log.debug(
+                f"Test {item} is removed from the collected items."
+                f"BZ 2125815 is related only to upgrade from 4.11 to 4.12"
+            )
+            items.remove(item)
