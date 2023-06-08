@@ -1,5 +1,6 @@
 import os
 import logging
+import tempfile
 import yaml
 
 from ocs_ci.ocs.exceptions import ConfigurationError
@@ -75,13 +76,6 @@ def deploy_odf():
     Create openshift-storage namespace and deploy managedFusionOffering CR there.
     """
 
-    # TODO: Remove this workaround when the build is fixed.
-    # Temporary workaround to create storageclassclaim CRD.
-    storageclassclaim_crd = (
-        "https://raw.githubusercontent.com/red-hat-storage/ocs-client-operator/release-4.12/config/crd/"
-        "bases/ocs.openshift.io_storageclassclaims.yaml"
-    )
-    exec_cmd(f"oc create -f {storageclassclaim_crd}")
     templating = Templating(base_path=FUSION_TEMPLATE_DIR)
     ns_name = config.ENV_DATA["cluster_namespace"]
     logger.info(f"Creating {ns_name} namespace")
@@ -134,13 +128,22 @@ def deploy_odf():
         template_file = "managedfusionoffering-dfc.yaml.j2"
 
     template = templating.render_template(template_file, offering_data)
-    template = yaml.load(template, Loader=yaml.Loader)
+
+    # TODO: Improve the creation of ManagedFusionOffering using exiting helper functions
+    with tempfile.NamedTemporaryFile(
+        mode="w+", prefix=constants.MANAGED_FUSION_OFFERING, delete=False
+    ) as temp_file:
+        temp_yaml = temp_file.name
+        temp_file.write(template)
+
     # CRDs may have not be available yet
     offering_check_cmd = ["oc", "get", "crd", "managedfusionofferings.misf.ibm.com"]
     retry(CommandFailed, tries=6, delay=10,)(
         exec_cmd
     )(offering_check_cmd)
-    helpers.create_resource(**template)
+
+    # Create ManagedFusionOffering
+    exec_cmd(cmd=f"oc create -f {temp_yaml}")
 
     operator_name = (
         defaults.OCS_OPERATOR_NAME
