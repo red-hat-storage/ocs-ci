@@ -21,16 +21,16 @@ log = logging.getLogger(__name__)
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
 )
 @skipif_managed_service
-def test_rbd_capacity_workload_alerts(workload_storageutilization_95p_rbd):
+def test_rbd_capacity_workload_alerts(workload_storageutilization_97p_rbd):
     """
     Test that there are appropriate alerts when ceph cluster is utilized
     via RBD interface.
     """
     api = prometheus.PrometheusAPI()
-    measure_end_time = workload_storageutilization_95p_rbd.get("stop")
+    measure_end_time = workload_storageutilization_97p_rbd.get("stop")
 
-    # Check utilization on 95%
-    alerts = workload_storageutilization_95p_rbd.get("prometheus_alerts")
+    # Check utilization on 97%
+    alerts = workload_storageutilization_97p_rbd.get("prometheus_alerts")
 
     if config.ENV_DATA.get("ocs_version") == "4.2":
         nearfull_message = "Storage cluster is nearing full. Expansion is required."
@@ -85,15 +85,15 @@ def test_rbd_capacity_workload_alerts(workload_storageutilization_95p_rbd):
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
 )
 @skipif_managed_service
-def test_cephfs_capacity_workload_alerts(workload_storageutilization_95p_cephfs):
+def test_cephfs_capacity_workload_alerts(workload_storageutilization_97p_cephfs):
     """
     Test that there are appropriate alerts when ceph cluster is utilized.
     """
     api = prometheus.PrometheusAPI()
-    measure_end_time = workload_storageutilization_95p_cephfs.get("stop")
+    measure_end_time = workload_storageutilization_97p_cephfs.get("stop")
 
-    # Check utilization on 95%
-    alerts = workload_storageutilization_95p_cephfs.get("prometheus_alerts")
+    # Check utilization on 97%
+    alerts = workload_storageutilization_97p_cephfs.get("prometheus_alerts")
 
     if config.ENV_DATA.get("ocs_version") == "4.2":
         nearfull_message = "Storage cluster is nearing full. Expansion is required."
