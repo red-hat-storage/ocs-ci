@@ -181,7 +181,7 @@ def get_hpa_utilization(namespace):
     return hpa_cpu_utilization
 
 
-def measure_obc_creation_time(obc_name_list, timeout=60):
+def measure_obc_creation_time(obc_name_list, timeout=120):
     """
     Measure OBC creation time
     Args:
