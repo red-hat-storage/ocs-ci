@@ -16,6 +16,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd, exec_cmd
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +57,10 @@ class QuayOperator(object):
             str: The default channel of the Quay operator.
 
         """
-        package_manifest_obj = OCP(
-            kind="PackageManifest", namespace=constants.MARKETPLACE_NAMESPACE
+        quay_package_manifest_obj = PackageManifest(
+            kind="PackageManifest", resource_name=constants.QUAY_OPERATOR
         )
-        quay_package_manifest = package_manifest_obj.get(
-            resource_name=constants.QUAY_OPERATOR
-        )
-        default_channel = quay_package_manifest.get("status").get("defaultChannel")
+        default_channel = quay_package_manifest_obj.get_default_channel()
         return default_channel
 
     def setup_quay_operator(self, channel=None):
