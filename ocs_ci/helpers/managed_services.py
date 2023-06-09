@@ -549,13 +549,15 @@ def verify_faas_provider_resources():
     for line in offering_info["spec"]["config"].split("\n"):
         if "usableCapacityInTiB" in line:
             capacity = line.split()[-1]
+        if "onboardingValidationKey" in line:
+            onboarding_validation_key = line.split()[-1]
     assert (
         capacity == config.ENV_DATA["size"]
     ), f"usableCapacityInTiB expected value is {config.ENV_DATA['size']}. Actual value is {capacity}."
 
     # Check managedFusionOffering onboardingValidationKey
     log.info("Verifying managedFusionOffering onboardingValidationKey")
-    assert len(offering_info["spec"]["config"]["onboardingValidationKey"]) > 700
+    assert len(onboarding_validation_key) > 700
 
     # Verify the version of Prometheus
     prometheus_csv = csv.get_csvs_start_with_prefix(
