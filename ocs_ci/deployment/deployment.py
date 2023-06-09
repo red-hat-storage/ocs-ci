@@ -1619,10 +1619,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         image_tag = get_latest_ds_olm_tag(
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
-
-    # apply icsp if present in the catalog image
-    get_and_aply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
-
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
@@ -1643,6 +1639,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         catalog_source_data["spec"][
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
+    # apply icsp if present in the catalog image
+    get_and_aply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
+
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
     )
