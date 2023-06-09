@@ -48,6 +48,21 @@ class QuayOperator(object):
             else constants.DEFAULT_STORAGECLASS_RBD
         )
 
+    def get_quay_default_channel(self):
+        """
+        Retrieves the default channel of the Quay operator from the
+        PackageManifest in the openshift-marketplace namespace.
+
+        Returns:
+            str: The default channel of the Quay operator.
+
+        """
+        quay_package_manifest_obj = PackageManifest(
+            kind="PackageManifest", resource_name=constants.QUAY_OPERATOR
+        )
+        default_channel = quay_package_manifest_obj.get_default_channel()
+        return default_channel
+
     def setup_quay_operator(self, channel=None):
         """
         Deploys the Quay operator using the specified channel or the default channel if not provided
@@ -63,11 +78,7 @@ class QuayOperator(object):
         """
         channel = channel if channel else self.get_quay_default_channel()
         quay_operator_data_dict = templating.load_yaml(file=constants.QUAY_SUB)
-        quay_package_manifest_obj = PackageManifest(
-            kind="PackageManifest", resource_name=constants.QUAY_OPERATOR
-        )
-        default_channel = quay_package_manifest_obj.get_default_channel()
-        quay_operator_data_dict["spec"]["channel"] = default_channel
+        quay_operator_data_dict["spec"]["channel"] = channel
         self.quay_operator = OCS(**quay_operator_data_dict)
         logger.info(f"Installing Quay operator: {self.quay_operator.name}")
         self.quay_operator.create()
