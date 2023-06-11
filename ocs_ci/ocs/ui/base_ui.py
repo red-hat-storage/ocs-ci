@@ -1607,7 +1607,7 @@ class TopologySidebar(BaseUI):
             return
         logger.info("Sidebar is closed")
 
-    def check_node_down_in_alerts_ui(self, entity=None, read_canvas_alerts=False):
+    def is_node_down_alert_in_alerts_ui(self, entity=None, read_canvas_alerts=False):
         """
         Checks if a NodeDown alert is present in the UI alerts.
 

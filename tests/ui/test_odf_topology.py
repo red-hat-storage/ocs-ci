@@ -18,7 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_worker_nodes, get_node_names
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.base_ui import PageNavigator, take_screenshot
 from ocs_ci.ocs.ui.odf_topology import (
     OdfTopologyHelper,
     get_deployment_details_cli,
@@ -265,7 +265,7 @@ class TestODFTopology(object):
         )
         nodes.stop_nodes(nodes=[random_node_under_test], force=True)
 
-        min_wait_for_update = 6
+        min_wait_for_update = 8
         logger.info(f"wait {min_wait_for_update}min to get UI updated")
         time.sleep(min_wait_for_update * 60)
 
@@ -273,44 +273,54 @@ class TestODFTopology(object):
         topology_tab.nodes_view.read_presented_topology()
 
         test_checks = dict()
-        test_checks["cluster_in_danger_state_check"] = (
-            topology_tab.nodes_view.is_cluster_in_danger(),
-            "ODF Topology canvas shows cluster is not in danger state (red canvas)",
-        )
+        test_checks[
+            "cluster_in_danger_state_check_pass"
+        ] = topology_tab.nodes_view.is_cluster_in_danger()
+        if test_checks["cluster_in_danger_state_check_pass"]:
+            take_screenshot("cluster_in_danger_state_check")
+            logger.error("cluster is not in danger, when one Worker node is down")
 
-        test_checks["ceph_node_down_alert_found_check"] = (
-            topology_tab.check_node_down_in_alerts_ui(read_canvas_alerts=True),
-            f"'{constants.ALERT_NODEDOWN}' alert has not been found in a sidebar",
-        )
+        test_checks[
+            "ceph_node_down_alert_found_check_pass"
+        ] = topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        if test_checks["ceph_node_down_alert_found_check_pass"]:
+            logger.error("CephNodeDown alert has not been found after node went down")
 
         if not config.ENV_DATA["sno"] and bool(random_node_idle):
             logger.info(
                 "check that any random idle node do not show CephNodeDown when conditions not met"
             )
-            test_checks["ceph_node_down_alert_found_on_idle_node_check"] = (
-                topology_tab.check_node_down_in_alerts_ui(entity=random_node_idle.name),
-                f"'{constants.ALERT_NODEDOWN}' alert has been found on idle node",
+            test_checks[
+                "ceph_node_down_alert_found_on_idle_node_check_pass"
+            ] = not topology_tab.is_node_down_alert_in_alerts_ui(
+                entity=random_node_idle.name
             )
+
+            if test_checks["ceph_node_down_alert_found_on_idle_node_check_pass"]:
+                logger.error(f"'{constants.ALERT_NODEDOWN}' alert found on idle node")
 
         logger.info(
             f"return node back to working state and check '{constants.ALERT_NODEDOWN}' alert removed"
         )
         nodes.start_nodes(nodes=[random_node_under_test], wait=True)
 
-        sleep_time_to_update_ui = 6 * 60
         logger.info(
-            f"sleep '{sleep_time_to_update_ui}'sec to update UI and remove {constants.ALERT_NODEDOWN} alert"
+            f"sleep {min_wait_for_update}min to update UI and remove {constants.ALERT_NODEDOWN} alert"
         )
-        time.sleep(sleep_time_to_update_ui)
+        time.sleep(min_wait_for_update * 60)
 
-        test_checks["ceph_node_down_alert_found_after_node_turned_on_check"] = (
-            not topology_tab.check_node_down_in_alerts_ui(read_canvas_alerts=True),
-            f"'{constants.ALERT_NODEDOWN}' alert has been found on idle node",
+        test_checks[
+            "ceph_node_down_alert_found_after_node_turned_on_check_pass"
+        ] = not topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        if test_checks["ceph_node_down_alert_found_after_node_turned_on_check_pass"]:
+            take_screenshot("ceph_node_down_alert_found_after_node_turned_on_check")
+            logger.error("CephNodeDown alert found after node returned back to work")
+
+        test_checks_df = pd.DataFrame.from_dict(
+            data=test_checks, columns=["check_state"], orient="index"
         )
 
-        if any(not test_check[0] for test_check in test_checks.values()):
-            test_checks_df = pd.DataFrame.from_dict(data=test_checks, orient="index")
-            test_checks_df = test_checks_df.drop(test_checks_df.columns[1], axis=1)
+        if not test_checks_df["check_state"].all():
             pytest.fail(
                 "One or multiple checks did not pass:"
                 f"\n{test_checks_df.to_markdown(index=True, tablefmt='grid')}"
