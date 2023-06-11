@@ -1,0 +1,334 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Writing tests &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Stable Branch" href="stable_branch.html" />
+    <link rel="prev" title="Results" href="results.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Writing tests</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#pytest-marks">Pytest marks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bugzilla-decorator">Bugzilla decorator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#skipping-tests-based-on-ocs-version">Skipping tests based on ocs version</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#base-test-classes-for-teams">Base test classes for teams</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#constants-and-defaults">Constants and Defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixture-usage">Fixture usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#other-notes">Other notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Writing tests</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/writing_tests.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="writing-tests">
+<h1>Writing tests<a class="headerlink" href="#writing-tests" title="Permalink to this headline">¶</a></h1>
+<p>In this documentation we will inform you about basic structure where implement
+code and some structure and objects you can use.</p>
+<p>Please feel free to update this documentation because it will help others ppl
+a lot!</p>
+<div class="section" id="pytest-marks">
+<h2>Pytest marks<a class="headerlink" href="#pytest-marks" title="Permalink to this headline">¶</a></h2>
+<p>We have predefined some of pytest marks you can use to decorate your tests.
+You can find them defined in <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/pytest.ini">pytest.ini</a> where we inform
+pytest about those marks.</p>
+<p>We have markers defined in pytest_customization package under
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/pytest_customization/marks.py">marks.py</a> plugin. From your tests you
+can import directly from <code class="docutils literal notranslate"><span class="pre">ocsci.testlib</span></code> module with this statement:
+<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">ocsci.testlib</span> <span class="pre">import</span> <span class="pre">tier1</span></code> for example.</p>
+</div>
+<div class="section" id="bugzilla-decorator">
+<h2>Bugzilla decorator<a class="headerlink" href="#bugzilla-decorator" title="Permalink to this headline">¶</a></h2>
+<p>You can mark test with specific bugzilla decorator as you can see in following
+example:
+:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pytest</span>
+
+<span class="kn">from</span> <span class="nn">ocs_ci.framework.testlib</span> <span class="kn">import</span> <span class="n">bugzilla</span><span class="p">,</span> <span class="n">ManageTest</span>
+
+<span class="nd">@bugzilla</span><span class="p">(</span><span class="s1">&#39;1726266&#39;</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">TestPvCreation</span><span class="p">(</span><span class="n">ManageTest</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="c1"># or you can directly use pytest.mark like:</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">bugzilla</span><span class="p">(</span><span class="s1">&#39;bugzilla_id&#39;</span><span class="p">)</span>  <span class="c1"># where bugzilla_id can be e.g. 1726266</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<p>For more details what else is possible with <code class="docutils literal notranslate"><span class="pre">pytest_marker_bugzilla</span></code> plugin
+look at the
+<a class="reference external" href="https://github.com/eanxgeek/pytest_marker_bugzilla">project documentation</a>.</p>
+</div>
+<div class="section" id="skipping-tests-based-on-ocs-version">
+<h2>Skipping tests based on ocs version<a class="headerlink" href="#skipping-tests-based-on-ocs-version" title="Permalink to this headline">¶</a></h2>
+<p>You can skip a test which is not applicable for specific ocs version using</p>
+<p><code class="docutils literal notranslate"><span class="pre">&#64;skipif_ocs_version([expression1,</span> <span class="pre">expression2,</span> <span class="pre">...])</span></code> decorator.</p>
+<p>example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ocs_ci.framework.testlib</span> <span class="kn">import</span> <span class="n">skipif_ocs_version</span>
+
+<span class="nd">@skipif_ocs_version</span><span class="p">([</span><span class="s1">&#39;&gt;4.1&#39;</span><span class="p">,</span><span class="s1">&#39;&lt;4.3&#39;</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">test_fio_workload</span><span class="p">():</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<p>You can also specify a single expression in a string like:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@skipif_ocs_version</span><span class="p">(</span><span class="s1">&#39;&lt;4.3&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">test_fio_workload</span><span class="p">():</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="base-test-classes-for-teams">
+<h2>Base test classes for teams<a class="headerlink" href="#base-test-classes-for-teams" title="Permalink to this headline">¶</a></h2>
+<p>Those are located in <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/testlib.py">testlib.py</a> which you can also
+import from <code class="docutils literal notranslate"><span class="pre">ocsci.testlib</span></code> module with statement:
+<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">ocsci.testlib</span> <span class="pre">import</span> <span class="pre">manage</span></code> which is base test class for manage team.</p>
+</div>
+<div class="section" id="constants-and-defaults">
+<h2>Constants and Defaults<a class="headerlink" href="#constants-and-defaults" title="Permalink to this headline">¶</a></h2>
+<p>Many of our tests utilize defaults and constants. These are both defined in
+<code class="docutils literal notranslate"><span class="pre">ocs/constants.py</span></code> and <code class="docutils literal notranslate"><span class="pre">ocs/defaults.py</span></code> respectively. Constants and defaults
+are fairly similar but functionally different which is why we have chosen
+to separate them into their own modules.</p>
+<p>If your test requires one of these you can easily import it.
+If you intend to implement a new one (generally if more than one test will
+utilize it), please consider whether or not that value might change between
+different test executions. If it’s something like a filepath (unchanging),
+it’s probably a constant. If tests may overwrite the value, it’s most likely a
+default.</p>
+<p>Note these modules are not intended to be a dumping ground for any variable
+your test might need. These are designed to be homes for widely used variables
+that need to be consistent across a test execution. You can learn more from
+viewing the existing constants and defaults in their respective modules.</p>
+</div>
+<div class="section" id="fixture-usage">
+<h2>Fixture usage<a class="headerlink" href="#fixture-usage" title="Permalink to this headline">¶</a></h2>
+<p>It’s documented <a class="reference internal" href="fixture_usage.html"><span class="doc">here</span></a>.</p>
+</div>
+<div class="section" id="other-notes">
+<h2>Other notes<a class="headerlink" href="#other-notes" title="Permalink to this headline">¶</a></h2>
+<p>Of course you can import in one line both team base class and marker with
+statement: <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">ocsci.testlib</span> <span class="pre">import</span> <span class="pre">manage,</span> <span class="pre">tier1</span></code></p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="stable_branch.html" class="btn btn-neutral float-right" title="Stable Branch" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="results.html" class="btn btn-neutral float-left" title="Results" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

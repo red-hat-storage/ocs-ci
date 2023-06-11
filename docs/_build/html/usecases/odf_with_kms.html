@@ -1,0 +1,284 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Using multiple instances of Vault KMS in OCS-CI &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How to report test results from ocs-ci not executed by ocs-ci jenkins?" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html" />
+    <link rel="prev" title="ENABLE HUGE PAGES" href="enable_huge_pages.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Common Use cases and FAQ</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html">Using ocs-ci to deploy OCP cluster without default OCS installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable_huge_pages.html">ENABLE HUGE PAGES</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Using multiple instances of Vault KMS in OCS-CI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html">How to report test results from ocs-ci not executed by ocs-ci jenkins?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html">How to execute tests on a cluster not deployed by ocs-ci?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_alternative_ocp_mirrors.html">How to use alternative mirrors/repositories for OCP installer/client download</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="index.html">Common Use cases and FAQ</a> &raquo;</li>
+        
+      <li>Using multiple instances of Vault KMS in OCS-CI</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/usecases/odf_with_kms.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="using-multiple-instances-of-vault-kms-in-ocs-ci">
+<h1>Using multiple instances of Vault KMS in OCS-CI<a class="headerlink" href="#using-multiple-instances-of-vault-kms-in-ocs-ci" title="Permalink to this headline">¶</a></h1>
+<p>Vault is one of the Key Management Systems, currently supported by ODF for encryption. QE maintains two instances of Vault: the community version of Vault and the enterprise version of Vault hosted on the Hashicorp Cloud Platform. The configuration and authentication details for these instances are defined in <code class="docutils literal notranslate"><span class="pre">data/auth.yaml</span></code> file under <code class="docutils literal notranslate"><span class="pre">vault</span></code> and <code class="docutils literal notranslate"><span class="pre">vault_hcp</span></code> sections respectively.
+The community version of vault is free to use but does not have the enterprise features, like namespaces available. The HCP Vault instance provides access to enterprise features and is billed based on usage.</p>
+<p>Each vault instance has one or more of these variables defined:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_ADDR</span></code> : Hostname of the vault instance</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PORT</span></code> : The port used by Vault. Usually defaults to 8200</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_CACERT_BASE64</span></code> : Base64 encoded CA certificate</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_CLIENT_CERT_BASE64</span></code> : Base64 encoded client certificate</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_CLIENT_KEY_BASE64</span></code> : Base64 encoded client key</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_TLS_SERVER_NAME</span></code> : TLS server name for the vault instance, if applicable</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_ROOT_TOKEN</span></code> : Vault root token or admin token</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">UNSEAL_KEY{1..5}</span></code> : Unseal keys for vault</p></li>
+</ul>
+<p>Example:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vault</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_ADDR</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">PORT</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_CACERT_BASE64</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_CLIENT_CERT_BASE64</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_CLIENT_KEY_BASE64</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_TLS_SERVER_NAME</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;&#39;</span>
+<span class="w">  </span><span class="nt">VAULT_ROOT_TOKEN</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">UNSEAL_KEY1</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">UNSEAL_KEY2</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">UNSEAL_KEY3</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">UNSEAL_KEY4</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">UNSEAL_KEY5</span><span class="p">:</span>
+
+<span class="nt">vault_hcp</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_ADDR</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">PORT</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_CACERT_BASE64</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_TLS_SERVER_NAME</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;&#39;</span>
+<span class="w">  </span><span class="nt">VAULT_ROOT_TOKEN</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">VAULT_HCP_NAMESPACE</span><span class="p">:</span>
+</pre></div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html" class="btn btn-neutral float-right" title="How to report test results from ocs-ci not executed by ocs-ci jenkins?" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="enable_huge_pages.html" class="btn btn-neutral float-left" title="ENABLE HUGE PAGES" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

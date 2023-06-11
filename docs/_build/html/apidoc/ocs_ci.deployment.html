@@ -1,0 +1,3082 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ocs_ci.deployment package &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ocs_ci.framework package" href="ocs_ci.framework.html" />
+    <link rel="prev" title="ocs_ci package" href="ocs_ci.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">ocs_ci modules</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="ocs_ci.html">ocs_ci package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="ocs_ci.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">ocs_ci.deployment package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.framework.html">ocs_ci.framework package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.helpers.html">ocs_ci.helpers package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.ocs.html">ocs_ci.ocs package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.tests.html">ocs_ci.tests package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.utility.html">ocs_ci.utility package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="ocs_ci.html#module-ocs_ci">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">ocs_ci</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.html">ocs_ci package</a> &raquo;</li>
+        
+      <li>ocs_ci.deployment package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/apidoc/ocs_ci.deployment.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="ocs-ci-deployment-package">
+<h1>ocs_ci.deployment package<a class="headerlink" href="#ocs-ci-deployment-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.deployment.acm">
+<span id="ocs-ci-deployment-acm-module"></span><h2>ocs_ci.deployment.acm module<a class="headerlink" href="#module-ocs_ci.deployment.acm" title="Permalink to this headline">¶</a></h2>
+<p>All ACM related deployment classes and functions should go here.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.acm.Submariner">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.acm.</code><code class="sig-name descname">Submariner</code><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Submariner configuaration and deployment</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.acm.Submariner.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner.deploy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.acm.Submariner.deploy_downstream">
+<code class="sig-name descname">deploy_downstream</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner.deploy_downstream" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.acm.Submariner.deploy_upstream">
+<code class="sig-name descname">deploy_upstream</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner.deploy_upstream" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.acm.Submariner.download_binary">
+<code class="sig-name descname">download_binary</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner.download_binary" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.acm.Submariner.get_default_gateway_node">
+<code class="sig-name descname">get_default_gateway_node</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner.get_default_gateway_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the default node to be used as submariner gateway</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Name of the gateway node</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.acm.Submariner.get_primary_cluster_index">
+<code class="sig-name descname">get_primary_cluster_index</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner.get_primary_cluster_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return list index (in the config list) of the primary cluster
+A cluster is primary from DR perspective</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Index of the cluster designated as primary</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.acm.Submariner.submariner_configure_upstream">
+<code class="sig-name descname">submariner_configure_upstream</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.Submariner.submariner_configure_upstream" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy and Configure upstream submariner</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.DRPrimaryNotFoundException" title="ocs_ci.ocs.exceptions.DRPrimaryNotFoundException"><strong>DRPrimaryNotFoundException</strong></a> – If there is no designated primary cluster found</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.acm.run_subctl_cmd">
+<code class="sig-prename descclassname">ocs_ci.deployment.acm.</code><code class="sig-name descname">run_subctl_cmd</code><span class="sig-paren">(</span><em class="sig-param">cmd=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.run_subctl_cmd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run subctl command</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cmd</strong> – subctl command to be executed</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.acm.run_subctl_cmd_interactive">
+<code class="sig-prename descclassname">ocs_ci.deployment.acm.</code><code class="sig-name descname">run_subctl_cmd_interactive</code><span class="sig-paren">(</span><em class="sig-param">cmd</em>, <em class="sig-param">prompt</em>, <em class="sig-param">answer</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.acm.run_subctl_cmd_interactive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle interactive prompts with answers during subctl command</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cmd</strong> (<em>str</em>) – Command to be executed</p></li>
+<li><p><strong>prompt</strong> (<em>str</em>) – Expected question during command run which needs to be provided</p></li>
+<li><p><strong>answer</strong> (<em>str</em>) – Answer for the prompt</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.InteractivePromptException" title="ocs_ci.ocs.exceptions.InteractivePromptException"><strong>InteractivePromptException</strong></a> – in case something goes wrong</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.aws">
+<span id="ocs-ci-deployment-aws-module"></span><h2>ocs_ci.deployment.aws module<a class="headerlink" href="#module-ocs_ci.deployment.aws" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on AWS platform</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.aws.AWSIPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.aws.</code><code class="sig-name descname">AWSIPI</code><a class="headerlink" href="#ocs_ci.deployment.aws.AWSIPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.aws.AWSBase</span></code></p>
+<p>A class to handle AWS IPI specific deployment</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.aws.AWSIPI.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.aws.AWSIPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.cloud.IPIOCPDeployment" title="ocs_ci.deployment.cloud.IPIOCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.IPIOCPDeployment</span></code></a></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSIPI.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSIPI.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on this platform</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSIPI.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSIPI.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster specific to AWS IPI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level openshift-installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.aws.AWSUPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.aws.</code><code class="sig-name descname">AWSUPI</code><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.aws.AWSBase</span></code></p>
+<p>A class to handle AWS UPI specific deployment</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.aws.AWSUPI.OCPDeployment">
+<em class="property">class </em><code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.OCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.OCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Exact deployment will happen here</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.OCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.OCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Overriding deploy_prereq from parent. Perform all necessary
+prerequisites for AWSUPI here.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.add_rhel_workers">
+<code class="sig-name descname">add_rhel_workers</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.add_rhel_workers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add RHEL worker nodes to the existing cluster</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.build_ansible_inventory">
+<code class="sig-name descname">build_ansible_inventory</code><span class="sig-paren">(</span><em class="sig-param">hosts</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.build_ansible_inventory" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build the ansible hosts file from jinja template</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hosts</strong> (<em>list</em>) – list of private host names</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>path of the ansible file created</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.check_connection">
+<code class="sig-name descname">check_connection</code><span class="sig-paren">(</span><em class="sig-param">rhel_pod_obj</em>, <em class="sig-param">host</em>, <em class="sig-param">pem_dst_path</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.check_connection" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.create_rhel_instance">
+<code class="sig-name descname">create_rhel_instance</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.create_rhel_instance" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function does the following:
+1. Create RHEL worker instances, copy required AWS tags from existing
+2. worker instances to new RHEL instances
+3. Copy  IAM role from existing worker to new RHEL workers</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>OCP deployment specific to AWS UPI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: ‘DEBUG’)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster for AWS UPI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level for openshift-installer (
+default:DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.gather_worker_data">
+<code class="sig-name descname">gather_worker_data</code><span class="sig-paren">(</span><em class="sig-param">suffix='no0'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.gather_worker_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gather various info like vpc, iam role, subnet,security group,
+cluster tag from existing RHCOS workers</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>suffix</strong> (<em>str</em>) – suffix to get resource of worker node, ‘no0’ by default</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.get_kube_tag">
+<code class="sig-name descname">get_kube_tag</code><span class="sig-paren">(</span><em class="sig-param">tags</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.get_kube_tag" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch kubernets.io tag from worker instance</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tags</strong> (<em>dict</em>) – AWS tags from existing worker</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>key looks like</dt><dd><p>”kubernetes.io/cluster/&lt;cluster-name&gt;” and value looks like
+“share” OR “owned”</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.get_ready_status">
+<code class="sig-name descname">get_ready_status</code><span class="sig-paren">(</span><em class="sig-param">node_ent</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.get_ready_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the node ‘Ready’ status</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>node_ent</strong> (<em>dict</em>) – Node info which includes details</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if node is Ready else False</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.get_rhcos_workers">
+<code class="sig-name descname">get_rhcos_workers</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.get_rhcos_workers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a list of rhcos worker names</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>list of rhcos worker nodes</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>rhcos_workers (list)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.get_worker_resource_id">
+<code class="sig-name descname">get_worker_resource_id</code><span class="sig-paren">(</span><em class="sig-param">resource</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.get_worker_resource_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the resource ID</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>resource</strong> (<em>dict</em>) – a dictionary of stack resource</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>ID of worker stack resource</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.remove_rhcos_workers">
+<code class="sig-name descname">remove_rhcos_workers</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.remove_rhcos_workers" title="Permalink to this definition">¶</a></dt>
+<dd><p>After RHEL workers are added remove rhcos workers from the cluster</p>
+<dl class="simple">
+<dt>Raise:</dt><dd><p>FailedToRemoveNodeException: if rhcos removal is failed</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.run_ansible_playbook">
+<code class="sig-name descname">run_ansible_playbook</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.run_ansible_playbook" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bring up a helper pod (RHEL) to run openshift-ansible
+playbook</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.aws.AWSUPI.verify_nodes_added">
+<code class="sig-name descname">verify_nodes_added</code><span class="sig-paren">(</span><em class="sig-param">hosts</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.aws.AWSUPI.verify_nodes_added" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify RHEL workers are added</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hosts</strong> (<em>list</em>) – list of aws private hostnames</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.FailedToAddNodeException" title="ocs_ci.ocs.exceptions.FailedToAddNodeException"><strong>FailedToAddNodeException</strong></a> – if node addition failed</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.azure">
+<span id="ocs-ci-deployment-azure-module"></span><h2>ocs_ci.deployment.azure module<a class="headerlink" href="#module-ocs_ci.deployment.azure" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on Azure platform.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.azure.AZUREIPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.azure.</code><code class="sig-name descname">AZUREIPI</code><a class="headerlink" href="#ocs_ci.deployment.azure.AZUREIPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.azure.AZUREBase</span></code></p>
+<p>A class to handle Azure IPI specific deployment.</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.azure.AZUREIPI.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.azure.AZUREIPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.cloud.IPIOCPDeployment" title="ocs_ci.deployment.cloud.IPIOCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.IPIOCPDeployment</span></code></a></p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.baremetal">
+<span id="ocs-ci-deployment-baremetal-module"></span><h2>ocs_ci.deployment.baremetal module<a class="headerlink" href="#module-ocs_ci.deployment.baremetal" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.baremetal.</code><code class="sig-name descname">BAREMETALUPI</code><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.Deployment" title="ocs_ci.deployment.deployment.Deployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.Deployment</span></code></a></p>
+<p>A class to handle Bare metal UPI specific deployment</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment">
+<em class="property">class </em><code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.check_bm_status_exist">
+<code class="sig-name descname">check_bm_status_exist</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.check_bm_status_exist" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check if BM Cluster already exist</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>response status</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.configure_storage_for_image_registry">
+<code class="sig-name descname">configure_storage_for_image_registry</code><span class="sig-paren">(</span><em class="sig-param">kubeconfig</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.configure_storage_for_image_registry" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configures storage for the image registry</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_config">
+<code class="sig-name descname">create_config</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the OCP deploy config for the Bare Metal</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_ignitions">
+<code class="sig-name descname">create_ignitions</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_ignitions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the ignition files</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_manifest">
+<code class="sig-name descname">create_manifest</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_manifest" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the Manifest files</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_pxe_files">
+<code class="sig-name descname">create_pxe_files</code><span class="sig-paren">(</span><em class="sig-param">ocp_version</em>, <em class="sig-param">role</em>, <em class="sig-param">disk_path</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.create_pxe_files" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create pxe file for giver role</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ocp_version</strong> (<em>float</em>) – OCP version</p></li>
+<li><p><strong>role</strong> (<em>str</em>) – Role of node eg:- bootstrap,master,worker</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>temp file path</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pre-Requisites for Bare Metal UPI Deployment</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.destroy">
+<code class="sig-name descname">destroy</code><span class="sig-paren">(</span><em class="sig-param">log_level=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster specific to BM UPI</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.get_locked_username">
+<code class="sig-name descname">get_locked_username</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.get_locked_username" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get name of user who has locked baremetal resource</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>username</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.set_pxe_boot_and_reboot">
+<code class="sig-name descname">set_pxe_boot_and_reboot</code><span class="sig-paren">(</span><em class="sig-param">machine</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.set_pxe_boot_and_reboot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ipmi Set Pxe boot and Restart the machine</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>machine</strong> (<em>str</em>) – Machine Name</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.update_bm_status">
+<code class="sig-name descname">update_bm_status</code><span class="sig-paren">(</span><em class="sig-param">bm_status</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BAREMETALUPI.OCPDeployment.update_bm_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update BM status when cluster is deployed/teardown</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>bm_status</strong> (<em>str</em>) – Status to be updated</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>response message</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.baremetal.BaremetalPSIUPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.baremetal.</code><code class="sig-name descname">BaremetalPSIUPI</code><a class="headerlink" href="#ocs_ci.deployment.baremetal.BaremetalPSIUPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.Deployment" title="ocs_ci.deployment.deployment.Deployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.Deployment</span></code></a></p>
+<p>All the functionalities related to BaremetalPSI- UPI deployment
+lives here</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment">
+<em class="property">class </em><code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_level=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implement ocp deploy in specific child class</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Instantiate proper flexy class here</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment.destroy">
+<code class="sig-name descname">destroy</code><span class="sig-paren">(</span><em class="sig-param">log_level=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.BaremetalPSIUPI.OCPDeployment.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy volumes attached if any and then the cluster</p>
+</dd></dl>
+
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.baremetal.clean_disk">
+<code class="sig-prename descclassname">ocs_ci.deployment.baremetal.</code><code class="sig-name descname">clean_disk</code><span class="sig-paren">(</span><em class="sig-param">worker</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.baremetal.clean_disk" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform disk cleanup</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>worker</strong> (<em>object</em>) – worker node object</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.cert_manager">
+<span id="ocs-ci-deployment-cert-manager-module"></span><h2>ocs_ci.deployment.cert_manager module<a class="headerlink" href="#module-ocs_ci.deployment.cert_manager" title="Permalink to this headline">¶</a></h2>
+<p>This module contains functions needed for installing
+cert-manager operator from Red Hat.
+More information about cert-manager can be found at
+<a class="reference external" href="https://github.com/openshift/cert-manager-operator">https://github.com/openshift/cert-manager-operator</a> and
+<a class="reference external" href="https://cert-manager.io/">https://cert-manager.io/</a></p>
+<dl class="function">
+<dt id="ocs_ci.deployment.cert_manager.deploy_cert_manager">
+<code class="sig-prename descclassname">ocs_ci.deployment.cert_manager.</code><code class="sig-name descname">deploy_cert_manager</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.cert_manager.deploy_cert_manager" title="Permalink to this definition">¶</a></dt>
+<dd><p>Installs cert-manager</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.cloud">
+<span id="ocs-ci-deployment-cloud-module"></span><h2>ocs_ci.deployment.cloud module<a class="headerlink" href="#module-ocs_ci.deployment.cloud" title="Permalink to this headline">¶</a></h2>
+<p>This module contains common code and a base class for any cloud platform
+deployment.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.cloud.CloudDeploymentBase">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.cloud.</code><code class="sig-name descname">CloudDeploymentBase</code><a class="headerlink" href="#ocs_ci.deployment.cloud.CloudDeploymentBase" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.Deployment" title="ocs_ci.deployment.deployment.Deployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.Deployment</span></code></a></p>
+<p>Base class for deployment on a cloud platform (such as AWS, Azure, …).</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.cloud.CloudDeploymentBase.check_cluster_existence">
+<code class="sig-name descname">check_cluster_existence</code><span class="sig-paren">(</span><em class="sig-param">cluster_name_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.cloud.CloudDeploymentBase.check_cluster_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check cluster existence according to cluster name prefix</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>True if a cluster with the same name prefix already exists,</dt><dd><p>False otherwise</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.cloud.CloudDeploymentBase.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.cloud.CloudDeploymentBase.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a cloud platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.cloud.IPIOCPDeployment">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.cloud.</code><code class="sig-name descname">IPIOCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.cloud.IPIOCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<p>Common implementation of IPI OCP deployments for cloud platforms.</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.cloud.IPIOCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.cloud.IPIOCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a cloud platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.cloud.IPIOCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.cloud.IPIOCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Overriding deploy_prereq from parent. Perform all necessary
+prerequisites for cloud IPI here.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.deployment">
+<span id="ocs-ci-deployment-deployment-module"></span><h2>ocs_ci.deployment.deployment module<a class="headerlink" href="#module-ocs_ci.deployment.deployment" title="Permalink to this headline">¶</a></h2>
+<p>This module provides base class for different deployment
+platforms like AWS, VMWare, Baremetal etc.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.Deployment">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">Deployment</code><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base for all deployment platforms</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.deployment.Deployment.CUSTOM_STORAGE_CLASS_PATH">
+<code class="sig-name descname">CUSTOM_STORAGE_CLASS_PATH</code><em class="property"> = None</em><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.CUSTOM_STORAGE_CLASS_PATH" title="Permalink to this definition">¶</a></dt>
+<dd><p>filepath of yaml file with custom storage class if necessary</p>
+<p>For some platforms, one have to create custom storage class for OCS to make
+sure ceph uses disks of expected type and parameters (eg. OCS requires
+ssd). This variable is either None (meaning that such custom storage class
+is not needed), or point to a yaml file with custom storage class.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.deployment.deployment.Deployment.DEFAULT_STORAGECLASS">
+<code class="sig-name descname">DEFAULT_STORAGECLASS</code><em class="property"> = None</em><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.DEFAULT_STORAGECLASS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.deployment.deployment.Deployment.DEFAULT_STORAGECLASS_LSO">
+<code class="sig-name descname">DEFAULT_STORAGECLASS_LSO</code><em class="property"> = 'localblock'</em><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.DEFAULT_STORAGECLASS_LSO" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.Deployment.OCPDeployment">
+<em class="property">class </em><code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<p>This class has to be implemented in child class and should overload
+methods for platform specific config.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.add_node">
+<code class="sig-name descname">add_node</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.add_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implement platform-specific add_node in child class</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_acm_hub">
+<code class="sig-name descname">deploy_acm_hub</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_acm_hub" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle ACM HUB deployment</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_acm_hub_released">
+<code class="sig-name descname">deploy_acm_hub_released</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_acm_hub_released" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle ACM HUB released image deployment</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_acm_hub_unreleased">
+<code class="sig-name descname">deploy_acm_hub_unreleased</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_acm_hub_unreleased" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle ACM HUB unreleased image deployment</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_cluster">
+<code class="sig-name descname">deploy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>We are handling both OCP and OCS deployment here based on flags</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – log level for installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_lvmo">
+<code class="sig-name descname">deploy_lvmo</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_lvmo" title="Permalink to this definition">¶</a></dt>
+<dd><p>deploy lvmo for platform specific (for now only vsphere)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Base deployment steps, the rest should be implemented in the child
+class.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – log level for installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_ocs">
+<code class="sig-name descname">deploy_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle OCS deployment, since OCS deployment steps are common to any
+platform, implementing OCS deployment here in base class.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_ocs_via_operator">
+<code class="sig-name descname">deploy_ocs_via_operator</code><span class="sig-paren">(</span><em class="sig-param">image=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_ocs_via_operator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method for deploy OCS via OCS operator</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>image</strong> (<em>str</em>) – Image of ocs registry.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_odf_addon">
+<code class="sig-name descname">deploy_odf_addon</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_odf_addon" title="Permalink to this definition">¶</a></dt>
+<dd><p>This method deploy ODF addon.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deploy_with_external_mode">
+<code class="sig-name descname">deploy_with_external_mode</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deploy_with_external_mode" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function handles the deployment of OCS on
+external/indpendent RHCS cluster</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.deployment_with_ui">
+<code class="sig-name descname">deployment_with_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.deployment_with_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment OCS Operator via OpenShift Console</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Base destroy cluster method, for more platform specific stuff please
+overload this method in child class.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level for installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_deploy_cert_manager">
+<code class="sig-name descname">do_deploy_cert_manager</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_deploy_cert_manager" title="Permalink to this definition">¶</a></dt>
+<dd><p>Installs cert-manager operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_deploy_fusion">
+<code class="sig-name descname">do_deploy_fusion</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_deploy_fusion" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install IBM Fusion operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_deploy_lvmo">
+<code class="sig-name descname">do_deploy_lvmo</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_deploy_lvmo" title="Permalink to this definition">¶</a></dt>
+<dd><p>call lvm deploy</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_deploy_ocp">
+<code class="sig-name descname">do_deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy OCP
+:param log_cli_level: log level for the installer
+:type log_cli_level: str</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_deploy_ocs">
+<code class="sig-name descname">do_deploy_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_deploy_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy OCS/ODF and run verification as well</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_deploy_rdr">
+<code class="sig-name descname">do_deploy_rdr</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_deploy_rdr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Call Regional DR deploy</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_deploy_submariner">
+<code class="sig-name descname">do_deploy_submariner</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_deploy_submariner" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy Submariner operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.do_gitops_deploy">
+<code class="sig-name descname">do_gitops_deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.do_gitops_deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy GitOps operator</p>
+<p>Returns:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.external_post_deploy_validation">
+<code class="sig-name descname">external_post_deploy_validation</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.external_post_deploy_validation" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function validates successful deployment of OCS
+in external mode, some of the steps overlaps with
+converged mode</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.get_arbiter_location">
+<code class="sig-name descname">get_arbiter_location</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.get_arbiter_location" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get arbiter mon location for storage cluster</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.get_rdr_conf">
+<code class="sig-name descname">get_rdr_conf</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.get_rdr_conf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Aggregate important Regional DR parameters in the dictionary</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>of Regional DR config parameters</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.label_and_taint_nodes">
+<code class="sig-name descname">label_and_taint_nodes</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.label_and_taint_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Label and taint worker nodes to be used by OCS operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.patch_default_sc_to_non_default">
+<code class="sig-name descname">patch_default_sc_to_non_default</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.patch_default_sc_to_non_default" title="Permalink to this definition">¶</a></dt>
+<dd><p>Patch storage class which comes as default with installation to non-default</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.post_ocp_deploy">
+<code class="sig-name descname">post_ocp_deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.post_ocp_deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function does post OCP deployment stuff we need to do.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.set_rook_log_level">
+<code class="sig-name descname">set_rook_log_level</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.set_rook_log_level" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.subscribe_ocs">
+<code class="sig-name descname">subscribe_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.subscribe_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>This method subscription manifest and subscribe to OCS operator.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.wait_for_csv">
+<code class="sig-name descname">wait_for_csv</code><span class="sig-paren">(</span><em class="sig-param">csv_name</em>, <em class="sig-param">namespace=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.wait_for_csv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for the CSV to appear</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>csv_name</strong> (<em>str</em>) – CSV name pattern</p></li>
+<li><p><strong>namespace</strong> (<em>str</em>) – Namespace where CSV exists</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.Deployment.wait_for_subscription">
+<code class="sig-name descname">wait_for_subscription</code><span class="sig-paren">(</span><em class="sig-param">subscription_name</em>, <em class="sig-param">namespace=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.Deployment.wait_for_subscription" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for the subscription to appear</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subscription_name</strong> (<em>str</em>) – Subscription name pattern</p></li>
+<li><p><strong>namespace</strong> (<em>str</em>) – Namespace name for checking subscription if None then default from ENV_data</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">MDRMultiClusterDROperatorsDeploy</code><span class="sig-paren">(</span><em class="sig-param">dr_conf</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy" title="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy</span></code></a></p>
+<p>A class for Metro-DR deployments</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.backup_pod_status_check">
+<code class="sig-name descname">backup_pod_status_check</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.backup_pod_status_check" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.build_bucket_name">
+<code class="sig-name descname">build_bucket_name</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.build_bucket_name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.create_dpa">
+<code class="sig-name descname">create_dpa</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.create_dpa" title="Permalink to this definition">¶</a></dt>
+<dd><p>create DPA
+OADP will be already installed when we enable backup flag
+Here we will create dataprotection application and
+update bucket name and s3 storage link</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.create_generic_credentials">
+<code class="sig-name descname">create_generic_credentials</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.create_generic_credentials" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.create_s3_bucket">
+<code class="sig-name descname">create_s3_bucket</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.create_s3_bucket" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>deploy ODF multicluster orchestrator operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.deploy_dr_policy">
+<code class="sig-name descname">deploy_dr_policy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.deploy_dr_policy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy dr policy with MDR perspective, only on active ACM</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.deploy_multicluster_orchestrator">
+<code class="sig-name descname">deploy_multicluster_orchestrator</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.deploy_multicluster_orchestrator" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.enable_cluster_backup">
+<code class="sig-name descname">enable_cluster_backup</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.enable_cluster_backup" title="Permalink to this definition">¶</a></dt>
+<dd><p>set cluster-backup to True in mch resource
+Note: changing this flag automatically installs OADP operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.enable_managed_serviceaccount">
+<code class="sig-name descname">enable_managed_serviceaccount</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.enable_managed_serviceaccount" title="Permalink to this definition">¶</a></dt>
+<dd><p>update MultiClusterEngine</p>
+<ul class="simple">
+<li><p>enabled: true
+name: managedserviceaccount-preview</p></li>
+</ul>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.validate_dpa">
+<code class="sig-name descname">validate_dpa</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MDRMultiClusterDROperatorsDeploy.validate_dpa" title="Permalink to this definition">¶</a></dt>
+<dd><p>Validate
+1. 3 restic pods
+2. 1 velero pod
+3. backupstoragelocation resource in “Available” phase</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">MultiClusterDROperatorsDeploy</code><span class="sig-paren">(</span><em class="sig-param">dr_conf</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Implement Multicluster DR operators deploy part here, mainly
+1. ODF Multicluster Orchestrator operator
+2. Metadata object stores (s3 OR MCG)
+3. ODF Hub operator
+4. ODF Cluster operator</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.configure_mirror_peer">
+<code class="sig-name descname">configure_mirror_peer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.configure_mirror_peer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>deploy ODF multicluster orchestrator operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.deploy_dr_multicluster_orchestrator">
+<code class="sig-name descname">deploy_dr_multicluster_orchestrator</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.deploy_dr_multicluster_orchestrator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploy multicluster orchestrator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.deploy_dr_policy">
+<code class="sig-name descname">deploy_dr_policy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.deploy_dr_policy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.mcg_meta_obj_store">
+<em class="property">class </em><code class="sig-name descname">mcg_meta_obj_store</code><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.mcg_meta_obj_store" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store">
+<em class="property">class </em><code class="sig-name descname">s3_meta_obj_store</code><span class="sig-paren">(</span><em class="sig-param">conf=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Internal class to handle aws s3 metadata obj store</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.deploy_and_configure">
+<code class="sig-name descname">deploy_and_configure</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.deploy_and_configure" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_meta_access_secret_keys">
+<code class="sig-name descname">get_meta_access_secret_keys</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_meta_access_secret_keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get aws_access_key_id and aws_secret_access_key
+by default we go with AWS, in case of noobaa it should be
+implemented in mcg_meta_obj_store class</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_participating_regions">
+<code class="sig-name descname">get_participating_regions</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_participating_regions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get all the participating regions in the DR scenario</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>List of participating regions</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>list of str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_ramen_resource">
+<code class="sig-name descname">get_ramen_resource</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_ramen_resource" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_s3_profiles">
+<code class="sig-name descname">get_s3_profiles</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_s3_profiles" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get names of s3 profiles from hub configmap resource</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_s3_secret_names">
+<code class="sig-name descname">get_s3_secret_names</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.get_s3_secret_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get secret resource names for s3</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.s3_configure">
+<code class="sig-name descname">s3_configure</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.s3_meta_obj_store.s3_configure" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.update_config_map_commit">
+<code class="sig-name descname">update_config_map_commit</code><span class="sig-paren">(</span><em class="sig-param">config_map_data</em>, <em class="sig-param">prefix=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.update_config_map_commit" title="Permalink to this definition">¶</a></dt>
+<dd><p>merge the config and update the resource</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config_map_data</strong> (<em>dict</em>) – base dictionary which will be later converted to yaml content</p></li>
+<li><p><strong>prefix</strong> (<em>str</em>) – Used to identify temp yaml</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.update_ramen_config_misc">
+<code class="sig-name descname">update_ramen_config_misc</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.update_ramen_config_misc" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.validate_mirror_peer">
+<code class="sig-name descname">validate_mirror_peer</code><span class="sig-paren">(</span><em class="sig-param">resource_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.validate_mirror_peer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Validate mirror peer,
+Begins with CTX: ACM</p>
+<ol class="arabic simple">
+<li><dl class="simple">
+<dt>Check phase: if RDR then state =  ‘ExchangedSecret’</dt><dd><p>if MDR then state = ‘S3ProfileSynced’</p>
+</dd>
+</dl>
+</li>
+<li><p>Check token-exchange-agent pod in ‘Running’ phase</p></li>
+</ol>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.ResourceWrongStatusException" title="ocs_ci.ocs.exceptions.ResourceWrongStatusException"><strong>ResourceWrongStatusException</strong></a> – If pod is not in expected state</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.verify_dr_hub_operator">
+<code class="sig-name descname">verify_dr_hub_operator</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy.verify_dr_hub_operator" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.RBDDRDeployOps">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">RBDDRDeployOps</code><a class="headerlink" href="#ocs_ci.deployment.deployment.RBDDRDeployOps" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>All RBD specific DR deployment operations</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.RBDDRDeployOps.configure_rbd">
+<code class="sig-name descname">configure_rbd</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.RBDDRDeployOps.configure_rbd" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.RBDDRDeployOps.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.RBDDRDeployOps.deploy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.RBDDRDeployOps.validate_csi_sidecar">
+<code class="sig-name descname">validate_csi_sidecar</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.RBDDRDeployOps.validate_csi_sidecar" title="Permalink to this definition">¶</a></dt>
+<dd><p>validate sidecar containers for rbd mirroring on each of the
+ODF cluster</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.RBDDRDeployOps.validate_mirror_peer">
+<code class="sig-name descname">validate_mirror_peer</code><span class="sig-paren">(</span><em class="sig-param">resource_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.RBDDRDeployOps.validate_mirror_peer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Validate mirror peer,
+Begins with CTX: ACM</p>
+<ol class="arabic simple">
+<li><p>Check initial phase of ‘ExchangingSecret’</p></li>
+<li><p>Check token-exchange-agent pod in ‘Running’ phase</p></li>
+</ol>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.ResourceWrongStatusException" title="ocs_ci.ocs.exceptions.ResourceWrongStatusException"><strong>ResourceWrongStatusException</strong></a> – If pod is not in expected state</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.deployment.RDRMultiClusterDROperatorsDeploy">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">RDRMultiClusterDROperatorsDeploy</code><span class="sig-paren">(</span><em class="sig-param">dr_conf</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.RDRMultiClusterDROperatorsDeploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy" title="ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.MultiClusterDROperatorsDeploy</span></code></a></p>
+<p>A class for Regional-DR deployments</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.deployment.RDRMultiClusterDROperatorsDeploy.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.RDRMultiClusterDROperatorsDeploy.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>RDR specific steps for deploy</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.deployment.create_catalog_source">
+<code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">create_catalog_source</code><span class="sig-paren">(</span><em class="sig-param">image=None</em>, <em class="sig-param">ignore_upgrade=False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.create_catalog_source" title="Permalink to this definition">¶</a></dt>
+<dd><p>This prepare catalog source manifest for deploy OCS operator from
+quay registry.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image</strong> (<em>str</em>) – Image of ocs registry.</p></li>
+<li><p><strong>ignore_upgrade</strong> (<em>bool</em>) – Ignore upgrade parameter.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.deployment.create_fusion_catalog_source">
+<code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">create_fusion_catalog_source</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.create_fusion_catalog_source" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create catalog source for fusion operator</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.deployment.create_ocs_secret">
+<code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">create_ocs_secret</code><span class="sig-paren">(</span><em class="sig-param">namespace</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.create_ocs_secret" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function for creation of pull secret for OCS. (Mostly for ibmcloud purpose)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>namespace</strong> (<em>str</em>) – namespace where to create the secret</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.deployment.get_and_apply_icsp_from_catalog">
+<code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">get_and_apply_icsp_from_catalog</code><span class="sig-paren">(</span><em class="sig-param">image</em>, <em class="sig-param">apply=True</em>, <em class="sig-param">insecure=False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.get_and_apply_icsp_from_catalog" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get ICSP from catalog image (if exists) and apply it on the cluster (if
+requested).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image</strong> (<em>str</em>) – catalog image of ocs registry.</p></li>
+<li><p><strong>apply</strong> (<em>bool</em>) – controls if the ICSP should be applied or not
+(default: true)</p></li>
+<li><p><strong>insecure</strong> (<em>bool</em>) – If True, it allows push and pull operations to registries to be made over HTTP</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>path to the icsp.yaml file or empty string, if icsp not available</dt><dd><p>in the catalog image</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.deployment.get_multicluster_dr_deployment">
+<code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">get_multicluster_dr_deployment</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.get_multicluster_dr_deployment" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.deployment.setup_persistent_monitoring">
+<code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">setup_persistent_monitoring</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.setup_persistent_monitoring" title="Permalink to this definition">¶</a></dt>
+<dd><p>Change monitoring backend to OCS</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.deployment.validate_acm_hub_install">
+<code class="sig-prename descclassname">ocs_ci.deployment.deployment.</code><code class="sig-name descname">validate_acm_hub_install</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.deployment.validate_acm_hub_install" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify the ACM MultiClusterHub installation was successful.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.disconnected">
+<span id="ocs-ci-deployment-disconnected-module"></span><h2>ocs_ci.deployment.disconnected module<a class="headerlink" href="#module-ocs_ci.deployment.disconnected" title="Permalink to this headline">¶</a></h2>
+<p>This module contains functionality required for disconnected installation.</p>
+<dl class="function">
+<dt id="ocs_ci.deployment.disconnected.get_csv_from_image">
+<code class="sig-prename descclassname">ocs_ci.deployment.disconnected.</code><code class="sig-name descname">get_csv_from_image</code><span class="sig-paren">(</span><em class="sig-param">bundle_image</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.disconnected.get_csv_from_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extract clusterserviceversion.yaml file from operator bundle image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>bundle_image</strong> (<em>str</em>) – OCS operator bundle image</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>loaded yaml from CSV file</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.disconnected.mirror_images_from_mapping_file">
+<code class="sig-prename descclassname">ocs_ci.deployment.disconnected.</code><code class="sig-name descname">mirror_images_from_mapping_file</code><span class="sig-paren">(</span><em class="sig-param">mapping_file</em>, <em class="sig-param">icsp=None</em>, <em class="sig-param">ignore_image=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.disconnected.mirror_images_from_mapping_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Mirror images based on mapping.txt file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mapping_file</strong> (<em>str</em>) – path to mapping.txt file</p></li>
+<li><p><strong>icsp</strong> (<em>dict</em>) – ImageContentSourcePolicy used for mirroring (workaround for
+stage images, which are pointing to different registry than they
+really are)</p></li>
+<li><p><strong>ignore_image</strong> – image which should be ignored when applying icsp
+(mirrored index image)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.disconnected.mirror_index_image_via_oc_mirror">
+<code class="sig-prename descclassname">ocs_ci.deployment.disconnected.</code><code class="sig-name descname">mirror_index_image_via_oc_mirror</code><span class="sig-paren">(</span><em class="sig-param">index_image</em>, <em class="sig-param">packages</em>, <em class="sig-param">icsp=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.disconnected.mirror_index_image_via_oc_mirror" title="Permalink to this definition">¶</a></dt>
+<dd><p>Mirror all images required for ODF deployment and testing to mirror
+registry via <cite>oc-mirror</cite> tool and create relevant imageContentSourcePolicy.
+<a class="reference external" href="https://github.com/openshift/oc-mirror">https://github.com/openshift/oc-mirror</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index_image</strong> (<em>str</em>) – index image which will be pruned and mirrored</p></li>
+<li><p><strong>packages</strong> (<em>list</em>) – list of packages to keep</p></li>
+<li><p><strong>icsp</strong> (<em>dict</em>) – ImageContentSourcePolicy used for mirroring (workaround for
+stage images, which are pointing to different registry than they
+really are)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>mirrored index image</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.disconnected.mirror_ocp_release_images">
+<code class="sig-prename descclassname">ocs_ci.deployment.disconnected.</code><code class="sig-name descname">mirror_ocp_release_images</code><span class="sig-paren">(</span><em class="sig-param">ocp_image_path</em>, <em class="sig-param">ocp_version</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.disconnected.mirror_ocp_release_images" title="Permalink to this definition">¶</a></dt>
+<dd><p>Mirror OCP release images to mirror registry.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ocp_image_path</strong> (<em>str</em>) – OCP release image path</p></li>
+<li><p><strong>ocp_version</strong> (<em>str</em>) – OCP release image version</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>tuple with two strings: mirrored image path and tag</dt><dd><p>or checksum</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple (str, str)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.disconnected.prepare_disconnected_ocs_deployment">
+<code class="sig-prename descclassname">ocs_ci.deployment.disconnected.</code><code class="sig-name descname">prepare_disconnected_ocs_deployment</code><span class="sig-paren">(</span><em class="sig-param">upgrade=False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.disconnected.prepare_disconnected_ocs_deployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare disconnected ocs deployment:
+- mirror required images from redhat-operators
+- get related images from OCS operator bundle csv
+- mirror related images to mirror registry
+- create imageContentSourcePolicy for the mirrored images
+- disable the default OperatorSources</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>upgrade</strong> (<em>bool</em>) – is this fresh installation or upgrade process
+(default: False)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>mirrored OCS registry image prepared for disconnected installation</dt><dd><p>or None (for live deployment)</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.disconnected.prune_and_mirror_index_image">
+<code class="sig-prename descclassname">ocs_ci.deployment.disconnected.</code><code class="sig-name descname">prune_and_mirror_index_image</code><span class="sig-paren">(</span><em class="sig-param">index_image</em>, <em class="sig-param">mirrored_index_image</em>, <em class="sig-param">packages</em>, <em class="sig-param">icsp=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.disconnected.prune_and_mirror_index_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prune given index image and push it to mirror registry, mirror all related
+images to mirror registry and create relevant imageContentSourcePolicy
+This uses <cite>opm index prune</cite> command, which supports only sqlite-based
+catalogs (&lt;= OCP 4.10), for &gt;= OCP 4.11 use <cite>oc-mirror</cite> tool implemented in
+mirror_index_image_via_oc_mirror(…) function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index_image</strong> (<em>str</em>) – index image which will be pruned and mirrored</p></li>
+<li><p><strong>mirrored_index_image</strong> (<em>str</em>) – mirrored index image which will be pushed to
+mirror registry</p></li>
+<li><p><strong>packages</strong> (<em>list</em>) – list of packages to keep</p></li>
+<li><p><strong>icsp</strong> (<em>dict</em>) – ImageContentSourcePolicy used for mirroring (workaround for
+stage images, which are pointing to different registry than they
+really are)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>path to generated catalogSource.yaml file</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.factory">
+<span id="ocs-ci-deployment-factory-module"></span><h2>ocs_ci.deployment.factory module<a class="headerlink" href="#module-ocs_ci.deployment.factory" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.deployment.factory.DeploymentFactory">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.factory.</code><code class="sig-name descname">DeploymentFactory</code><a class="headerlink" href="#ocs_ci.deployment.factory.DeploymentFactory" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A factory class to get specific platform object</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.factory.DeploymentFactory.get_deployment">
+<code class="sig-name descname">get_deployment</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.factory.DeploymentFactory.get_deployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the exact deployment class based on ENV_DATA
+Example:
+deployment_platform may look like ‘aws’, ‘vmware’, ‘baremetal’
+deployment_type may be like ‘ipi’ or ‘upi’</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.flexy">
+<span id="ocs-ci-deployment-flexy-module"></span><h2>ocs_ci.deployment.flexy module<a class="headerlink" href="#module-ocs_ci.deployment.flexy" title="Permalink to this headline">¶</a></h2>
+<p>All the flexy related classes and functionality lives here</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.flexy.FlexyAWSUPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.flexy.</code><code class="sig-name descname">FlexyAWSUPI</code><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyAWSUPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.flexy.FlexyBase" title="ocs_ci.deployment.flexy.FlexyBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.flexy.FlexyBase</span></code></a></p>
+<p>A specific implementation of AWS UPI installation using flexy</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.flexy.FlexyBaremetalPSI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.flexy.</code><code class="sig-name descname">FlexyBaremetalPSI</code><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBaremetalPSI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.flexy.FlexyBase" title="ocs_ci.deployment.flexy.FlexyBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.flexy.FlexyBase</span></code></a></p>
+<p>A specific implementation of Baremetal with PSI using flexy</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.flexy.FlexyBase">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.flexy.</code><code class="sig-name descname">FlexyBase</code><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A base class for all types of flexy installs</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.build_container_args">
+<code class="sig-name descname">build_container_args</code><span class="sig-paren">(</span><em class="sig-param">purpose=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.build_container_args" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds most commonly used arguments for flexy container</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>purpose</strong> (<em>str</em>) – purpose for which we are building these args
+eg: destroy, debug. By default it will be empty string
+which turns into ‘deploy’ mode for flexy</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>of flexy container args</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.build_destroy_cmd">
+<code class="sig-name descname">build_destroy_cmd</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.build_destroy_cmd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build flexy command line for ‘destroy’ operation</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.build_install_cmd">
+<code class="sig-name descname">build_install_cmd</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.build_install_cmd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build flexy command line for ‘deploy’ operation</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.clone_and_unlock_ocs_private_conf">
+<code class="sig-name descname">clone_and_unlock_ocs_private_conf</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.clone_and_unlock_ocs_private_conf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clone ocs_private_conf (flexy env and config) repo into
+flexy_host_dir</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_level=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>build and invoke flexy deployer here</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level for flexy container</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Common flexy prerequisites like cloning the private-conf
+repo locally and updating the contents with user supplied
+values</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.destroy">
+<code class="sig-name descname">destroy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Invokes flexy container with ‘destroy’ argument</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.flexy_backup_work_dir">
+<code class="sig-name descname">flexy_backup_work_dir</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.flexy_backup_work_dir" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform copying of flexy-dir to cluster_path.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.flexy_post_processing">
+<code class="sig-name descname">flexy_post_processing</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.flexy_post_processing" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform a few actions required after flexy execution:
+- update global pull-secret
+- login to mirror registry (disconnected cluster)
+- configure proxy server (disconnected cluster)
+- configure ntp (if required)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.flexy_prepare_work_dir">
+<code class="sig-name descname">flexy_prepare_work_dir</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.flexy_prepare_work_dir" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Prepare Flexy working directory (flexy-dir):</dt><dd><ul class="simple">
+<li><p>copy flexy-dir from cluster_path to data dir (if available)</p></li>
+<li><p>set proper ownership</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.get_installer_payload">
+<code class="sig-name descname">get_installer_payload</code><span class="sig-paren">(</span><em class="sig-param">version=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.get_installer_payload" title="Permalink to this definition">¶</a></dt>
+<dd><p>A proper installer payload url required for flexy
+based on DEPLOYMENT[‘installer_version’].
+If ‘nigtly’ is present then we will use registry.svc to get latest
+nightly else if ‘-ga’ is present then we will look for
+ENV_DATA[‘installer_payload_image’]</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.merge_flexy_env">
+<code class="sig-name descname">merge_flexy_env</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.merge_flexy_env" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update the Flexy env file with the user supplied values.
+This function assumes that the flexy_env_file is available
+(e.g. flexy-ocs-private repo has been already cloned).</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.flexy.FlexyBase.run_container">
+<code class="sig-name descname">run_container</code><span class="sig-paren">(</span><em class="sig-param">cmd_string</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyBase.run_container" title="Permalink to this definition">¶</a></dt>
+<dd><p>Actual container run happens here, a thread will be
+spawned to asynchronously print flexy container logs</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cmd_string</strong> (<em>str</em>) – Podman command line along with options</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.flexy.FlexyVSPHEREUPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.flexy.</code><code class="sig-name descname">FlexyVSPHEREUPI</code><a class="headerlink" href="#ocs_ci.deployment.flexy.FlexyVSPHEREUPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.flexy.FlexyBase" title="ocs_ci.deployment.flexy.FlexyBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.flexy.FlexyBase</span></code></a></p>
+<p>A specific implementation of vSphere UPI installation using flexy</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.fusion">
+<span id="ocs-ci-deployment-fusion-module"></span><h2>ocs_ci.deployment.fusion module<a class="headerlink" href="#module-ocs_ci.deployment.fusion" title="Permalink to this headline">¶</a></h2>
+<p>This module contains functions needed to install IBM Fusion</p>
+<dl class="function">
+<dt id="ocs_ci.deployment.fusion.deploy_fusion">
+<code class="sig-prename descclassname">ocs_ci.deployment.fusion.</code><code class="sig-name descname">deploy_fusion</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.fusion.deploy_fusion" title="Permalink to this definition">¶</a></dt>
+<dd><p>Installs IBM Fusion</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.fusion_aas">
+<span id="ocs-ci-deployment-fusion-aas-module"></span><h2>ocs_ci.deployment.fusion_aas module<a class="headerlink" href="#module-ocs_ci.deployment.fusion_aas" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on Fusion aaS</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.fusion_aas.FUSIONAAS">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.fusion_aas.</code><code class="sig-name descname">FUSIONAAS</code><a class="headerlink" href="#ocs_ci.deployment.fusion_aas.FUSIONAAS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.rosa.ROSA" title="ocs_ci.deployment.rosa.ROSA"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.rosa.ROSA</span></code></a></p>
+<p>Deployment class for Fusion aaS.</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.fusion_aas.FUSIONAAS.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.fusion_aas.FUSIONAAS.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.fusion_aas.FUSIONAASOCP" title="ocs_ci.deployment.fusion_aas.FUSIONAASOCP"><code class="xref py py-class docutils literal notranslate"><span class="pre">FUSIONAASOCP</span></code></a></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.fusion_aas.FUSIONAAS.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.fusion_aas.FUSIONAAS.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a cloud platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.fusion_aas.FUSIONAAS.deploy_ocs">
+<code class="sig-name descname">deploy_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.fusion_aas.FUSIONAAS.deploy_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment of ODF Managed Service addon on Fusion aaS.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.fusion_aas.FUSIONAAS.destroy_ocs">
+<code class="sig-name descname">destroy_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.fusion_aas.FUSIONAAS.destroy_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Uninstall ODF Managed Service addon via rosa cli.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.fusion_aas.FUSIONAASOCP">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.fusion_aas.</code><code class="sig-name descname">FUSIONAASOCP</code><a class="headerlink" href="#ocs_ci.deployment.fusion_aas.FUSIONAASOCP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.rosa.ROSAOCP" title="ocs_ci.deployment.rosa.ROSAOCP"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.rosa.ROSAOCP</span></code></a></p>
+<p>Fusion aaS deployment class.</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.fusion_aas.FUSIONAASOCP.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_level=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.fusion_aas.FUSIONAASOCP.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a Fusion aaS platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – openshift installer’s log level that is expected from
+inherited class</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.gcp">
+<span id="ocs-ci-deployment-gcp-module"></span><h2>ocs_ci.deployment.gcp module<a class="headerlink" href="#module-ocs_ci.deployment.gcp" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on Google Cloud Platform (aka GCP).</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.gcp.GCPIPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.gcp.</code><code class="sig-name descname">GCPIPI</code><a class="headerlink" href="#ocs_ci.deployment.gcp.GCPIPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.gcp.GCPBase</span></code></p>
+<p>A class to handle GCP IPI specific deployment</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.gcp.GCPIPI.CUSTOM_STORAGE_CLASS_PATH">
+<code class="sig-name descname">CUSTOM_STORAGE_CLASS_PATH</code><em class="property"> = '/Users/danielosypenko/Work/automation_4/ocs-ci/ocs_ci/templates/ocs-deployment/storageclass.gcp.yaml'</em><a class="headerlink" href="#ocs_ci.deployment.gcp.GCPIPI.CUSTOM_STORAGE_CLASS_PATH" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.deployment.gcp.GCPIPI.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.gcp.GCPIPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.cloud.IPIOCPDeployment" title="ocs_ci.deployment.cloud.IPIOCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.IPIOCPDeployment</span></code></a></p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.ibm">
+<span id="ocs-ci-deployment-ibm-module"></span><h2>ocs_ci.deployment.ibm module<a class="headerlink" href="#module-ocs_ci.deployment.ibm" title="Permalink to this headline">¶</a></h2>
+<p>This module implements the OCS deployment for IBM Power platform
+Base code in deployment.py contains the required changes to keep
+code duplication to minimum. Only destroy_ocs is retained here.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.ibm.IBMDeployment">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.ibm.</code><code class="sig-name descname">IBMDeployment</code><a class="headerlink" href="#ocs_ci.deployment.ibm.IBMDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.Deployment" title="ocs_ci.deployment.deployment.Deployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.Deployment</span></code></a></p>
+<p>Implementation of Deploy for IBM Power architecture</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.ibm.IBMDeployment.destroy_lso">
+<code class="sig-name descname">destroy_lso</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibm.IBMDeployment.destroy_lso" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibm.IBMDeployment.destroy_ocs">
+<code class="sig-name descname">destroy_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibm.IBMDeployment.destroy_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle OCS destruction. Remove storage classes, PVCs, Storage
+Cluster, Openshift-storage namespace, LocalVolume, unlabel
+worker-storage nodes, delete ocs CRDs, etc.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.ibmcloud">
+<span id="ocs-ci-deployment-ibmcloud-module"></span><h2>ocs_ci.deployment.ibmcloud module<a class="headerlink" href="#module-ocs_ci.deployment.ibmcloud" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on IBM Cloud Platform.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloud">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.ibmcloud.</code><code class="sig-name descname">IBMCloud</code><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloud" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.cloud.CloudDeploymentBase" title="ocs_ci.deployment.cloud.CloudDeploymentBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.CloudDeploymentBase</span></code></a></p>
+<p>Deployment class for IBM Cloud</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloud.DEFAULT_STORAGECLASS">
+<code class="sig-name descname">DEFAULT_STORAGECLASS</code><em class="property"> = 'ibmc-vpc-block-10iops-tier'</em><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloud.DEFAULT_STORAGECLASS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloud.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloud.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">IBMCloudOCPDeployment</span></code></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloud.check_cluster_existence">
+<code class="sig-name descname">check_cluster_existence</code><span class="sig-paren">(</span><em class="sig-param">cluster_name_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloud.check_cluster_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check cluster existence based on a cluster name prefix.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_name_prefix</strong> (<em>str</em>) – name prefix which identifies a cluster</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>True if a cluster with the same name prefix already exists,</dt><dd><p>False otherwise</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloud.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloud.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a cloud platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.ibmcloud.</code><code class="sig-name descname">IBMCloudIPI</code><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.cloud.CloudDeploymentBase" title="ocs_ci.deployment.cloud.CloudDeploymentBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.CloudDeploymentBase</span></code></a></p>
+<p>A class to handle IBM Cloud IPI specific deployment</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.DEFAULT_STORAGECLASS">
+<code class="sig-name descname">DEFAULT_STORAGECLASS</code><em class="property"> = 'ibmc-vpc-block-10iops-tier'</em><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.DEFAULT_STORAGECLASS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.cloud.IPIOCPDeployment" title="ocs_ci.deployment.cloud.IPIOCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.IPIOCPDeployment</span></code></a></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.check_cluster_existence">
+<em class="property">static </em><code class="sig-name descname">check_cluster_existence</code><span class="sig-paren">(</span><em class="sig-param">cluster_name_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.check_cluster_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check cluster existence based on a cluster name prefix.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_name_prefix</strong> (<em>str</em>) – name prefix which identifies a cluster</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>True if a cluster with the same name prefix already exists,</dt><dd><p>False otherwise</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.configure_cloud_credential_operator">
+<em class="property">static </em><code class="sig-name descname">configure_cloud_credential_operator</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.configure_cloud_credential_operator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extract and Prepare the CCO utility (ccoctl) binary. This utility
+allows us to create and manage cloud credentials from outside of
+the cluster while in manual mode.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.delete_resource_group">
+<code class="sig-name descname">delete_resource_group</code><span class="sig-paren">(</span><em class="sig-param">resource_group</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.delete_resource_group" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete the resource group that contained the cluster assets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>resource_group</strong> – Resource group in IBM Cloud that contains the cluster resources.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.delete_service_id">
+<code class="sig-name descname">delete_service_id</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.delete_service_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete the Service ID.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.delete_volumes">
+<code class="sig-name descname">delete_volumes</code><span class="sig-paren">(</span><em class="sig-param">resource_group</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.delete_volumes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete the pvc volumes created in IBM Cloud that the openshift installer doesn’t remove.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>resource_group</strong> – Resource group in IBM Cloud that contains the cluster resources.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform IBMCloudIPI OCP deployment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – log level for installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy the OCP cluster.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level openshift-installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.export_api_key">
+<em class="property">static </em><code class="sig-name descname">export_api_key</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.export_api_key" title="Permalink to this definition">¶</a></dt>
+<dd><p>Exports the IBM CLoud API key as an environment variable.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.get_release_image">
+<code class="sig-name descname">get_release_image</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.get_release_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve release image using the openshift installer.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.get_resource_group">
+<code class="sig-name descname">get_resource_group</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.get_resource_group" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve and set the resource group being utilized for the cluster assets.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ibmcloud.IBMCloudIPI.manually_create_iam_for_vpc">
+<code class="sig-name descname">manually_create_iam_for_vpc</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ibmcloud.IBMCloudIPI.manually_create_iam_for_vpc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Manually specify the IAM secrets for the cloud provider</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.install_ocp_on_rhel">
+<span id="ocs-ci-deployment-install-ocp-on-rhel-module"></span><h2>ocs_ci.deployment.install_ocp_on_rhel module<a class="headerlink" href="#module-ocs_ci.deployment.install_ocp_on_rhel" title="Permalink to this headline">¶</a></h2>
+<p>This module will install OCP on RHEL nodes</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.install_ocp_on_rhel.</code><code class="sig-name descname">OCPINSTALLRHEL</code><span class="sig-paren">(</span><em class="sig-param">rhel_worker_nodes</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class to install OCP on RHEL nodes</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.create_inventory">
+<code class="sig-name descname">create_inventory</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.create_inventory" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the inventory file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Path to inventory file</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.create_inventory_for_haproxy">
+<code class="sig-name descname">create_inventory_for_haproxy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.create_inventory_for_haproxy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the inventory file for haproxy</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Path to inventory file for haproxy</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.execute_ansible_playbook">
+<code class="sig-name descname">execute_ansible_playbook</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.execute_ansible_playbook" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run ansible-playbook on pod</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.prepare_rhel_nodes">
+<code class="sig-name descname">prepare_rhel_nodes</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.prepare_rhel_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare RHEL nodes for OCP installation</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.upload_helpers">
+<code class="sig-name descname">upload_helpers</code><span class="sig-paren">(</span><em class="sig-param">ocp_repo</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.install_ocp_on_rhel.OCPINSTALLRHEL.upload_helpers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Upload helper files to pod for OCP installation on RHEL
+Helper Files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">-</span> <span class="n">ssh_key</span> <span class="n">pem</span>
+<span class="o">-</span> <span class="n">ocp</span> <span class="n">repo</span>
+<span class="o">-</span> <span class="n">ocp</span> <span class="n">pem</span>
+<span class="o">-</span> <span class="n">kubeconfig</span>
+<span class="o">-</span> <span class="n">pull</span> <span class="n">secret</span>
+<span class="o">-</span> <span class="n">inventory</span> <span class="n">yaml</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>ocp_repo</strong> (<em>str</em>) – OCP repo to upload</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.multicluster_deployment">
+<span id="ocs-ci-deployment-multicluster-deployment-module"></span><h2>ocs_ci.deployment.multicluster_deployment module<a class="headerlink" href="#module-ocs_ci.deployment.multicluster_deployment" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.multicluster_deployment.</code><code class="sig-name descname">OCPDeployWithACM</code><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.Deployment" title="ocs_ci.deployment.deployment.Deployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.Deployment</span></code></a></p>
+<p>When we instantiate this class, the assumption is we already have
+an OCP cluster with ACM installed and current context is ACM</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.deploy_cluster">
+<code class="sig-name descname">deploy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='INFO'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.deploy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>We deploy new OCP clusters using ACM
+Note: Importing cluster through ACM has been implemented as part
+of Jenkins pipeline</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Teardown OCP clusters deployed through ACM</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.do_deploy_ocp">
+<code class="sig-name descname">do_deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='INFO'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.do_deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function overrides the parent’s function in order accomodate
+ACM based OCP cluster deployments</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.do_rdr_acm_ocp_deploy">
+<code class="sig-name descname">do_rdr_acm_ocp_deploy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.do_rdr_acm_ocp_deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specific to regional DR OCP cluster deployments</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.post_deploy_ops">
+<code class="sig-name descname">post_deploy_ops</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.post_deploy_ops" title="Permalink to this definition">¶</a></dt>
+<dd><ol class="arabic simple">
+<li><p>Install ingress certificates on OCP clusters deployed through ACM</p></li>
+<li><p>Run post_ocp_deploy on OCP clusters</p></li>
+</ol>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.post_destroy_ops">
+<code class="sig-name descname">post_destroy_ops</code><span class="sig-paren">(</span><em class="sig-param">cluster_list</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.post_destroy_ops" title="Permalink to this definition">¶</a></dt>
+<dd><p>Post destroy ops mainly includes ip clean up and dns cleanup</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_list</strong> (<em>list</em><em>[</em><em>ACMOCPClusterDeploy</em><em>]</em>) – list of platform specific instances</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.wait_for_all_cluster_async_destroy">
+<code class="sig-name descname">wait_for_all_cluster_async_destroy</code><span class="sig-paren">(</span><em class="sig-param">destroy_cluster_list</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.wait_for_all_cluster_async_destroy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.wait_for_all_clusters_async">
+<code class="sig-name descname">wait_for_all_clusters_async</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.multicluster_deployment.OCPDeployWithACM.wait_for_all_clusters_async" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.netsplit">
+<span id="ocs-ci-deployment-netsplit-module"></span><h2>ocs_ci.deployment.netsplit module<a class="headerlink" href="#module-ocs_ci.deployment.netsplit" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.deployment.netsplit.get_netsplit_mc">
+<code class="sig-prename descclassname">ocs_ci.deployment.netsplit.</code><code class="sig-name descname">get_netsplit_mc</code><span class="sig-paren">(</span><em class="sig-param">tmp_path</em>, <em class="sig-param">master_zones</em>, <em class="sig-param">worker_zones</em>, <em class="sig-param">enable_split=True</em>, <em class="sig-param">x_addr_list=None</em>, <em class="sig-param">arbiter_zone=None</em>, <em class="sig-param">latency=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.netsplit.get_netsplit_mc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate machineconfig with network split scripts and configuration,
+tailored for the current cluster state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tmp_path</strong> (<em>pathlib.Path</em>) – Directory where a temporary yaml file will
+be created. In test context, use pytest fixture <code class="docutils literal notranslate"><span class="pre">tmp_path</span></code>.</p></li>
+<li><p><strong>master_zones</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – zones where master nodes are placed</p></li>
+<li><p><strong>worker_zones</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – zones where worker nodes are placed</p></li>
+<li><p><strong>x_addr_list</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – IP addressess of external services (zone x)</p></li>
+<li><p><strong>arbiter_zone</strong> (<em>str</em>) – name of arbiter zone if arbiter deployment is used</p></li>
+<li><p><strong>latency</strong> (<em>int</em>) – additional latency in miliseconds, which will be
+introduced among zones</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>mc (dict with MachineConfig) to deploy via</dt><dd><p><code class="xref py py-func docutils literal notranslate"><span class="pre">deploy_machineconfig()</span></code></p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.UnexpectedDeploymentConfiguration" title="ocs_ci.ocs.exceptions.UnexpectedDeploymentConfiguration"><strong>UnexpectedDeploymentConfiguration</strong></a> – in case of invalid cluster
+    configuration, which prevents deployment of network split scripts</p></li>
+<li><p><strong>ValueError</strong> – in case given zone configuration doesn’t make any sense</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.ocp">
+<span id="ocs-ci-deployment-ocp-module"></span><h2>ocs_ci.deployment.ocp module<a class="headerlink" href="#module-ocs_ci.deployment.ocp" title="Permalink to this headline">¶</a></h2>
+<p>This module provides base class for OCP deployment.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.ocp.</code><code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.create_config">
+<code class="sig-name descname">create_config</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.create_config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create the OCP deploy config, if something needs to be changed for
+specific platform you can overload this method in child class.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implement ocp deploy in specific child class</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform generic prereq before calling openshift-installer
+This method performs all the basic steps necessary before invoking the
+installer</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.destroy">
+<code class="sig-name descname">destroy</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster specific</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level openshift-installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.download_installer">
+<code class="sig-name descname">download_installer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.download_installer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to download installer</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>path to the installer</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.get_pull_secret">
+<code class="sig-name descname">get_pull_secret</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.get_pull_secret" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load pull secret file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>content of pull secret</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.get_ssh_key">
+<code class="sig-name descname">get_ssh_key</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.get_ssh_key" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads public ssh to be used for deployment</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>public ssh key or empty string if not found</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.ocp.OCPDeployment.test_cluster">
+<code class="sig-name descname">test_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.ocp.OCPDeployment.test_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Test if OCP cluster installed successfuly</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.on_prem">
+<span id="ocs-ci-deployment-on-prem-module"></span><h2>ocs_ci.deployment.on_prem module<a class="headerlink" href="#module-ocs_ci.deployment.on_prem" title="Permalink to this headline">¶</a></h2>
+<p>This module contains common code and a base class for any on-premise platform
+deployment.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.on_prem.IPIOCPDeployment">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.on_prem.</code><code class="sig-name descname">IPIOCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.on_prem.IPIOCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<p>Common implementation of IPI OCP deployments for on-premise platforms</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.on_prem.IPIOCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.on_prem.IPIOCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster for on-prem platform</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.on_prem.IPIOCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.on_prem.IPIOCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Overriding deploy_prereq from parent. Perform all necessary
+prerequisites for on-premise IPI here</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.on_prem.OnPremDeploymentBase">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.on_prem.</code><code class="sig-name descname">OnPremDeploymentBase</code><a class="headerlink" href="#ocs_ci.deployment.on_prem.OnPremDeploymentBase" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.deployment.Deployment" title="ocs_ci.deployment.deployment.Deployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.deployment.Deployment</span></code></a></p>
+<p>Base class for deployment in on-premise platforms</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.on_prem.OnPremDeploymentBase.check_cluster_existence">
+<code class="sig-name descname">check_cluster_existence</code><span class="sig-paren">(</span><em class="sig-param">cluster_name_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.on_prem.OnPremDeploymentBase.check_cluster_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check cluster existence according to cluster name prefix</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>True if a cluster with the same name prefix already exists,</dt><dd><p>False otherwise</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.on_prem.OnPremDeploymentBase.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.on_prem.OnPremDeploymentBase.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster in on-premise platform</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.openshift_dedicated">
+<span id="ocs-ci-deployment-openshift-dedicated-module"></span><h2>ocs_ci.deployment.openshift_dedicated module<a class="headerlink" href="#module-ocs_ci.deployment.openshift_dedicated" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on Openshfit Dedicated Platform.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.openshift_dedicated.</code><code class="sig-name descname">OpenshiftDedicated</code><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.cloud.CloudDeploymentBase" title="ocs_ci.deployment.cloud.CloudDeploymentBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.CloudDeploymentBase</span></code></a></p>
+<p>Deployment class for Openshift Dedicated.</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP" title="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP"><code class="xref py py-class docutils literal notranslate"><span class="pre">OpenshiftDedicatedOCP</span></code></a></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated.check_cluster_existence">
+<code class="sig-name descname">check_cluster_existence</code><span class="sig-paren">(</span><em class="sig-param">cluster_name_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated.check_cluster_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check cluster existence based on a cluster name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_name_prefix</strong> (<em>str</em>) – name prefix which identifies a cluster</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>True if a cluster with the same name prefix already exists,</dt><dd><p>False otherwise</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicated.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a cloud platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.openshift_dedicated.</code><code class="sig-name descname">OpenshiftDedicatedOCP</code><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<p>Openshift Dedicated deployment class.</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_level=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a cloud platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Overriding deploy_prereq from parent. Perform all necessary
+prerequisites for Openshfit Dedciated deployment.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP.destroy">
+<code class="sig-name descname">destroy</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.openshift_dedicated.OpenshiftDedicatedOCP.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster specific</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level openshift-installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.rhv">
+<span id="ocs-ci-deployment-rhv-module"></span><h2>ocs_ci.deployment.rhv module<a class="headerlink" href="#module-ocs_ci.deployment.rhv" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on Red Hat Virtualization (RHV) platform</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.rhv.RHVIPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.rhv.</code><code class="sig-name descname">RHVIPI</code><a class="headerlink" href="#ocs_ci.deployment.rhv.RHVIPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.rhv.RHVBASE</span></code></p>
+<p>A class to handle RHV IPI specific deployment</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.rhv.RHVIPI.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.rhv.RHVIPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.on_prem.IPIOCPDeployment" title="ocs_ci.deployment.on_prem.IPIOCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.on_prem.IPIOCPDeployment</span></code></a></p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.rosa">
+<span id="ocs-ci-deployment-rosa-module"></span><h2>ocs_ci.deployment.rosa module<a class="headerlink" href="#module-ocs_ci.deployment.rosa" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on Openshfit Dedicated Platform.</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.rosa.ROSA">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.rosa.</code><code class="sig-name descname">ROSA</code><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSA" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.cloud.CloudDeploymentBase" title="ocs_ci.deployment.cloud.CloudDeploymentBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.cloud.CloudDeploymentBase</span></code></a></p>
+<p>Deployment class for ROSA.</p>
+<dl class="attribute">
+<dt id="ocs_ci.deployment.rosa.ROSA.OCPDeployment">
+<code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSA.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#ocs_ci.deployment.rosa.ROSAOCP" title="ocs_ci.deployment.rosa.ROSAOCP"><code class="xref py py-class docutils literal notranslate"><span class="pre">ROSAOCP</span></code></a></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSA.check_cluster_existence">
+<code class="sig-name descname">check_cluster_existence</code><span class="sig-paren">(</span><em class="sig-param">cluster_name_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSA.check_cluster_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check cluster existence based on a cluster name. Cluster in Uninstalling
+phase is not considered to be existing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_name_prefix</strong> (<em>str</em>) – name prefix which identifies a cluster</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>True if a cluster with the same name prefix already exists,</dt><dd><p>False otherwise</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSA.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSA.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a cloud platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSA.deploy_ocs">
+<code class="sig-name descname">deploy_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSA.deploy_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment of ODF Managed Service addon on ROSA.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSA.destroy_ocs">
+<code class="sig-name descname">destroy_ocs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSA.destroy_ocs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Uninstall ODF Managed Service addon via rosa cli.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSA.host_network_update">
+<code class="sig-name descname">host_network_update</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSA.host_network_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update security group rules for HostNetwork</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.rosa.ROSAOCP">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.rosa.</code><code class="sig-name descname">ROSAOCP</code><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSAOCP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<p>ROSA deployment class.</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSAOCP.cluster_present">
+<code class="sig-name descname">cluster_present</code><span class="sig-paren">(</span><em class="sig-param">cluster_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSAOCP.cluster_present" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check if the cluster is present in the cluster list, regardless of its
+state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_name</strong> (<em>str</em>) – name which identifies the cluster</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>True if a cluster with the given name exists,</dt><dd><p>False otherwise</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSAOCP.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_level=''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSAOCP.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on a ROSA Managed Service platform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSAOCP.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSAOCP.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Overriding deploy_prereq from parent. Perform all necessary
+prerequisites for Openshfit Dedciated deployment.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.rosa.ROSAOCP.destroy">
+<code class="sig-name descname">destroy</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.rosa.ROSAOCP.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster specific</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level openshift-installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.terraform">
+<span id="ocs-ci-deployment-terraform-module"></span><h2>ocs_ci.deployment.terraform module<a class="headerlink" href="#module-ocs_ci.deployment.terraform" title="Permalink to this headline">¶</a></h2>
+<p>This module contains terraform specific methods and classes needed
+for deployment on vSphere platform</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.terraform.Terraform">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.terraform.</code><code class="sig-name descname">Terraform</code><span class="sig-paren">(</span><em class="sig-param">path</em>, <em class="sig-param">bin_path=None</em>, <em class="sig-param">state_file_path=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Wrapper for terraform</p>
+<dl class="method">
+<dt id="ocs_ci.deployment.terraform.Terraform.apply">
+<code class="sig-name descname">apply</code><span class="sig-paren">(</span><em class="sig-param">tfvars</em>, <em class="sig-param">bootstrap_complete=False</em>, <em class="sig-param">module=None</em>, <em class="sig-param">refresh=True</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform.apply" title="Permalink to this definition">¶</a></dt>
+<dd><p>Apply the changes required to reach the desired state of the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tfvars</strong> (<em>str</em>) – path to terraform.tfvars file</p></li>
+<li><p><strong>bootstrap_complete</strong> (<em>bool</em>) – Removes bootstrap node if True</p></li>
+<li><p><strong>module</strong> (<em>str</em>) – Module to apply
+e.g: constants.COMPUTE_MODULE</p></li>
+<li><p><strong>refresh</strong> (<em>bool</em>) – If True, updates the state for each resource prior to
+planning and applying</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.terraform.Terraform.change_statefile">
+<code class="sig-name descname">change_statefile</code><span class="sig-paren">(</span><em class="sig-param">module</em>, <em class="sig-param">resource_type</em>, <em class="sig-param">resource_name</em>, <em class="sig-param">instance</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform.change_statefile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove the records from the state file so that terraform will no longer be
+tracking the corresponding remote objects.</p>
+<p>Note: terraform state file should be present in the directory from where the
+commands are initiated</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>module</strong> (<em>str</em>) – Name of the module
+e.g: compute_vm, module.control_plane_vm etc.</p></li>
+<li><p><strong>resource_type</strong> (<em>str</em>) – Resource type
+e.g: vsphere_virtual_machine, vsphere_compute_cluster etc.</p></li>
+<li><p><strong>resource_name</strong> (<em>str</em>) – Name of the resource
+e.g: vm</p></li>
+<li><p><strong>instance</strong> (<em>str</em>) – Name of the instance
+e.g: compute-0.j-056vu1cs33l-a.qe.rh-ocs.com</p></li>
+</ul>
+</dd>
+</dl>
+<p>Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">terraform</span> <span class="o">=</span> <span class="n">Terraform</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">upi_repo_path</span><span class="p">,</span> <span class="s2">&quot;upi/vsphere/&quot;</span><span class="p">))</span>
+<span class="n">terraform</span><span class="o">.</span><span class="n">change_statefile</span><span class="p">(</span>
+    <span class="n">module</span><span class="o">=</span><span class="s2">&quot;compute_vm&quot;</span><span class="p">,</span> <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;vsphere_virtual_machine&quot;</span><span class="p">,</span>
+    <span class="n">resource_name</span><span class="o">=</span><span class="s2">&quot;vm&quot;</span><span class="p">,</span> <span class="n">instance</span><span class="o">=</span><span class="s2">&quot;compute-0.j-056vu1cs33l-a.qe.rh-ocs.com&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.terraform.Terraform.destroy">
+<code class="sig-name descname">destroy</code><span class="sig-paren">(</span><em class="sig-param">tfvars</em>, <em class="sig-param">refresh=True</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroys the cluster</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tfvars</strong> (<em>str</em>) – path to terraform.tfvars file</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.terraform.Terraform.destroy_module">
+<code class="sig-name descname">destroy_module</code><span class="sig-paren">(</span><em class="sig-param">tfvars</em>, <em class="sig-param">module</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform.destroy_module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroys the particular module/node</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tfvars</strong> (<em>str</em>) – path to terraform.tfvars file</p></li>
+<li><p><strong>module</strong> (<em>str</em>) – Module to destroy
+e.g: constants.BOOTSTRAP_MODULE</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.terraform.Terraform.get_terraform_version">
+<em class="property">static </em><code class="sig-name descname">get_terraform_version</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform.get_terraform_version" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.terraform.Terraform.initialize">
+<code class="sig-name descname">initialize</code><span class="sig-paren">(</span><em class="sig-param">upgrade=False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform.initialize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize a working directory containing Terraform configuration files</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>upgrade</strong> (<em>bool</em>) – True in case installing modules needs upgrade from
+previously-downloaded objects, False otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.terraform.Terraform.output">
+<code class="sig-name descname">output</code><span class="sig-paren">(</span><em class="sig-param">tfstate</em>, <em class="sig-param">module</em>, <em class="sig-param">json_format=True</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.terraform.Terraform.output" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extracts the value of an output variable from the state file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tfstate</strong> (<em>str</em>) – path to terraform.tfstate file</p></li>
+<li><p><strong>module</strong> (<em>str</em>) – module to extract</p></li>
+<li><p><strong>json_format</strong> (<em>bool</em>) – True if format output as json</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>output from tfstate</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.vmware">
+<span id="ocs-ci-deployment-vmware-module"></span><h2>ocs_ci.deployment.vmware module<a class="headerlink" href="#module-ocs_ci.deployment.vmware" title="Permalink to this headline">¶</a></h2>
+<p>This module contains platform specific methods and classes for deployment
+on vSphere platform</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.vmware.</code><code class="sig-name descname">VSPHEREUPI</code><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.vmware.VSPHEREBASE</span></code></p>
+<p>A class to handle vSphere UPI specific deployment</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment">
+<em class="property">class </em><code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.change_ignition_ip_and_hostname">
+<code class="sig-name descname">change_ignition_ip_and_hostname</code><span class="sig-paren">(</span><em class="sig-param">ip_address</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.change_ignition_ip_and_hostname" title="Permalink to this definition">¶</a></dt>
+<dd><p>Embed into iso.ign ip address and hostname (sno-edge-0)
+:param ip_address: ip address we got from IPAM to embed inside iso”
+:type ip_address: str</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.configure_storage_for_image_registry">
+<code class="sig-name descname">configure_storage_for_image_registry</code><span class="sig-paren">(</span><em class="sig-param">kubeconfig</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.configure_storage_for_image_registry" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configures storage for the image registry</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.create_config">
+<code class="sig-name descname">create_config</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.create_config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the OCP deploy config for the vSphere</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.create_ignitions">
+<code class="sig-name descname">create_ignitions</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.create_ignitions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the ignition files</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.create_sno_iso_and_upload">
+<code class="sig-name descname">create_sno_iso_and_upload</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.create_sno_iso_and_upload" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creating iso file with values for SNO deployment</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on this platform</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pre-Requisites for vSphere UPI Deployment</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.generate_manifests">
+<code class="sig-name descname">generate_manifests</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.generate_manifests" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates manifest files</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.wait_for_sno_second_boot_change_ip_and_hostname">
+<code class="sig-name descname">wait_for_sno_second_boot_change_ip_and_hostname</code><span class="sig-paren">(</span><em class="sig-param">ip_address</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.OCPDeployment.wait_for_sno_second_boot_change_ip_and_hostname" title="Permalink to this definition">¶</a></dt>
+<dd><p>After second boot ocp is booting with the right ip address but after a while the ip is changed to dhcp.
+We monitor the ip address and when it changed we ssh to the node and change back the ip address and hostname
+:param ip_address: The ip address given from the IPAM server
+:type ip_address: str</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.ConnectivityFail" title="ocs_ci.ocs.exceptions.ConnectivityFail"><strong>ConnectivityFail</strong></a> – Incase after the change we ping the ip_address. If it doesn’t reply we raise.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on vSphere platform</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster specific to vSphere UPI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level openshift-installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.destroy_scaleup_nodes">
+<code class="sig-name descname">destroy_scaleup_nodes</code><span class="sig-paren">(</span><em class="sig-param">scale_up_terraform_data_dir</em>, <em class="sig-param">scale_up_terraform_var</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.destroy_scaleup_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy the scale-up nodes</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>scale_up_terraform_data_dir</strong> (<em>str</em>) – Path to scale-up terraform
+data directory</p></li>
+<li><p><strong>scale_up_terraform_var</strong> (<em>str</em>) – Path to scale-up
+terraform.tfvars file</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREUPI.scale_down_pods_and_remove_pvcs">
+<code class="sig-name descname">scale_down_pods_and_remove_pvcs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREUPI.scale_down_pods_and_remove_pvcs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes the mon and osd pods and also removes PVC’s</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.deployment.vmware.VSPHEREIPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.deployment.vmware.</code><code class="sig-name descname">VSPHEREIPI</code><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREIPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.vmware.VSPHEREBASE</span></code></p>
+<p>A class to handle vSphere IPI specific deployment</p>
+<dl class="class">
+<dt id="ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment">
+<em class="property">class </em><code class="sig-name descname">OCPDeployment</code><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.deployment.ocp.OCPDeployment" title="ocs_ci.deployment.ocp.OCPDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.deployment.ocp.OCPDeployment</span></code></a></p>
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment.create_config">
+<code class="sig-name descname">create_config</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment.create_config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the OCP deploy config for the vSphere</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment.deploy">
+<code class="sig-name descname">deploy</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment.deploy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on this platform</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment.deploy_prereq">
+<code class="sig-name descname">deploy_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREIPI.OCPDeployment.deploy_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Overriding deploy_prereq from parent. Perform all necessary
+prerequisites for VSPHEREIPI here.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREIPI.deploy_ocp">
+<code class="sig-name descname">deploy_ocp</code><span class="sig-paren">(</span><em class="sig-param">log_cli_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREIPI.deploy_ocp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deployment specific to OCP cluster on this platform</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_cli_level</strong> (<em>str</em>) – openshift installer’s log level
+(default: “DEBUG”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.deployment.vmware.VSPHEREIPI.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><em class="sig-param">log_level='DEBUG'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.vmware.VSPHEREIPI.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy OCP cluster specific to vSphere IPI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log_level</strong> (<em>str</em>) – log level openshift-installer (default: DEBUG)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment.zones">
+<span id="ocs-ci-deployment-zones-module"></span><h2>ocs_ci.deployment.zones module<a class="headerlink" href="#module-ocs_ci.deployment.zones" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.deployment.zones.are_zone_labels_missing">
+<code class="sig-prename descclassname">ocs_ci.deployment.zones.</code><code class="sig-name descname">are_zone_labels_missing</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.zones.are_zone_labels_missing" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that there are no nodes with zone labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>True if all nodes are missing zone label, False otherwise.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.zones.are_zone_labels_present">
+<code class="sig-prename descclassname">ocs_ci.deployment.zones.</code><code class="sig-name descname">are_zone_labels_present</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.zones.are_zone_labels_present" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that there are no nodes without zone labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>True if all nodes have a zone label, False otherwise.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.zones.assign_dummy_zones">
+<code class="sig-prename descclassname">ocs_ci.deployment.zones.</code><code class="sig-name descname">assign_dummy_zones</code><span class="sig-paren">(</span><em class="sig-param">zones</em>, <em class="sig-param">nodes</em>, <em class="sig-param">overwrite=False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.zones.assign_dummy_zones" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign node labels to given nodes based on given zone lists. Zones
+are assigned so that there is the same number of nodes in each zone.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>zones</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – list of k8s zone names</p></li>
+<li><p><strong>nodes</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – list of node names to label</p></li>
+<li><p><strong>overwrite</strong> (<em>bool</em>) – if True, labeling will not fail on already defined
+zone labels (False by default)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>ValueError</strong> – when number of nodes is not divisible by number of zones</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.deployment.zones.create_dummy_zone_labels">
+<code class="sig-prename descclassname">ocs_ci.deployment.zones.</code><code class="sig-name descname">create_dummy_zone_labels</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.deployment.zones.create_dummy_zone_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create dummy zone labels on cluster nodes: try to label all master and
+worker nodes based on values of <code class="docutils literal notranslate"><span class="pre">worker_availability_zones</span></code> and
+<code class="docutils literal notranslate"><span class="pre">master_availability_zones</span></code> options, but only if there are no zone
+labels already defined.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.UnexpectedDeploymentConfiguration" title="ocs_ci.ocs.exceptions.UnexpectedDeploymentConfiguration"><strong>UnexpectedDeploymentConfiguration</strong></a> – when either cluster or ocs-ci config
+    file are in conflict with dummy zone labels.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.deployment">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-ocs_ci.deployment" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="ocs_ci.framework.html" class="btn btn-neutral float-right" title="ocs_ci.framework package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="ocs_ci.html" class="btn btn-neutral float-left" title="ocs_ci package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

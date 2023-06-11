@@ -1,0 +1,586 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Usage &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Upgrade" href="upgrade.html" />
+    <link rel="prev" title="Supported platforms" href="supported_platforms.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#usage-for-cleanup">usage for cleanup</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#aws">AWS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vsphere">vSphere</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#usage-for-ocs-build-tool">Usage for ocs-build tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#required-configuration">Required configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-arguments">Required arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#useful-arguments">Useful arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#subcommand">Subcommand:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#additional-arguments">Additional arguments:</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-of-cluster">Deployment of cluster</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#deployment-configurations">Deployment configurations</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-of-cluster-on-vsphere-platform">Deployment of cluster on vSphere Platform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-via-ui">Deployment via UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#running-tests-on-deployed-environment">Running tests on deployed environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#running-tests-on-deployed-environment-and-sending-reports">Running tests on deployed environment and sending reports</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#running-tests-on-multicluster-environment">Running tests on multicluster environment</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#example-1">example 1:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#example-2">example 2:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#running-tests-with-background-io-load">Running tests with background IO load</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#destroy-of-cluster">Destroy of cluster</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Usage</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/usage.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="usage">
+<h1>Usage<a class="headerlink" href="#usage" title="Permalink to this headline">¶</a></h1>
+<p>For full usage run: <code class="docutils literal notranslate"><span class="pre">run-ci</span> <span class="pre">--help</span></code></p>
+</div>
+<div class="section" id="usage-for-getting-various-ocs-image-versions">
+<h1>usage for getting various ocs image versions<a class="headerlink" href="#usage-for-getting-various-ocs-image-versions" title="Permalink to this headline">¶</a></h1>
+<p>for full help run: <code class="docutils literal notranslate"><span class="pre">report-version</span> <span class="pre">--help</span></code></p>
+<p>Run <code class="docutils literal notranslate"><span class="pre">report-version</span> <span class="pre">--cluster-path</span> <span class="pre">/my-cluster/path</span> <span class="pre">--log-level</span> <span class="pre">INFO</span></code> to
+get information on various image version deployed by ocs-ci</p>
+</div>
+<div class="section" id="usage-for-cleanup">
+<h1>usage for cleanup<a class="headerlink" href="#usage-for-cleanup" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="aws">
+<h2>AWS<a class="headerlink" href="#aws" title="Permalink to this headline">¶</a></h2>
+<p>This should be used only when your cluster-dir is accidentally deleted
+<code class="docutils literal notranslate"><span class="pre">ci-cleanup</span> <span class="pre">[-h]</span> <span class="pre">--cluster</span> <span class="pre">CLUSTER</span></code>
+CLUSTER points to cluster tag eg: mycluster-ocs-ci-jlgzn , without additional
+-master or -worker. This can be found by logging into AWS, Selecting the VM
+and clicking on Tags.</p>
+</div>
+<div class="section" id="vsphere">
+<h2>vSphere<a class="headerlink" href="#vsphere" title="Permalink to this headline">¶</a></h2>
+<p>This should be used only when your cluster-dir is accidentally deleted</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>vsphere-cleanup<span class="w"> </span><span class="o">[</span>-h<span class="o">]</span><span class="w"> </span>--cluster-name<span class="w"> </span>CLUSTER_NAME<span class="w"> </span>--ocsci-conf<span class="w"> </span>VSPHERE_CONF
+</pre></div>
+</div>
+<p>e.g:</p>
+<p><code class="docutils literal notranslate"><span class="pre">vsphere-cleanup</span> <span class="pre">--cluster-name</span> <span class="pre">mycluster-oct12</span> <span class="pre">--ocsci-conf</span> <span class="pre">~/vSphere-DC-CP_VC1.yaml</span></code></p>
+</div>
+</div>
+<div class="section" id="usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">
+<h1>usage to shutdown AWS nodes when nodes are not in use<a class="headerlink" href="#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use" title="Permalink to this headline">¶</a></h1>
+<p>Following cli can be used when you want to shutdown the cluster
+<code class="docutils literal notranslate"><span class="pre">ci-pause</span> <span class="pre">--cluster-path</span> <span class="pre">/home-dir/cluster-path</span> <span class="pre">--action</span> <span class="pre">[stop|start]</span></code>
+action can be start or stop that performs the required action on all the nodes
+in the cluster</p>
+</div>
+<div class="section" id="usage-for-ocs-build-tool">
+<h1>Usage for ocs-build tool<a class="headerlink" href="#usage-for-ocs-build-tool" title="Permalink to this headline">¶</a></h1>
+<p>Use <code class="docutils literal notranslate"><span class="pre">ocs-build</span> <span class="pre">--help</span></code> for printing the options.
+This tool returns latest OCS build tag which is available and by default will
+be used (output example: 4.7.0-353.ci).</p>
+<p>If –image parameter is provided, the whole image will be returned (output example:
+quay.io/rhceph-dev/ocs-registry:4.7.0-353.ci)</p>
+<p>You can also ask for build of specific OCS version using <code class="docutils literal notranslate"><span class="pre">--ocs-version</span> <span class="pre">4.8</span></code>
+argument to get tag for 4.8 version (if no version provided, the OCS-CI default
+will be used).</p>
+<p>The quay access_token is required to be set in data/auth.yaml file.</p>
+<div class="section" id="required-configuration">
+<h2>Required configuration<a class="headerlink" href="#required-configuration" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p><strong>AWS credentials</strong> - if you have AWS already configured by <code class="docutils literal notranslate"><span class="pre">aws</span> <span class="pre">configure</span></code>,
+see:
+<a class="reference external" href="https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html">AWS doc</a>
+there shouldn’t be need of any additional configuration for AWS. If not,
+please make sure you configure your AWS credentials via <code class="docutils literal notranslate"><span class="pre">aws</span> <span class="pre">configure</span></code>
+command, or you have proper configuration done in <code class="docutils literal notranslate"><span class="pre">~/.aws</span></code> folder which is
+usually generated by mentioned command.</p></li>
+</ul>
+</div>
+<div class="section" id="required-arguments">
+<h2>Required arguments<a class="headerlink" href="#required-arguments" title="Permalink to this headline">¶</a></h2>
+<p>There are a few arguments that are required ocs test execution:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--cluster-path</span> <span class="pre">&lt;path&gt;</span></code> - path to the directory which will
+contain all the installation/authentication information about the cluster.
+If the information given can not be used to access the cluster then
+test execution will fail. If you wish to deploy a new cluster, give
+a path to a new directory and also use the <code class="docutils literal notranslate"><span class="pre">--deploy</span></code> argument.</p></li>
+</ul>
+</div>
+<div class="section" id="useful-arguments">
+<h2>Useful arguments<a class="headerlink" href="#useful-arguments" title="Permalink to this headline">¶</a></h2>
+<p>Some non-required arguments that we end up using a lot. You can use
+<code class="docutils literal notranslate"><span class="pre">run-ci</span>&#160; <span class="pre">--help</span></code> to see all the parameters and description which you can pass
+to the pytest.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--capture=no</span></code> - when using pdb or ipdb you have to turn of capture mode
+for pytest.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-m</span> <span class="pre">&quot;tier1</span> <span class="pre">and</span> <span class="pre">ecosystem&quot;</span></code> - This will select just tests marked with
+tier1 and ecosystem marks.</p></li>
+</ul>
+<div class="section" id="subcommand">
+<h3>Subcommand:<a class="headerlink" href="#subcommand" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">multicluster</span> <span class="pre">&lt;int&gt;</span></code> - to be used if multiple clusters needs to be handled by ocs-ci, this subcommand is useful in the
+DR scenario where multiple cluster contexts needs to be handled by the framework. For more information on the usage check examples section and <code class="docutils literal notranslate"><span class="pre">run-ci</span> <span class="pre">multicluster</span> <span class="pre">--help</span></code>.</p></li>
+</ul>
+</div>
+<div class="section" id="additional-arguments">
+<h3>Additional arguments:<a class="headerlink" href="#additional-arguments" title="Permalink to this headline">¶</a></h3>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">--cluster-name</span> <span class="pre">&lt;name&gt;</span></code> - name of cluster (always required for deployment) must be 5-17 characters long.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--ocs-version</span></code> - version of OCS to be used (e.g. 4.2 or 4.3). If not
+specified, the default from ocs-ci will be used. If <code class="docutils literal notranslate"><span class="pre">--ocs-registry-image</span></code> is passed
+then <code class="docutils literal notranslate"><span class="pre">--ocs-version</span></code> parameter has higher priority which allow us to install previous version
+from CSV of the next build (e.g. we can install 4.3 from 4.4 build csv).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--upgrade-ocs-version</span></code> - version of OCS to be used for upgrade (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--ocp-version</span></code> - OCP version to be used for deployment. This version will
+be used for load file from conf/ocp_version/ocp-VERSION-config.yaml.
+You can use for example those values:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">4.2</span></code>: for nightly 4.2 OCP build</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">4.2-ga</span></code>: for latest GAed 4.2 OCP build from stable channel</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">4.2-ga-minus1</span></code>: for latest GAed 4.2 build (stable channel) - 1</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--ocp-installer-version</span></code> - Specific OCP installer version to be used for deployment.
+This option will generally be used for non-GA or nightly builds. (e.g. 4.5.5).
+This option will overwrite any values set via –ocp-version</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--ocs-registry-image</span></code> - ocs registry image to be used for deployment
+(e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2). In case this parameter
+is passed, the version is parsed from the registry image name but only
+if no version is passed via –ocs-version parameter.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--upgrade-ocs-registry-image</span></code> - ocs registry image to be used for upgrade (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> - with this configuration parameter you can overwrite the
+default OCS-CI config parameters defined in
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml">default config</a>.
+This is the repeatable parameter and you can use it multiple times for
+adding multiple config files. (The last one overwrites previous config!)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--deploy</span></code> - if this is given and a cluster can not be accessed from the
+provided <code class="docutils literal notranslate"><span class="pre">--cluster-path</span></code> then a new test cluster will be deployed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--live-deploy</span></code> - OCS-CI will use live content to deploy OCS and will also
+update OCS/ODF must gather image to the GAed one.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--teardown</span></code> - if this is given the testing cluster will be destroyed after
+the test have completed, regardless of if the tests passed or failed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--html</span></code> - to generate html reports of the test run</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--self-contained-html</span></code> - creates self-contained html file containing all
+necessary styles and scripts</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--email</span></code> - to send the email reports of the test run which was generated
+by –html option. MUST specify –html to send email reports.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--squad-analysis</span></code> - Include Squad Analysis to email report. Applicable only
+in combination with –email option.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bugzilla</span></code> - allows you to skip tests with unresolved bug (test case
+needs to be properly decorated as you can see in
+<a class="reference internal" href="writing_tests.html"><span class="doc">documentation</span></a>). You will also need to
+create configuration file for <code class="docutils literal notranslate"><span class="pre">pytest_marker_bugzilla</span></code> plugin. See the
+<a class="reference external" href="https://github.com/eanxgeek/pytest_marker_bugzilla">plugin documentation</a>
+or example of <code class="docutils literal notranslate"><span class="pre">/etc/bugzilla.cfg</span></code> file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="o">[</span>DEFAULT<span class="o">]</span>
+<span class="nv">bugzilla_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>https://bugzilla.redhat.com/xmlrpc.cgi
+<span class="nv">bugzilla_api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>&lt;API_KEY&gt;
+</pre></div>
+</div>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--collect-logs</span></code> - to collect OCS logs for failed test cases.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--collect-logs-on-success-run</span></code> - Collect must gather logs at the end of the
+execution (also when no failure in the tests)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--io-in-bg</span></code> - If passed, IO will be running in the test background.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--io-load</span></code> - IOs throughput target percentage. The value should be
+between 0 to 100. If not provided, the default is 30 (30%)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--log-cluster-utilization</span></code> - If passed, metrics of the cluster utilization will be
+printed every 20 seconds</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--csv-change</span></code> - Allows changes in the OCS CSV. For example, usage of custom image,
+like MCG or RHCS. The format should be:
+&lt;pattern_to_replace_from::pattern_to_replace_to&gt;, while ‘::’ is the delimiter</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--dev-mode</span></code> - Runs in development mode. Skip the checks like collecting
+cluster versions, collection ocs versions, health checks etc.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--ceph-debug</span></code> - Deploy with Ceph in debug log level. This option is available starting OCS 4.7</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--re-trigger-failed-tests</span></code> - Path to the xunit file for xml junit report from the
+previous execution. If the file is provided, the execution will remove all the test cases
+which passed and will run only those test cases which were skipped / failed / or had error
+in the provided report.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--install-lvmo</span></code> - Deploy LVMCluster, will skip ODF deployment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--lvmo-disks</span></code> - Number of disks to add to SNO deployment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--lvmo-disks-size</span></code> - Size of disks to add to SNO deployment.</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Permalink to this headline">¶</a></h2>
+<p>Deployment and teardown of the test cluster can be done automatically with
+the <code class="docutils literal notranslate"><span class="pre">--deploy</span></code> and <code class="docutils literal notranslate"><span class="pre">--teardown</span></code> arguments. The <code class="docutils literal notranslate"><span class="pre">--cluster-path</span></code> must always be
+provided and if given without the <code class="docutils literal notranslate"><span class="pre">--deploy</span></code> argument, it must contain information
+that can be used to access an existing cluster.</p>
+<blockquote>
+<div><p>In case you lost your cluster dir, the destroy can be done with
+<code class="docutils literal notranslate"><span class="pre">ci-cleanup</span></code> cli that should be invoked with cluster-tag from AWS.</p>
+</div></blockquote>
+<div class="section" id="deployment-of-cluster">
+<h3>Deployment of cluster<a class="headerlink" href="#deployment-of-cluster" title="Permalink to this headline">¶</a></h3>
+<p>If you would like to deploy new cluster you can run following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>-m<span class="w"> </span>deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ocsci-conf<span class="w"> </span>conf/path_to_config_to_be_used.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--deploy<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>tests/
+</pre></div>
+</div>
+<p>Of course you can omit <code class="docutils literal notranslate"><span class="pre">--cluster-name</span></code> if you would like to use default
+values.</p>
+<blockquote>
+<div><p><strong><em>NOTE:</em></strong> You need to specify <code class="docutils literal notranslate"><span class="pre">tests/</span></code> directory as a test path even for
+deployment.</p>
+</div></blockquote>
+<p>Note that during deployment, openshift command line tools like <code class="docutils literal notranslate"><span class="pre">oc</span></code> and
+<code class="docutils literal notranslate"><span class="pre">openshift-install</span></code> are installed into <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/bin"><code class="docutils literal notranslate"><span class="pre">bin</span></code> directory of the
+repository</a>. These tools are then available to both deployment and test
+code because <code class="docutils literal notranslate"><span class="pre">run-ci</span></code> wrapper includes the <code class="docutils literal notranslate"><span class="pre">bin</span></code> directory into <code class="docutils literal notranslate"><span class="pre">PATH</span></code>
+environment variable.</p>
+<div class="section" id="deployment-configurations">
+<h4>Deployment configurations<a class="headerlink" href="#deployment-configurations" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>encryption at REST</em> - to enable encryption at REST use this configuration file:
+conf/ocsci/encryption_at_rest.yaml</p></li>
+<li><p><em>FIPS</em> - to enable FIPS, use this configuration file:
+conf/ocsci/fips.yaml</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="deployment-of-cluster-on-vsphere-platform">
+<h3>Deployment of cluster on vSphere Platform<a class="headerlink" href="#deployment-of-cluster-on-vsphere-platform" title="Permalink to this headline">¶</a></h3>
+<p>terraform and jq is needed for deployment of OCS on vSphere platform.</p>
+<p>Change the <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci/vsphere_upi_vars.yaml.example">vsphere_upi_vars.yaml.example</a> to vsphere_upi_vars.yaml and update the values accordingly.
+Check for vsphere_upi_vars.yaml.skeleton(../conf/ocsci/vsphere_upi_vars.yaml.skeleton) for more options.</p>
+<p>After filling all the required parameters, run the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>-m<span class="w"> </span>deployment<span class="w"> </span>--ocsci-conf<span class="w"> </span>conf/ocsci/vsphere_upi.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span>tests/<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--deploy
+</pre></div>
+</div>
+</div>
+<div class="section" id="deployment-via-ui">
+<h3>Deployment via UI<a class="headerlink" href="#deployment-via-ui" title="Permalink to this headline">¶</a></h3>
+<p>To enable UI deployment please pass <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span> <span class="pre">conf/ocsci/ui_deployment.yaml</span></code>
+In addition, the function <code class="docutils literal notranslate"><span class="pre">ui_deployment_conditions</span></code> checks if the deployment type, OCP/OCS version or platform is supported for installation via UI, and if not it will back off and deploy OCS via CLI.
+At the moment, UI deployment is possible for the following platforms:</p>
+<ul class="simple">
+<li><p>AWS</p></li>
+<li><p>vSphere</p></li>
+</ul>
+</div>
+<div class="section" id="running-tests-on-deployed-environment">
+<h3>Running tests on deployed environment<a class="headerlink" href="#running-tests-on-deployed-environment" title="Permalink to this headline">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;tier1 and manage&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span>tests/
+</pre></div>
+</div>
+</div>
+<div class="section" id="running-tests-on-deployed-environment-and-sending-reports">
+<h3>Running tests on deployed environment and sending reports<a class="headerlink" href="#running-tests-on-deployed-environment-and-sending-reports" title="Permalink to this headline">¶</a></h3>
+<p>If you would like to send the test run results to email you can run
+following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>tests/<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--html<span class="o">=</span>report.html<span class="w"> </span>--self-contained-html<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--email<span class="o">=</span>&lt;emailid&gt;
+</pre></div>
+</div>
+<p>If you want to send reports to multiple email ID’s, use comma separated
+email ID’s like below</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>tests/<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--html<span class="o">=</span>report.html<span class="w"> </span>--self-contained-html<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--email<span class="o">=</span>&lt;emailid1&gt;,&lt;emailid2&gt;,&lt;emailid3&gt;
+</pre></div>
+</div>
+</div>
+<div class="section" id="running-tests-on-multicluster-environment">
+<h3>Running tests on multicluster environment<a class="headerlink" href="#running-tests-on-multicluster-environment" title="Permalink to this headline">¶</a></h3>
+<p>If you would like to run multicluster environment tests and deployments, use <code class="docutils literal notranslate"><span class="pre">multicluster</span></code> subcommand for run-ci.</p>
+<div class="section" id="example-1">
+<h4>example 1:<a class="headerlink" href="#example-1" title="Permalink to this headline">¶</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>multicluster<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>tests/<span class="w"> </span>-m<span class="w"> </span>tier1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>test_cluster1<span class="w"> </span>--cluster-path<span class="w"> </span>test_cluster1_path<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ocsci-conf<span class="w"> </span>/path/to/cluster1_conf1<span class="w"> </span>--ocsci-conf<span class="w"> </span>/path/to/cluster1_conf2<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster2<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>test_cluster2<span class="w"> </span>--cluster-path<span class="w"> </span>test_cluster2_path<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ocsci-conf<span class="w"> </span>/path/to/cluster2_conf1<span class="w"> </span>--ocsci-conf<span class="w"> </span>/path/to/cluster2_conf2
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">multicluster</span></code> cluster subcommand is slightly different from usual CLI used in run-ci.
+<code class="docutils literal notranslate"><span class="pre">multicluster</span></code> subcommand should be followed by an integer which indicates how many clusters we want to handle with this run, which
+will be followed by common arguments like pytest directory path, pytest markers, <code class="docutils literal notranslate"><span class="pre">deploy</span></code>, <code class="docutils literal notranslate"><span class="pre">teardown</span></code> etc. All the common options should appear before
+any cluster specific options in the CLI.
+Towards the end of CLI, user needs to pass individual cluster specific arguments with cluster sequence numbers like <code class="docutils literal notranslate"><span class="pre">--cluster1</span> <span class="pre">&lt;cluster1</span> <span class="pre">options&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">--cluster2</span> <span class="pre">&lt;cluster2</span> <span class="pre">options&gt;</span></code> so on.
+Cluster specific options will be passed within <code class="docutils literal notranslate"><span class="pre">--cluster&lt;n&gt;</span></code> argument boundary i.e. anything starting from <code class="docutils literal notranslate"><span class="pre">--cluster1</span></code> and before <code class="docutils literal notranslate"><span class="pre">--cluster2</span></code> will be considered
+as arguments of <code class="docutils literal notranslate"><span class="pre">cluster1</span></code>.</p>
+</div>
+<div class="section" id="example-2">
+<h4>example 2:<a class="headerlink" href="#example-2" title="Permalink to this headline">¶</a></h4>
+<p>Passing common arguments to cluster:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>multicluster<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>tests/<span class="w"> </span>-m<span class="w"> </span>tier1<span class="w"> </span>--ocsci-conf<span class="w"> </span>common-conf.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster1<span class="w"> </span>--cluster-name<span class="w"> </span>test_cluster1<span class="w"> </span>--cluster-path<span class="w"> </span>test_cluster1_path<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ocsci-conf<span class="w"> </span>/path/to/cluster1_conf1<span class="w"> </span>--ocsci-conf<span class="w"> </span>/path/to/cluster1_conf2<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster2<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>test_cluster2<span class="w"> </span>--cluster-path<span class="w"> </span>test_cluster2_path<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ocsci-conf<span class="w"> </span>/path/to/cluster2_conf1<span class="w"> </span>--ocsci-conf<span class="w"> </span>/path/to/cluster2_conf2
+</pre></div>
+</div>
+<p>In the above example <code class="docutils literal notranslate"><span class="pre">common-conf.yaml</span></code> configuration will be applied on both the clusters.</p>
+</div>
+</div>
+<div class="section" id="running-tests-with-background-io-load">
+<h3>Running tests with background IO load<a class="headerlink" href="#running-tests-with-background-io-load" title="Permalink to this headline">¶</a></h3>
+<p>If you would like to run tests with IO load of 75% of the cluster throughput limit,
+in the tests background, append these arguments to the <code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command:
+<code class="docutils literal notranslate"><span class="pre">--io-in-bg</span> <span class="pre">--io-load</span> <span class="pre">75</span></code></p>
+<p>If you would like metrics of cluster utilization to be logged, every 10 seconds, during
+the test execution, append the <code class="docutils literal notranslate"><span class="pre">--log-cluster-utilization</span></code> argument to the <code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command</p>
+</div>
+<div class="section" id="destroy-of-cluster">
+<h3>Destroy of cluster<a class="headerlink" href="#destroy-of-cluster" title="Permalink to this headline">¶</a></h3>
+<p>If you would like to destroy existing cluster you can run following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>-m<span class="w"> </span>deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span>tests/<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--teardown
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="upgrade.html" class="btn btn-neutral float-right" title="Upgrade" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="supported_platforms.html" class="btn btn-neutral float-left" title="Supported platforms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

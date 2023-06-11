@@ -1,0 +1,308 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Debugging &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Unit tests" href="unit_tests.html" />
+    <link rel="prev" title="Guidelines for fixtures usage in OCS-CI" href="fixture_usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Debugging</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ssh-to-the-host">SSH to the host</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#oc-debug">OC debug</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#enable-debug-log-level-for-rook-ceph-operator">Enable debug log level for rook-ceph-operator</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Debugging</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/debugging.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="debugging">
+<h1>Debugging<a class="headerlink" href="#debugging" title="Permalink to this headline">¶</a></h1>
+<p>In this document you will find useful information for the debugging.</p>
+<div class="section" id="ssh-to-the-host">
+<h2>SSH to the host<a class="headerlink" href="#ssh-to-the-host" title="Permalink to this headline">¶</a></h2>
+<p>If you would like to ssh to the host and your cluster is running on AWS where
+you don’t have your nodes exposed to the public network you can ssh to the hosts with the
+ssh bastion pod. See this <a class="reference external" href="https://github.com/eparis/ssh-bastion">repository</a> for
+more details.</p>
+<ol>
+<li><p>make sure you are logged to OCP or have exported <code class="docutils literal notranslate"><span class="pre">KUBECONFIG</span></code></p></li>
+<li><p>optional step:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">export SSH_BASTION_NAMESPACE=openshift-ssh-bastion</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p>openshift-ssh-bastion is used by default</p>
+</div></blockquote>
+</li>
+<li><p>run the following command for deploy bastion pod:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">curl https://raw.githubusercontent.com/eparis/ssh-bastion/master/deploy/deploy.sh | bash</span>
+</pre></div>
+</div>
+</li>
+<li><p>the bastion address can be found by running:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">oc get service -n openshift-ssh-bastion ssh-bastion -o jsonpath=&#39;{.status.loadBalancer.ingress[0].hostname}&#39;</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p>The address was also printed out by previous command.</p>
+</div></blockquote>
+</li>
+<li><p>find the ip of the node you would like to connect to by running:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">oc get node -o wide</span>
+</pre></div>
+</div>
+</li>
+<li><p>connect to the node by:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">ssh -i ~/.ssh/openshift-dev.pem -t -o StrictHostKeyChecking=no -o ProxyCommand=&#39;ssh -A -i ~/.ssh/openshift-dev.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -W %h:%p core@$(oc get service --all-namespaces -l run=ssh-bastion -o jsonpath=&quot;{.items[0].status.loadBalancer.ingress[0].hostname}&quot;)&#39; core@10.0.130.69 &quot;sudo -i&quot;</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p>in case you didn’t use the same location of openshift-dev.pem key or you used different one during OCP deployment you have to change the path to the other one.</p>
+</div></blockquote>
+</li>
+</ol>
+</div>
+<div class="section" id="oc-debug">
+<h2>OC debug<a class="headerlink" href="#oc-debug" title="Permalink to this headline">¶</a></h2>
+<p>if you don’t need to connect via ssh you can use <code class="docutils literal notranslate"><span class="pre">oc</span> <span class="pre">debug</span></code> command.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">oc debug node/NODE_NAME</span>
+</pre></div>
+</div>
+<p>This will create temporary pod on the specified node and you have to run
+following command after the previous mentioned one.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chroot /host</span>
+</pre></div>
+</div>
+<p>Now you can start running commands on the node.</p>
+</div>
+<div class="section" id="enable-debug-log-level-for-rook-ceph-operator">
+<h2>Enable debug log level for rook-ceph-operator<a class="headerlink" href="#enable-debug-log-level-for-rook-ceph-operator" title="Permalink to this headline">¶</a></h2>
+<p>To enable DEBUG log level for rook-ceph-operator you can pass:</p>
+<p><code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span> <span class="pre">conf/ocsci/set_debug_rook_log_level.yaml</span></code></p>
+<p>This will update the config map to change the log level.
+This happens after subscription to the OCS/ODF and before creating the storage
+cluster CR.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="unit_tests.html" class="btn btn-neutral float-right" title="Unit tests" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="fixture_usage.html" class="btn btn-neutral float-left" title="Guidelines for fixtures usage in OCS-CI" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

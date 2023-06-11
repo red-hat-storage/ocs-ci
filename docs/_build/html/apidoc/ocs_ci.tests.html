@@ -1,0 +1,291 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ocs_ci.tests package &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ocs_ci.utility package" href="ocs_ci.utility.html" />
+    <link rel="prev" title="ocs_ci.ocs.ui package" href="ocs_ci.ocs.ui.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">ocs_ci modules</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="ocs_ci.html">ocs_ci package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="ocs_ci.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.deployment.html">ocs_ci.deployment package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.framework.html">ocs_ci.framework package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.helpers.html">ocs_ci.helpers package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.ocs.html">ocs_ci.ocs package</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">ocs_ci.tests package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.utility.html">ocs_ci.utility package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="ocs_ci.html#module-ocs_ci">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">ocs_ci</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.html">ocs_ci package</a> &raquo;</li>
+        
+      <li>ocs_ci.tests package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/apidoc/ocs_ci.tests.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="ocs-ci-tests-package">
+<h1>ocs_ci.tests package<a class="headerlink" href="#ocs-ci-tests-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.tests.test_import_all">
+<span id="ocs-ci-tests-test-import-all-module"></span><h2>ocs_ci.tests.test_import_all module<a class="headerlink" href="#module-ocs_ci.tests.test_import_all" title="Permalink to this headline">¶</a></h2>
+<p>This unit test tries to just import every module within ocs_ci module, to
+detect serious errors (eg. a syntax error) or dependency problems.</p>
+<dl class="function">
+<dt id="ocs_ci.tests.test_import_all.list_submodules">
+<code class="sig-prename descclassname">ocs_ci.tests.test_import_all.</code><code class="sig-name descname">list_submodules</code><span class="sig-paren">(</span><em class="sig-param">module_path</em>, <em class="sig-param">module_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.tests.test_import_all.list_submodules" title="Permalink to this definition">¶</a></dt>
+<dd><p>For given module, return list of full module path names for all submodules
+recursively.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.tests.test_import_all.test_import">
+<code class="sig-prename descclassname">ocs_ci.tests.test_import_all.</code><code class="sig-name descname">test_import</code><span class="sig-paren">(</span><em class="sig-param">module</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.tests.test_import_all.test_import" title="Permalink to this definition">¶</a></dt>
+<dd><p>Just try to import given module. In case of any error, test fails on import
+exception.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.tests.test_pytest_sanity">
+<span id="ocs-ci-tests-test-pytest-sanity-module"></span><h2>ocs_ci.tests.test_pytest_sanity module<a class="headerlink" href="#module-ocs_ci.tests.test_pytest_sanity" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.tests.test_pytest_sanity.test_nontest_code_unexpected_in_tests_dir">
+<code class="sig-prename descclassname">ocs_ci.tests.test_pytest_sanity.</code><code class="sig-name descname">test_nontest_code_unexpected_in_tests_dir</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.tests.test_pytest_sanity.test_nontest_code_unexpected_in_tests_dir" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make sure that in tests directory, there are only test code (starts with
+<code class="docutils literal notranslate"><span class="pre">test_</span></code> prefix), <code class="docutils literal notranslate"><span class="pre">conftest.py</span></code> or <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code> files - nothing else.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.tests">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-ocs_ci.tests" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="ocs_ci.utility.html" class="btn btn-neutral float-right" title="ocs_ci.utility package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="ocs_ci.ocs.ui.html" class="btn btn-neutral float-left" title="ocs_ci.ocs.ui package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,546 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Getting Started &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Supported platforms" href="supported_platforms.html" />
+    <link rel="prev" title="Coding guidelines for OCS-CI project" href="coding_guidelines.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#aws-upi">AWS UPI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#aws-upi-with-rhel-workers">AWS UPI with RHEL workers</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#vsphere-upi">vSphere UPI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#vsphere-ipi">vSphere IPI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#mac-osx-users">Mac OSX Users</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#installing">Installing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#initial-setup">Initial Setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocs-ci-config">OCS-CI config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#performance-tests">Performance Tests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pull-secret">Pull Secret</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#brew-registry-access-for-non-ga-lso-testing">Brew registry access for non-GA LSO testing</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#ssh-key">SSH key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#authentication-config">Authentication Config</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quay">Quay</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#github">GitHub</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#tests">Tests</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#aws-and-centralci-authentication-files">AWS and CentralCI Authentication files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cluster-configuration">Cluster Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#email">Email</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Getting Started</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/getting_started.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="getting-started">
+<h1>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this headline">¶</a></h2>
+<ol class="simple">
+<li><p>Python version &gt;= 3.8</p></li>
+<li><p>Following dependency packages for fedora/centos for successfully installing modules in virtualenv</p>
+<ul class="simple">
+<li><p>gcc, git, openssl-devel, python3-devel or python specific version packages
+depends on Python version installed e.g. python38-devel (or similar packages for ubuntu).</p></li>
+</ul>
+</li>
+<li><p>Configure AWS Account credentials when testing with AWS platforms,
+check default section in <code class="docutils literal notranslate"><span class="pre">~/.aws/credentials</span></code> for access/secret key
+<a class="reference external" href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">check aws-configuration</a>.</p></li>
+<li><p>oc client binary is installed on your localhost and binary is listed in $PATH
+(running oc version on terminal should display version &gt; 3.11).
+Latest client can be downloaded from <a class="reference external" href="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/">oc-client</a>.</p></li>
+<li><p>For vSphere based installations, <a class="reference external" href="https://learn.hashicorp.com/terraform/getting-started/install.html">terraform</a>
+and <a class="reference external" href="https://stedolan.github.io/jq/download/">jq</a> should be installed ( terraform version should be 0.11.13  )</p></li>
+<li><p>Installation of ovirt-engine-sdk-python requires <code class="docutils literal notranslate"><span class="pre">curl-config</span></code> and
+<code class="docutils literal notranslate"><span class="pre">libxml/xmlreader.h</span></code> (they are on Fedora, RHEL or CentOS provided by
+packages <code class="docutils literal notranslate"><span class="pre">libcurl-devel</span></code> and <code class="docutils literal notranslate"><span class="pre">libxml2-devel</span></code> respectively).</p></li>
+</ol>
+<div class="section" id="aws-upi">
+<h3>AWS UPI<a class="headerlink" href="#aws-upi" title="Permalink to this headline">¶</a></h3>
+<p>There are additional prerequisites if you plan to execute AWS UPI deployments</p>
+<ol class="simple">
+<li><p>Install the <code class="docutils literal notranslate"><span class="pre">jq</span></code>, <code class="docutils literal notranslate"><span class="pre">yq</span></code> (v4.12.1+), and <code class="docutils literal notranslate"><span class="pre">awscli</span></code> system packages.</p></li>
+</ol>
+<div class="section" id="aws-upi-with-rhel-workers">
+<h4>AWS UPI with RHEL workers<a class="headerlink" href="#aws-upi-with-rhel-workers" title="Permalink to this headline">¶</a></h4>
+<p>Along with AWS UPI prerequisites we need following</p>
+<ol class="simple">
+<li><p>openshift-dev.pem needs to be available to ocs-ci</p></li>
+<li><p>provide authentication credentials for mirror.openshift.com in <code class="docutils literal notranslate"><span class="pre">auth.yaml</span></code>:</p></li>
+</ol>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">mirror_openshift</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;USERNAME&quot;</span>
+<span class="w">  </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;PASSWORD&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="vsphere-upi">
+<h3>vSphere UPI<a class="headerlink" href="#vsphere-upi" title="Permalink to this headline">¶</a></h3>
+<p>For vSphere UPI deployments, RHCOS templates must be present on Cluster in Datacenter</p>
+<p>Till OCP version 4.9, download RHCOS templates from <a class="reference external" href="https://raw.githubusercontent.com/openshift/installer/release-4.9/data/data/rhcos.json">here</a>
+e.g: From above url, form the exact download path using baseURI + vmware (in images section )</p>
+<p><a class="reference external" href="https://rhcos-redirector.apps.art.xq1c.p1.openshiftapps.com/art/storage/releases/rhcos-4.9/49.84.202110081407-0/x86_64/rhcos-49.84.202110081407-0-vmware.x86_64.ova">link</a> to download OCP 4.9 RHCOS template</p>
+<p>From OCP 4.10 version, download RHCOS templates from <a class="reference external" href="https://github.com/openshift/installer/blob/release-4.10/data/data/coreos/rhcos.json">here</a></p>
+<p>e.g: <a class="reference external" href="https://rhcos-redirector.apps.art.xq1c.p1.openshiftapps.com/art/storage/releases/rhcos-4.10/410.84.202205191234-0/x86_64/rhcos-410.84.202205191234-0-vmware.x86_64.ova">link</a> to download OCP 4.10 RHCOS template</p>
+<p>For GA’ed version, download RHCOS templates from <a class="reference external" href="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.10/4.10.3/">here</a></p>
+<p>Follow this <a class="reference external" href="https://docs.vmware.com/en/VMware-vSphere/7.0/com.vmware.vsphere.vm_admin.doc/GUID-17BEDA21-43F6-41F4-8FB2-E01D275FE9B4.html">procedure</a> to deploy ova/ovf template in vCenter.</p>
+</div>
+<div class="section" id="vsphere-ipi">
+<h3>vSphere IPI<a class="headerlink" href="#vsphere-ipi" title="Permalink to this headline">¶</a></h3>
+<p>Since vSphere IPI deployment require access to vCenter, we must add vCenter’s trusted root CA certificates to the
+system trust before installing an OCP cluster</p>
+<p>Follow this <a class="reference external" href="https://docs.openshift.com/container-platform/4.7/installing/installing_vsphere/installing-vsphere-installer-provisioned.html#installation-adding-vcenter-root-certificates_installing-vsphere-installer-provisioned">procedure</a>
+to add vCenter’s trusted root CA certificates.</p>
+<div class="section" id="mac-osx-users">
+<h4>Mac OSX Users<a class="headerlink" href="#mac-osx-users" title="Permalink to this headline">¶</a></h4>
+<p>The system <code class="docutils literal notranslate"><span class="pre">sed</span></code> package is not compatible with the script used to install AWS
+UPI. To resolve this issue, you must install <code class="docutils literal notranslate"><span class="pre">gnu-sed</span></code>. You can do this with brew.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">brew</span> <span class="n">install</span> <span class="n">gnu</span><span class="o">-</span><span class="n">sed</span>
+</pre></div>
+</div>
+<p>In addition to this, you will need to ensure that <code class="docutils literal notranslate"><span class="pre">gnu-sed</span></code> is used instead
+of the system <code class="docutils literal notranslate"><span class="pre">sed</span></code>. To do this you will need to update your PATH accordingly.
+In your shell rc file (<code class="docutils literal notranslate"><span class="pre">~/.bashrc</span></code>, <code class="docutils literal notranslate"><span class="pre">~/.zshrc</span></code>, etc.) add the following
+line to the end of the file.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="n">PATH</span><span class="o">=</span><span class="s2">&quot;/usr/local/opt/gnu-sed/libexec/gnubin:$PATH&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="section" id="installing">
+<h2>Installing<a class="headerlink" href="#installing" title="Permalink to this headline">¶</a></h2>
+<p>It is recommended that you use a python virtual environment to install the
+necessary dependencies</p>
+<ol class="simple">
+<li><p>Clone ocs-ci repository from
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci">https://github.com/red-hat-storage/ocs-ci</a>
+via cmd <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span> <span class="pre">git&#64;github.com:red-hat-storage/ocs-ci.git</span></code>.</p></li>
+<li><p>Go to ocs-ci folder <code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">ocs-ci</span></code>.</p></li>
+<li><p>Setup a python 3.8 virtual environment. This is actually quite easy to do
+now. Use hidden <code class="docutils literal notranslate"><span class="pre">.venv</span></code> or normal <code class="docutils literal notranslate"><span class="pre">venv</span></code> folder for virtual env as we are
+ignoring this in flake8 configuration in tox.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">python3.8</span> <span class="pre">-m</span> <span class="pre">venv</span> <span class="pre">&lt;path/to/venv&gt;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">source</span> <span class="pre">&lt;path/to/.venv&gt;/bin/activate</span></code></p></li>
+</ul>
+</li>
+<li><p>Upgrade pip and setuptools with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">--upgrade</span> <span class="pre">pip</span> <span class="pre">setuptools</span></code></p></li>
+</ol>
+<p>** On Python3.8, there is a bug on numpy with setuptools 65.6.0 https://github.com/numpy/numpy/issues/22623
+WA : <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">setuptools==65.5.0</span></code></p>
+<p>Expected Error:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>  <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">ccompiler</span>
+  <span class="n">File</span> <span class="s2">&quot;ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/ccompiler.py&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">20</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+    <span class="kn">from</span> <span class="nn">numpy.distutils</span> <span class="kn">import</span> <span class="n">log</span>
+  <span class="n">File</span> <span class="s2">&quot;ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/log.py&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">4</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+    <span class="kn">from</span> <span class="nn">distutils.log</span> <span class="kn">import</span> <span class="n">Log</span> <span class="k">as</span> <span class="n">old_Log</span>
+  <span class="ne">ImportError</span><span class="p">:</span> <span class="n">cannot</span> <span class="kn">import</span> <span class="nn">name</span> <span class="s1">&#39;Log&#39;</span> <span class="kn">from</span> <span class="s1">&#39;distutils.log&#39;</span> <span class="o">/</span>
+    <span class="p">(</span><span class="n">ocs</span><span class="o">-</span><span class="n">ci</span><span class="o">/</span><span class="n">venv</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">python3</span><span class="mf">.8</span><span class="o">/</span><span class="n">site</span><span class="o">-</span><span class="n">packages</span><span class="o">/</span><span class="n">setuptools</span><span class="o">/</span><span class="n">_distutils</span><span class="o">/</span><span class="n">log</span><span class="o">.</span><span class="n">py</span><span class="p">)</span>
+</pre></div>
+</div>
+<ol class="simple">
+<li><p>Install requirements with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-r</span> <span class="pre">requirements.txt</span></code></p></li>
+<li><p>Install pre-config to enforce commits sign-offs, flake8 compliance and more</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-r</span> <span class="pre">requirements-dev.txt</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pre-commit</span> <span class="pre">install</span> <span class="pre">--hook-type</span> <span class="pre">pre-commit</span> <span class="pre">--hook-type</span> <span class="pre">commit-msg</span></code></p></li>
+</ul>
+</li>
+</ol>
+</div>
+<div class="section" id="initial-setup">
+<h2>Initial Setup<a class="headerlink" href="#initial-setup" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="ocs-ci-config">
+<h3>OCS-CI config<a class="headerlink" href="#ocs-ci-config" title="Permalink to this headline">¶</a></h3>
+<p>Configure your ocs-ci.yaml and pass it with –ocsci-conf parameter</p>
+<p>This file is used to allow configuration around a number of things within ocs-ci.
+The default file is in <code class="docutils literal notranslate"><span class="pre">ocs_ci/framework/conf/default_config.yaml</span></code>.</p>
+<p>The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
+Values for report portal or polarion are only required if you plan on posting to that particular service.</p>
+<p>Move a copy of the template to your conf directory and edit it from there with
+the proper values and pass it with –ocsci-conf parameter to pytest.</p>
+</div>
+<div class="section" id="performance-tests">
+<h3>Performance Tests<a class="headerlink" href="#performance-tests" title="Permalink to this headline">¶</a></h3>
+<p>The OCS performance tests need to have an elastic-search server for running benchmarks and for storing the results.
+If an elastic-search server is not available, the tests can deploy ES in the system under test for the benchmark, and it will
+dump all results in JSON file.</p>
+<p>The support for automated deployment of the Elastic-search server is available only for x86_64 architecture
+for other architecture (e.g. PPC / s390), since the benchmark can not deploy ES server on the OCP cluster,
+an ES server need to be deployed in the LAB, and the IP/Port need to be configured in the configuration file.</p>
+<p>All elasticsearch configuration done in the <code class="docutils literal notranslate"><span class="pre">ocs_ci/framework/conf/default_config.yaml</span></code> at the <code class="docutils literal notranslate"><span class="pre">PERF:</span></code> section.</p>
+<p>For creating a new performance test, pleas use the template from : <code class="docutils literal notranslate"><span class="pre">template_test/Performance_template.py</span></code></p>
+</div>
+<div class="section" id="pull-secret">
+<h3>Pull Secret<a class="headerlink" href="#pull-secret" title="Permalink to this headline">¶</a></h3>
+<p>In order to deploy a cluster to AWS with the Openshift Installer,
+you will need to download the pull secret for your account.
+Download this file from <a class="reference external" href="https://console.redhat.com/openshift/install/pull-secret">openshift.com</a>
+and place in the <code class="docutils literal notranslate"><span class="pre">data</span></code> directory at the root level of the project.
+If there is no <code class="docutils literal notranslate"><span class="pre">data</span></code> directory, create one.
+The name of the file should be <code class="docutils literal notranslate"><span class="pre">pull-secret</span></code>.</p>
+<div class="section" id="brew-registry-access-for-non-ga-lso-testing">
+<h4>Brew registry access for non-GA LSO testing<a class="headerlink" href="#brew-registry-access-for-non-ga-lso-testing" title="Permalink to this headline">¶</a></h4>
+<p>If you intend to test non-GA versions of the local storage operator you will need access
+to provided authentication for <code class="docutils literal notranslate"><span class="pre">brew.registry.redhat.io</span></code> in your pull secret. In order
+to obtain credentials for this brew registry you will need to do the following:</p>
+<ol>
+<li><p>Send a request to <code class="docutils literal notranslate"><span class="pre">operator-pipeline-wg&#64;redhat.com</span></code> for <code class="docutils literal notranslate"><span class="pre">brew.registry.redhat.io</span></code>
+credentials for you or your team. You will want to provide an email address to
+associate the account with. You may be required to provide a gpg public key in order
+to receive the credentials.</p></li>
+<li><p>Once you have received credentials for the brew registry you will need to log in to
+the registry in order to obtain the data you will add to your pull secret. You can
+log in to the registry using <code class="docutils literal notranslate"><span class="pre">docker</span></code> and the provided credentials:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">brew.registry.redhat.io</span></code></p></li>
+</ul>
+</li>
+<li><p>Once you have successfully logged in, you can retrieve the auth data from
+<code class="docutils literal notranslate"><span class="pre">~/.docker/config.json</span></code>. Grab the auth section for <code class="docutils literal notranslate"><span class="pre">brew.registry.redhat.com</span></code>, it
+will look something like this</p>
+<p>“brew.registry.redhat.io” : {
+“auth” : “TOKEN”
+},</p>
+</li>
+<li><p>Add that auth section to your existing pull secret.</p></li>
+</ol>
+<div class="section" id="nightly-builds">
+<h5>Nightly Builds<a class="headerlink" href="#nightly-builds" title="Permalink to this headline">¶</a></h5>
+<p>In addition you will need to add a registry auth to your pull-secret to
+support deploying CI / Nightly builds. Please follow the instructions
+<a class="reference external" href="https://mojo.redhat.com/docs/DOC-1204026">here</a> to do so.</p>
+</div>
+<div class="section" id="quay-private-repos">
+<h5>Quay Private Repos<a class="headerlink" href="#quay-private-repos" title="Permalink to this headline">¶</a></h5>
+<p>To support pulling images from the new private repositories in quay, you will
+need to add yet another registry auth to the auths section of your pull-secret.
+Ask people on ocs-qe mailing list or chat room if you don’t know where to find
+the TOKEN.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">&quot;quay.io/rhceph-dev&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;auth&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;TOKEN&quot;</span><span class="p">}}</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="section" id="ssh-key">
+<h3>SSH key<a class="headerlink" href="#ssh-key" title="Permalink to this headline">¶</a></h3>
+<p>We would like to use a shared ssh key with engineering which allows us to connect
+to the nodes via known ssh key for QE and engineering.
+To setup the shared public ssh key for your deployment you have to follow
+these steps:</p>
+<p>Download private openshift-dev ssh key from secret location to
+<code class="docutils literal notranslate"><span class="pre">~/.ssh/openshift-dev.pem</span></code>.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chmod 600 ~/.ssh/openshift-dev.pem</span>
+<span class="go">ssh-keygen -y -f ~/.ssh/openshift-dev.pem &gt; ~/.ssh/openshift-dev.pub</span>
+</pre></div>
+</div>
+<p>Ask people on ocs-qe mailing list or chat room if you don’t know where to find the
+secret URL for openshift-dev key. Or look for this mail thread:
+<code class="docutils literal notranslate"><span class="pre">Libra</span> <span class="pre">ssh</span> <span class="pre">key</span> <span class="pre">replaced</span> <span class="pre">by</span> <span class="pre">openshift-dev</span> <span class="pre">key</span></code> where the URL was mentioned.</p>
+<p>If you would like to use a different path, you can overwrite it in the custom
+config file under the DEPLOYMENT section with this key and value:
+<code class="docutils literal notranslate"><span class="pre">ssh_key:</span> <span class="pre">&quot;~/your/custom/path/ssh-key.pub&quot;</span></code>.</p>
+<p>If you don’t want to use the shared key, you can change this value to
+<code class="docutils literal notranslate"><span class="pre">~/.ssh/id_rsa.pub</span></code> to use your own public key.</p>
+<blockquote>
+<div><p>If the public key does not exist, the deployment of this public key is skipped.</p>
+</div></blockquote>
+<p>How to connect to the node via SSH you can find <a class="reference internal" href="debugging.html"><span class="doc">here</span></a>.</p>
+</div>
+<div class="section" id="authentication-config">
+<h3>Authentication Config<a class="headerlink" href="#authentication-config" title="Permalink to this headline">¶</a></h3>
+<p>For some services we will require additional information in order to
+successfully authenticate. This is a simple yaml file that you will need to
+create manually.</p>
+<p>Create a file under <code class="docutils literal notranslate"><span class="pre">ocs-ci/data/</span></code> named <code class="docutils literal notranslate"><span class="pre">auth.yaml</span></code>.</p>
+<div class="section" id="quay">
+<h4>Quay<a class="headerlink" href="#quay" title="Permalink to this headline">¶</a></h4>
+<p>To authenticate with quay you will need to have an access token. You can
+generate one yourself by following <a class="reference external" href="https://docs.quay.io/api/">the API doc</a> or
+you may use the one QE has generated already. Ask people on ocs-qe mailing list
+or chat room if you don’t know where to find the access token.</p>
+<p>To enable ocs-ci to use this token, add the following to your <code class="docutils literal notranslate"><span class="pre">auth.yaml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">quay</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">access_token</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;YOUR_TOKEN&#39;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="github">
+<h4>GitHub<a class="headerlink" href="#github" title="Permalink to this headline">¶</a></h4>
+<p>For disconnected cluster installation, we need to access github api (during
+downloading opm tool) which have very strict rate limit for unauthenticated
+requests (<a class="reference external" href="https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting">60 requests per hour</a>).
+To avoid API rate limit exceeded errors, you can provide github authentication
+credentials (username and token) obtained on <a class="reference external" href="https://github.com/settings/tokens">Personal access tokens</a>
+page (Settings -&gt; Developer settings -&gt; Personal access tokens).</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">github</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;GITHUB_USERNAME&quot;</span>
+<span class="w">  </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;GITHUB_TOKEN&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="section" id="tests">
+<h2>Tests<a class="headerlink" href="#tests" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="aws-and-centralci-authentication-files">
+<h3>AWS and CentralCI Authentication files<a class="headerlink" href="#aws-and-centralci-authentication-files" title="Permalink to this headline">¶</a></h3>
+<p>AWS and CentralCI Authentication files will reside in users home dir and will be used by
+CLI option</p>
+</div>
+<div class="section" id="cluster-configuration">
+<h3>Cluster Configuration<a class="headerlink" href="#cluster-configuration" title="Permalink to this headline">¶</a></h3>
+<p>Cluster configuration that defines Openshift/Kubernetes Cluster along with Ceph Configuration
+will reside in conf/ folder, This is still a work in progress.</p>
+</div>
+<div class="section" id="email">
+<h3>Email<a class="headerlink" href="#email" title="Permalink to this headline">¶</a></h3>
+<p>To send test run reports to email ID’s, postfix should be installed on fedora</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>* `sudo dnf install postfix`
+* `systemctl enable postfix.service`
+* `systemctl start postfix.service`
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="supported_platforms.html" class="btn btn-neutral float-right" title="Supported platforms" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="coding_guidelines.html" class="btn btn-neutral float-left" title="Coding guidelines for OCS-CI project" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

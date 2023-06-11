@@ -1,0 +1,597 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ocs_ci.utility.tests package &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ocs_ci.utility.workloads package" href="ocs_ci.utility.workloads.html" />
+    <link rel="prev" title="ocs_ci.utility.spreadsheet package" href="ocs_ci.utility.spreadsheet.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">ocs_ci modules</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="ocs_ci.html">ocs_ci package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="ocs_ci.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.deployment.html">ocs_ci.deployment package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.framework.html">ocs_ci.framework package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.helpers.html">ocs_ci.helpers package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.ocs.html">ocs_ci.ocs package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.tests.html">ocs_ci.tests package</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="ocs_ci.utility.html">ocs_ci.utility package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="ocs_ci.html#module-ocs_ci">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">ocs_ci</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.html">ocs_ci package</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.utility.html">ocs_ci.utility package</a> &raquo;</li>
+        
+      <li>ocs_ci.utility.tests package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/apidoc/ocs_ci.utility.tests.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="ocs-ci-utility-tests-package">
+<h1>ocs_ci.utility.tests package<a class="headerlink" href="#ocs-ci-utility-tests-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_azure_utils">
+<span id="ocs-ci-utility-tests-test-azure-utils-module"></span><h2>ocs_ci.utility.tests.test_azure_utils module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_azure_utils" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_azure_utils.test_azureutil_init_noresourcegroup">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_azure_utils.</code><code class="sig-name descname">test_azureutil_init_noresourcegroup</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_azure_utils.test_azureutil_init_noresourcegroup" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that resource group of azure util object is None when this is not
+specified anywhere.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_azure_utils.test_azureutil_init_resourcegroup">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_azure_utils.</code><code class="sig-name descname">test_azureutil_init_resourcegroup</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_azure_utils.test_azureutil_init_resourcegroup" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that resource group of azure util object can be initialized.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_azure_utils.test_azureutil_init_resourcegroup_config">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_azure_utils.</code><code class="sig-name descname">test_azureutil_init_resourcegroup_config</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_azure_utils.test_azureutil_init_resourcegroup_config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that default resource group of azure util object could be redefined
+via ocsci config.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_deployment_utils">
+<span id="ocs-ci-utility-tests-test-deployment-utils-module"></span><h2>ocs_ci.utility.tests.test_deployment_utils module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_deployment_utils" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_deployment_utils.test_get_cluster_prefix">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_deployment_utils.</code><code class="sig-name descname">test_get_cluster_prefix</code><span class="sig-paren">(</span><em class="sig-param">cluster_name</em>, <em class="sig-param">expected</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_deployment_utils.test_get_cluster_prefix" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_gcp">
+<span id="ocs-ci-utility-tests-test-gcp-module"></span><h2>ocs_ci.utility.tests.test_gcp module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_gcp" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_gcp.test_gcputil_init_region">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_gcp.</code><code class="sig-name descname">test_gcputil_init_region</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_gcp.test_gcputil_init_region" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that region of gcp util object could be specified via constructor.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_gcp.test_gcputil_init_region_config">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_gcp.</code><code class="sig-name descname">test_gcputil_init_region_config</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_gcp.test_gcputil_init_region_config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that region of gcp util object is loaded from via ocsci config when
+not specified. Moreover if the region is specified directly, the config
+value should not be used.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_prometheus">
+<span id="ocs-ci-utility-tests-test-prometheus-module"></span><h2>ocs_ci.utility.tests.test_prometheus module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_prometheus" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.query_range_result_bad_last_90s">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">query_range_result_bad_last_90s</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_ok</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.query_range_result_bad_last_90s" title="Permalink to this definition">¶</a></dt>
+<dd><p>Range query data with bad values in last 6 values (last 90s of the
+measurement).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.query_range_result_delay_60s">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">query_range_result_delay_60s</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_ok</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.query_range_result_delay_60s" title="Permalink to this definition">¶</a></dt>
+<dd><p>Range query data with bad values in first 4 values (first 60s of the
+measurement).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.query_range_result_ok">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">query_range_result_ok</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.query_range_result_ok" title="Permalink to this definition">¶</a></dt>
+<dd><p>Simpified example of data produced by <code class="docutils literal notranslate"><span class="pre">PrometheusAPI.query_range()</span></code> with
+<code class="docutils literal notranslate"><span class="pre">ceph_mon_quorum_status</span></code> query, which performs Prometheus <a class="reference external" href="https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries">instant
+query</a>.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.query_range_result_single_error">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">query_range_result_single_error</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_ok</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.query_range_result_single_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>Range query data with one bad value.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_exp_delay">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">test_check_query_range_result_exp_delay</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_delay_60s</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_exp_delay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that exp_metric_num is taken into account, so that initial bad values
+are ignored.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_exp_good_time">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">test_check_query_range_result_exp_good_time</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_bad_last_90s</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_exp_good_time" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that exp_good_time is taken into account, so that initial bad values
+are ignored if appear after the good time passess.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_exp_metric_num">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">test_check_query_range_result_exp_metric_num</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_ok</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_exp_metric_num" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that exp_metric_num is checked as expected when specified.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_null">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">test_check_query_range_result_null</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_null" title="Permalink to this definition">¶</a></dt>
+<dd><p>The function does’t throw any exception and returns true when executed
+with empty arguments.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_simple">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">test_check_query_range_result_simple</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_ok</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_simple" title="Permalink to this definition">¶</a></dt>
+<dd><p>The function validates query_range_result_ok data assuming 1 is a good
+value.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_simple_fail">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">test_check_query_range_result_simple_fail</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_ok</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_simple_fail" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assuming 0 is a good value, the validation should fail.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_single_error">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_prometheus.</code><code class="sig-name descname">test_check_query_range_result_single_error</code><span class="sig-paren">(</span><em class="sig-param">query_range_result_single_error</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_prometheus.test_check_query_range_result_single_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>The function finds single error in query_range_result_single_error data,
+assuming 1 is a good value.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_rgwutils">
+<span id="ocs-ci-utility-tests-test-rgwutils-module"></span><h2>ocs_ci.utility.tests.test_rgwutils module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_rgwutils" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_rgwutils.test_get_rgw_count">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_rgwutils.</code><code class="sig-name descname">test_get_rgw_count</code><span class="sig-paren">(</span><em class="sig-param">ocs_version</em>, <em class="sig-param">is_upgrade</em>, <em class="sig-param">version_before_upgrade</em>, <em class="sig-param">expected</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_rgwutils.test_get_rgw_count" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_utils">
+<span id="ocs-ci-utility-tests-test-utils-module"></span><h2>ocs_ci.utility.tests.test_utils module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_utils" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.utility.tests.test_utils.A">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">A</code><span class="sig-paren">(</span><em class="sig-param">amount</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.A" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_get_attr_chain">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_get_attr_chain</code><span class="sig-paren">(</span><em class="sig-param">chain_length</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_get_attr_chain" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_get_empty_attr">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_get_empty_attr</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_get_empty_attr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_get_none_obj_attr">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_get_none_obj_attr</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_get_none_obj_attr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_get_nonexistent_attr_chain">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_get_nonexistent_attr_chain</code><span class="sig-paren">(</span><em class="sig-param">chain_length</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_get_nonexistent_attr_chain" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_mask_secret_nomatch">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_mask_secret_nomatch</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_mask_secret_nomatch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checking that mask_secret function works when there is no match.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_mask_secret_nosecrets">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_mask_secret_nosecrets</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_mask_secret_nosecrets" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checking that mask_secret function doesn’t change plaintext when secrets
+are not specified.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_mask_secret_null">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_mask_secret_null</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_mask_secret_null" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checking that mask_secret function works with empty arguments.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_mask_secret_simple_positive">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_mask_secret_simple_positive</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_mask_secret_simple_positive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checking that mask_secret function works in a simple positive case.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_run_cmd_simple_negative">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_run_cmd_simple_negative</code><span class="sig-paren">(</span><em class="sig-param">caplog</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_run_cmd_simple_negative" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check simple negative use case for run_cmd, including logging.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_run_cmd_simple_negative_ignoreerror">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_run_cmd_simple_negative_ignoreerror</code><span class="sig-paren">(</span><em class="sig-param">caplog</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_run_cmd_simple_negative_ignoreerror" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check simple negative use case for run_cmd with ignore error and logging.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_run_cmd_simple_negative_with_secrets">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_run_cmd_simple_negative_with_secrets</code><span class="sig-paren">(</span><em class="sig-param">caplog</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_run_cmd_simple_negative_with_secrets" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check simple negative use case for run_cmd, including logging,
+when secrets are specified.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_run_cmd_simple_positive">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_run_cmd_simple_positive</code><span class="sig-paren">(</span><em class="sig-param">caplog</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_run_cmd_simple_positive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check simple positive use case for run_cmd, including logging.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils.test_run_cmd_simple_positive_with_secrets">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils.</code><code class="sig-name descname">test_run_cmd_simple_positive_with_secrets</code><span class="sig-paren">(</span><em class="sig-param">caplog</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils.test_run_cmd_simple_positive_with_secrets" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check simple positive use case for run_cmd, including logging,
+when secrets are specified.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_utils_timeout_sampler">
+<span id="ocs-ci-utility-tests-test-utils-timeout-sampler-module"></span><h2>ocs_ci.utility.tests.test_utils_timeout_sampler module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_utils_timeout_sampler" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ti_func_values">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ti_func_values</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ti_func_values" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterate over results of a simple TimeoutIterator instance when function
+args and kwargs are specified.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_func_exception">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_func_exception</code><span class="sig-paren">(</span><em class="sig-param">caplog</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_func_exception" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that TimeoutSampler handles exception raised during iteration.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_null">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_null</code><span class="sig-paren">(</span><em class="sig-param">timeout_cls</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_null" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creating TimeoutSampler without any parameters should fail on TypeError.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_one_iteration">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_one_iteration</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_one_iteration" title="Permalink to this definition">¶</a></dt>
+<dd><p>When timeout == sleep_time, one iteration should happen.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_one_iteration_big_func_runtime">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_one_iteration_big_func_runtime</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_one_iteration_big_func_runtime" title="Permalink to this definition">¶</a></dt>
+<dd><p>When timeout &lt; runtime of 1st iteration, one iteration should happen.
+TimeoutSampler won’t kill the function while it’s running over the overall
+timeout.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_one_iteration_big_sleep_time">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_one_iteration_big_sleep_time</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_one_iteration_big_sleep_time" title="Permalink to this definition">¶</a></dt>
+<dd><p>When timeout &lt; sleep_time, TimeoutSampler object init fails on
+ValueError exception (as given timeout can’t be quaranteed).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_simple_logging">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_simple_logging</code><span class="sig-paren">(</span><em class="sig-param">caplog</em>, <em class="sig-param">capsys</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_simple_logging" title="Permalink to this definition">¶</a></dt>
+<dd><p>For a simple usecase, check that TimeoutSampler logging works.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_simple_usecase">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_simple_usecase</code><span class="sig-paren">(</span><em class="sig-param">timeout_cls</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_simple_usecase" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterate over results of a simple TimeoutSampler instance and check that
+expected number of iterations happened and that TimeoutExpiredError was
+raised in the end.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_wait_for_value_negative">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_wait_for_value_negative</code><span class="sig-paren">(</span><em class="sig-param">caplog</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_wait_for_value_negative" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that when wait_for_value() fails to see expected return value of
+given func within given timeout, exception is raised and the problem
+logged.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_wait_for_value_positive">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_utils_timeout_sampler.</code><code class="sig-name descname">test_ts_wait_for_value_positive</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_utils_timeout_sampler.test_ts_wait_for_value_positive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that wait_for_value() function waits for func to return given value
+as expected.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests.test_version">
+<span id="ocs-ci-utility-tests-test-version-module"></span><h2>ocs_ci.utility.tests.test_version module<a class="headerlink" href="#module-ocs_ci.utility.tests.test_version" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_version.test_compare_from_get_semantic_version">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_version.</code><code class="sig-name descname">test_compare_from_get_semantic_version</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_version.test_compare_from_get_semantic_version" title="Permalink to this definition">¶</a></dt>
+<dd><p>This teest is testing that semantic version comparison works as expected and
+version 4.5.11 is lower than 4.11. Which in the float will not work, but in semantic
+versions it should be fine.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_version.test_compare_versions">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_version.</code><code class="sig-name descname">test_compare_versions</code><span class="sig-paren">(</span><em class="sig-param">expression</em>, <em class="sig-param">expected</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_version.test_compare_versions" title="Permalink to this definition">¶</a></dt>
+<dd><p>This test is suppose to test if the compare_versions returns
+expected values for different expressions.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_version.test_compare_versions_wrong_expression">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_version.</code><code class="sig-name descname">test_compare_versions_wrong_expression</code><span class="sig-paren">(</span><em class="sig-param">expression</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_version.test_compare_versions_wrong_expression" title="Permalink to this definition">¶</a></dt>
+<dd><p>This test is suppose to test if the compare_versions raises
+expected exception for wrong expression.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_version.test_get_semantic_version">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_version.</code><code class="sig-name descname">test_get_semantic_version</code><span class="sig-paren">(</span><em class="sig-param">product_version</em>, <em class="sig-param">only_major_minor</em>, <em class="sig-param">ignore_pre_release</em>, <em class="sig-param">expected</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_version.test_get_semantic_version" title="Permalink to this definition">¶</a></dt>
+<dd><p>This test is suppose to test if the get_semantic_version returns
+expected values for different combinations of paramters and different values
+of string version provided to that function.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.utility.tests.test_version.test_get_semantic_version_string_values">
+<code class="sig-prename descclassname">ocs_ci.utility.tests.test_version.</code><code class="sig-name descname">test_get_semantic_version_string_values</code><span class="sig-paren">(</span><em class="sig-param">product_version</em>, <em class="sig-param">only_major_minor</em>, <em class="sig-param">ignore_pre_release</em>, <em class="sig-param">expected</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.tests.test_version.test_get_semantic_version_string_values" title="Permalink to this definition">¶</a></dt>
+<dd><p>This test is suppose to test if the get_semantic_version returns
+expected values which after the sting formatting are the same as the expected.
+Testing all different combinations of parameters and values.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.tests">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-ocs_ci.utility.tests" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="ocs_ci.utility.workloads.html" class="btn btn-neutral float-right" title="ocs_ci.utility.workloads package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="ocs_ci.utility.spreadsheet.html" class="btn btn-neutral float-left" title="ocs_ci.utility.spreadsheet package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

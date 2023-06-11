@@ -1,0 +1,664 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ocs_ci.utility.perf_dash package &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ocs_ci.utility.spreadsheet package" href="ocs_ci.utility.spreadsheet.html" />
+    <link rel="prev" title="ocs_ci.utility package" href="ocs_ci.utility.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">ocs_ci modules</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="ocs_ci.html">ocs_ci package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="ocs_ci.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.deployment.html">ocs_ci.deployment package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.framework.html">ocs_ci.framework package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.helpers.html">ocs_ci.helpers package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.ocs.html">ocs_ci.ocs package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.tests.html">ocs_ci.tests package</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="ocs_ci.utility.html">ocs_ci.utility package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="ocs_ci.html#module-ocs_ci">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">ocs_ci</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.html">ocs_ci package</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.utility.html">ocs_ci.utility package</a> &raquo;</li>
+        
+      <li>ocs_ci.utility.perf_dash package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/apidoc/ocs_ci.utility.perf_dash.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="ocs-ci-utility-perf-dash-package">
+<h1>ocs_ci.utility.perf_dash package<a class="headerlink" href="#ocs-ci-utility-perf-dash-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.utility.perf_dash.dashboard_api">
+<span id="ocs-ci-utility-perf-dash-dashboard-api-module"></span><h2>ocs_ci.utility.perf_dash.dashboard_api module<a class="headerlink" href="#module-ocs_ci.utility.perf_dash.dashboard_api" title="Permalink to this headline">¶</a></h2>
+<p>API module to interact with the Performance Dashboard
+In order to push results into the dashboard, and pulling data
+from it to compare between results.</p>
+<blockquote>
+<div><p>The DB structure is :</p>
+<blockquote>
+<div><p>some tables which use for indexing values and all in the same structure:</p>
+<p>versions : list of all OCS versions which tested
+platform : list of tested platform (e.g. AWS / VSphere etc.)
+az_topology : Topology of the tested environment (e.g. 3-AZ)
+tests : Tests name which ran (e.g. FIO / SmallFiles etc.)</p>
+<dl class="simple">
+<dt>table name :</dt><dd><p>ID (int) : the index - unique number
+Name (str) : the name to index</p>
+</dd>
+</dl>
+<p>the <cite>builds</cite> table contain the builds of a particular OCS version</p>
+<dl class="simple">
+<dt>table name<span class="classifier">builds</span></dt><dd><p>ID (int) : the index - unique number
+version (int) : version ID - must be exists in the versions table
+Name (str) : the name (or number) of the build (e.g. 254 / RC1-312 / GA)</p>
+</dd>
+</dl>
+<p>the <cite>results</cite> table contain the complete data about individual test</p>
+<dl class="simple">
+<dt>table name<span class="classifier">results</span></dt><dd><p>ID (int): the index - unique number
+sample (int): number of the sample - each test can be run more the one time
+version (int): version ID - must be exists in the versions table
+build (int): build ID - must be exists in the builds table
+platform (int): platform ID - must be exists in the platform table
+az_topology (int): topology ID - must be exists in the az_topology table
+test_name (int): test ID - must be exists in the tests table
+es_link (str): the elasticsearch links to the individual test separated by comma
+e.g. <a class="reference external" href="http:/">http:/</a>/&lt;es_server&gt;:&lt;port&gt;/&lt;sub-test_1&gt;, <a class="reference external" href="http:/">http:/</a>/&lt;es_server&gt;:&lt;port&gt;/&lt;sub-test_2&gt;
+log_file (str): link to full test log</p>
+</dd>
+</dl>
+<p>One single test test (e.g. FIO) can be split to few sub-tests (by parametrize),
+e.g.  : [CEPHBLOCKPOOL, sequential], [CEPHFILESYSTEM, sequential],
+[CEPHBLOCKPOOL, random], [CEPHFILESYSTEM, random]</p>
+<p>but in the dashboard all those tests (4 in the FIO example) are displayed as single test</p>
+</div></blockquote>
+</div></blockquote>
+<dl class="class">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.utility.perf_dash.dashboard_api.</code><code class="sig-name descname">PerfDash</code><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>The API class to connect and managing the performance dashboard database</p>
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.add_results">
+<code class="sig-name descname">add_results</code><span class="sig-paren">(</span><em class="sig-param">version</em>, <em class="sig-param">build</em>, <em class="sig-param">platform</em>, <em class="sig-param">topology</em>, <em class="sig-param">test</em>, <em class="sig-param">eslink</em>, <em class="sig-param">logfile</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.add_results" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adding results information into the DB.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>version</strong> (<em>str</em>) – The version number (e.g. 4.9.0)</p></li>
+<li><p><strong>build</strong> (<em>str</em>) – The build number (e.g. RC5-180)</p></li>
+<li><p><strong>platform</strong> (<em>str</em>) – The platform (e.g.  Bare-Metal)</p></li>
+<li><p><strong>topology</strong> (<em>str</em>) – The topology (e.g. 3-AZ)</p></li>
+<li><p><strong>test</strong> (<em>str</em>) – The test name (e.g. SmallFiles)</p></li>
+<li><p><strong>eslink</strong> (<em>str</em>) – The elasticsearch link(s) to the results</p></li>
+<li><p><strong>logfile</strong> (<em>str</em>) – The link to the test log file</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if the operation succeed otherwise False</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.cleanup">
+<code class="sig-name descname">cleanup</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.cleanup" title="Permalink to this definition">¶</a></dt>
+<dd><p>Cleanup and close the DB connection</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.connect">
+<code class="sig-name descname">connect</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.connect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create DB connection</p>
+<dl class="simple">
+<dt>Raise:</dt><dd><p>in case of connection failed - use the exception that caught</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_build_id">
+<code class="sig-name descname">get_build_id</code><span class="sig-paren">(</span><em class="sig-param">version</em>, <em class="sig-param">build</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_build_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Getting the build ID for specific build of version.
+if the build does not exist, return None</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>version</strong> (<em>str</em>) – the version name (e.g. 4.9.0)</p></li>
+<li><p><strong>build</strong> (<em>str</em>) – the build name (e.g. GA)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the build ID</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_id_by_name">
+<code class="sig-name descname">get_id_by_name</code><span class="sig-paren">(</span><em class="sig-param">table=None</em>, <em class="sig-param">name=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_id_by_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query the ID of specific ‘name’ value from selected table</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table</strong> (<em>str</em>) – The table from which data will be query</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – The value for the ‘name’ field in the table to query</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the value of the ID field in the table, otherwise None</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_name_by_id">
+<code class="sig-name descname">get_name_by_id</code><span class="sig-paren">(</span><em class="sig-param">table=None</em>, <em class="sig-param">recid=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_name_by_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query the name of specific ‘id’ value from selected table</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table</strong> (<em>str</em>) – The table from which data will be query</p></li>
+<li><p><strong>recid</strong> (<em>int</em>) – The value for the ‘id’ field in the table to query</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the value of the Name field in the table, otherwise None</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_next_sample">
+<code class="sig-name descname">get_next_sample</code><span class="sig-paren">(</span><em class="sig-param">version</em>, <em class="sig-param">build</em>, <em class="sig-param">platform</em>, <em class="sig-param">topology</em>, <em class="sig-param">test</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_next_sample" title="Permalink to this definition">¶</a></dt>
+<dd><p>Getting the the number of the next sample for particular test results.
+if there are no results in the DB, it will return 0</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>version</strong> (<em>str</em>) – The version number (e.g. 4.9.0)</p></li>
+<li><p><strong>build</strong> (<em>str</em>) – The build number (e.g. RC5-180)</p></li>
+<li><p><strong>platform</strong> (<em>str</em>) – The platform (e.g.  Bare-Metal)</p></li>
+<li><p><strong>topology</strong> (<em>str</em>) – The topology (e.g. 3-AZ)</p></li>
+<li><p><strong>test</strong> (<em>str</em>) – The test name (e.g. SmallFiles)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the number of the next sample to insert to the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_platform_id">
+<code class="sig-name descname">get_platform_id</code><span class="sig-paren">(</span><em class="sig-param">platform=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_platform_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the ID of platform name in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>platform</strong> (<em>str</em>) – The platform name (e.g. AWS)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the Platform ID in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_platform_name">
+<code class="sig-name descname">get_platform_name</code><span class="sig-paren">(</span><em class="sig-param">platform=0</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_platform_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the IName of platform ID in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>platform</strong> (<em>int</em>) – The platform ID</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the Platform Name in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_results">
+<code class="sig-name descname">get_results</code><span class="sig-paren">(</span><em class="sig-param">version</em>, <em class="sig-param">build</em>, <em class="sig-param">platform</em>, <em class="sig-param">topology</em>, <em class="sig-param">test</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_results" title="Permalink to this definition">¶</a></dt>
+<dd><p>Getting the results information (es_link, log_file) for all test samples
+for a particular test configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>version</strong> (<em>str</em>) – The version number (e.g. 4.9.0)</p></li>
+<li><p><strong>build</strong> (<em>str</em>) – The build number (e.g. RC5-180)</p></li>
+<li><p><strong>platform</strong> (<em>str</em>) – The platform (e.g.  Bare-Metal)</p></li>
+<li><p><strong>topology</strong> (<em>str</em>) – The topology (e.g. 3-AZ)</p></li>
+<li><p><strong>test</strong> (<em>str</em>) – The test name (e.g. SmallFiles)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>dictionary of all test samples as :</dt><dd><p>{sample: {es_link, log_file},}</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_test_id">
+<code class="sig-name descname">get_test_id</code><span class="sig-paren">(</span><em class="sig-param">test=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_test_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the ID of test name in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>test</strong> (<em>str</em>) – The test name (e.g. FIO)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the Test ID in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_test_name">
+<code class="sig-name descname">get_test_name</code><span class="sig-paren">(</span><em class="sig-param">test=0</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_test_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the Name of test ID in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>test</strong> (<em>int</em>) – The test ID</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the Test Name in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_topology_id">
+<code class="sig-name descname">get_topology_id</code><span class="sig-paren">(</span><em class="sig-param">topology=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_topology_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the ID of platform name in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>topology</strong> (<em>str</em>) – The Topology name (e.g. 3-AZ)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the Topology ID in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_topology_name">
+<code class="sig-name descname">get_topology_name</code><span class="sig-paren">(</span><em class="sig-param">topology=0</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_topology_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the Name of platform ID in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>topology</strong> (<em>int</em>) – The Topology ID</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the Topology Name in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_version_builds">
+<code class="sig-name descname">get_version_builds</code><span class="sig-paren">(</span><em class="sig-param">version=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_version_builds" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query the list of build in specific version</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>version</strong> (<em>str</em>) – The version name (e.g. 4.9.0)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dictionary of (Name: ID), None if not exist</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_version_id">
+<code class="sig-name descname">get_version_id</code><span class="sig-paren">(</span><em class="sig-param">version=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_version_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the ID of version number in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>version</strong> (<em>str</em>) – The version number (e.g. 4.9.0)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the version ID in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_version_name">
+<code class="sig-name descname">get_version_name</code><span class="sig-paren">(</span><em class="sig-param">version=0</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.get_version_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Query of the Name of version ID in the DB</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>version</strong> (<em>int</em>) – The version ID</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the version name in the DB</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.insert_build">
+<code class="sig-name descname">insert_build</code><span class="sig-paren">(</span><em class="sig-param">version</em>, <em class="sig-param">build</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.insert_build" title="Permalink to this definition">¶</a></dt>
+<dd><p>Insert a new build to the DB and return it’s ID</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>version</strong> (<em>str</em>) – The version number as string (e.g. 4.9.0)</p></li>
+<li><p><strong>build</strong> (<em>str</em>) – The build number (e.g. 180 / RC1-200 / GA)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the ID of the build in the DB, otherwise None</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.utility.perf_dash.dashboard_api.PerfDash.insert_single_value">
+<code class="sig-name descname">insert_single_value</code><span class="sig-paren">(</span><em class="sig-param">table=None</em>, <em class="sig-param">value=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.utility.perf_dash.dashboard_api.PerfDash.insert_single_value" title="Permalink to this definition">¶</a></dt>
+<dd><p>Insert a value to ‘table’ and return it’s ID</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table</strong> (<em>str</em>) – The table to insert data into</p></li>
+<li><p><strong>value</strong> (<em>str</em>) – The value to insert</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the ID of the value in the table, otherwise None</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.utility.perf_dash">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-ocs_ci.utility.perf_dash" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="ocs_ci.utility.spreadsheet.html" class="btn btn-neutral float-right" title="ocs_ci.utility.spreadsheet package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="ocs_ci.utility.html" class="btn btn-neutral float-left" title="ocs_ci.utility package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

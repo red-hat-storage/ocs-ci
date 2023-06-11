@@ -1,0 +1,299 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Code review/contribution best practices in OCS-CI &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Coding guidelines for OCS-CI project" href="coding_guidelines.html" />
+    <link rel="prev" title="ocs_ci.utility.workloads package" href="apidoc/ocs_ci.utility.workloads.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Code review/contribution best practices in OCS-CI</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/code_review.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="code-review-contribution-best-practices-in-ocs-ci">
+<h1>Code review/contribution best practices in OCS-CI<a class="headerlink" href="#code-review-contribution-best-practices-in-ocs-ci" title="Permalink to this headline">¶</a></h1>
+<p><strong>Lets use the following guidelines for Code Reviews and contribution:</strong></p>
+<ul class="simple">
+<li><p>Create own fork of the repository and submit PR from your fork.</p></li>
+<li><p>If a github issue describing the changes you are making does not exist be sure to
+create one before creating a pull request. This is a <em>requirement</em> for all
+bugs, feature requests, and enhancements to the framework or our tests that
+involve more than a few lines of code changes. If the PR is extremely small,
+still be sure to include a purpose for the change in the description.</p></li>
+<li><p>Please follow rules we have set in <a class="reference internal" href="coding_guidelines.html"><span class="doc">coding guidelines</span></a>
+and read it properly before submitting your first PR.</p></li>
+<li><p>Run couple of real tests before submitting for library changes.
+For test changes, they should be run on at least one environment before
+pull request is submitted.</p></li>
+<li><p>Run the <code class="docutils literal notranslate"><span class="pre">tox</span></code> command locally before submitting the patch to github to see if
+you are passing the tests we are running in Travis CI.</p></li>
+<li><p>It is better to submit small changes in core libraries to avoid regression.</p></li>
+<li><p>Make sure you sign-off your commits with <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span> <span class="pre">-s</span></code>
+<a class="reference external" href="https://github.com/probot/dco#how-it-works">Developer Certificate of Origin (DCO)</a>
+is enabled which means all PRs will be checked for the submitter GitHub account.</p></li>
+<li><p>If the change is still Work In Progress (WIP), please add WIP to the name of
+PR which indicates that patch is not ready for the  merge yet. We have
+installed this <a class="reference external" href="https://github.com/marketplace/wip">application WIP</a>. This
+magic word will prevent us to merge this change which contains WIP in the
+name. Once you finish with patch you can remove it from the PR name.</p></li>
+<li><p>Include <code class="docutils literal notranslate"><span class="pre">Fixes:</span> <span class="pre">#issue_id</span></code> in the description of your pull request in order
+to have github automatically close the issue when the pull request is
+merged. This also helps maintain a reference to the issue for merge commits
+in our git log.</p></li>
+<li><p>Request review from a few of project maintainers or related folks.
+Currently we are using the CODEOWNERS file which should auto assign
+<a class="reference external" href="https://github.com/orgs/red-hat-storage/teams/top-level-reviewers/members">top level reviewers</a>.
+If you feel ownership of some package/module, please add yourself to this
+file <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/.github/CODEOWNERS">CODEOWNERS</a> following conventions from
+comments or <a class="reference external" href="https://help.github.com/en/articles/about-code-owners">documentation</a>.</p></li>
+<li><p>Thumbs up, LGTM indicates that change looks OK, but change needs to be
+approved  from github by at least 2 project maintainers before merge.</p></li>
+<li><p>All comments should be addressed or responded and once comment is considered
+as closed we should Resolve conversation to close the comment.</p></li>
+<li><p>If there are new review comments for a PR that is older than 4 days, the
+author can take it up as follow on PR after the issue is filed in github
+to address new review comments.</p></li>
+<li><p>If some fixes required from the comment, please do not do
+<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span> <span class="pre">--amend</span></code> and <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">push</span> <span class="pre">--force</span></code> as we lose the history of
+changes and it’s hard for reviewer to see what was really changed from the
+last comment. Instead of force pushing, please do another commit with
+commit message <code class="docutils literal notranslate"><span class="pre">Fixing</span> <span class="pre">comments</span> <span class="pre">from</span> <span class="pre">PR</span></code> and at the end we will do
+<strong>Squash and merge</strong> in github. If the PR is big and contains a lot of
+changes, and once all comments are addressed, you can squash related
+commits together and force push to the branch. Then we will just merge
+whole PR.</p></li>
+<li><p>When squashing and merging a PR, do your best to clean up the commit message. This
+message should be a clear description of the changes that were introduced. Please
+remove any duplicated sign off messages as well as any messages that contain little
+or no information such as “fixup” or “addressed comments.” These messages don’t do
+us any good once things are merged to master and just clutter up the git log. If
+there is any doubt around what the message should be, consult with the PR’s author.</p></li>
+<li><p>If the pull request introduces a workaround, the reviewer should check that
+rules noted in <a class="reference internal" href="workarounds.html"><span class="doc">Tracking of workarounds</span></a> page are
+followed. The person merging a workaround is responsible for checking that all
+information related to the workaround is correct.</p></li>
+<li><p>MCG test cases should work on any cloud platform (AWS, Azure, GCP, …).</p></li>
+</ul>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="coding_guidelines.html" class="btn btn-neutral float-right" title="Coding guidelines for OCS-CI project" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="apidoc/ocs_ci.utility.workloads.html" class="btn btn-neutral float-left" title="ocs_ci.utility.workloads package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

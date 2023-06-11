@@ -1,0 +1,351 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Upgrade &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Results" href="results.html" />
+    <link rel="prev" title="Usage" href="usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Upgrade</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#deployment">Deployment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#upgrade-execution">Upgrade execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#live-upgrade">Live upgrade</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-upgrade">Stage upgrade</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Upgrade</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/upgrade.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="upgrade">
+<h1>Upgrade<a class="headerlink" href="#upgrade" title="Permalink to this headline">¶</a></h1>
+<p>Upgrade can be performed to the:</p>
+<ul class="simple">
+<li><p>latest one DS build (by default)</p></li>
+<li><p>next one Y version, for example current <code class="docutils literal notranslate"><span class="pre">4.2</span></code> -&gt; latest <code class="docutils literal notranslate"><span class="pre">4.3</span></code>.
+(version passed by <code class="docutils literal notranslate"><span class="pre">--upgrade-ocs-version</span></code> param)</p></li>
+<li><p>specific image:tag specified by configuration file (see the example below)
+or cli param <code class="docutils literal notranslate"><span class="pre">--upgrade-ocs-registry-image</span></code>.</p></li>
+<li><p>next one DS build from current one - <code class="docutils literal notranslate"><span class="pre">upgrade_to_latest:</span> <span class="pre">false</span></code> has to be
+set, see here: <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci/upgrade_to_next_build.yaml">upgrade_to_next_build.yaml</a>
+for more details.</p></li>
+</ul>
+<div class="section" id="deployment">
+<h2>Deployment<a class="headerlink" href="#deployment" title="Permalink to this headline">¶</a></h2>
+<p>To be able to upgrade your cluster you cannot deploy the latest downstream
+build, because then you won’t have any next build available for upgrade.</p>
+<p>For this purpose we have this config file: <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci/upgrade.yaml">upgrade.yaml</a>
+which you can pass via <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> when you are running the deployment. This will
+automatically take not latest build but one before.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">--live-deploy</span></code> parameter in the case you would like to deploy GAed version.</p>
+</div>
+<div class="section" id="upgrade-execution">
+<h2>Upgrade execution<a class="headerlink" href="#upgrade-execution" title="Permalink to this headline">¶</a></h2>
+<p>For upgrade we have few pytest marks defined <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/pytest_customization/marks.py">here</a>:</p>
+<ul class="simple">
+<li><p><strong>pre_upgrade</strong> - mark tests which are suppose to run before upgrade</p></li>
+<li><p><strong>upgrade</strong> - this is mark for upgrade itself</p></li>
+<li><p><strong>post_upgrade</strong> - mark tests which are suppose to run after upgrade</p></li>
+</ul>
+<p>Those marks has to be imported from mentioned
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/pytest_customization/marks.py">module</a> and your test have to
+be decorated by those marks as we combine those mark decorators with order
+decorator used by <code class="docutils literal notranslate"><span class="pre">pytest-ordering</span></code> plugin to properly order the tests.</p>
+<p>To execute the upgrade you can use this command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>tests/
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-m<span class="w"> </span>upgrade
+</pre></div>
+</div>
+<p>If you would like to trigger also pre/post upgrade tests run with following
+markers:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>tests/
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-m<span class="w"> </span><span class="s1">&#39;pre_upgrade or upgrade or post_upgrade&#39;</span>
+</pre></div>
+</div>
+<p>In the case you would like to upgrade just to the one following DS build and not
+to the latest one, please pass <code class="docutils literal notranslate"><span class="pre">conf/ocsci/upgrade_to_next_build.yaml</span></code>
+configuration file to the upgrade execution.</p>
+<p>For upgrade between versions like 4.2 to 4.3 you need to:</p>
+<ul class="simple">
+<li><p>specify version of OCS you have installed with <code class="docutils literal notranslate"><span class="pre">--ocs-version</span></code> param. This will
+load proper config for this version (default is loaded latest one version
+specified in OCS-CI default config). Example</p></li>
+<li><p>specify version of OCS you would like to upgrade to with <code class="docutils literal notranslate"><span class="pre">--upgrade-ocs-version</span></code>.
+This will automatically load new config for specific version.</p></li>
+</ul>
+<p>Example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>tests/
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-m<span class="w"> </span><span class="s1">&#39;pre_upgrade or upgrade or post_upgrade&#39;</span><span class="w"> </span>--ocs-version<span class="w"> </span><span class="m">4</span>.2<span class="w"> </span>--upgrade-ocs-version<span class="w"> </span><span class="m">4</span>.3
+</pre></div>
+</div>
+<p>Upgrade to specific build via config file:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">UPGRADE</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">upgrade_ocs_registry_image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;quay.io/rhceph-dev/ocs-olm-operator:latest-4.3&quot;</span>
+</pre></div>
+</div>
+<p>Upgrade to specific build via cli option:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>run-ci<span class="w"> </span>tests/
+<span class="w">    </span>--cluster-name<span class="w"> </span>kerberos_ID-ocs-deployment<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster-path<span class="w"> </span>/home/my_user/my-ocs-dir<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-m<span class="w"> </span><span class="s1">&#39;pre_upgrade or upgrade or post_upgrade&#39;</span><span class="w"> </span>--ocs-version<span class="w"> </span><span class="m">4</span>.2<span class="w"> </span>--upgrade-ocs-version<span class="w"> </span><span class="m">4</span>.3<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--upgrade-ocs-registry-image<span class="w"> </span><span class="s1">&#39;quay.io/rhceph-dev/ocs-olm-operator:latest-4.3&#39;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="live-upgrade">
+<h2>Live upgrade<a class="headerlink" href="#live-upgrade" title="Permalink to this headline">¶</a></h2>
+<p>In the case you would like to upgrade from GAed version to GAed version you need
+to use <code class="docutils literal notranslate"><span class="pre">--live-deploy</span></code> parameter for deployment as mentioned above, but also
+when you starting upgrade execution to have proper must gather image from live content.</p>
+<p>Also the <code class="docutils literal notranslate"><span class="pre">conf/upgrade/upgrade_in_current_source.yaml</span></code> should be passed via <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code>, to let
+OCS-CI know, that it should not update catalog source to the internal build, but
+keep in GAed content.</p>
+<blockquote>
+<div><p>In the case of Z-stream upgrade, only manual approval strategy job can be used.
+Or manually passing: <code class="docutils literal notranslate"><span class="pre">conf/ocsci/manual_subscription_plan_approval.yaml</span></code>
+The cluster needs to be installed before content is released.
+There is no way to install previous Z-stream version once content is released!</p>
+</div></blockquote>
+</div>
+<div class="section" id="stage-upgrade">
+<h2>Stage upgrade<a class="headerlink" href="#stage-upgrade" title="Permalink to this headline">¶</a></h2>
+<p>In the case of upgrade from stage. This config file: <code class="docutils literal notranslate"><span class="pre">conf/ocsci/stage-rh-osbs.yaml</span></code>
+should be passed via <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> parameter.</p>
+<p>Also the <code class="docutils literal notranslate"><span class="pre">conf/upgrade/upgrade_in_current_source.yaml</span></code> should be passed via <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code>, to let
+OCS-CI know, that it should not update catalog source to the internal build, but
+keep in stage content.</p>
+<blockquote>
+<div><p>In the case of Z-stream upgrade, only manual approval strategy job can be used.
+Or manually passing: <code class="docutils literal notranslate"><span class="pre">conf/ocsci/manual_subscription_plan_approval.yaml</span></code>
+The cluster needs to be installed before push to the stage.
+There is no way to install previous Z-stream version once content is pushed to the stage!</p>
+</div></blockquote>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="results.html" class="btn btn-neutral float-right" title="Results" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="usage.html" class="btn btn-neutral float-left" title="Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,2316 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ocs_ci.ocs.ui package &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ocs_ci.tests package" href="ocs_ci.tests.html" />
+    <link rel="prev" title="ocs_ci.ocs.tests package" href="ocs_ci.ocs.tests.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">ocs_ci modules</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="ocs_ci.html">ocs_ci package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="ocs_ci.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.deployment.html">ocs_ci.deployment package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.framework.html">ocs_ci.framework package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.helpers.html">ocs_ci.helpers package</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="ocs_ci.ocs.html">ocs_ci.ocs package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.tests.html">ocs_ci.tests package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.utility.html">ocs_ci.utility package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="ocs_ci.html#module-ocs_ci">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">ocs_ci</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.html">ocs_ci package</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.ocs.html">ocs_ci.ocs package</a> &raquo;</li>
+        
+      <li>ocs_ci.ocs.ui package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/apidoc/ocs_ci.ocs.ui.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="ocs-ci-ocs-ui-package">
+<h1>ocs_ci.ocs.ui package<a class="headerlink" href="#ocs-ci-ocs-ui-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.acm_ui">
+<span id="ocs-ci-ocs-ui-acm-ui-module"></span><h2>ocs_ci.ocs.ui.acm_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.acm_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.acm_ui.</code><code class="sig-name descname">ACMOCPClusterDeployment</code><span class="sig-paren">(</span><em class="sig-param">platform</em>, <em class="sig-param">cluster_conf</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator" title="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.acm_ui.AcmPageNavigator</span></code></a></p>
+<p>Everything related to cluster creation through ACM goes here</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_bailout_if_failed">
+<code class="sig-name descname">acm_bailout_if_failed</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_bailout_if_failed" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_cluster_status_creating">
+<code class="sig-name descname">acm_cluster_status_creating</code><span class="sig-paren">(</span><em class="sig-param">timeout=120</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_cluster_status_creating" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_cluster_status_failed">
+<code class="sig-name descname">acm_cluster_status_failed</code><span class="sig-paren">(</span><em class="sig-param">timeout=5</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_cluster_status_failed" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_cluster_status_ready">
+<code class="sig-name descname">acm_cluster_status_ready</code><span class="sig-paren">(</span><em class="sig-param">timeout=120</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.acm_cluster_status_ready" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.click_next_button">
+<code class="sig-name descname">click_next_button</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.click_next_button" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.click_platform_and_credentials">
+<code class="sig-name descname">click_platform_and_credentials</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.click_platform_and_credentials" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.create_cluster">
+<code class="sig-name descname">create_cluster</code><span class="sig-paren">(</span><em class="sig-param">cluster_config=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.create_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create cluster using ACM UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_config</strong> (<a class="reference internal" href="ocs_ci.framework.html#ocs_ci.framework.Config" title="ocs_ci.framework.Config"><em>Config</em></a>) – framework.Config object of complete configuration required
+for deployment</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.create_cluster_prereq">
+<code class="sig-name descname">create_cluster_prereq</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.create_cluster_prereq" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.destroy_cluster">
+<code class="sig-name descname">destroy_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.destroy_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>ACM UI based destroy cluster,
+select the cluster from UI, click on destroy</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.download_cluster_conf_files">
+<code class="sig-name descname">download_cluster_conf_files</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.download_cluster_conf_files" title="Permalink to this definition">¶</a></dt>
+<dd><p>Download install-config and kubeconfig to cluster dir</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.download_kubeconfig">
+<code class="sig-name descname">download_kubeconfig</code><span class="sig-paren">(</span><em class="sig-param">authdir</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.download_kubeconfig" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.fill_multiple_textbox">
+<code class="sig-name descname">fill_multiple_textbox</code><span class="sig-paren">(</span><em class="sig-param">key_val</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.fill_multiple_textbox" title="Permalink to this definition">¶</a></dt>
+<dd><p>In a page if we want to fill multiple text boxes we can use
+this function which iteratively fills in values from the dictionary parameter</p>
+<dl class="simple">
+<dt>key_val (dict): keys corresponds to the xpath of text box, value corresponds</dt><dd><p>to the value to be filled in</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.get_deployment_status">
+<code class="sig-name descname">get_deployment_status</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.get_deployment_status" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.get_destroy_status">
+<code class="sig-name descname">get_destroy_status</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.get_destroy_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the current status of destroy operation</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.goto_cluster_details_page">
+<code class="sig-name descname">goto_cluster_details_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.goto_cluster_details_page" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.navigate_create_clusters_page">
+<code class="sig-name descname">navigate_create_clusters_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.navigate_create_clusters_page" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.post_destroy_ops">
+<code class="sig-name descname">post_destroy_ops</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.post_destroy_ops" title="Permalink to this definition">¶</a></dt>
+<dd><p>Post destroy ops should be implemented by child classes because
+post destroy ops are mostly specific to the platform</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.wait_for_cluster_create">
+<code class="sig-name descname">wait_for_cluster_create</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment.wait_for_cluster_create" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPDeploymentFactory">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.acm_ui.</code><code class="sig-name descname">ACMOCPDeploymentFactory</code><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPDeploymentFactory" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPDeploymentFactory.get_platform_instance">
+<code class="sig-name descname">get_platform_instance</code><span class="sig-paren">(</span><em class="sig-param">cluster_config</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPDeploymentFactory.get_platform_instance" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_config</strong> (<em>dict</em>) – Cluster Config object</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.acm_ui.</code><code class="sig-name descname">ACMOCPPlatformVsphereIPI</code><span class="sig-paren">(</span><em class="sig-param">cluster_conf=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment" title="ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.acm_ui.ACMOCPClusterDeployment</span></code></a></p>
+<p>This class handles all behind the scene activities
+for cluster creation through ACM for vsphere platform</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.add_different_pod_network">
+<code class="sig-name descname">add_different_pod_network</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.add_different_pod_network" title="Permalink to this definition">¶</a></dt>
+<dd><p>Edit online cluster yaml to add network info</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.create_cluster">
+<code class="sig-name descname">create_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.create_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function navigates through following pages in the UI
+1. Cluster details
+2. Node poools
+3. Networks
+4. Proxy
+5. Automation
+6. Review</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.exceptions.ACMClusterDeployException" title="ocs_ci.ocs.exceptions.ACMClusterDeployException"><strong>ACMClusterDeployException</strong></a> – If deployment failed for the cluster</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.create_cluster_prereq">
+<code class="sig-name descname">create_cluster_prereq</code><span class="sig-paren">(</span><em class="sig-param">timeout=600</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.create_cluster_prereq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform all prereqs before vsphere cluster creation from ACM</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>timeout</strong> (<em>int</em>) – Timeout for any UI operations</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.fill_cluster_details_page">
+<code class="sig-name descname">fill_cluster_details_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.fill_cluster_details_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fill in following details in “Cluster details” page
+1. Cluster name
+2. Base DNS domain
+3. Release image</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.fill_network_info">
+<code class="sig-name descname">fill_network_info</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.fill_network_info" title="Permalink to this definition">¶</a></dt>
+<dd><p>We need to fill following network info
+1. vSphere network name
+2. API VIP
+3. Ingress VIP</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.get_ocp_release_img">
+<code class="sig-name descname">get_ocp_release_img</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.get_ocp_release_img" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.post_destroy_ops">
+<code class="sig-name descname">post_destroy_ops</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.ACMOCPPlatformVsphereIPI.post_destroy_ops" title="Permalink to this definition">¶</a></dt>
+<dd><p>Post destroy ops includes
+1. Deleting DNS entries
+2. Freeing the ips assigned</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.acm_ui.</code><code class="sig-name descname">AcmPageNavigator</code><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ocs_ci.ocs.ui.base_ui.BaseUI" title="ocs_ci.ocs.ui.base_ui.BaseUI"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.base_ui.BaseUI</span></code></a></p>
+<p>ACM Page Navigator Class</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_applications_page">
+<code class="sig-name descname">navigate_applications_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_applications_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Applications Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_automation_page">
+<code class="sig-name descname">navigate_automation_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_automation_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Automation Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_bare_metal_assets_page">
+<code class="sig-name descname">navigate_bare_metal_assets_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_bare_metal_assets_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Bare Metal Assets Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_clusters_page">
+<code class="sig-name descname">navigate_clusters_page</code><span class="sig-paren">(</span><em class="sig-param">timeout=120</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_clusters_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Clusters Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_credentials_page">
+<code class="sig-name descname">navigate_credentials_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_credentials_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Credentials Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_data_services">
+<code class="sig-name descname">navigate_data_services</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_data_services" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to Data Services page on ACM UI, supported for ACM version 2.7 and above</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_from_ocp_to_acm_cluster_page">
+<code class="sig-name descname">navigate_from_ocp_to_acm_cluster_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_from_ocp_to_acm_cluster_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>For ACM version 2.7 and above we need to navigate from OCP
+console to ACM multicluster page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_governance_page">
+<code class="sig-name descname">navigate_governance_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_governance_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Governance Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_infrastructure_env_page">
+<code class="sig-name descname">navigate_infrastructure_env_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_infrastructure_env_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Infrastructure Environments Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_overview_page">
+<code class="sig-name descname">navigate_overview_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_overview_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Overview Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_welcome_page">
+<code class="sig-name descname">navigate_welcome_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator.navigate_welcome_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to ACM Welcome Page</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.add_replace_device_ui">
+<span id="ocs-ci-ocs-ui-add-replace-device-ui-module"></span><h2>ocs_ci.ocs.ui.add_replace_device_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.add_replace_device_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.add_replace_device_ui.AddReplaceDeviceUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.add_replace_device_ui.</code><code class="sig-name descname">AddReplaceDeviceUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.add_replace_device_ui.AddReplaceDeviceUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>InfraUI class for add capacity, device replacement, node replacement</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.add_replace_device_ui.AddReplaceDeviceUI.add_capacity_ui">
+<code class="sig-name descname">add_capacity_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.add_replace_device_ui.AddReplaceDeviceUI.add_capacity_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add Capacity via UI</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.add_replace_device_ui.AddReplaceDeviceUI.verify_pod_status">
+<code class="sig-name descname">verify_pod_status</code><span class="sig-paren">(</span><em class="sig-param">pod_names</em>, <em class="sig-param">pod_state='Running'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.add_replace_device_ui.AddReplaceDeviceUI.verify_pod_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify pod status</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pod_names</strong> (<em>list</em>) – list of pod names</p></li>
+<li><p><strong>pod_state</strong> (<em>string</em>) – the desired pod state</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.base_ui">
+<span id="ocs-ci-ocs-ui-base-ui-module"></span><h2>ocs_ci.ocs.ui.base_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.base_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">BaseUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base Class for UI Tests</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.check_element_presence">
+<code class="sig-name descname">check_element_presence</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=5</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.check_element_presence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check if an web element is present on the web console or not.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By))</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Looks for a web element repeatedly until timeout (sec) occurs</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if the element is found, returns False otherwise and raises NoSuchElementException</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.check_element_text">
+<code class="sig-name descname">check_element_text</code><span class="sig-paren">(</span><em class="sig-param">expected_text</em>, <em class="sig-param">element='*'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.check_element_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check if the text matches the expected text.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>expected_text</strong> (<em>string</em>) – The expected text.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if the text matches the expected text, False otherwise</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.choose_expanded_mode">
+<code class="sig-name descname">choose_expanded_mode</code><span class="sig-paren">(</span><em class="sig-param">mode</em>, <em class="sig-param">locator</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.choose_expanded_mode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Select the element mode (expanded or collapsed)</p>
+<p>mode (bool): True if element expended, False otherwise
+locator (tuple): (GUI element needs to operate on (str), type (By))</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.copy_dom">
+<code class="sig-name descname">copy_dom</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.copy_dom" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get page source of the webpage</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.deep_get">
+<em class="property">classmethod </em><code class="sig-name descname">deep_get</code><span class="sig-paren">(</span><em class="sig-param">dictionary</em>, <em class="sig-param">*keys</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.deep_get" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.do_clear">
+<code class="sig-name descname">do_clear</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.do_clear" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clear the existing text from UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By))</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Looks for a web element until timeout (sec) occurs</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.do_click">
+<code class="sig-name descname">do_click</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=30</em>, <em class="sig-param">enable_screenshot=False</em>, <em class="sig-param">copy_dom=False</em>, <em class="sig-param">avoid_stale=False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.do_click" title="Permalink to this definition">¶</a></dt>
+<dd><p>Click on Button/link on OpenShift Console</p>
+<p>locator (tuple): (GUI element needs to operate on (str), type (By))
+timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+enable_screenshot (bool): take screenshot
+copy_dom (bool): copy page source of the webpage
+avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
+refresh the page once and try click again
+* don’t use when refreshed page expected to be different from initial page, or loose input values</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.do_click_by_id">
+<code class="sig-name descname">do_click_by_id</code><span class="sig-paren">(</span><em class="sig-param">id</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.do_click_by_id" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.do_click_by_xpath">
+<code class="sig-name descname">do_click_by_xpath</code><span class="sig-paren">(</span><em class="sig-param">xpath</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.do_click_by_xpath" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to click on a web element using XPATH
+:param xpath: xpath to interact with web element
+:type xpath: str
+:param timeout: timeout until which an exception won’t be raised
+:type timeout: int</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Clicks on the web element found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.do_send_keys">
+<code class="sig-name descname">do_send_keys</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">text</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.do_send_keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send text to element on OpenShift Console</p>
+<p>locator (tuple): (GUI element needs to operate on (str), type (By))
+text (str): Send text to element
+timeout (int): Looks for a web element repeatedly until timeout (sec) happens.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.find_an_element_by_xpath">
+<code class="sig-name descname">find_an_element_by_xpath</code><span class="sig-paren">(</span><em class="sig-param">locator</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.find_an_element_by_xpath" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to find an element using xpath</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>locator</strong> (<em>str</em>) – locator of the element to be found</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>an object of the type WebElement</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.get_checkbox_status">
+<code class="sig-name descname">get_checkbox_status</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.get_checkbox_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checkbox Status</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By))</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Looks for a web element repeatedly until timeout (sec) happens.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if element is Enabled, False otherwise</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.get_element_attribute">
+<code class="sig-name descname">get_element_attribute</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">attribute</em>, <em class="sig-param">safe: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.get_element_attribute" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get attribute from WebElement</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By)).</p></li>
+<li><p><strong>attribute</strong> (<em>str</em>) – the value of this attribute will be extracted from WebElement</p></li>
+<li><p><strong>safe</strong> (<em>bool</em>) – if True exception will not raise when element not found. Default option - not safe</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>value of the attribute of requested and found WebElement</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.get_element_text">
+<code class="sig-name descname">get_element_text</code><span class="sig-paren">(</span><em class="sig-param">locator</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.get_element_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the inner text of an element in locator.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By)).</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The text captured.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.get_elements">
+<code class="sig-name descname">get_elements</code><span class="sig-paren">(</span><em class="sig-param">locator</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.get_elements" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get an elements list. Useful to count number of elements presented on page, etc.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By)).</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The list of WebElements</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.is_expanded">
+<code class="sig-name descname">is_expanded</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.is_expanded" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check whether an element is in an expanded or collapsed state</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By))</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Looks for a web element repeatedly until timeout (sec) happens.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if element expended, False otherwise</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.navigate_backward">
+<code class="sig-name descname">navigate_backward</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.navigate_backward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Navigate to a previous Web Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.page_has_loaded">
+<code class="sig-name descname">page_has_loaded</code><span class="sig-paren">(</span><em class="sig-param">retries=5</em>, <em class="sig-param">sleep_time=2</em>, <em class="sig-param">module_loc=('html'</em>, <em class="sig-param">'tag name')</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.page_has_loaded" title="Permalink to this definition">¶</a></dt>
+<dd><p>Waits for page to completely load by comparing current page hash values.
+Not suitable for pages that use frequent dynamically content (less than sleep_time)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>retries</strong> (<em>int</em>) – How much time in sleep_time to wait for page to load</p></li>
+<li><p><strong>sleep_time</strong> (<em>int</em>) – Time to wait between every pool of dom hash</p></li>
+<li><p><strong>module_loc</strong> (<em>tuple</em>) – locator of the module of the page awaited to be loaded</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.refresh_page">
+<code class="sig-name descname">refresh_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.refresh_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Refresh Web Page</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.scroll_into_view">
+<code class="sig-name descname">scroll_into_view</code><span class="sig-paren">(</span><em class="sig-param">locator</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.scroll_into_view" title="Permalink to this definition">¶</a></dt>
+<dd><p>Scroll element into view</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.select_checkbox_status">
+<code class="sig-name descname">select_checkbox_status</code><span class="sig-paren">(</span><em class="sig-param">status</em>, <em class="sig-param">locator</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.select_checkbox_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Select checkbox status (enable or disable)</p>
+<p>status (bool): True if checkbox enable, False otherwise
+locator (tuple): (GUI element needs to operate on (str), type (By))</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.take_screenshot">
+<code class="sig-name descname">take_screenshot</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.take_screenshot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Take screenshot using python code</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.wait_for_element_attribute">
+<code class="sig-name descname">wait_for_element_attribute</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">attribute</em>, <em class="sig-param">attribute_value</em>, <em class="sig-param">timeout</em>, <em class="sig-param">sleep</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.wait_for_element_attribute" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to wait attribute have specific value. Fails the test if attribure value not equal to expected
+:param locator: (GUI element needs to operate on (str), type (By)).
+:type locator: tuple
+:param attribute: the value of this attribute will be extracted from WebElement
+:type attribute: str
+:param attribute_value: the value attribute (can be None as well)
+:type attribute_value: str
+:param timeout: timeout in seconds
+:type timeout: int
+:param sleep: sleep interval in seconds
+:type sleep: int</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.wait_for_element_to_be_visible">
+<code class="sig-name descname">wait_for_element_to_be_visible</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.wait_for_element_to_be_visible" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for element to be visible. Use when Web element is not have to be clickable (icons, disabled btns, etc.)
+Method does not fail when Web element not found</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By)).</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Looks for a web element until timeout (sec) occurs</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.wait_for_endswith_url">
+<code class="sig-name descname">wait_for_endswith_url</code><span class="sig-paren">(</span><em class="sig-param">endswith</em>, <em class="sig-param">timeout=60</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.wait_for_endswith_url" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for endswith url to load</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>endswith</strong> (<em>string</em>) – url endswith string for which we need to wait</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Timeout in seconds</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.BaseUI.wait_until_expected_text_is_found">
+<code class="sig-name descname">wait_until_expected_text_is_found</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">expected_text</em>, <em class="sig-param">timeout=60</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.BaseUI.wait_until_expected_text_is_found" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to wait for a expected text to appear on the UI (use of explicit wait type),
+this method is helpful in working with elements which appear on completion of certain action and
+ignores all the listed exceptions for the given timeout.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By))</p></li>
+<li><p><strong>expected_text</strong> (<em>str</em>) – Text which needs to be searched on UI</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Looks for a web element repeatedly until timeout (sec) occurs</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Returns True if the expected element text is found, False otherwise</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.base_ui.SeleniumDriver">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">SeleniumDriver</code><span class="sig-paren">(</span><em class="sig-param">command_executor='http://127.0.0.1:4444/wd/hub'</em>, <em class="sig-param">desired_capabilities=None</em>, <em class="sig-param">browser_profile=None</em>, <em class="sig-param">proxy=None</em>, <em class="sig-param">keep_alive=False</em>, <em class="sig-param">file_detector=None</em>, <em class="sig-param">options=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.SeleniumDriver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">selenium.webdriver.remote.webdriver.WebDriver</span></code></p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.base_ui.SeleniumDriver.remove_instance">
+<em class="property">classmethod </em><code class="sig-name descname">remove_instance</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.SeleniumDriver.remove_instance" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.close_browser">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">close_browser</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.close_browser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Close Selenium WebDriver</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.copy_dom">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">copy_dom</code><span class="sig-paren">(</span><em class="sig-param">name_suffix: str = ''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.copy_dom" title="Permalink to this definition">¶</a></dt>
+<dd><p>Copy DOM using python code</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name_suffix</strong> (<em>str</em>) – name suffix, will be added before extension. Optional argument</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.garbage_collector_webdriver">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">garbage_collector_webdriver</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.garbage_collector_webdriver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Garbage Collector for webdriver objs</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.login_ui">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">login_ui</code><span class="sig-paren">(</span><em class="sig-param">console_url=None</em>, <em class="sig-param">username=None</em>, <em class="sig-param">password=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.login_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Login to OpenShift Console</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>console_url</strong> (<em>str</em>) – ocp console url</p></li>
+<li><p><strong>username</strong> (<em>str</em>) – User which is other than admin user,</p></li>
+<li><p><strong>password</strong> (<em>str</em>) – Password of user other than admin user</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>driver (Selenium WebDriver)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.proceed_to_login_console">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">proceed_to_login_console</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.proceed_to_login_console" title="Permalink to this definition">¶</a></dt>
+<dd><p>Proceed to the login console, if needed to confirm this action in a page that appears before.
+This is required to be as a solo function, because the driver initializes in the login_ui function.
+Function needs to be called just before login</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.screenshot_dom_location">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">screenshot_dom_location</code><span class="sig-paren">(</span><em class="sig-param">type_loc='screenshot'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.screenshot_dom_location" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the location for copy DOM/screenshot</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>type_loc</strong> (<em>str</em>) – if type_loc is “screenshot” the location for copy screeenshot else DOM</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.take_screenshot">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">take_screenshot</code><span class="sig-paren">(</span><em class="sig-param">name_suffix: str = ''</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.take_screenshot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Take screenshot using python code</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name_suffix</strong> (<em>str</em>) – name suffix, will be added before extension. Optional argument</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.wait_for_element_to_be_clickable">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">wait_for_element_to_be_clickable</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.wait_for_element_to_be_clickable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for an element to be clickable.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – A tuple containing the locator strategy (e.g., By.ID, By.XPATH) and the locator value.</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Maximum time (in seconds) to wait for the element to be clickable. Defaults to 30 seconds.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The clickable web element.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>selenium.webdriver.remote.webelement.WebElement</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.base_ui.wait_for_element_to_be_visible">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.base_ui.</code><code class="sig-name descname">wait_for_element_to_be_visible</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.base_ui.wait_for_element_to_be_visible" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for element to be visible. Use when Web element is not have to be clickable (icons, disabled btns, etc.)
+Method does not fail when Web element not found</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By)).</p></li>
+<li><p><strong>timeout</strong> (<em>int</em>) – Looks for a web element until timeout (sec) occurs</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Visible web element.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>selenium.webdriver.remote.webelement.WebElement</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.block_pool">
+<span id="ocs-ci-ocs-ui-block-pool-module"></span><h2>ocs_ci.ocs.ui.block_pool module<a class="headerlink" href="#module-ocs_ci.ocs.ui.block_pool" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.block_pool.</code><code class="sig-name descname">BlockPoolUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>User Interface Selenium for Block Pools page</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_avail_capacity">
+<code class="sig-name descname">check_pool_avail_capacity</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_avail_capacity" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the available capacity of the blockpool</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The total available capacity of blockpool</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_eligibility">
+<code class="sig-name descname">check_pool_compression_eligibility</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_eligibility" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the pool the percentage of incoming data that is compressible</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>percentage of incoming compressible data</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_ratio">
+<code class="sig-name descname">check_pool_compression_ratio</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_ratio" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the blockpool compression ratio</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Compression ratio of blockpool</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_savings">
+<code class="sig-name descname">check_pool_compression_savings</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_savings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the total savings gained from compression for this pool, including replicas</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The total savings gained from compression for this pool, including replicas</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_status">
+<code class="sig-name descname">check_pool_compression_status</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_compression_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check what is the status of pool compression</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if pool is in the Enabled, otherwise False</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_existence">
+<code class="sig-name descname">check_pool_existence</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check if pool appears in the block pool list</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if pool is in the list of pools page, otherwise False</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_replicas">
+<code class="sig-name descname">check_pool_replicas</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_replicas" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the number of replicas for the pool</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Number of replicas for the pool</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_status">
+<code class="sig-name descname">check_pool_status</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the status of the pool</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>status of the pool</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_used_capacity">
+<code class="sig-name descname">check_pool_used_capacity</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_used_capacity" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the total used capacity of the blockpool</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The total used capacity of the blockpool</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_volume_type">
+<code class="sig-name descname">check_pool_volume_type</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_pool_volume_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check the volume type of the pool</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Volume type of pool if set otherwise</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_storage_class_attached">
+<code class="sig-name descname">check_storage_class_attached</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.check_storage_class_attached" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks the number of storage class attached to the pool.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – Name of the pool to check</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The total number of storage classes attached to the pool.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.create_pool">
+<code class="sig-name descname">create_pool</code><span class="sig-paren">(</span><em class="sig-param">replica</em>, <em class="sig-param">compression</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.create_pool" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create block pool via UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>replica</strong> (<em>int</em>) – replica size usually 2,3</p></li>
+<li><p><strong>compression</strong> (<em>bool</em>) – True to enable compression otherwise False</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>pool name (str) pool status (bool) #pool can be created with failure status</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.delete_pool">
+<code class="sig-name descname">delete_pool</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.delete_pool" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete pool from pool page</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – The name of the pool to be deleted</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if pool is not found in pool list, otherwise false</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.edit_pool_parameters">
+<code class="sig-name descname">edit_pool_parameters</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em>, <em class="sig-param">replica=3</em>, <em class="sig-param">compression=True</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.edit_pool_parameters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Edit an already existing pool</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pool_name</strong> (<em>str</em>) – The name of the pool to change.</p></li>
+<li><p><strong>replica</strong> (<em>int</em>) – size of replica. Available in OCS now 2,3.</p></li>
+<li><p><strong>compression</strong> (<em>bool</em>) – True if enable compression. False otherwise.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.block_pool.BlockPoolUI.reach_pool_limit">
+<code class="sig-name descname">reach_pool_limit</code><span class="sig-paren">(</span><em class="sig-param">replica</em>, <em class="sig-param">compression</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.block_pool.BlockPoolUI.reach_pool_limit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add pools till pool fails because of pg limit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>replica</strong> (<em>int</em>) – size of pool.</p></li>
+<li><p><strong>compression</strong> (<em>bool</em>) – True for enabling compression. Otherwise False.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.deployment_ui">
+<span id="ocs-ci-ocs-ui-deployment-ui-module"></span><h2>ocs_ci.ocs.ui.deployment_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.deployment_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.deployment_ui.</code><code class="sig-name descname">DeploymentUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>Deployment OCS/ODF Operator via User Interface</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.configure_encryption">
+<code class="sig-name descname">configure_encryption</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.configure_encryption" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure Encryption</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.configure_in_transit_encryption">
+<code class="sig-name descname">configure_in_transit_encryption</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.configure_in_transit_encryption" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure in_transit_encryption</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.configure_osd_size">
+<code class="sig-name descname">configure_osd_size</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.configure_osd_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure OSD Size</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.create_storage_cluster">
+<code class="sig-name descname">create_storage_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.create_storage_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Review and Create StorageCluster/StorageSystem</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.enable_taint_nodes">
+<code class="sig-name descname">enable_taint_nodes</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.enable_taint_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable taint Nodes</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_internal_cluster">
+<code class="sig-name descname">install_internal_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_internal_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install Internal Cluster</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_local_storage_operator">
+<code class="sig-name descname">install_local_storage_operator</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_local_storage_operator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install local storage operator</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_lso_cluster">
+<code class="sig-name descname">install_lso_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_lso_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install LSO cluster via UI</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_mcg_only_cluster">
+<code class="sig-name descname">install_mcg_only_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_mcg_only_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install MCG ONLY cluster via UI</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_ocs_operator">
+<code class="sig-name descname">install_ocs_operator</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_ocs_operator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install OCS/ODF Opeartor</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_ocs_ui">
+<code class="sig-name descname">install_ocs_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_ocs_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install OCS/ODF via UI.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_storage_cluster">
+<code class="sig-name descname">install_storage_cluster</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.install_storage_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Install StorageCluster/StorageSystem</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.refresh_popup">
+<code class="sig-name descname">refresh_popup</code><span class="sig-paren">(</span><em class="sig-param">timeout=30</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.refresh_popup" title="Permalink to this definition">¶</a></dt>
+<dd><p>Refresh PopUp</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.search_operator_installed_operators_page">
+<code class="sig-name descname">search_operator_installed_operators_page</code><span class="sig-paren">(</span><em class="sig-param">operator='OpenShift Container Storage'</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.search_operator_installed_operators_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Search Operator on Installed Operators Page</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>operator</strong> (<em>str</em>) – type of operator</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.verify_disks_lso_attached">
+<code class="sig-name descname">verify_disks_lso_attached</code><span class="sig-paren">(</span><em class="sig-param">timeout=600</em>, <em class="sig-param">sleep=20</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.verify_disks_lso_attached" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify Disks Attached</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>timeout</strong> (<em>int</em>) – Time in seconds to wait</p></li>
+<li><p><strong>sleep</strong> (<em>int</em>) – Sampling time in seconds</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.deployment_ui.DeploymentUI.verify_operator_succeeded">
+<code class="sig-name descname">verify_operator_succeeded</code><span class="sig-paren">(</span><em class="sig-param">operator='OpenShift Container Storage'</em>, <em class="sig-param">timeout_install=300</em>, <em class="sig-param">sleep=20</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.deployment_ui.DeploymentUI.verify_operator_succeeded" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify Operator Installation</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>operator</strong> (<em>str</em>) – type of operator</p></li>
+<li><p><strong>timeout_install</strong> (<em>int</em>) – Time in seconds to wait</p></li>
+<li><p><strong>sleep</strong> (<em>int</em>) – Sampling time in seconds</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.helpers_ui">
+<span id="ocs-ci-ocs-ui-helpers-ui-module"></span><h2>ocs_ci.ocs.ui.helpers_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.helpers_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.helpers_ui.format_locator">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.helpers_ui.</code><code class="sig-name descname">format_locator</code><span class="sig-paren">(</span><em class="sig-param">locator</em>, <em class="sig-param">*args</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.helpers_ui.format_locator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Use this function format_locator when working with dynamic locators.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>locator</strong> (<em>tuple</em>) – (GUI element needs to operate on (str), type (By))</p></li>
+<li><p><strong>*args</strong> (<em>str</em>) – Name of the variable (string) which contains the dynamic web element
+when generated on certain action</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>formats the locator using .format() function which takes string to be inserted as an argument</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.helpers_ui.get_element_type">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.helpers_ui.</code><code class="sig-name descname">get_element_type</code><span class="sig-paren">(</span><em class="sig-param">element_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.helpers_ui.get_element_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function accepts an element name as a argument and returns the element type by creating XPATH for it.
+This is helpful when we are creating dynamic names for PVC’s, Pod’s, Namespaces’s etc. and want to interact
+with the same on UI.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.helpers_ui.ui_add_capacity">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.helpers_ui.</code><code class="sig-name descname">ui_add_capacity</code><span class="sig-paren">(</span><em class="sig-param">osd_size_capacity_requested</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.helpers_ui.ui_add_capacity" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add Capacity via UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>osd_size_capacity_requested</strong> (<em>int</em>) – Requested osd size capacity</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Returns True if all OSDs are in Running state</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>new_storage_devices_sets_count (int)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.helpers_ui.ui_add_capacity_conditions">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.helpers_ui.</code><code class="sig-name descname">ui_add_capacity_conditions</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.helpers_ui.ui_add_capacity_conditions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Conditions for add capacity via UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>True if support UI add capacity, False otherwise</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.helpers_ui.ui_deployment_conditions">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.helpers_ui.</code><code class="sig-name descname">ui_deployment_conditions</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.helpers_ui.ui_deployment_conditions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Conditions for installing the OCS operator via UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>True if support UI deployment, False otherwise</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.mcg_ui">
+<span id="ocs-ci-ocs-ui-mcg-ui-module"></span><h2>ocs_ci.ocs.ui.mcg_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.mcg_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.mcg_ui.</code><code class="sig-name descname">BucketClassUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>A class representation for abstraction of BC-related OpenShift UI actions</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI.create_namespace_bucketclass_ui">
+<code class="sig-name descname">create_namespace_bucketclass_ui</code><span class="sig-paren">(</span><em class="sig-param">bc_name</em>, <em class="sig-param">policy</em>, <em class="sig-param">nss_name_lst</em>, <em class="sig-param">bs_name_lst</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI.create_namespace_bucketclass_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a namespace BC via the UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>bc_name</strong> (<em>str</em>) – The name to grant the BC</p></li>
+<li><p><strong>policy</strong> (<em>str</em>) – The policy type to use. Single/Multi/Cache</p></li>
+<li><p><strong>nss_name_lst</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – A list of namespacestore names to be used by the bucketclass</p></li>
+<li><p><strong>bs_name_lst</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – A list of backingstore names to be used by the bucketclass</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI.create_standard_bucketclass_ui">
+<code class="sig-name descname">create_standard_bucketclass_ui</code><span class="sig-paren">(</span><em class="sig-param">bc_name</em>, <em class="sig-param">policy</em>, <em class="sig-param">store_list</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI.create_standard_bucketclass_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a standard BC via the UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>bc_name</strong> (<em>str</em>) – The name to grant the BC</p></li>
+<li><p><strong>policy</strong> (<em>str</em>) – The policy type to use. Spread/Mirror</p></li>
+<li><p><strong>store_list</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – A list of backingstore names to be used by the bucketclass</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI.delete_bucketclass_ui">
+<code class="sig-name descname">delete_bucketclass_ui</code><span class="sig-paren">(</span><em class="sig-param">bc_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI.delete_bucketclass_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete a BC via the UI</p>
+<p>bc_name (str): Name of the BC to be deleted</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_cache_namespacestore_policy">
+<code class="sig-name descname">set_cache_namespacestore_policy</code><span class="sig-paren">(</span><em class="sig-param">nss_name_lst</em>, <em class="sig-param">bs_name_lst</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_cache_namespacestore_policy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_multi_namespacestore_policy">
+<code class="sig-name descname">set_multi_namespacestore_policy</code><span class="sig-paren">(</span><em class="sig-param">nss_name_lst</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_multi_namespacestore_policy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_namespacestore_policy">
+<code class="sig-name descname">set_namespacestore_policy</code><em class="property"> = {'cache': &lt;function BucketClassUI.set_cache_namespacestore_policy&gt;, 'multi': &lt;function BucketClassUI.set_multi_namespacestore_policy&gt;, 'single': &lt;function BucketClassUI.set_single_namespacestore_policy&gt;}</em><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_namespacestore_policy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_single_namespacestore_policy">
+<code class="sig-name descname">set_single_namespacestore_policy</code><span class="sig-paren">(</span><em class="sig-param">nss_name_lst</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.BucketClassUI.set_single_namespacestore_policy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.mcg_ui.MCGStoreUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.mcg_ui.</code><code class="sig-name descname">MCGStoreUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.MCGStoreUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>A class representation for abstraction of MCG store related OpenShift UI actions</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.MCGStoreUI.create_store_ui">
+<code class="sig-name descname">create_store_ui</code><span class="sig-paren">(</span><em class="sig-param">kind</em>, <em class="sig-param">store_name</em>, <em class="sig-param">secret_name</em>, <em class="sig-param">target_bucket</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.MCGStoreUI.create_store_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create an MCG store via the UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>kind</strong> (<em>str</em>) – The store kind - backingstore | namespacestore</p></li>
+<li><p><strong>store_name</strong> (<em>str</em>) – The name to grant to the store</p></li>
+<li><p><strong>secret_name</strong> (<em>str</em>) – The name of the secret to used to connect the store to AWS</p></li>
+<li><p><strong>target_bucket</strong> (<em>str</em>) – The AWS S3 bucket to use as a host for the store</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.mcg_ui.MCGStoreUI.delete_store_ui">
+<code class="sig-name descname">delete_store_ui</code><span class="sig-paren">(</span><em class="sig-param">kind</em>, <em class="sig-param">store_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.mcg_ui.MCGStoreUI.delete_store_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete an MCG store via the UI</p>
+<p>store_name (str): Name of the store to be deleted</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.odf_topology">
+<span id="ocs-ci-ocs-ui-odf-topology-module"></span><h2>ocs_ci.ocs.ui.odf_topology module<a class="headerlink" href="#module-ocs_ci.ocs.ui.odf_topology" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.odf_topology.</code><code class="sig-name descname">OdfTopologyHelper</code><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Helper class to automate procedures necessary for ODF Topology related tests</p>
+<dl class="attribute">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.busy_box_depl">
+<code class="sig-name descname">busy_box_depl</code><em class="property"> = {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'annotations': {'deployment.kubernetes.io/revision': '1'}, 'name': 'test-deployment-topology-test', 'namespace': {}}, 'spec': {'selector': {'matchLabels': {'app': 'test-deployment-busybox'}}, 'template': {'metadata': {'labels': {'app': 'test-deployment-busybox'}}, 'spec': {'containers': [{'name': 'busybox', 'image': 'busybox', 'command': ['sleep', '360000']}], 'nodeName': {}}}}}</em><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.busy_box_depl" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.delete_busybox">
+<code class="sig-name descname">delete_busybox</code><span class="sig-paren">(</span><em class="sig-param">force: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.delete_busybox" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deletes the BusyBox deployment from cluster.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>force</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, force deletion even if the deployment is not found. Defaults to False.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>The deletion result if the BusyBox deployment exists and is successfully deleted.</dt><dd><p>Returns None otherwise.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.deploy_busybox">
+<code class="sig-name descname">deploy_busybox</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.deploy_busybox" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deploys a busybox container to a randomly selected worker node.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The name of the node where the busybox container is deployed, if deployed, otherwise None.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.file_stream">
+<code class="sig-name descname">file_stream</code><em class="property"> = &lt;_io.TextIOWrapper name='/Users/danielosypenko/Work/automation_4/ocs-ci/ocs_ci/templates/ocp-deployment/busybox.yaml' mode='r' encoding='UTF-8'&gt;</em><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.file_stream" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_busybox_depl_name">
+<code class="sig-name descname">get_busybox_depl_name</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_busybox_depl_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the name of the BusyBox deployment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Name of the BusyBox deployment.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_deployment_names_from_node_df_cli">
+<code class="sig-name descname">get_deployment_names_from_node_df_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em><span class="sig-paren">)</span> &#x2192; list<a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_deployment_names_from_node_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the deployment names associated with a node from the CLI-based topology DataFrame.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>node_name</strong> (<em>str</em>) – Name of the node.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>List of deployment names associated with the given node.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_deployment_obj_from_node_df_cli">
+<code class="sig-name descname">get_deployment_obj_from_node_df_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em>, <em class="sig-param">deployment_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_deployment_obj_from_node_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the deployment OCP object associated with a specific node and deployment name from the dataframe
+taken from CLI.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>node_name</strong> (<em>str</em>) – Name of the node.</p></li>
+<li><p><strong>deployment_name</strong> (<em>str</em>) – Name of the deployment.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Deployment object associated with the specified node and deployment.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.ocp.OCP" title="ocs_ci.ocs.ocp.OCP">ocs_ci.ocs.ocp.OCP</a></p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – If no deployment with the specified name is found in the given node.</p></li>
+<li><p><strong>ValueError</strong> – If an incorrect object is requested (invalid node name or deployment name).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_node_names_df_cli">
+<code class="sig-name descname">get_node_names_df_cli</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; list<a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_node_names_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves a list of node names from the CLI topology DataFrame.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A list of node names extracted from the CLI topology DataFrame.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_pod_obj_from_node_and_depl_df_cli">
+<code class="sig-name descname">get_pod_obj_from_node_and_depl_df_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em>, <em class="sig-param">deployment_name</em>, <em class="sig-param">pod_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_pod_obj_from_node_and_depl_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the Pod object from the CLI based on the node name, deployment name, and pod name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>node_name</strong> (<em>str</em>) – Name of the node.</p></li>
+<li><p><strong>deployment_name</strong> (<em>str</em>) – Name of the deployment.</p></li>
+<li><p><strong>pod_name</strong> (<em>str</em>) – Name of the pod.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The pod object matching the specified node, deployment, and pod names.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="ocs_ci.ocs.resources.html#ocs_ci.ocs.resources.pod.Pod" title="ocs_ci.ocs.resources.pod.Pod">Pod</a></p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>get_pod_obj_from_node_and_depl_df_cli(“node-1”, “my-deployment”, “my-pod”)
+# Returns the Pod object for the specified node, deployment, and pod names.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_pod_status_df_cli">
+<code class="sig-name descname">get_pod_status_df_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em>, <em class="sig-param">deployment_name</em>, <em class="sig-param">pod_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_pod_status_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the status of a pod from the CLI and returns it as a dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>node_name</strong> (<em>str</em>) – Name of the node.</p></li>
+<li><p><strong>deployment_name</strong> (<em>str</em>) – Name of the deployment.</p></li>
+<li><p><strong>pod_name</strong> (<em>str</em>) – Name of the pod.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Dictionary containing the status of the pod.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_topology_cli_str">
+<code class="sig-name descname">get_topology_cli_str</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.get_topology_cli_str" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the topology CLI string representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Object representing the topology CLI string.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#ocs_ci.ocs.ui.odf_topology.TopologyCliStr" title="ocs_ci.ocs.ui.odf_topology.TopologyCliStr">TopologyCliStr</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.read_topology_cli_all">
+<code class="sig-name descname">read_topology_cli_all</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.read_topology_cli_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gather data about cluster in form of table where columns are node names and rows are deployments.
+If node has a deployment the table will have a reference to OCP object</p>
+<p>Returns: pd.DataFrame similar to:
+# +————————+—————————+—————————+——————–+
+# |                        | compute-2                 | compute-1                 | compute-0          |
+# +========================+===========================+===========================+====================+
+# | csi-addo…manager     | [&lt;ocs_ci.ocs.OCP object&gt;, | nan                       | nan                |
+# +————————+—————————+—————————+——————–+
+# | csi-rbd…provisioner  | [&lt;ocs_ci.ocs.OCP object&gt;, | [&lt;ocs_ci.ocs.OCP object&gt;, | nan                |
+# +————————+—————————+—————————+——————–+
+# | rook-rgw-ocs-storagecl.| [&lt;ocs_ci.ocs.OCP object&gt;, | nan                       | nan                |
+# +————————+—————————+—————————+——————–+
+# | csi-…plugin-prov     | nan                       | [&lt;ocs_ci.ocs.OCP object&gt;, | [&lt;ocs_ci.ocs.OCP&gt;, |
+# +————————+—————————+—————————+——————–+</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.reload_depl_data_obj_from_node_df_cli">
+<code class="sig-name descname">reload_depl_data_obj_from_node_df_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em>, <em class="sig-param">deployment_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.reload_depl_data_obj_from_node_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reloads the data object for a deployment from the CLI.</p>
+<p>This method retrieves the deployment object associated with the provided node and deployment names,
+and then reloads its data to have DataFrame objects updated</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>node_name</strong> (<em>str</em>) – Name of the node.</p></li>
+<li><p><strong>deployment_name</strong> (<em>str</em>) – Name of the deployment.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.reload_pod_obj_from_node_and_depl_df_cli">
+<code class="sig-name descname">reload_pod_obj_from_node_and_depl_df_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em>, <em class="sig-param">deployment_name</em>, <em class="sig-param">pod_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.reload_pod_obj_from_node_and_depl_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reloads the data of a pod object from the CLI using node, deployment, and pod names to have DataFrame
+objects updated</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>node_name</strong> (<em>str</em>) – Name of the node associated with the pod.</p></li>
+<li><p><strong>deployment_name</strong> (<em>str</em>) – Name of the deployment associated with the pod.</p></li>
+<li><p><strong>pod_name</strong> (<em>str</em>) – Name of the pod.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.set_busybox_depl_name">
+<code class="sig-name descname">set_busybox_depl_name</code><span class="sig-paren">(</span><em class="sig-param">name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.set_busybox_depl_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the name of the BusyBox deployment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – New name for the BusyBox deployment.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.set_resource_obj_of_node_df_cli">
+<code class="sig-name descname">set_resource_obj_of_node_df_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em>, <em class="sig-param">deployment_name</em>, <em class="sig-param">obj_new</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.set_resource_obj_of_node_df_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets a new resource OCP object in the node dataframe for a given node and deployment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>node_name</strong> (<em>str</em>) – Name of the node.</p></li>
+<li><p><strong>deployment_name</strong> (<em>str</em>) – Name of the deployment.</p></li>
+<li><p><strong>obj_new</strong> (<a class="reference internal" href="ocs_ci.ocs.html#ocs_ci.ocs.ocp.OCP" title="ocs_ci.ocs.ocp.OCP"><em>ocs_ci.ocs.ocp.OCP</em></a><em> or </em><a class="reference internal" href="ocs_ci.ocs.resources.html#ocs_ci.ocs.resources.pod.Pod" title="ocs_ci.ocs.resources.pod.Pod"><em>Pod</em></a>) – New resource object to be set.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The newly set resource object.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>set_resource_obj_of_node_df_cli(“node-1”, “my-deployment”, new_pod_object)
+# Returns the new_pod_object that has been set in the node dataframe.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The method assumes the availability of the OCP and Pod classes.</p>
+</div>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.topology_cli_df">
+<code class="sig-name descname">topology_cli_df</code><em class="property"> = Empty DataFrame Columns: [] Index: []</em><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.topology_cli_df" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.wait_busy_box_scaled_up">
+<code class="sig-name descname">wait_busy_box_scaled_up</code><span class="sig-paren">(</span><em class="sig-param">timeout</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.OdfTopologyHelper.wait_busy_box_scaled_up" title="Permalink to this definition">¶</a></dt>
+<dd><p>Waits for the ‘busybox’ deployment to be scaled up within the specified timeout.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>timeout</strong> (<em>int</em>) – The maximum time to wait for the deployment to be scaled up, in seconds.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if the deployment is successfully scaled up within the timeout, False otherwise.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.odf_topology.TopologyCliStr">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.odf_topology.</code><code class="sig-name descname">TopologyCliStr</code><span class="sig-paren">(</span><em class="sig-param">topology_df</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.TopologyCliStr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class-helper to visualize Topology configuration saved in dataframe gathered with cli output.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.odf_topology.TopologyUiStr">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.odf_topology.</code><code class="sig-name descname">TopologyUiStr</code><span class="sig-paren">(</span><em class="sig-param">topology_df</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.TopologyUiStr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class-helper to visualize Topology configuration saved in dataframe gathered with Selenium driver.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.odf_topology.get_creation_ts_with_offset">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.odf_topology.</code><code class="sig-name descname">get_creation_ts_with_offset</code><span class="sig-paren">(</span><em class="sig-param">node_metadata</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.get_creation_ts_with_offset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the creation timestamp of a node with offset similar to what we see on ODF Management console.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>node_metadata</strong> (<em>dict</em>) – Node metadata containing the ‘creationTimestamp’ value.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Formatted creation timestamp with offset.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>get_creation_ts_with_offset({‘creationTimestamp’: ‘2022-01-01T12:34:56Z’})
+# Returns ‘Jan 1, 2022, 12:34 PM’.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Assumes ‘creationTimestamp’ is in the format ‘%Y-%m-%dT%H:%M:%SZ’.</p>
+</div>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.odf_topology.get_deployment_details_cli">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.odf_topology.</code><code class="sig-name descname">get_deployment_details_cli</code><span class="sig-paren">(</span><em class="sig-param">deployment_name</em><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.get_deployment_details_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves detailed information about a deployment from the CLI.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>deployment_name</strong> (<em>str</em>) – Name of the deployment.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Dictionary containing the deployment details, including its name, namespace, labels,</dt><dd><p>number of annotations, owner, and creation timestamp.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>get_deployment_details_cli(“my-deployment”)
+# Returns {‘name’: ‘my-deployment’, ‘namespace’: ‘my-namespace’, ‘labels’: {‘app’: ‘my-app’},
+#          ‘annotation’: ‘3 annotations’, ‘owner’: ‘my-owner’, ‘created_at’: ‘Jun 1, 2023, 10:00 AM’}</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.odf_topology.get_node_details_cli">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.odf_topology.</code><code class="sig-name descname">get_node_details_cli</code><span class="sig-paren">(</span><em class="sig-param">node_name</em><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.get_node_details_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves detailed information about a node from the CLI.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>node_name</strong> (<em>str</em>) – Name of the node.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Dictionary containing the node details, including its name, status, role, operating system,</dt><dd><p>kernel version, instance type, OS image, architecture, addresses, kubelet version,
+provider ID, number of annotations, external ID, and creation timestamp.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>get_node_details_cli(“node-1”)
+# Returns {‘name’: ‘node-1’, ‘status’: ‘Ready’, ‘role’: ‘worker’, ‘operating_system’: ‘linux’,
+#          ‘kernel_version’: ‘4.18.0-305.12.1.el8_4.x86_64’, ‘instance_type’: ‘m5.large’,
+#          ‘OS_image’: ‘CentOS Linux 8 (Core)’, ‘architecture’: ‘amd64’,
+#          ‘addresses’: ‘External IP: 203.0.113.10; Hostname: node-1; Internal IP: 192.168.0.1’,
+#          ‘kubelet_version’: ‘v1.21.2’, ‘provider_ID’: ‘aws’, ‘annotations_number’: ‘5 annotations’,
+#          ‘external_id’: ‘-‘, ‘created’: ‘Jun 1, 2023, 10:00 AM’}</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.ui.odf_topology.get_node_names_of_the_pods_by_pattern">
+<code class="sig-prename descclassname">ocs_ci.ocs.ui.odf_topology.</code><code class="sig-name descname">get_node_names_of_the_pods_by_pattern</code><span class="sig-paren">(</span><em class="sig-param">pattern</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.odf_topology.get_node_names_of_the_pods_by_pattern" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the node names of the pods matching the given pattern.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pattern</strong> (<em>str</em>) – The pattern to match the pod names.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dictionary mapping pod names to their corresponding node names.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.pvc_ui">
+<span id="ocs-ci-ocs-ui-pvc-ui-module"></span><h2>ocs_ci.ocs.ui.pvc_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.pvc_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.pvc_ui.PvcUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.pvc_ui.</code><code class="sig-name descname">PvcUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.pvc_ui.PvcUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>User Interface Selenium</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.pvc_ui.PvcUI.create_pvc_ui">
+<code class="sig-name descname">create_pvc_ui</code><span class="sig-paren">(</span><em class="sig-param">project_name</em>, <em class="sig-param">sc_name</em>, <em class="sig-param">pvc_name</em>, <em class="sig-param">access_mode</em>, <em class="sig-param">pvc_size</em>, <em class="sig-param">vol_mode</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.pvc_ui.PvcUI.create_pvc_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create PVC via UI.
+:param project_name: name of test project
+:type project_name: str
+:param sc_name: storage class name
+:type sc_name: str
+:param pvc_name: the name of pvc
+:type pvc_name: str
+:param access_mode: access mode
+:type access_mode: str
+:param pvc_size: the size of pvc (GB)
+:type pvc_size: str
+:param vol_mode: volume mode type
+:type vol_mode: str</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.pvc_ui.PvcUI.delete_pvc_ui">
+<code class="sig-name descname">delete_pvc_ui</code><span class="sig-paren">(</span><em class="sig-param">pvc_name</em>, <em class="sig-param">project_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.pvc_ui.PvcUI.delete_pvc_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete pvc via UI
+:param pvc_name: Name of the pvc
+:type pvc_name: str
+:param project_name: name of test project
+:type project_name: str</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.pvc_ui.PvcUI.pvc_clone_ui">
+<code class="sig-name descname">pvc_clone_ui</code><span class="sig-paren">(</span><em class="sig-param">project_name</em>, <em class="sig-param">pvc_name</em>, <em class="sig-param">cloned_pvc_access_mode='ReadWriteOnce'</em>, <em class="sig-param">cloned_pvc_name=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.pvc_ui.PvcUI.pvc_clone_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clone PVC via UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>project_name</strong> (<em>str</em>) – The name of project</p></li>
+<li><p><strong>pvc_name</strong> (<em>str</em>) – The name of PVC</p></li>
+<li><p><strong>cloned_pvc_access_mode</strong> (<em>str</em>) – Access mode for cloned PVC</p></li>
+<li><p><strong>cloned_pvc_name</strong> (<em>str</em>) – The name for cloned PVC</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.pvc_ui.PvcUI.pvc_resize_ui">
+<code class="sig-name descname">pvc_resize_ui</code><span class="sig-paren">(</span><em class="sig-param">project_name</em>, <em class="sig-param">pvc_name</em>, <em class="sig-param">new_size</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.pvc_ui.PvcUI.pvc_resize_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resizing pvc via UI
+:param project_name: name of test project
+:type project_name: str
+:param pvc_name: the name of pvc
+:type pvc_name: str
+:param new_size: the new size of pvc (GB)
+:type new_size: int</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.pvc_ui.PvcUI.verify_pvc_resize_ui">
+<code class="sig-name descname">verify_pvc_resize_ui</code><span class="sig-paren">(</span><em class="sig-param">project_name</em>, <em class="sig-param">pvc_name</em>, <em class="sig-param">expected_capacity</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.pvc_ui.PvcUI.verify_pvc_resize_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verifying PVC resize via UI
+:param project_name: name of test project
+:type project_name: str
+:param pvc_name: the name of pvc
+:type pvc_name: str
+:param expected_capacity: the new size of pvc (GiB)
+:type expected_capacity: str</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.pvc_ui.PvcUI.verify_pvc_ui">
+<code class="sig-name descname">verify_pvc_ui</code><span class="sig-paren">(</span><em class="sig-param">pvc_size</em>, <em class="sig-param">access_mode</em>, <em class="sig-param">vol_mode</em>, <em class="sig-param">sc_name</em>, <em class="sig-param">pvc_name</em>, <em class="sig-param">project_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.pvc_ui.PvcUI.verify_pvc_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verifying PVC details via UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pvc_size</strong> (<em>str</em>) – the size of pvc (GB)</p></li>
+<li><p><strong>access_mode</strong> (<em>str</em>) – access mode</p></li>
+<li><p><strong>vol_mode</strong> (<em>str</em>) – volume mode type</p></li>
+<li><p><strong>sc_name</strong> (<em>str</em>) – storage class name</p></li>
+<li><p><strong>pvc_name</strong> (<em>str</em>) – the name of pvc</p></li>
+<li><p><strong>project_name</strong> (<em>str</em>) – name of test project</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.storageclass">
+<span id="ocs-ci-ocs-ui-storageclass-module"></span><h2>ocs_ci.ocs.ui.storageclass module<a class="headerlink" href="#module-ocs_ci.ocs.ui.storageclass" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.storageclass.StorageClassUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.storageclass.</code><code class="sig-name descname">StorageClassUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.storageclass.StorageClassUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>User Interface Selenium</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.storageclass.StorageClassUI.create_encrypted_storage_class_ui">
+<code class="sig-name descname">create_encrypted_storage_class_ui</code><span class="sig-paren">(</span><em class="sig-param">backend_path=None</em>, <em class="sig-param">reclaim_policy='Delete'</em>, <em class="sig-param">provisioner='openshift-storage.rbd.csi.ceph.com'</em>, <em class="sig-param">vol_binding_mode='Immediate'</em>, <em class="sig-param">service_name=None</em>, <em class="sig-param">kms_address=None</em>, <em class="sig-param">tls_server_name=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.storageclass.StorageClassUI.create_encrypted_storage_class_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Test for creation of storage class with encryption via UI
+:param backend_path: name of the vault backend path
+:type backend_path: str
+:param reclaim_policy: value of the reclaim policy, it could be ‘Delete’ or ‘Retain’
+:type reclaim_policy: str
+:param provisioner: type of provisioner used, it could be ‘rbd’ or ‘cephfs’
+:type provisioner: str
+:param vol_binding_mode: value of the volume binding mode, it could be ‘WaitForFirstConsumer’ or ‘Immediate’
+:type vol_binding_mode: str
+:param service_name: the default value is None which can be changed in the function call
+:type service_name: str
+:param kms_address: the default value is None which can be changed in the function call
+:type kms_address: str
+:param tls_server_name: the default value is None which can be changed in the function call
+:type tls_server_name: str</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>sc_name (str) if the storage class creation is successful, returns False otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.storageclass.StorageClassUI.create_storageclass">
+<code class="sig-name descname">create_storageclass</code><span class="sig-paren">(</span><em class="sig-param">pool_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.storageclass.StorageClassUI.create_storageclass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Basic function to create RBD based storageclass</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pool_name</strong> (<em>str</em>) – The pool to choose in the storageclass.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the name of the storageclass created, otherwise return None.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>sc_name (str)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.storageclass.StorageClassUI.delete_rbd_storage_class">
+<code class="sig-name descname">delete_rbd_storage_class</code><span class="sig-paren">(</span><em class="sig-param">sc_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.storageclass.StorageClassUI.delete_rbd_storage_class" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete RBD storageclass</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sc_name</strong> (<em>str</em>) – Name of the storageclass to delete.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if deletion succeeded otherwise False.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(bool)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.storageclass.StorageClassUI.verify_storageclass_existence">
+<code class="sig-name descname">verify_storageclass_existence</code><span class="sig-paren">(</span><em class="sig-param">sc_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.storageclass.StorageClassUI.verify_storageclass_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check if storageclass is existing in the storageclass list page</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sc_name</strong> (<em>str</em>) – The name of storageclass to verify.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True is it exist otherwise False.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.validation_ui">
+<span id="ocs-ci-ocs-ui-validation-ui-module"></span><h2>ocs_ci.ocs.ui.validation_ui module<a class="headerlink" href="#module-ocs_ci.ocs.ui.validation_ui" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.ui.validation_ui.</code><code class="sig-name descname">ValidationUI</code><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator</span></code></p>
+<p>User Interface Validation Selenium</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.check_capacity_breakdown">
+<code class="sig-name descname">check_capacity_breakdown</code><span class="sig-paren">(</span><em class="sig-param">project_name</em>, <em class="sig-param">pod_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.check_capacity_breakdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check Capacity Breakdown</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>project_name</strong> (<em>str</em>) – The name of the project</p></li>
+<li><p><strong>pod_name</strong> (<em>str</em>) – The name of pod</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>True if project_name and pod_name exist on capacity_breakdown, False otherwise</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.odf_console_plugin_check">
+<code class="sig-name descname">odf_console_plugin_check</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.odf_console_plugin_check" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to verify if console plugin is enabled on UI or not,
+if not, this function will enable it so as to see ODF tab under Storage section</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.odf_overview_ui">
+<code class="sig-name descname">odf_overview_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.odf_overview_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to verify changes and validate elements on ODF Overview tab for ODF 4.9</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.odf_storagesystems_ui">
+<code class="sig-name descname">odf_storagesystems_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.odf_storagesystems_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to verify changes and validate elements on ODF Storage Systems tab for ODF 4.9</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.refresh_web_console">
+<code class="sig-name descname">refresh_web_console</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.refresh_web_console" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.validate_storage_cluster_ui">
+<code class="sig-name descname">validate_storage_cluster_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.validate_storage_cluster_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to validate Storage Cluster on UI for ODF 4.9 and above</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.validate_unprivileged_access">
+<code class="sig-name descname">validate_unprivileged_access</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.validate_unprivileged_access" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to verify the unprivileged users can’t access ODF dashbaord</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.verification_ui">
+<code class="sig-name descname">verification_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.verification_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verification UI</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_object_service_page">
+<code class="sig-name descname">verify_object_service_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_object_service_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify Object Service Page UI</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_ocs_operator_tabs">
+<code class="sig-name descname">verify_ocs_operator_tabs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_ocs_operator_tabs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify OCS Operator Tabs</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_odf_without_ocs_in_installed_operator">
+<code class="sig-name descname">verify_odf_without_ocs_in_installed_operator</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_odf_without_ocs_in_installed_operator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to validate ODF operator is present post ODF installation,
+expectation is only ODF operator should be present in Installed operators tab and
+OCS operator shouldn’t be present. This function is only written for 4.9+ versions</p>
+<p>Returns:
+True: If only odf operator is present in the UI
+False: If ocs operator is also present in the UI</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_page_contain_strings">
+<code class="sig-name descname">verify_page_contain_strings</code><span class="sig-paren">(</span><em class="sig-param">strings_on_page</em>, <em class="sig-param">page_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_page_contain_strings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify Page Contain Strings</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>strings_on_page</strong> (<em>list</em>) – list of strings on page</p></li>
+<li><p><strong>page_name</strong> (<em>str</em>) – the name of the page</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_persistent_storage_page">
+<code class="sig-name descname">verify_persistent_storage_page</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.ui.validation_ui.ValidationUI.verify_persistent_storage_page" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify Persistent Storage Page</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui.views">
+<span id="ocs-ci-ocs-ui-views-module"></span><h2>ocs_ci.ocs.ui.views module<a class="headerlink" href="#module-ocs_ci.ocs.ui.views" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.ocs.ui">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-ocs_ci.ocs.ui" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="ocs_ci.tests.html" class="btn btn-neutral float-right" title="ocs_ci.tests package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="ocs_ci.ocs.tests.html" class="btn btn-neutral float-left" title="ocs_ci.ocs.tests package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

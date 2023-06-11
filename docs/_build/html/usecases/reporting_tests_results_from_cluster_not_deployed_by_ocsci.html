@@ -1,0 +1,374 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>How to report test results from ocs-ci not executed by ocs-ci jenkins? &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How to execute tests on a cluster not deployed by ocs-ci?" href="running_tests_on_cluster_not_deployed_by_ocsci.html" />
+    <link rel="prev" title="Using multiple instances of Vault KMS in OCS-CI" href="odf_with_kms.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Common Use cases and FAQ</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html">Using ocs-ci to deploy OCP cluster without default OCS installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable_huge_pages.html">ENABLE HUGE PAGES</a></li>
+<li class="toctree-l2"><a class="reference internal" href="odf_with_kms.html">Using multiple instances of Vault KMS in OCS-CI</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">How to report test results from ocs-ci not executed by ocs-ci jenkins?</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#xml-file-with-junit-test-report">XML file with JUnit test report</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocs-ci-log-files">ocs-ci log files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#must-gather-data">must gather data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pytest-temporary-directory">pytest temporary directory</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html">How to execute tests on a cluster not deployed by ocs-ci?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_alternative_ocp_mirrors.html">How to use alternative mirrors/repositories for OCP installer/client download</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="index.html">Common Use cases and FAQ</a> &raquo;</li>
+        
+      <li>How to report test results from ocs-ci not executed by ocs-ci jenkins?</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/usecases/reporting_tests_results_from_cluster_not_deployed_by_ocsci.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="how-to-report-test-results-from-ocs-ci-not-executed-by-ocs-ci-jenkins">
+<h1>How to report test results from ocs-ci not executed by ocs-ci jenkins?<a class="headerlink" href="#how-to-report-test-results-from-ocs-ci-not-executed-by-ocs-ci-jenkins" title="Permalink to this headline">¶</a></h1>
+<p>There are multiple report and log files created during ocs-ci test run, and for
+failure analysis of the results, QE team requires all of these files to be
+provided.</p>
+<p>That said, if you want to just list names of the tests executed along with
+their results, and don’t expect QE team or anybody else to ever analyze a test
+failure(s) in this test run, sharing sheer <a class="reference external" href="https://docs.pytest.org/en/stable/usage.html#creating-junitxml-format-files">JUnit XML</a> test report file is
+enough.</p>
+<div class="section" id="xml-file-with-junit-test-report">
+<h2>XML file with JUnit test report<a class="headerlink" href="#xml-file-with-junit-test-report" title="Permalink to this headline">¶</a></h2>
+<p>Providing this file is <strong>mandatory</strong>.</p>
+<p>You need to specify a filename of <a class="reference external" href="https://docs.pytest.org/en/stable/usage.html#creating-junitxml-format-files">JUnit XML</a> report file as
+<code class="docutils literal notranslate"><span class="pre">--junit-xml</span></code> command line option of <code class="docutils literal notranslate"><span class="pre">run-ci</span></code> tool. When you forget to
+specify this option, the file is not generated and you won’t be able to share
+the results with others.</p>
+</div>
+<div class="section" id="ocs-ci-log-files">
+<h2>ocs-ci log files<a class="headerlink" href="#ocs-ci-log-files" title="Permalink to this headline">¶</a></h2>
+<p>For each test run executed by ocs-ci (via <code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command), a unique
+directory named <code class="docutils literal notranslate"><span class="pre">/tmp/ocs-ci-logs-${UNIX_TIMESTAMP}</span></code> is created. The last
+part of the name is a number representing unix timestamp taken when the test
+run was started.</p>
+<p>For example, after executing a single run, you will have one ocs-ci-logs
+directory:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ls<span class="w"> </span>-ltr<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">&#39;ocs-ci-logs-[0-9]*$&#39;</span>
+<span class="go">drwxrwxr-x. 3 ocsqe ocsqe   60 Oct  7 23:25 ocs-ci-logs-1602105881</span>
+</pre></div>
+</div>
+<p>This directory contains a tree structure which follows a ocs-ci test case
+hierarchy, with a log file for each test:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>tree<span class="w"> </span>ocs-ci-logs-1602105881<span class="w"> </span><span class="p">|</span><span class="w"> </span>head
+<span class="go">ocs-ci-logs-1602105881</span>
+<span class="go">└── tests</span>
+<span class="go">    ├── e2e</span>
+<span class="go">    │   ├── logging</span>
+<span class="go">    │   │   └── test_openshift-logging.py</span>
+<span class="go">    │   │       └── Testopenshiftloggingonocs</span>
+<span class="go">    │   │           └── test_create_new_project_to_verify_logging</span>
+<span class="go">    │   │               └── logs</span>
+<span class="go">    │   └── registry</span>
+<span class="go">    │       └── test_pod_from_registry.py</span>
+</pre></div>
+</div>
+<p>These log files are crucial to understand why a test case failed.</p>
+<p>To share it with QE team, just create a tarball with the whole ocs-ci-logs
+directory. Like in our example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>/tmp
+<span class="gp">$ </span>tar<span class="w"> </span>caf<span class="w"> </span>~/ocs-ci-logs-1602105881.tar.gz<span class="w"> </span>ocs-ci-logs-1602105881
+<span class="gp">$ </span>ls<span class="w">  </span>-lh<span class="w"> </span>~/ocs-ci-logs-1602105881.tar.gz
+<span class="go">-rw-rw-r--. 1 ocsqe ocsqe 60M Oct  8 16:17 /home/ocsqe/ocs-ci-logs-1602105881.tar.gz</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="must-gather-data">
+<h2>must gather data<a class="headerlink" href="#must-gather-data" title="Permalink to this headline">¶</a></h2>
+<p>Based on a request or because of a test failure, ocs-ci also tries to run <a class="reference external" href="https://docs.openshift.com/container-platform/4.5/support/gathering-cluster-data.html#about-must-gather_gathering-cluster-data">must
+gather</a> to get additional evidence. Must gather data fetched this way are stored
+in the following directories:</p>
+<ul class="simple">
+<li><p>OCP: <code class="docutils literal notranslate"><span class="pre">/tmp/testcases_${UNIX_TIMESTAMP}/ocp_must_gather</span></code></p></li>
+<li><p>OCS: <code class="docutils literal notranslate"><span class="pre">/tmp/ocs-ci-logs-${UNIX_TIMESTAMP}_ocs_logs/ocs_must_gather</span></code></p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>There is ocs-ci issue <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/3088">#3088</a> discussing simplification and unification of
+this naming scheme.</p>
+</div>
+<p>These directories contains a tree structure which follows product component
+organization. For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>tree<span class="w"> </span>/tmp/testcases_1602105881/ocp_must_gather<span class="w"> </span><span class="p">|</span><span class="w"> </span>head
+<span class="go">/tmp/testcases_1602105881/ocp_must_gather</span>
+<span class="go">└── quay-io-openshift-origin-must-gather-sha256-c5b27546b5bb33e0af0bdd7610a0f19075bb68c78f39233db743671b9f043f6b</span>
+<span class="go">    ├── cluster-scoped-resources</span>
+<span class="go">    │   ├── admissionregistration.k8s.io</span>
+<span class="go">    │   │   └── validatingwebhookconfigurations</span>
+<span class="go">    │   │       ├── autoscaling.openshift.io.yaml</span>
+<span class="go">    │   │       └── multus.openshift.io.yaml</span>
+<span class="go">    │   ├── apiextensions.k8s.io</span>
+<span class="go">    │   │   └── customresourcedefinitions</span>
+<span class="go">    │   │       ├── alertmanagers.monitoring.coreos.com.yaml</span>
+<span class="gp">$ </span>tree<span class="w"> </span>/tmp/ocs-ci-logs-1602105881_ocs_logs/ocs_must_gather<span class="w"> </span><span class="p">|</span><span class="w"> </span>head
+<span class="go">/tmp/ocs-ci-logs-1602105881_ocs_logs/ocs_must_gather</span>
+<span class="go">└── quay-io-rhceph-dev-ocs-must-gather-sha256-02a84d07c42197311b6361097aa7e48156c6a186b75d8e9e32311c073736d1c0</span>
+<span class="go">    ├── ceph</span>
+<span class="go">    │   ├── cluster-scoped-resources</span>
+<span class="go">    │   │   └── storage.k8s.io</span>
+<span class="go">    │   │       └── storageclasses</span>
+<span class="go">    │   │           ├── ocs-storagecluster-cephfs.yaml</span>
+<span class="go">    │   │           ├── ocs-storagecluster-ceph-rbd.yaml</span>
+<span class="go">    │   │           ├── openshift-storage.noobaa.io.yaml</span>
+<span class="go">    │   │           └── standard.yaml</span>
+</pre></div>
+</div>
+<p>To share it with QE team, just create a tarball with all must gather
+directories.</p>
+</div>
+<div class="section" id="pytest-temporary-directory">
+<h2>pytest temporary directory<a class="headerlink" href="#pytest-temporary-directory" title="Permalink to this headline">¶</a></h2>
+<p>When monitoring test cases are executed, additional evidence can be found in
+pytest temporary directory.</p>
+<p>Here is an example of pytest temporary directory right after execution of all
+tier1 monitoring test cases:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>tree<span class="w"> </span>/tmp/pytest-of-ocsqe/pytest-current/
+<span class="go">/tmp/pytest-of-ocsqe/pytest-current/</span>
+<span class="go">├── measurement_results</span>
+<span class="go">│   ├── measure_workload_idle.json</span>
+<span class="go">│   ├── workload_storageutilization_10G_cephfs.json</span>
+<span class="go">│   └── workload_storageutilization_10G_rbd.json</span>
+<span class="go">├── test_monitoring_reporting_ok_w0</span>
+<span class="go">├── test_monitoring_reporting_ok_wcurrent -&gt; /tmp/pytest-of-ocsqe/pytest-0/test_monitoring_reporting_ok_w0</span>
+<span class="go">├── test_workload_rbd_cephfs_10g0</span>
+<span class="go">│   ├── objectconfig.workload_storageutilization_10G_cephfs.yaml</span>
+<span class="go">│   └── objectconfig.workload_storageutilization_10G_rbd.yaml</span>
+<span class="go">└── test_workload_rbd_cephfs_10gcurrent -&gt; /tmp/pytest-of-ocsqe/pytest-0/test_workload_rbd_cephfs_10g0</span>
+
+<span class="go">5 directories, 5 files</span>
+</pre></div>
+</div>
+<p>Measurement results files contain a timestamps of a measurement range and
+archive of all k8s alerts active during this time. Workload files contain a
+full deployment specification of the workload executed during metrics tests.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="running_tests_on_cluster_not_deployed_by_ocsci.html" class="btn btn-neutral float-right" title="How to execute tests on a cluster not deployed by ocs-ci?" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="odf_with_kms.html" class="btn btn-neutral float-left" title="Using multiple instances of Vault KMS in OCS-CI" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

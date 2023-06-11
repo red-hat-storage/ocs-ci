@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: test-project-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      volumeName: pv-test-copy-nooba-db-vol
+      storageClassName: ocs-storagecluster-ceph-rbd
+      containers:
+        - name: nginx
+          image: quay.io/ocsci/nginx:latest
+      securityContext:
+        privileged: false
+        runAsNonRoot: true
+#        runAsUser: 1000690000
+#        fsGroup: 1000690000
+        allowPrivilegeEscalation: false
+        seccompProfile:
+          type: RuntimeDefault
+        capabilities:
+          drop:
+            - ALL

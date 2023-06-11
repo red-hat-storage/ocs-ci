@@ -1,0 +1,598 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Supported platforms &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage" href="usage.html" />
+    <link rel="prev" title="Getting Started" href="getting_started.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Supported platforms</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#aws">AWS</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-types">Deployment types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#ipi">IPI</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#upi">UPI</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#vsphere">vSphere</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Deployment types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id2">UPI</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#azure">Azure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Deployment types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id4">UPI</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ibm-cloud">IBM Cloud</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#requirements">Requirements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#supported-providers">Supported providers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-files">Configuration files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#how-to-get-api-key">How to get API key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#how-to-get-cos-keys">How to get COS keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id5">Deployment types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id6">IPI</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#managed">Managed</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#known-issues">Known issues</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#global-pull-secret">Global pull secret</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#must-gather">Must-gather</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#deployment-of-ocp-takes-long-time">Deployment of OCP takes long time</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#missing-snapshotter-crds">Missing snapshotter CRDs</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#openshift-dedicated">Openshift Dedicated</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id8">Requirements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id9">Configuration files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id10">Deployment types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id11">Managed</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#rosa">ROSA</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id12">Requirements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id13">Configuration files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id14">Deployment types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id15">Managed</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Supported platforms</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/supported_platforms.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="supported-platforms">
+<h1>Supported platforms<a class="headerlink" href="#supported-platforms" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="aws">
+<h2>AWS<a class="headerlink" href="#aws" title="Permalink to this headline">¶</a></h2>
+<p>TODO document this platform</p>
+<div class="section" id="deployment-types">
+<h3>Deployment types<a class="headerlink" href="#deployment-types" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="ipi">
+<h4>IPI<a class="headerlink" href="#ipi" title="Permalink to this headline">¶</a></h4>
+</div>
+<div class="section" id="upi">
+<h4>UPI<a class="headerlink" href="#upi" title="Permalink to this headline">¶</a></h4>
+</div>
+</div>
+</div>
+<div class="section" id="vsphere">
+<h2>vSphere<a class="headerlink" href="#vsphere" title="Permalink to this headline">¶</a></h2>
+<p>TODO document this platform</p>
+<div class="section" id="id1">
+<h3>Deployment types<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="id2">
+<h4>UPI<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h4>
+</div>
+</div>
+</div>
+<div class="section" id="azure">
+<h2>Azure<a class="headerlink" href="#azure" title="Permalink to this headline">¶</a></h2>
+<p>File <code class="docutils literal notranslate"><span class="pre">osServicePrincipal.json</span></code> in <code class="docutils literal notranslate"><span class="pre">~/.azure/</span></code> directory with proper credentials
+is required. The file looks like this:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;subscriptionId&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;clientId&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;clientSecret&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;tenantId&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>To deploy ocs-ci cluster on Azure platform using one of OCS QE subscriptions,
+you need to specify one deployment config file from <code class="docutils literal notranslate"><span class="pre">conf/deployment/azure/</span></code>
+directory (which one to use depends on the type of deployment one needs to
+use) and also one config file with azure <code class="docutils literal notranslate"><span class="pre">base_domain</span></code> value (either
+<code class="docutils literal notranslate"><span class="pre">conf/ocsci/azure_qe_rh_ocs_com_domain.yaml</span></code> or
+<code class="docutils literal notranslate"><span class="pre">conf/ocsci/azure2_qe_rh_ocs_com_domain.yaml</span></code> or similar newly created with
+proper <code class="docutils literal notranslate"><span class="pre">base_domain</span></code> configuration), because each azure subscription has it’s
+own domain name.</p>
+<div class="section" id="id3">
+<h3>Deployment types<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="id4">
+<h4>UPI<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h4>
+</div>
+</div>
+</div>
+<div class="section" id="ibm-cloud">
+<h2>IBM Cloud<a class="headerlink" href="#ibm-cloud" title="Permalink to this headline">¶</a></h2>
+<p>This platform supports deployment of OCP cluster + OCS cluster on top of it.
+For IPI deployments, please see the IPI section below.</p>
+<div class="section" id="requirements">
+<h3>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>Have locally installed ibmcloud CLI, follow <a class="reference external" href="https://cloud.ibm.com/docs/cli">official documentation</a>.</p></li>
+<li><p>Install required plugins for IBM Cloud CLI via command: <code class="docutils literal notranslate"><span class="pre">ibmcloud</span> <span class="pre">plugin</span> <span class="pre">install</span> <span class="pre">PLUGIN_NAME</span> <span class="pre">-f</span> <span class="pre">-r</span> <span class="pre">'IBM</span> <span class="pre">Cloud'</span></code></p>
+<ul>
+<li><p>infrastructure-service</p></li>
+<li><p>kubernetes-service</p></li>
+</ul>
+</li>
+<li><p>Provide credential config file + credential config file described bellow to
+<code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command via <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> parameters.</p></li>
+</ul>
+</div>
+<div class="section" id="supported-providers">
+<h3>Supported providers<a class="headerlink" href="#supported-providers" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">vpc-gen2</span></code> - This is first implemented supported provider for IBM cloud.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">classic</span></code> - Not supported yet.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">satellite</span></code> - Not supported yet.</p></li>
+</ul>
+</div>
+<div class="section" id="configuration-files">
+<h3>Configuration files<a class="headerlink" href="#configuration-files" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml</span></code> - this file can be used for deployment
+on IBM Cloud - this config is for VPC gen 2 provider.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conf/deployment/ibmcloud/ibm_cloud_vpc_cluster_without_cos.yaml</span></code> - this file can be used for deployment
+on IBM Cloud - this config is for VPC gen 2 provider without COS secret created.</p></li>
+</ul>
+<p>You will need to create also credential file with secret data which should
+never be shared publicly in this repository.
+All needed values are mentioned as placeholders and commented out in
+<code class="docutils literal notranslate"><span class="pre">conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml</span></code></p>
+<p>But an example is pasted also here:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># This is the basic config for IBM cloud usage</span>
+<span class="nn">---</span>
+<span class="nt">ENV_DATA</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vpc_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VPC ID PLACEHOLDER</span>
+<span class="w">  </span><span class="nt">subnet_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SUBNET ID PLACEHOLDER</span>
+<span class="w">  </span><span class="nt">cos_instance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">COS INSTANCE PLACEHOLDER</span>
+<span class="nt">AUTH</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ibmcloud</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IBM CLOUD API KEY PLACEHOLDER</span>
+<span class="w">    </span><span class="nt">account_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ACCOUNT ID PLACEHOLDER</span>
+<span class="w">    </span><span class="nt">ibm_cos_access_key_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KEY PLACEHOLDER</span>
+<span class="w">    </span><span class="nt">ibm_cos_secret_access_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SECRET PLACEHOLDER</span>
+<span class="nt">DEPLOYMENT</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ocs_secret_dockerconfigjson</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">BASE64 OF QUAY SECRET PLACEHOLDER</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="how-to-get-api-key">
+<h3>How to get API key<a class="headerlink" href="#how-to-get-api-key" title="Permalink to this headline">¶</a></h3>
+<p>API key creation is - one time action and is required for run deployment and
+other operation with ibmcloud CLI as we are using login with this API key.</p>
+<p>Follow this documentation <a class="reference external" href="https://cloud.ibm.com/docs/openshift?topic=openshift-access_cluster#access_api_key">access API Key</a>.</p>
+<p>Command:
+<code class="docutils literal notranslate"><span class="pre">ibmcloud</span> <span class="pre">login</span> <span class="pre">-u</span> <span class="pre">user&#64;redhat.com</span> <span class="pre">-p</span> <span class="pre">PASSWORD_PLACEHOLDER</span> <span class="pre">-c</span> <span class="pre">ACCOUNT_ID_PLACEHOLDER</span> <span class="pre">-r</span> <span class="pre">us-east</span></code></p>
+<p>You should get this info as output where you can get the key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Please preserve the API key! It cannot be retrieved after it&#39;s created.
+
+ID            ApiKey-ID
+Name          my-api-key
+Description
+Created At    2020-10-19T15:05+0000
+API Key       OUR_KEY
+Locked        false
+</pre></div>
+</div>
+</div>
+<div class="section" id="how-to-get-cos-keys">
+<h3>How to get COS keys<a class="headerlink" href="#how-to-get-cos-keys" title="Permalink to this headline">¶</a></h3>
+<p>Please follow official
+<a class="reference external" href="https://cloud.ibm.com/docs/cloud-object-storage?topic=cloud-object-storage-uhc-hmac-credentials-main">documentation</a>.</p>
+</div>
+<div class="section" id="id5">
+<h3>Deployment types<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="id6">
+<h4>IPI<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h4>
+<p>IPI deployments to IBM Cloud are supported for ODF versions &gt;= 4.10.</p>
+<div class="section" id="id7">
+<h5>Requirements<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h5>
+<ol class="simple">
+<li><p>OCP installer version &gt;= 4.10</p></li>
+<li><p>ibmcloud ipi config file (e.g. <code class="docutils literal notranslate"><span class="pre">conf/deployment/ibmcloud/ipi_3az_rhcos_3m_3w.yaml</span></code>)</p></li>
+<li><p>ibmcloud account data. This data should appear as follows in the ocsci config:</p></li>
+</ol>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1">#AUTH:</span>
+<span class="c1">#  ibmcloud:</span>
+<span class="c1">#    account_id: ACCOUNT ID PLACEHOLDER</span>
+<span class="c1">#    api_key: IBM CLOUD API KEY PLACEHOLDER</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="managed">
+<h4>Managed<a class="headerlink" href="#managed" title="Permalink to this headline">¶</a></h4>
+<p>This deployment type is managed - there is no openshift-installer used for
+installing the cluster, but we are using ibmcloud CLI to create the cluster.</p>
+<p>As we rely on matadata.json file to store cluster name and few other details
+like ID we are creating this json file from data which we get from command:
+<code class="docutils literal notranslate"><span class="pre">ibmcloud</span> <span class="pre">ks</span> <span class="pre">cluster</span> <span class="pre">get</span> <span class="pre">--cluster</span> <span class="pre">CLUSTER_NAME</span> <span class="pre">-json</span></code> and updating with values
+we usually read from this file like <code class="docutils literal notranslate"><span class="pre">clusterName</span></code> and <code class="docutils literal notranslate"><span class="pre">clusterID</span></code>.</p>
+<p>The kubeconfig is generated by command:
+<code class="docutils literal notranslate"><span class="pre">ibmcloud</span> <span class="pre">ks</span> <span class="pre">cluster</span> <span class="pre">config</span> <span class="pre">--cluster</span> <span class="pre">cluster-name</span> <span class="pre">--admin</span> <span class="pre">--output</span> <span class="pre">yaml</span></code></p>
+<p>And stored in the same structure like openshift-installer does in cluster dir.</p>
+<p>There are added just worker nodes as par to the deployment as master nodes are
+not directly accessible in this kind of deployment.</p>
+</div>
+</div>
+<div class="section" id="known-issues">
+<h3>Known issues<a class="headerlink" href="#known-issues" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="global-pull-secret">
+<h4>Global pull secret<a class="headerlink" href="#global-pull-secret" title="Permalink to this headline">¶</a></h4>
+<p>There is no way how to update global pull secret cause of missing
+machineConfig. So as workaround to be able install internal build from private
+quay repository we need to create secret and add it to two namespaces:</p>
+<ul class="simple">
+<li><p>openshift-marketplace - in order to be able to create catalogSource</p></li>
+<li><p>openshift-storage - in order to be able install OCS operator</p></li>
+</ul>
+<p>We need to then assign this secret to all service accounts in mentioned
+namespaces.</p>
+<blockquote>
+<div><p>Note:
+In openshift-storage namespace there are not all service accounts created
+before deployment. As workaround we need to run deployment - then we see that
+pods will not start cause of image pull error, but service account will be
+created. Then we need to again assign secret to all service accounts and
+remove all pods in the openshift-storage namespace. Then pods will be created
+again and successfully pull the images.</p>
+</div></blockquote>
+</div>
+<div class="section" id="must-gather">
+<h4>Must-gather<a class="headerlink" href="#must-gather" title="Permalink to this headline">¶</a></h4>
+<p>There is also problem with secret in must-gather. As must gather is always
+created in temporary created namespace with random name we cannot use the same
+mechanism mentioned above. As a workaround we are able to use live must-gather
+after the GA of specific version. Or we have to use upstream image. By default
+we are using upstream image for IBM Cloud.</p>
+<p>Config files:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">/conf/ocsci/live-must-gather.yaml</span></code> - for usage of live GAed version of mus
+gather image</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conf/ocsci/upstream-must-gather.yaml</span></code> - for usage of upstream image, this is
+also now part of <code class="docutils literal notranslate"><span class="pre">conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml</span></code></p></li>
+</ul>
+</div>
+<div class="section" id="deployment-of-ocp-takes-long-time">
+<h4>Deployment of OCP takes long time<a class="headerlink" href="#deployment-of-ocp-takes-long-time" title="Permalink to this headline">¶</a></h4>
+<p>It happened a lot that OCP cluster didn’t get to normal state in several hours
+and was in warning status cause of some ingress issue. For now, the timeout is
+increased to 10 hours as a workaround.</p>
+</div>
+<div class="section" id="missing-snapshotter-crds">
+<h4>Missing snapshotter CRDs<a class="headerlink" href="#missing-snapshotter-crds" title="Permalink to this headline">¶</a></h4>
+<p>Some missing CRDs for snapshooter are missing in IBM Cloud.
+As a workaround we need to create those CRDs depends on OCP version. (this is
+covered in automation)
+OCP 4.6 https://github.com/openshift/csi-external-snapshotter/tree/release-4.6/client/config/crd
+OCP 4.5 https://github.com/openshift/csi-external-snapshotter/tree/release-4.5/config/crd</p>
+</div>
+</div>
+</div>
+<div class="section" id="openshift-dedicated">
+<h2>Openshift Dedicated<a class="headerlink" href="#openshift-dedicated" title="Permalink to this headline">¶</a></h2>
+<p>This platform supports deployment of OCP cluster + OCS cluster on top of it.</p>
+<div class="section" id="id8">
+<h3>Requirements<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>Provide config file + credential config file described bellow to
+<code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command via <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> parameters.</p></li>
+</ul>
+</div>
+<div class="section" id="id9">
+<h3>Configuration files<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">conf/ocsci/openshift_dedicated.yaml</span></code> - this file can be used for deployment
+on Openshift Dedicated.</p></li>
+</ul>
+<p>You will need to create also credential file with secret data which should
+never be shared publicly in this repository.
+All needed values are mentioned as placeholders and commented out in
+<code class="docutils literal notranslate"><span class="pre">conf/ocsci/openshift_dedicated.yaml</span></code> and also mentioned below.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># This is the basic config for Openshift Dedicated usage</span>
+<span class="nn">---</span>
+<span class="nt">AUTH</span><span class="p">:</span>
+<span class="w"> </span><span class="nt">openshiftdedicated</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OCM TOKEN KEY PLACEHOLDER</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id10">
+<h3>Deployment types<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="id11">
+<h4>Managed<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h4>
+<p>This deployment type is managed - there is no openshift-installer used for
+installing the cluster, but we are using osde2e CLI to create the cluster.</p>
+<p>The kubeconfig is generated by command:
+<code class="docutils literal notranslate"><span class="pre">ocm</span> <span class="pre">get</span> <span class="pre">/api/clusters_mgmt/v1/clusters/{cluster_id}/credentials</span></code></p>
+<p>And stored in the same structure like openshift-installer does in cluster dir.</p>
+</div>
+</div>
+</div>
+<div class="section" id="rosa">
+<h2>ROSA<a class="headerlink" href="#rosa" title="Permalink to this headline">¶</a></h2>
+<p>This platform supports deployment of OCP cluster + OCS cluster on top of it.</p>
+<div class="section" id="id12">
+<h3>Requirements<a class="headerlink" href="#id12" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>Provide config file + credential config file described bellow to
+<code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command via <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> parameters.</p></li>
+</ul>
+</div>
+<div class="section" id="id13">
+<h3>Configuration files<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">conf/ocsci/rosa.yaml</span></code> - this file can be used for deployment on ROSA.</p></li>
+</ul>
+<p>You will need to create also credential file with secret data which should
+never be shared publicly in this repository.
+All needed values are mentioned as placeholders and commented out in
+<code class="docutils literal notranslate"><span class="pre">conf/ocsci/rosa.yaml</span></code> and also mentioned below.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># This is the basic config for OCM, user needs to login to OCM before ROSA can</span>
+<span class="c1"># be used</span>
+<span class="nn">---</span>
+<span class="nt">AUTH</span><span class="p">:</span>
+<span class="w"> </span><span class="nt">openshiftdedicated</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OCM TOKEN KEY PLACEHOLDER</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id14">
+<h3>Deployment types<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="id15">
+<h4>Managed<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h4>
+<p>This deployment type is managed - there is no openshift-installer used for
+installing the cluster, but we are using osde2e CLI to create the cluster.</p>
+<p>The kubeconfig is generated by command:
+<code class="docutils literal notranslate"><span class="pre">ocm</span> <span class="pre">get</span> <span class="pre">/api/clusters_mgmt/v1/clusters/{cluster_id}/credentials</span></code></p>
+<p>And stored in the same structure like openshift-installer does in cluster dir.</p>
+</div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="usage.html" class="btn btn-neutral float-right" title="Usage" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="getting_started.html" class="btn btn-neutral float-left" title="Getting Started" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

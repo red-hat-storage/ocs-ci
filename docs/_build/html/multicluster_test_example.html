@@ -1,0 +1,346 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Multi-cluster test example &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="How to use alternative mirrors/repositories for OCP installer/client download" href="usecases/using_alternative_ocp_mirrors.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Multi-cluster test example</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#example-test">Example test</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#execution-of-the-example-test">Execution of the example test</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Multi-cluster test example</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/multicluster_test_example.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="multi-cluster-test-example">
+<h1>Multi-cluster test example<a class="headerlink" href="#multi-cluster-test-example" title="Permalink to this headline">¶</a></h1>
+<p>The following example and notes are based on the main
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/pull/4875">PR#4875</a> for this feature.</p>
+<div class="section" id="example-test">
+<h2>Example test<a class="headerlink" href="#example-test" title="Permalink to this headline">¶</a></h2>
+<p>Following example is simple test which do basically nothing, just shows how to
+switch between cluster configuration contexts and how to access configuration
+of particular cluster without switching context to it.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">from</span> <span class="nn">ocs_ci.utility.utils</span> <span class="kn">import</span> <span class="n">exec_cmd</span>
+
+<span class="kn">from</span> <span class="nn">ocs_ci.framework</span> <span class="kn">import</span> <span class="n">config</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">test_multicluster_dahorak</span><span class="p">():</span>
+    <span class="c1"># print number of clusters to the log</span>
+    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of clusters: </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">nclusters</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># iterate over the clusters and perform some actions on each cluster</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">nclusters</span><span class="p">):</span>
+        <span class="c1"># switch context to the i-th cluster</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">switch_ctx</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="c1"># print the cluster name of the selected cluster</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;CLUSTER_NAME: </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">ENV_DATA</span><span class="p">[</span><span class="s1">&#39;cluster_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># run oc command against the selected cluster</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">exec_cmd</span><span class="p">(</span><span class="s2">&quot;oc version&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+        <span class="c1"># print kubeconfig path of the selected cluster</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;KUBECONFIG&quot;</span><span class="p">])</span>
+
+    <span class="c1"># access configuration of particular cluster without switching context to it</span>
+    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cluster name of first cluster: </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">clusters</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ENV_DATA</span><span class="p">[</span><span class="s1">&#39;cluster_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cluster name of second cluster: </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">clusters</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">ENV_DATA</span><span class="p">[</span><span class="s1">&#39;cluster_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="execution-of-the-example-test">
+<h2>Execution of the example test<a class="headerlink" href="#execution-of-the-example-test" title="Permalink to this headline">¶</a></h2>
+<p>See also <a class="reference external" href="usage.md#running-tests-on-multicluster-environment">Running tests on multicluster environment section in Usage
+doc</a>.</p>
+<p>I saved the above example test into <code class="docutils literal notranslate"><span class="pre">tests/test_multicluster_dahorak.py</span></code> file.
+Additionally I have two clusters and related cluster dirs:</p>
+<ul class="simple">
+<li><p>cluster: <code class="docutils literal notranslate"><span class="pre">dahorak-test1</span></code>, cluster path: <code class="docutils literal notranslate"><span class="pre">../clusters/dahorak-test1/</span></code></p></li>
+<li><p>cluster: <code class="docutils literal notranslate"><span class="pre">dahorak-test2</span></code>, cluster path: <code class="docutils literal notranslate"><span class="pre">../clusters/dahorak-test2/</span></code></p></li>
+</ul>
+<p>(Each cluster dir contains only <code class="docutils literal notranslate"><span class="pre">auth/kubeconfig</span></code> directory/file.)</p>
+<p>Now I’ll run the test via following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>run-ci<span class="w"> </span>multicluster<span class="w"> </span><span class="m">2</span><span class="w"> </span>tests/test_multicluster_dahorak.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ocsci-conf<span class="w"> </span>ocsci_conf.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster1<span class="w"> </span>--cluster-path<span class="w"> </span>../clusters/dahorak-test1/<span class="w"> </span>--cluster-name<span class="w"> </span>dahorak-test1<span class="w"> </span>--ocp-version<span class="w"> </span><span class="m">4</span>.10<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cluster2<span class="w"> </span>--cluster-path<span class="w"> </span>../clusters/dahorak-test2/<span class="w"> </span>--cluster-name<span class="w"> </span>dahorak-test2<span class="w"> </span>--ocp-version<span class="w"> </span><span class="m">4</span>.9<span class="w"> </span>--ocsci-conf<span class="w"> </span>config_for_cluster2.yaml
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>On the second line, I provided configuration file common for both clusters (beside other parameters I also set <code class="docutils literal notranslate"><span class="pre">skip_ocs_deployment:</span> <span class="pre">True</span></code>, to avoid additional checks and log messages in the console output).</p></li>
+<li><p>Third and fourth line is specific for particular cluster (cluster path, cluster name and additional configuration variables and files).</p></li>
+</ul>
+<p>The output (truncated for better readability) looks like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ run-ci multicluster 2 \
+    tests/test_multicluster_dahorak.py \
+    --ocsci-conf ocsci_conf.yaml \
+    --cluster1 --cluster-path ../clusters/dahorak-test1/ --cluster-name dahorak-test1 --ocp-version 4.10 \
+    --cluster2 --cluster-path ../clusters/dahorak-test2/ --cluster-name dahorak-test2 --ocp-version 4.9 --ocsci-conf config_for_cluster2.yaml
+2022-02-02 16:19:21,790 - MainThread - ocs_ci.framework.pytest_customization.ocscilib - INFO - Pytest configure switching to: cluster=0
+2022-02-02 16:19:22,410 - MainThread - ocs_ci.framework.pytest_customization.ocscilib - INFO - Dump of the consolidated config file is located here: /tmp/run-1643815158-cl0-config.yaml
+2022-02-02 16:19:22,411 - MainThread - ocs_ci.framework.pytest_customization.ocscilib - INFO - Skipping version collection because we skipped the OCS deployment
+2022-02-02 16:19:22,411 - MainThread - ocs_ci.framework.pytest_customization.ocscilib - INFO - Pytest configure switching to: cluster=1
+2022-02-02 16:19:22,994 - MainThread - ocs_ci.framework.pytest_customization.ocscilib - INFO - Dump of the consolidated config file is located here: /tmp/run-1643815158-cl1-config.yaml
+2022-02-02 16:19:22,994 - MainThread - ocs_ci.framework.pytest_customization.ocscilib - INFO - Skipping version collection because we skipped the OCS deployment
+================================== test session starts ==================================
+platform linux -- Python 3.9.7, pytest-5.3.5, py-1.11.0, pluggy-0.13.1
+rootdir: ocs-ci, inifile: pytest.ini
+plugins: metadata-1.11.0, ordering-0.6, marker-bugzilla-0.9.4, logger-0.5.1, html-2.1.1, flaky-3.7.0, repeat-0.9.1, profiling-1.7.0
+collected 1 item
+
+tests/test_multicluster_dahorak.py::test_multicluster_dahorak
+------------------------------------ live log setup -------------------------------------
+  ...
+------------------------------------- live log call -------------------------------------
+16:19:23 - MainThread - tests.test_multicluster_dahorak - INFO - Number of clusters: 2
+16:19:23 - MainThread - tests.test_multicluster_dahorak - INFO - CLUSTER_NAME: dahorak-test1
+16:19:23 - MainThread - ocs_ci.utility.utils - INFO - Executing command: oc version
+16:19:24 - MainThread - tests.test_multicluster_dahorak - INFO - b&#39;Client Version: 4.10.0-0.nightly-2022-02-02-000921\nServer Version: 4.10.0-0.nightly-2022-02-02-000921\nKubernetes Version: v1.23.3+b63be7f\n&#39;
+16:19:24 - MainThread - tests.test_multicluster_dahorak - INFO - ../clusters/dahorak-test1/auth/kubeconfig
+16:19:24 - MainThread - tests.test_multicluster_dahorak - INFO - CLUSTER_NAME: dahorak-test2
+16:19:24 - MainThread - ocs_ci.utility.utils - INFO - Executing command: oc version
+16:19:25 - MainThread - tests.test_multicluster_dahorak - INFO - b&#39;Client Version: 4.10.0-0.nightly-2022-02-02-000921\nServer Version: 4.9.17\nKubernetes Version: v1.22.3+e790d7f\n&#39;
+16:19:25 - MainThread - tests.test_multicluster_dahorak - INFO - ../clusters/dahorak-test2/auth/kubeconfig
+16:19:25 - MainThread - tests.test_multicluster_dahorak - INFO - Cluster name of first cluster: dahorak-test1
+16:19:25 - MainThread - tests.test_multicluster_dahorak - INFO - Cluster name of second cluster: dahorak-test2
+PASSED                                                                            [100%]
+
+============================= 1 passed in 60.92s (0:01:00) ==============================
+</pre></div>
+</div>
+<p>Just few notes about the output:</p>
+<ul class="simple">
+<li><p>in the beginning of the output, configuration for first and second cluster is
+dumped to <code class="docutils literal notranslate"><span class="pre">/tmp/run-1643815158-cl0-config.yaml</span></code> and
+<code class="docutils literal notranslate"><span class="pre">/tmp/run-1643815158-cl1-config.yaml</span></code> files respectively.</p></li>
+<li><p>Then in the test section (<code class="docutils literal notranslate"><span class="pre">---</span> <span class="pre">live</span> <span class="pre">log</span> <span class="pre">call</span> <span class="pre">---</span></code>), it prints cluster name,
+output of <code class="docutils literal notranslate"><span class="pre">oc</span> <span class="pre">version</span></code> command and path to <code class="docutils literal notranslate"><span class="pre">kubeconfig</span></code> for the first cluster
+and then the same for the second cluster.</p></li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="usecases/using_alternative_ocp_mirrors.html" class="btn btn-neutral float-left" title="How to use alternative mirrors/repositories for OCP installer/client download" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

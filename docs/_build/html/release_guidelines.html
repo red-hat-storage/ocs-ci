@@ -1,0 +1,384 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>OCS-CI Release Branches &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Common Use cases and FAQ" href="usecases/index.html" />
+    <link rel="prev" title="Tracking of workarounds" href="workarounds.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">OCS-CI Release Branches</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#goals">Goals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#supported-versions-and-use-cases">Supported versions and use-cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#locally">Locally</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#jenkins">Jenkins</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#creating-release-branches">Creating Release Branches</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#github-ui">Github UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cli">CLI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#post-creation-steps">Post-Creation Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#backporting-changes">Backporting Changes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#creating-a-cherry-pick-pr">Creating a cherry-pick PR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#run-pr-validation">Run PR Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#merge-to-the-release-branch">Merge to the release branch</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#fixes-related-to-specific-release-versions">Fixes related to specific release versions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>OCS-CI Release Branches</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/release_guidelines.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="ocs-ci-release-branches">
+<h1>OCS-CI Release Branches<a class="headerlink" href="#ocs-ci-release-branches" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="goals">
+<h2>Goals<a class="headerlink" href="#goals" title="Permalink to this headline">¶</a></h2>
+<p>Release branches are now available for users to deploy or test specific versions of ODF with. These branches are based off of our stable branch and are created after ODF has hit GA. There are a few goals behind implementing these release branches.</p>
+<p>The first goal is stability of testing existing releases. Since the code that will be used to target existing releases isn’t constantly being updated like our master/stable branches, the code will be much more stable and allow for greater consistency when testing released versions of ODF. The only changes to these existing release branches will be major bug fixes that are backported (or cherry-picked) from stable or important test cases that absolutely need to be retroactively added for older versions.</p>
+<p>The second goal is greater consistency in the framework. Now that we have release branches that exist for testing older versions of the product, we don’t need to carry logic forward to handle every version forever. We have many areas of the code that are performing checks on the product version and then performing actions if we are deploying or testing a version greater than a specific version. This will no longer be necessary once it can be assumed that the latest code will always include a feature and so the code that is performing this version check can be removed. This will enable us to reduce the amount of code in the framework that simply exists to make sure our framework is doing something that the product supports based on version, reducing a lot of technical debt.</p>
+<p>Overall, implementing release branches should allow us greater stability in testing existing releases as well as reducing the complexity of some of our framework code.</p>
+</div>
+<div class="section" id="supported-versions-and-use-cases">
+<h2>Supported versions and use-cases<a class="headerlink" href="#supported-versions-and-use-cases" title="Permalink to this headline">¶</a></h2>
+<p>Release branches will support deployments and testing of ODF/OCP versions N and N-1, N being the version specified in the name of the branch.</p>
+<p>N: Standard use-case of deployment and testing the version specified in the release branch name.
+N-1: For upgrade purposes. We need to be able to deploy N-1, run pre-upgrade tests, upgrade and reload configs for version N, then run post-upgrade tests. This process requires that release branches support the deployment and testing of previous versions.</p>
+<p>For example, the branch release-4.8 will be able to deploy OCP/ODF 4.8 as well as 4.7 to support upgrade testing. However, it will not officially support deployment or testing of versions &lt;= 4.6.</p>
+</div>
+<div class="section" id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="locally">
+<h3>Locally<a class="headerlink" href="#locally" title="Permalink to this headline">¶</a></h3>
+<p>As these are simply git branches we are creating, you just need to perform a git checkout on the specific release branch you wish to run your deployment or tests with in order to use it.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">fetch</span> <span class="n">upstream</span>
+<span class="n">git</span> <span class="n">checkout</span> <span class="n">release</span><span class="o">-</span><span class="mf">4.12</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p>Note that <code class="docutils literal notranslate"><span class="pre">upstream</span></code> is the name of the remote for the base repository, not your personal fork.</p>
+</div></blockquote>
+</div>
+<div class="section" id="jenkins">
+<h3>Jenkins<a class="headerlink" href="#jenkins" title="Permalink to this headline">¶</a></h3>
+<p>From Jenkins we will automatically be using the release branch if no other ocs-ci branch has been specified. Which specific release branch we use will be dynamically based on the <code class="docutils literal notranslate"><span class="pre">OCS_VERSION</span></code> or <code class="docutils literal notranslate"><span class="pre">UPGRADE_OCS_VERSION</span></code> parameters. For example, if <code class="docutils literal notranslate"><span class="pre">OCS_VERSION</span></code> is 4.13 we will use <code class="docutils literal notranslate"><span class="pre">release-4.13</span></code>. If this release branch doesn’t exist yet, we will default back to the <code class="docutils literal notranslate"><span class="pre">stable</span></code> branch. This logic can be overridden by specifying a branch to use.</p>
+</div>
+</div>
+<div class="section" id="creating-release-branches">
+<h2>Creating Release Branches<a class="headerlink" href="#creating-release-branches" title="Permalink to this headline">¶</a></h2>
+<p><strong>This process is handled by the project maintainers and done alongside the corresponding ODF GA release</strong></p>
+<p>Release branches will branch off of the <code class="docutils literal notranslate"><span class="pre">stable</span></code> branch. More specifically, we will target one of the tags we use when updating our stable branch. This ensures that the code we are basing the release branch off of has passed our stable branch verification testing. You can view these in the <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tags">github tags view</a>, they will have the format <code class="docutils literal notranslate"><span class="pre">stable-ocs-x.y-timestamp</span></code>. Once we know the tag we are basing the branch off of, we can then go about creating the branch from either the git CLI or the Github UI.</p>
+<div class="section" id="github-ui">
+<h3>Github UI<a class="headerlink" href="#github-ui" title="Permalink to this headline">¶</a></h3>
+<p>From the Github UI, navigate to the list of <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/branches">branches</a>. From here you can click on new branch, selecting the <code class="docutils literal notranslate"><span class="pre">stable</span></code> branch as the base.</p>
+<blockquote>
+<div><p>Note that the branch creation process only works this way if the latest stable commit is the point we wish to branch off from. Otherwise we will need to create the branch using the CLI.</p>
+</div></blockquote>
+</div>
+<div class="section" id="cli">
+<h3>CLI<a class="headerlink" href="#cli" title="Permalink to this headline">¶</a></h3>
+<p>First, ensure your local repository is up to date with the remote.</p>
+<blockquote>
+<div><p>Note that the following command is destructive so make sure you have any local changes stashed or committed before continuing.</p>
+</div></blockquote>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="n">master</span> <span class="o">&amp;&amp;</span> <span class="n">git</span> <span class="n">fetch</span> <span class="o">--</span><span class="nb">all</span> <span class="o">&amp;&amp;</span> <span class="n">git</span> <span class="n">reset</span> <span class="o">--</span><span class="n">hard</span> <span class="n">upstream</span><span class="o">/</span><span class="n">master</span>
+</pre></div>
+</div>
+<p>Checkout the stable branch</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="n">stable</span>
+</pre></div>
+</div>
+<p>Create a local branch using the stable tag</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="o">-</span><span class="n">b</span> <span class="n">release</span><span class="o">-</span><span class="mf">4.12</span> <span class="n">stable</span><span class="o">-</span><span class="n">ocs</span><span class="o">-</span><span class="mf">4.12</span><span class="o">-</span><span class="mi">202301310444</span>
+</pre></div>
+</div>
+<p>Finally, push the branch to the remote.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">push</span> <span class="n">upstream</span> <span class="n">release</span><span class="o">-</span><span class="mf">4.12</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p>Branches with the <code class="docutils literal notranslate"><span class="pre">release-*</span></code> naming convention will automatically be considered protected branches due to our repository configuration.</p>
+</div></blockquote>
+</div>
+<div class="section" id="post-creation-steps">
+<h3>Post-Creation Steps<a class="headerlink" href="#post-creation-steps" title="Permalink to this headline">¶</a></h3>
+<p>Given the nature of our release cadence and testing, we will generally want to start preparing for testing the next release after we have prepared a release branch. For example once we create a release branch for 4.12 we will update the code to default to deploying and testing 4.13. This update will include bumping the version in several places in the <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/blob/master/ocs_ci/framework/conf/default_config.yaml">default configuration</a> as well as updating the project version in our <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/blob/master/setup.py">setup.py</a>. You can see an example of one of these updates <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/pull/7028/files">here</a>.</p>
+</div>
+</div>
+<div class="section" id="backporting-changes">
+<h2>Backporting Changes<a class="headerlink" href="#backporting-changes" title="Permalink to this headline">¶</a></h2>
+<p>Most changes to the repository will end up being merged to master, propagated to the stable branch and eventually end up on the next release branch. Critical bug fixes or important test cases may be selected to be backported to existing release branches. In order to backport changes to an existing release branch, we will need to take the following steps.</p>
+<div class="section" id="creating-a-cherry-pick-pr">
+<h3>Creating a cherry-pick PR<a class="headerlink" href="#creating-a-cherry-pick-pr" title="Permalink to this headline">¶</a></h3>
+<p>The first step in the process will be to checkout the master branch and ensure it is up to date, as well as fetch remote branches.</p>
+<blockquote>
+<div><p>Note that the following command is destructive so make sure you have any local changes stashed or committed before continuing.</p>
+</div></blockquote>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="n">master</span> <span class="o">&amp;&amp;</span> <span class="n">git</span> <span class="n">fetch</span> <span class="o">--</span><span class="nb">all</span> <span class="o">&amp;&amp;</span> <span class="n">git</span> <span class="n">reset</span> <span class="o">--</span><span class="n">hard</span> <span class="n">upstream</span><span class="o">/</span><span class="n">master</span>
+</pre></div>
+</div>
+<p>Before we can cherry-pick our change we will need to know the commit hash. You can find this using:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">log</span>
+</pre></div>
+</div>
+<p>Once we have the hash, we will create a local branch based off of the release branch we wish to backport our changes to.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="o">-</span><span class="n">b</span> <span class="n">release</span><span class="o">-</span><span class="mf">4.8</span><span class="o">-</span><span class="n">cherry</span><span class="o">-</span><span class="n">pick</span><span class="o">-</span><span class="n">pr</span><span class="o">-</span><span class="mi">4765</span> <span class="n">upstream</span><span class="o">/</span><span class="n">release</span><span class="o">-</span><span class="mf">4.8</span>
+</pre></div>
+</div>
+<p>Then, we will cherry pick the commit to our branch using the hash.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">cherry</span><span class="o">-</span><span class="n">pick</span> <span class="mi">46568</span><span class="n">b9b4b8c2ceabad665b839655e0b19ab3634</span>
+</pre></div>
+</div>
+<p>And push our branch to our fork of the repository.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">push</span> <span class="n">origin</span> <span class="n">release</span><span class="o">-</span><span class="mf">4.8</span><span class="o">-</span><span class="n">cherry</span><span class="o">-</span><span class="n">pick</span><span class="o">-</span><span class="n">pr</span><span class="o">-</span><span class="mi">4765</span>
+</pre></div>
+</div>
+<p>Once we have our branch pushed to our fork, we can then open a pull request from Github. <strong>Be sure to change the base branch to the target release branch (in our example this would be <code class="docutils literal notranslate"><span class="pre">release-4.8</span></code>).</strong></p>
+</div>
+<div class="section" id="run-pr-validation">
+<h3>Run PR Validation<a class="headerlink" href="#run-pr-validation" title="Permalink to this headline">¶</a></h3>
+<p>Run the PR validation Job using the target release branch as the <code class="docutils literal notranslate"><span class="pre">OCS_CI_PR_BASE_BRANCH</span></code>. The standard level of verification for testing changes backported to release branches is a 100% pass rate of the <code class="docutils literal notranslate"><span class="pre">acceptance</span></code> test suite.</p>
+</div>
+<div class="section" id="merge-to-the-release-branch">
+<h3>Merge to the release branch<a class="headerlink" href="#merge-to-the-release-branch" title="Permalink to this headline">¶</a></h3>
+<p>Once the changes have been verified, merge the PR. You can then perform the same process for any other release branches that your changes may need to be backported to.</p>
+</div>
+</div>
+<div class="section" id="fixes-related-to-specific-release-versions">
+<h2>Fixes related to specific release versions<a class="headerlink" href="#fixes-related-to-specific-release-versions" title="Permalink to this headline">¶</a></h2>
+<p>There may be a time where a particular bug fix needs to be applied to a specific release branch while not being something we want to merge to master. In this scenario, we can follow a similar process to how we merge changes to master with two exceptions.</p>
+<ol class="simple">
+<li><p>The development branch will be based off of the <strong>target release branch</strong>, not master.</p></li>
+<li><p>The target branch of the pull request will be the <strong>release branch</strong>, not master.</p></li>
+</ol>
+<p>For example, a bug is discovered that only affects <code class="docutils literal notranslate"><span class="pre">4.11</span></code> releases that we need to implement a change for. Since this change isn’t necessary for the later releases, we don’t need to merge this to master and backport the change to previous releases. We can simply create a development branch off of our <code class="docutils literal notranslate"><span class="pre">release-4.11</span></code> branch, implement the fix, raise the pull request with <code class="docutils literal notranslate"><span class="pre">release-4.11</span></code> as the base branch.</p>
+<p>An important thing to remember in a scenario like this is the fact that our release branches support N and N-1 versions. This is significant if the fixes intended for a particular version are required for deployment, upgrades, or pre-upgrade testing it may be necessary to cherry-pick the change to the N+1 release branch. For example, if a bugfix is necessary for 4.10 deployments, the change will also need to be cherry-picked to the 4.11 release branch since <code class="docutils literal notranslate"><span class="pre">release-4.11</span></code> supports deployments of 4.10 for upgrade testing purposes.</p>
+<blockquote>
+<div><p>These will likely be rare occurances as most changes will be aimed at our master branch and backported to previous releases when necessary.</p>
+</div></blockquote>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="usecases/index.html" class="btn btn-neutral float-right" title="Common Use cases and FAQ" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="workarounds.html" class="btn btn-neutral float-left" title="Tracking of workarounds" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

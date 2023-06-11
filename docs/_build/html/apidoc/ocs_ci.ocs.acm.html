@@ -1,0 +1,431 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ocs_ci.ocs.acm package &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ocs_ci.ocs.must_gather package" href="ocs_ci.ocs.must_gather.html" />
+    <link rel="prev" title="ocs_ci.ocs package" href="ocs_ci.ocs.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">ocs_ci modules</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="ocs_ci.html">ocs_ci package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="ocs_ci.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.deployment.html">ocs_ci.deployment package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.framework.html">ocs_ci.framework package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.helpers.html">ocs_ci.helpers package</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="ocs_ci.ocs.html">ocs_ci.ocs package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.tests.html">ocs_ci.tests package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ocs_ci.utility.html">ocs_ci.utility package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="ocs_ci.html#module-ocs_ci">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">ocs_ci</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.html">ocs_ci package</a> &raquo;</li>
+        
+          <li><a href="ocs_ci.ocs.html">ocs_ci.ocs package</a> &raquo;</li>
+        
+      <li>ocs_ci.ocs.acm package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/apidoc/ocs_ci.ocs.acm.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="ocs-ci-ocs-acm-package">
+<h1>ocs_ci.ocs.acm package<a class="headerlink" href="#ocs-ci-ocs-acm-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.ocs.acm.acm">
+<span id="ocs-ci-ocs-acm-acm-module"></span><h2>ocs_ci.ocs.acm.acm module<a class="headerlink" href="#module-ocs_ci.ocs.acm.acm" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ocs_ci.ocs.acm.acm.AcmAddClusters">
+<em class="property">class </em><code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">AcmAddClusters</code><a class="headerlink" href="#ocs_ci.ocs.acm.acm.AcmAddClusters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="ocs_ci.ocs.ui.html#ocs_ci.ocs.ui.acm_ui.AcmPageNavigator" title="ocs_ci.ocs.ui.acm_ui.AcmPageNavigator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ocs_ci.ocs.ui.acm_ui.AcmPageNavigator</span></code></a></p>
+<p>ACM Page Navigator Class</p>
+<dl class="method">
+<dt id="ocs_ci.ocs.acm.acm.AcmAddClusters.import_cluster">
+<code class="sig-name descname">import_cluster</code><span class="sig-paren">(</span><em class="sig-param">cluster_name</em>, <em class="sig-param">kubeconfig_location</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.AcmAddClusters.import_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Import cluster using UI</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cluster_name</strong> – (str): cluster name to import</p></li>
+<li><p><strong>kubeconfig_location</strong> – (str): kubeconfig location</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None, but exits if sample object is not None using TimeoutSampler</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.acm.acm.AcmAddClusters.import_cluster_ui">
+<code class="sig-name descname">import_cluster_ui</code><span class="sig-paren">(</span><em class="sig-param">cluster_name</em>, <em class="sig-param">kubeconfig_location</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.AcmAddClusters.import_cluster_ui" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cluster_name</strong> (<em>str</em>) – cluster name to import</p></li>
+<li><p><strong>kubeconfig_location</strong> (<em>str</em>) – kubeconfig file location of imported cluster</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.acm.acm.AcmAddClusters.install_submariner_ui">
+<code class="sig-name descname">install_submariner_ui</code><span class="sig-paren">(</span><em class="sig-param">globalnet=True</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.AcmAddClusters.install_submariner_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>Installs the Submariner on the ACM Hub cluster and expects 2 OCP clusters to be already imported
+on the Hub Cluster to create a link between them</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>globalnet</strong> (<em>bool</em>) – Globalnet is set to True by default for ODF versions greater than or equal to 4.13</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ocs_ci.ocs.acm.acm.AcmAddClusters.submariner_validation_ui">
+<code class="sig-name descname">submariner_validation_ui</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.AcmAddClusters.submariner_validation_ui" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function validates submariner status on ACM console which connects 2 managed OCP clusters.
+This is a mandatory pre-check for Regional DR.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.copy_kubeconfig">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">copy_kubeconfig</code><span class="sig-paren">(</span><em class="sig-param">file=None</em>, <em class="sig-param">return_str=False</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.copy_kubeconfig" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file</strong> – (str): kubeconfig file location</p></li>
+<li><p><strong>return_str</strong> – (bool): if True return kubeconfig content as string</p></li>
+<li><p><strong>return list of lines of kubeconfig content</strong> (<em>else</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>kubeconfig content</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list/str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.get_acm_url">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">get_acm_url</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.get_acm_url" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets ACM console url</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>url of ACM console</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.get_clusters_env">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">get_clusters_env</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.get_clusters_env" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stores cluster’s kubeconfig location and clusters name, in case of multi-cluster setup.
+Function will switch to context index zero before returning
+:returns: with clusters names, clusters kubeconfig locations
+:rtype: dict</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.import_clusters_via_cli">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">import_clusters_via_cli</code><span class="sig-paren">(</span><em class="sig-param">clusters</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.import_clusters_via_cli" title="Permalink to this definition">¶</a></dt>
+<dd><p>Import clusters via cli</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>clusters</strong> (<em>list</em>) – list of tuples (cluster name, kubeconfig path)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.import_clusters_with_acm">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">import_clusters_with_acm</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.import_clusters_with_acm" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run Procedure of: detecting acm, login to ACM console, import 2 clusters</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.login_to_acm">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">login_to_acm</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.login_to_acm" title="Permalink to this definition">¶</a></dt>
+<dd><p>Login to ACM console and validate by its title</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>driver (Selenium WebDriver)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.validate_cluster_import">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">validate_cluster_import</code><span class="sig-paren">(</span><em class="sig-param">cluster_name</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.validate_cluster_import" title="Permalink to this definition">¶</a></dt>
+<dd><p>Validate ACM status of managed cluster</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cluster_name</strong> – (str): cluster name to validate</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Assert:</dt><dd><p>All conditions of selected managed cluster should be “True”, Failed otherwise</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>True, if not AssertionError</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.validate_page_title">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">validate_page_title</code><span class="sig-paren">(</span><em class="sig-param">title</em><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.validate_page_title" title="Permalink to this definition">¶</a></dt>
+<dd><p>Validates Page HTML Title
+:param title: required title
+:type title: str</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="ocs_ci.ocs.acm.acm.verify_running_acm">
+<code class="sig-prename descclassname">ocs_ci.ocs.acm.acm.</code><code class="sig-name descname">verify_running_acm</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ocs_ci.ocs.acm.acm.verify_running_acm" title="Permalink to this definition">¶</a></dt>
+<dd><p>Detect ACM and its version on Cluster</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ocs_ci.ocs.acm.acm_constants">
+<span id="ocs-ci-ocs-acm-acm-constants-module"></span><h2>ocs_ci.ocs.acm.acm_constants module<a class="headerlink" href="#module-ocs_ci.ocs.acm.acm_constants" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-ocs_ci.ocs.acm">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-ocs_ci.ocs.acm" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="ocs_ci.ocs.must_gather.html" class="btn btn-neutral float-right" title="ocs_ci.ocs.must_gather package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="ocs_ci.ocs.html" class="btn btn-neutral float-left" title="ocs_ci.ocs package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

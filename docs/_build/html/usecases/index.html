@@ -1,0 +1,277 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Common Use cases and FAQ &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Using ocs-ci to deploy OCP cluster without default OCS installation" href="deployment_without_ocs.html" />
+    <link rel="prev" title="OCS-CI Release Branches" href="../release_guidelines.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Common Use cases and FAQ</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html">Using ocs-ci to deploy OCP cluster without default OCS installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable_huge_pages.html">ENABLE HUGE PAGES</a></li>
+<li class="toctree-l2"><a class="reference internal" href="odf_with_kms.html">Using multiple instances of Vault KMS in OCS-CI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html">How to report test results from ocs-ci not executed by ocs-ci jenkins?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html">How to execute tests on a cluster not deployed by ocs-ci?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_alternative_ocp_mirrors.html">How to use alternative mirrors/repositories for OCP installer/client download</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Common Use cases and FAQ</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/usecases/index.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="common-use-cases-and-faq">
+<h1>Common Use cases and FAQ<a class="headerlink" href="#common-use-cases-and-faq" title="Permalink to this headline">¶</a></h1>
+<p>Here you can find descriptions of common use cases and answers for frequently
+asked questions about using <code class="docutils literal notranslate"><span class="pre">ocs-ci</span></code>.</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="deployment_without_ocs.html">Using ocs-ci to deploy OCP cluster without default OCS installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html#option-skip-ocs-deployment">Option skip_ocs_deployment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html#skipping-ocs-installation-in-deploy-cluster-jenkins-job">Skipping OCS installation in deploy cluster jenkins job</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html#catalog-sources-with-ci-builds">Catalog sources with CI builds</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="enable_huge_pages.html">ENABLE HUGE PAGES</a></li>
+<li class="toctree-l1"><a class="reference internal" href="odf_with_kms.html">Using multiple instances of Vault KMS in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html">How to report test results from ocs-ci not executed by ocs-ci jenkins?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html#xml-file-with-junit-test-report">XML file with JUnit test report</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html#ocs-ci-log-files">ocs-ci log files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html#must-gather-data">must gather data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html#pytest-temporary-directory">pytest temporary directory</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html">How to execute tests on a cluster not deployed by ocs-ci?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html#preparation-of-test-execution-command">Preparation of test execution command</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html#how-do-i-specify-ocs-ci-config-with-platform-and-deployment-info">How do I specify ocs-ci config with platform and deployment info?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html#access-to-platform-where-the-cluster-is-deployed">Access to platform where the cluster is deployed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html#access-to-cloud-object-storage-mcg-only">Access to cloud object storage (MCG only)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html#what-if-i-need-to-run-tests-on-a-new-platform">What if I need to run tests on a new platform?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html#what-if-i-see-lot-of-warnings-about-catalogsource">What if I see lot of warnings about catalogsource?</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="using_alternative_ocp_mirrors.html">How to use alternative mirrors/repositories for OCP installer/client download</a></li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="deployment_without_ocs.html" class="btn btn-neutral float-right" title="Using ocs-ci to deploy OCP cluster without default OCS installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="../release_guidelines.html" class="btn btn-neutral float-left" title="OCS-CI Release Branches" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

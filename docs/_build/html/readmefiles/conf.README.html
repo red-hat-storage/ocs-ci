@@ -1,0 +1,636 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Config directory &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Guidelines for fixtures usage in OCS-CI" href="../fixture_usage.html" />
+    <link rel="prev" title="Stable Branch" href="../stable_branch.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Config directory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ocs-ci-config">OCS CI Config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#custom-config">Custom config</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sections-in-our-configs">Sections in our configs</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#run">RUN</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#deployment">DEPLOYMENT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#reporting">REPORTING</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#env-data">ENV_DATA</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#upgrade">UPGRADE</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#auth">AUTH</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#multicluster">MULTICLUSTER</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flexy">FLEXY</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#external-mode">EXTERNAL_MODE</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#ui-selenium">UI_SELENIUM</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#components">COMPONENTS</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#example-of-accessing-config-default-data">Example of accessing config/default data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#priority-of-loading-configs">Priority of loading configs:</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Config directory</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/readmefiles/conf.README.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="config-directory">
+<h1>Config directory<a class="headerlink" href="#config-directory" title="Permalink to this headline">¶</a></h1>
+<p>In this directory we store all the configuration for cluster and OCSCI config
+files.</p>
+<p>During the execution we are loading different config files passed by
+–ocsci-conf parameter which we merge together. The last one passed config file
+overwrite previous file.</p>
+<p>Each config file can contain different sections (DEFAULTS, ENV_DATA, RUN, etc).</p>
+<p>For more information please read the rest of the documentation.</p>
+<div class="section" id="ocs-ci-config">
+<h2>OCS CI Config<a class="headerlink" href="#ocs-ci-config" title="Permalink to this headline">¶</a></h2>
+<p>We moved most of the OCSCI framework related config under
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci/">ocsci folder</a>.</p>
+<p>You can pass those config files by <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> parameter.</p>
+</div>
+<div class="section" id="custom-config">
+<h2>Custom config<a class="headerlink" href="#custom-config" title="Permalink to this headline">¶</a></h2>
+<p>If you would like to overwrite cluster default data you can create file
+similar to
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocs_basic_install.yml">this example</a>.
+Example shown overwrites below ENV data:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">platform</span></code> - Platform the cluster was created in or will be created in</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">worker_replicas</span></code> - Number of replicas of worker nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">master_replicas</span></code> - Number of replicas of master nodes</p></li>
+</ul>
+<div class="section" id="sections-in-our-configs">
+<h3>Sections in our configs<a class="headerlink" href="#sections-in-our-configs" title="Permalink to this headline">¶</a></h3>
+<p>All of the below sections, will be available from the ocsci config dataclass.</p>
+<div class="section" id="run">
+<h4>RUN<a class="headerlink" href="#run" title="Permalink to this headline">¶</a></h4>
+<p>Framework RUN related config parameters. If the parameter is for the complete
+run it belongs here.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">username</span></code> - Kubeadmin username</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">password_location</span></code> - Filepath (under the cluster path) where the kubeadmin password is located</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">log_dir</span></code> - Directory where logs are placed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">logs_url</span></code> - URL where the logs will be available for remote access, used for Jenkins runs and configured by Jenkins</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cluster_dir_full_path</span></code> - cluster dir full path on NFS share starting with <code class="docutils literal notranslate"><span class="pre">/mnt/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run_id</span></code> - Timestamp ID that is used for log directory naming</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">kubeconfig_location</span></code> - Filepath (under the cluster path) where the kubeconfig is located</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cli_params</span></code> - Dict that holds onto all CLI parameters</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">client_version</span></code> - OCP client version</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bin_dir</span></code> - Directory where binaries are downloaded to</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">google_api_secret</span></code> - Filepath to google api secret json file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">force_chrome_branch_base</span></code> - Chrome base branch for openshift console UI testing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">force_chrome_branch_sha256sum</span></code> - Chrome branch sha256sum for openshift console UI testing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chrome_binary_path</span></code> - Filepath to the chrome browser binary</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">io_in_bg</span></code> - Run IO in background (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">io_load</span></code> - Target percentage for IO in background</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">log_utilization</span></code> - Enable logging of cluster utilization metrics every 10 seconds. Set via –log-cluster-utilization</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">use_ocs_worker_for_scale</span></code> - Use OCS workers for scale testing (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">load_status</span></code> - Current status of IO load</p></li>
+</ul>
+</div>
+<div class="section" id="deployment">
+<h4>DEPLOYMENT<a class="headerlink" href="#deployment" title="Permalink to this headline">¶</a></h4>
+<p>Deployment related parameters. Only deployment related params not used
+anywhere else.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">installer_version</span></code> - OCP installer version</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">custom_ocp_image</span></code> - Custom OCP image from which extract the installer and
+client and isntall OCP</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">force_download_installer</span></code> - Download the OCP installer even if one already exists in the bin_dir</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">force_download_client</span></code> - Download the OCP client even if one already exists in the bin_dir</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">skip_download_client</span></code> - Skip the openshift client download step or not (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">default_latest_tag</span></code> - OCS latest tag to be used by default if one is not provided</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">external_mode</span></code> - If OCS cluster is setup in external mode (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocs_csv_channel</span></code> - Channel used to install OCS CSV</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">default_ocs_registry_image</span></code> - Default OCS registry image (e.g. “quay.io/rhceph-dev/ocs-olm-operator:latest-4.6”)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocs_operator_nodes_to_label</span></code> - Number of OCS operator nodes to label</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocs_operator_nodes_to_taint</span></code> - Number of OCS operator nodes to taint</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ssh_key</span></code> - Filepath to the public SSH key used to authenticate with OCP nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ssh_key_private</span></code> - Filepath to the private SSH key used to auth with OCP nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">force_deploy_multiple_clusters</span></code> - Allow multiple clusters to be deployed with the same prefix (vmware)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">allow_lower_instance_requirements</span></code> Allow instance requirements lower than the documented recommended values (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_deployment</span></code> - Utilize openshift-console to deploy OCS via the UI (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_acm_import</span></code> - Import clusters to ACM via the UI (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">live_deployment</span></code> - Deploy OCS from live content (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">live_content_source</span></code> - Content source to use for live deployment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">preserve_bootstrap_node</span></code> - Preserve the bootstrap node rather than deleting it after deployment (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">terraform_version</span></code> - Version of terraform to download</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">infra_nodes</span></code> - Add infrastructure nodes to the cluster</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">openshift_install_timeout</span></code> - Time (in seconds) to wait before timing out during OCP installation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">local_storage</span></code> - Deploy OCS with the local storage operator (aka LSO) (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">local_storage_storagedeviceset_count</span></code> - This option allows one to control <code class="docutils literal notranslate"><span class="pre">spec.storageDeviceSets[0].count</span></code> of LSO backed StorageCluster.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">optional_operators_image</span></code> - If provided, it is used for LSO installation on unreleased OCP version</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disconnected</span></code> - Set if the cluster is deployed in a disconnected environment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">proxy</span></code> - Set if the cluster is deployed in a proxy environment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mirror_registry</span></code> - Hostname of the mirror registry</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mirror_registry_user</span></code> - Username for disconnected cluster mirror registry</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mirror_registry_password</span></code> - Password for disconnected cluster mirror registry</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opm_index_prune_binary_image</span></code> - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor version.
+(for example: <code class="docutils literal notranslate"><span class="pre">registry.redhat.io/openshift4/ose-operator-registry:v4.9</span></code>)
+<a class="reference external" href="https://access.redhat.com/documentation/en-us/openshift_container_platform/4.9/html/operators/administrator-tasks#olm-pruning-index-image_olm-managing-custom-catalogs">doc</a></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">min_noobaa_endpoints</span></code> - Sets minimum noobaa endpoints (Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2861)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">host_network</span></code> - Enable host network in the storage cluster CR and prepare rules needed in AWS for host network during OCP deployment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">subscription_plan_approval</span></code> - ‘Manual’ or ‘Automatic’ subscription approval for OCS upgrade</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stage_rh_osbs</span></code> - Deploy rh-osbs-operator (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stage_index_image_tag</span></code> - Image tag to use for rh-osbs-operator deployment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">type</span></code> - Type of VMWare LSO deployment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">kms_deployment</span></code> - Deploy OCS with KMS (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">create_ibm_cos_secret</span></code>: If this value is set to True (by default), the COS
+secret is created. If False, it will not be created. Relevant only for IBM
+Cloud deployment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ceph_dubg</span></code> - Deploy OCS with Ceph in debug log level. Available starting OCS 4.7 (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ignition_version</span></code> - Ignition Version is the version used in MachineConfigs.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dummy_zone_node_labels</span></code>: When set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, ocs-ci will try to label all
+master and worker nodes based on values of <code class="docutils literal notranslate"><span class="pre">worker_availability_zones</span></code> and
+<code class="docutils literal notranslate"><span class="pre">master_availability_zones</span></code> options, but only if there are no zone labels
+already defined. Labeling happens during post OCP deployment procedures.
+If proper labeling is not possible, an exception (which will fail OCP
+deployment) is raised. The default is False.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rook_log_level</span></code> - If defined, it will change rook_log_level to specified value (e.g. DEBUG),
+after the subscription to the OCS.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">use_custom_ingress_ssl_cert</span></code> - Replace the default ingress certificate by custom one. (default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ingress_ssl_cert</span></code> - Path for the custom ingress ssl certificate. (default: <code class="docutils literal notranslate"><span class="pre">data/ingress-cert.crt</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ingress_ssl_key</span></code> - Path for the key for custom ingress ssl certificate. (default: <code class="docutils literal notranslate"><span class="pre">data/ingress-cert.key</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ingress_ssl_ca_cert</span></code> - Path for the CA certificate used for signing the ingress_ssl_cert. (default: <code class="docutils literal notranslate"><span class="pre">data/ca.crt</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cert_signing_service_url</span></code> - Automatic Certification Authority signing service URL.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">proxy_http_proxy</span></code>, <code class="docutils literal notranslate"><span class="pre">proxy_https_proxy</span></code> - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disconnected_http_proxy</span></code>, <code class="docutils literal notranslate"><span class="pre">disconnected_https_proxy</span></code>, <code class="docutils literal notranslate"><span class="pre">disconnected_no_proxy</span></code> - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disconnected_env_skip_image_mirroring</span></code> - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">customized_deployment_storage_class</span></code> - Customize the storage class type in the deployment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ibmcloud_disable_addon</span></code> - Disable OCS addon</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">in_transit_encryption</span></code> - Enable in-transit encryption.</p></li>
+</ul>
+</div>
+<div class="section" id="reporting">
+<h4>REPORTING<a class="headerlink" href="#reporting" title="Permalink to this headline">¶</a></h4>
+<p>Reporting related config. (Do not store secret data in the repository!).</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">email</span></code> - Subsection for email reporting configuration</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">address</span></code> - Address to send results to</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">smtp_server</span></code> - Hostname for SMTP server</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">polarion</span></code> - Subsection for polarion reporting configuration</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">project_id</span></code> - Polarion project ID</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">us_ds</span></code> - ‘DS’ or ‘US’, specify downstream or upstream OCS deployment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocp_must_gather_image</span></code> - Image used for OCP must-gather (e.g. “quay.io/openshift/origin-must-gather”)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">default_ocs_must_gather_image</span></code> - Default OCS must gather image used for OCS must-gather, can be overwritten by ocs_must_gather_image</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocs_must_gather_image</span></code> - Image used for OCS must-gather (e.g. “quay.io/ocs-dev/origin-must-gather”)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">default_ocs_must_gather_latest_tag</span></code> - Latest tag to use by default for OCS must-gather, can be ovewritten by ocs_must_gather_latest_tag</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocs_must_gather_latest_tag</span></code> - Latest tag to use for OCS must-gather</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gather_on_deploy_failure</span></code> - Run must-gather on deployment failure or not (Default: true)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">collect_logs_on_success_run</span></code> - Run must-gather on successful run or not (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">must_gather_timeout</span></code> - Time (in seconds) to wait before timing out during must-gather</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">post_upgrade</span></code> - If True, post-upgrade will be reported in the test suite
+name in the mail subject.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">save_mem_report</span></code> - If True, test run memory report CSV file will be saved in <code class="docutils literal notranslate"><span class="pre">RUN[&quot;log_dir&quot;]/stats_log_dir_&lt;run_id&gt;</span></code>
+directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
+exporting env variable: export SAVE_MEM_REPORT=true</p></li>
+</ul>
+</div>
+<div class="section" id="env-data">
+<h4>ENV_DATA<a class="headerlink" href="#env-data" title="Permalink to this headline">¶</a></h4>
+<p>Environment specific data. This section is meant to be overwritten by own
+cluster config file, but can be overwritten also here (But cluster config has
+higher priority).</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cluster_name</span></code> - Defaults to null, is set by the –cluster-name CLI argument</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">storage_cluster_name</span></code> - OCS storage cluster name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">storage_device_sets_name</span></code> - OCS storage device sets name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cluster_namespace</span></code> - Namespace where OCS pods are created</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">local_storage_namespace</span></code> - Namespace where local storage operator pods are created</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">monitoring_enabled</span></code> - For testing OCS monitoring based on Prometheus (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">persistent-monitoring</span></code> - Change monitoring backend to OCS (Default: true)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">platform</span></code> - Platform the cluster was created in or will be created in</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">deployment_type</span></code> - ‘ipi’ or ‘upi’, Installer provisioned installation or user provisioned installation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">region</span></code> - Platform region the cluster nodes are created in</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">base_domain</span></code> - Base domain used for routing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">master_instance_type</span></code> - Instance type used for master nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">worker_instance_type</span></code> - Instance type used for worker nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">master_replicas</span></code> - Number of replicas of master nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">worker_replicas</span></code> - Number of replicas of worker nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">master_availability_zones</span></code> - List of availability zones to create master nodes in</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">worker_availability_zones</span></code> - List of availability zones to create worker nodes in</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">skip_ocp_deployment</span></code> - Skip the OCP deployment step or not (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">skip_ocs_deployment</span></code> - Skip the OCS deployment step or not (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocs_version</span></code> - Version of OCS that is being deployed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">vm_template</span></code> - VMWare template to use for RHCOS images</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fio_storageutilization_min_mbps</span></code> - Minimal write speed of FIO used in workload_fio_storageutilization</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TF_LOG_LEVEL</span></code> - Terraform log level</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TF_LOG_FILE</span></code> - Terraform log file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cluster_host_prefix</span></code> - Subnet prefix length to assign to each individual node</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">flexy_deployment</span></code> - Deploy OCP via flexy or not (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">flexy_template</span></code> - Template from openshift-misc repo for the flexy deployment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">local_storage_allow_rotational_disks</span></code> - Enable rotational disk devices for LSO deployment (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disk_enable_uuid</span></code> - Enable the disk UUID on VMs, this is required for VMDK</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ignition_data_encoding</span></code> - Encoding type used for the ignition config data</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">device_size</span></code> - Size (in GB) to use for storage device sets</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_workers</span></code> - Use RHEL workers instead of RHCOS, for UPI deployments (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_version</span></code> - For AWS UPI deployment over RHEL. Based on this value we
+will select one of rhelX.Y RHEL AMI mentioned below. (e.g 7.9 or 8.4)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_version_for_ansible</span></code> - This RHEL version will be used for running
+ansible playbook for adding RHEL nodes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhelX.Y_worker_ami</span></code> - AMI to use for AWS deployment over RHEL X.Y worker nodes
+(X.Y replace with valid version e.g 7.9: rhel7.9_worker_ami).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhcos_ami</span></code> - AMI to use for RHCOS workers, for UPI deployments</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">skip_ntp_configuration</span></code> - Skip NTP configuration during flexy deployment (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">encryption_at_rest</span></code> - Enable encryption at rest (OCS &gt;= 4.6 only) (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fips</span></code> - Enable FIPS (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">master_num_cpus</span></code> - Number of CPUs for each master node</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">worker_num_cpus</span></code> - Number of CPUs for each worker node</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">memory</span></code> - Amount of memory used for each node (vmware)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disk_pattern</span></code> - Specify disk pattern used when determining device paths for LSO deployment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">number_of_storage_nodes</span></code> - Number of storage nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">master_memory</span></code> - The amount of memory for each master node</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">compute_memory</span></code> - The amount of memory for each compute node</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scale_up</span></code> - Add nodes to the cluster (vmware)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nodes_scaleup_count</span></code> - Number of nodes to add to the cluster</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_template</span></code> - The VMWare template to use to spin up RHEL nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_worker_prefix</span></code> - RHEL worker node name prefix</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_user</span></code> - RHEL node username</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_num_cpus</span></code> - Number of CPUs for each RHEL node</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rhel_memory</span></code> - The amount of memory RHEL nodes will have</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mixed_cluster</span></code> - Whether or not a cluster has a mix of RHEL and RHCOS nodes (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">vault_deploy_mode</span></code> - The mode in which vault service is deployed (external OR internal)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hpcs_deploy_mode</span></code> - The mode in which hpcs service is deployed (external only)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">KMS_PROVIDER</span></code> - KMS provider name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">KMS_SERVICE_NAME</span></code> - KMS service name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_ADDR</span></code> - Address of vault server</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_CACERT</span></code> - Name of the ca certificate ocp resource for vault</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_CLIENT_CERT</span></code> - Name of the client certificate ocp resource for vault</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_CLIENT_KEY</span></code> - Client key for vault</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_SKIP_VERIFY</span></code> - Skip SSL check (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_BACKEND_PATH</span></code> - Vault path name used in ocs cluster</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VAULT_POLICY</span></code> - Vault policy name used in ocs cluster</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IBM_KP_SERVICE_INSTANCE_ID</span></code> - ID of the HPCS service instance.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IBM_KP_BASE_URL</span></code> - HPCS Service’s public endpoint URL.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IBM_KP_TOKEN_URL</span></code> - IBM endpoint for exchanging token for API key.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IBM_KP_SERVICE_API_KEY</span></code> - API key to access HPCS service.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IBM_KP_CUSTOMER_ROOT_KEY</span></code> - ID of the root key generated by customer under HPCS service.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">huge_pages</span></code> - True if you would like to enable HUGE PAGES.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">http_proxy</span></code>, <code class="docutils literal notranslate"><span class="pre">https_proxy</span></code>, <code class="docutils literal notranslate"><span class="pre">no_proxy</span></code> - proxy configuration used for accessing external resources</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">client_http_proxy</span></code> - proxy configuration used by client to access OCP cluster</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ibm_flash</span></code> - Set to <code class="docutils literal notranslate"><span class="pre">true</span></code> if you are running on the system with IBM Flash storageSystem.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ms_env_type</span></code> - to choose managed service environment type staging or production, default set to staging</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lvmo</span></code> - set to True if it’s LVMO deployment - mainly used for reporting purpose.</p></li>
+</ul>
+</div>
+<div class="section" id="upgrade">
+<h4>UPGRADE<a class="headerlink" href="#upgrade" title="Permalink to this headline">¶</a></h4>
+<p>Upgrade related configuration data.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">upgrade</span></code> - Set to true if upgrade is being executed  (Default: false)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">upgrade_to_latest</span></code> - Upgrade to the latest OCS version (Default: true)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocp_channel</span></code> - OCP channel to upgrade with</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocp_upgrade_path</span></code> - OCP image to upgrade with</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ocp_arch</span></code> - Architecture type of the OCP image</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">upgrade_logging_channel</span></code> - OCP logging channel to upgrade with</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">upgrade_ui</span></code> - Perform upgrade via UI (Not all the versions are supported, please look at the code)</p></li>
+</ul>
+</div>
+<div class="section" id="auth">
+<h4>AUTH<a class="headerlink" href="#auth" title="Permalink to this headline">¶</a></h4>
+<p>This section of the config is used for storing secret data that is read from a local
+auth file or pulled from s3.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">test_quay_auth</span></code> - Config variable used during unit_testing</p></li>
+</ul>
+</div>
+<div class="section" id="multicluster">
+<h4>MULTICLUSTER<a class="headerlink" href="#multicluster" title="Permalink to this headline">¶</a></h4>
+<p>This section of the config is used for multicluster specific configuration data.
+Scenarios that use this data include MDR and RDR deployments.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">multicluster_index</span></code> - Index of the cluster, used to differentiate between other cluster configurations.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">acm_cluster</span></code> - True if the cluster is an ACM hub cluster, otherwise False.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">primary_cluster</span></code> - True if the cluster is the primary cluster, otherwise False.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">active_acm_cluster</span></code> - True if the cluster is the active ACM hub cluster, False if passive.</p></li>
+</ul>
+<div class="section" id="ibmcloud">
+<h5>ibmcloud<a class="headerlink" href="#ibmcloud" title="Permalink to this headline">¶</a></h5>
+<p>IBM Cloud related section under AUTH config.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">api_key</span></code> - IBM Cloud API key for authentication. See
+<a class="reference external" href="https://cloud.ibm.com/docs/openshift?topic=openshift-access_cluster#access_api_key">documentation</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">account_id</span></code> - Account ID to be used for login to IBM Cloud</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ibm_cos_access_key_id</span></code> - COS (Cloud Object Storage) key ID. See
+<a class="reference external" href="https://cloud.ibm.com/docs/cloud-object-storage?topic=cloud-object-storage-uhc-hmac-credentials-main">documentation</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ibm_cos_secret_access_key</span></code> - COS secret key (Follow the same documentation link above!)</p></li>
+</ul>
+<blockquote>
+<div><p>All the configuration values mentioned above are required for IBM Cloud
+deployment!</p>
+</div></blockquote>
+</div>
+</div>
+<div class="section" id="flexy">
+<h4>FLEXY<a class="headerlink" href="#flexy" title="Permalink to this headline">¶</a></h4>
+<p>Configuration specific to flexy OCP cluster deployments</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">LAUNCHER_VARS</span></code> - dict of arguments to pass to flexy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">OPENSHIFT_SSHKEY_PATH</span></code> - Filepath to SSH key used by flexy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">GIT_PRIVATE_OPENSHIFT_MISC_URI</span></code> - URL for the flexy-templates repository</p></li>
+</ul>
+</div>
+<div class="section" id="external-mode">
+<h4>EXTERNAL_MODE<a class="headerlink" href="#external-mode" title="Permalink to this headline">¶</a></h4>
+<p>Configuration specific to external Ceph cluster</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">admin_keyring</span></code></p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">key</span></code> - Admin keyring value used for the external Ceph cluster</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">external_cluster_details</span></code> - base64 encoded data of json output from exporter script</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rgw_secure</span></code> - boolean parameter which defines if external Ceph cluster RGW is secured using SSL</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rgw_cert_ca</span></code> - url pointing to CA certificate used to sign certificate for RGW with SSL</p></li>
+</ul>
+<div class="section" id="login">
+<h5>login<a class="headerlink" href="#login" title="Permalink to this headline">¶</a></h5>
+<p>Login section under EXTERNAL_MODE with auth details for SSH to the host of RHCS
+Cluster.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">username</span></code> - user to be used for SSH access to the node</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">password</span></code> - password for the ssh user (optional if ssh_key provided)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ssh_key</span></code> - path to SSH private key (optional if password is provided)</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="ui-selenium">
+<h4>UI_SELENIUM<a class="headerlink" href="#ui-selenium" title="Permalink to this headline">¶</a></h4>
+<p>Configuration specific to ui testing with selenium</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">browser_type</span></code> - The type of browser (chrome,firefox)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chrome_type</span></code> - The type of chrome browser (google-chrome,chromium,edge)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">headless</span></code> - Browser simulation program that does not have a user interface.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">screenshot</span></code> - A Screenshot in Selenium Webdriver is used for bug analysis.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ignore_ssl</span></code> - Ignore the ssl certificate</p></li>
+</ul>
+</div>
+<div class="section" id="components">
+<h4>COMPONENTS<a class="headerlink" href="#components" title="Permalink to this headline">¶</a></h4>
+<p>Configurations specific to disable/enable OCS components</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">disable_rgw</span></code> - Disable RGW component deployment (Default: False)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disable_noobaa</span></code> - Disable noobaa component deployment (Default: False)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disable_cephfs</span></code> - Disable cephfs component deployment (Default: False)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disable_blockpools</span></code> - Disable blockpools (rbd) component deployment (Default: False)</p></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="section" id="example-of-accessing-config-default-data">
+<h2>Example of accessing config/default data<a class="headerlink" href="#example-of-accessing-config-default-data" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ocs_ci.framework</span> <span class="kn">import</span> <span class="n">config</span>
+<span class="kn">from</span> <span class="nn">ocs_ci.ocs</span> <span class="kn">import</span> <span class="n">defaults</span>
+
+<span class="c1"># From you code you can access those data like</span>
+
+<span class="c1"># Taking data from ENV_DATA will always use right cluster_namespace passed via</span>
+<span class="c1"># `--ocsci-conf` config file or default one defined in `default_config.yaml`.</span>
+<span class="n">function_that_uses_namespace</span><span class="p">(</span><span class="n">namespace</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">ENV_DATA</span><span class="p">[</span><span class="s1">&#39;cluster_namespace&#39;</span><span class="p">])</span>
+
+<span class="c1"># Defaults data you can access like in this example:</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Printing some default data like API version: </span><span class="si">{</span><span class="n">defaults</span><span class="o">.</span><span class="n">API_VERSION</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="priority-of-loading-configs">
+<h2>Priority of loading configs:<a class="headerlink" href="#priority-of-loading-configs" title="Permalink to this headline">¶</a></h2>
+<p>Lower number == higher priority</p>
+<ol class="simple">
+<li><p><strong>CLI args</strong> - sometime we can pass some variables by CLI parameters, in
+this case those arguments should overwrite everything and have the highest
+priority.</p></li>
+<li><p><strong>ocsci config file</strong> - ocsci related config passed by <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code>
+parameter.</p></li>
+<li><p><strong>default configuration</strong> - default values and the lowest priority. You can
+see <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml">default config here</a>.</p></li>
+</ol>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../fixture_usage.html" class="btn btn-neutral float-right" title="Guidelines for fixtures usage in OCS-CI" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="../stable_branch.html" class="btn btn-neutral float-left" title="Stable Branch" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

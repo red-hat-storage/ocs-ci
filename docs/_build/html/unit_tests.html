@@ -1,0 +1,291 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Unit tests &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Tracking of workarounds" href="workarounds.html" />
+    <link rel="prev" title="Debugging" href="debugging.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debugging.html">Debugging</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Unit tests</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#how-to-run-the-unit-tests-myself">How to run the unit tests myself?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-tests-are-available">What tests are available?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-to-run-particular-test-only">How to run particular test only?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pytest-integration-tests">Pytest integration tests</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usecases/index.html">Common Use cases and FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Unit tests</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/unit_tests.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="unit-tests">
+<h1>Unit tests<a class="headerlink" href="#unit-tests" title="Permalink to this headline">¶</a></h1>
+<p>We’re in the process of writing unit tests for the ocs-ci python modules,
+including our pytest plugins.</p>
+<p>We are using <a class="reference external" href="https://docs.pytest.org/en/latest/">pytest</a> framework
+and test execution is handled via <a class="reference external" href="https://tox.readthedocs.io/">tox</a>, as
+configured in <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/tox.ini">tox.ini</a> config file.</p>
+<p>The tests are executed in <a class="reference external" href="https://travis-ci.org/red-hat-storage/ocs-ci">Travis CI</a>
+for each pull request created for this repository.</p>
+<div class="section" id="how-to-run-the-unit-tests-myself">
+<h2>How to run the unit tests myself?<a class="headerlink" href="#how-to-run-the-unit-tests-myself" title="Permalink to this headline">¶</a></h2>
+<p>Make sure you have python 3.8 and tox installed from binary packages of your
+distribution.</p>
+<p>Then in root directory of the repository just run:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tox
+</pre></div>
+</div>
+<p>This will execute the tests in the same way as in
+<a class="reference external" href="https://travis-ci.org/red-hat-storage/ocs-ci">Travis CI</a>, including flake8
+checks.</p>
+</div>
+<div class="section" id="what-tests-are-available">
+<h2>What tests are available?<a class="headerlink" href="#what-tests-are-available" title="Permalink to this headline">¶</a></h2>
+<p>You can list available tests by doing:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tox -e py37 -- --collect-only
+</pre></div>
+</div>
+</div>
+<div class="section" id="how-to-run-particular-test-only">
+<h2>How to run particular test only?<a class="headerlink" href="#how-to-run-particular-test-only" title="Permalink to this headline">¶</a></h2>
+<p>It’s possible to pass additional pytest arguments to tox like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tox -e py37 -- ocsci/pytest_customization/tests/test_pytest.py::test_config_parametrize
+</pre></div>
+</div>
+<p>Or like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tox -e py37 -- -k test_config_parametrize
+</pre></div>
+</div>
+<p>This can be also helpful during debugging:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tox -e py37 -- -v --pdb
+</pre></div>
+</div>
+</div>
+<div class="section" id="pytest-integration-tests">
+<h2>Pytest integration tests<a class="headerlink" href="#pytest-integration-tests" title="Permalink to this headline">¶</a></h2>
+<p>In <code class="docutils literal notranslate"><span class="pre">test_pytest.py</span></code> file, we have unit tests covering our pytest plugins. The
+testing is done via
+<a class="reference external" href="https://docs.pytest.org/en/latest/_modules/_pytest/pytester.html">pytester</a>,
+which is official pytest module for testing pytest plugins via pytest.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="workarounds.html" class="btn btn-neutral float-right" title="Tracking of workarounds" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="debugging.html" class="btn btn-neutral float-left" title="Debugging" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

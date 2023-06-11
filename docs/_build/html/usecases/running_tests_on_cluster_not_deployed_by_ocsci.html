@@ -1,0 +1,468 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>How to execute tests on a cluster not deployed by ocs-ci? &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How to use alternative mirrors/repositories for OCP installer/client download" href="using_alternative_ocp_mirrors.html" />
+    <link rel="prev" title="How to report test results from ocs-ci not executed by ocs-ci jenkins?" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Common Use cases and FAQ</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html">Using ocs-ci to deploy OCP cluster without default OCS installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable_huge_pages.html">ENABLE HUGE PAGES</a></li>
+<li class="toctree-l2"><a class="reference internal" href="odf_with_kms.html">Using multiple instances of Vault KMS in OCS-CI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html">How to report test results from ocs-ci not executed by ocs-ci jenkins?</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">How to execute tests on a cluster not deployed by ocs-ci?</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#preparation-of-test-execution-command">Preparation of test execution command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#how-do-i-specify-ocs-ci-config-with-platform-and-deployment-info">How do I specify ocs-ci config with platform and deployment info?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#access-to-platform-where-the-cluster-is-deployed">Access to platform where the cluster is deployed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#access-to-cloud-object-storage-mcg-only">Access to cloud object storage (MCG only)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#what-if-i-need-to-run-tests-on-a-new-platform">What if I need to run tests on a new platform?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#what-if-i-see-lot-of-warnings-about-catalogsource">What if I see lot of warnings about catalogsource?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="using_alternative_ocp_mirrors.html">How to use alternative mirrors/repositories for OCP installer/client download</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="index.html">Common Use cases and FAQ</a> &raquo;</li>
+        
+      <li>How to execute tests on a cluster not deployed by ocs-ci?</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/usecases/running_tests_on_cluster_not_deployed_by_ocsci.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="how-to-execute-tests-on-a-cluster-not-deployed-by-ocs-ci">
+<h1>How to execute tests on a cluster not deployed by ocs-ci?<a class="headerlink" href="#how-to-execute-tests-on-a-cluster-not-deployed-by-ocs-ci" title="Permalink to this headline">¶</a></h1>
+<p>Running ocs-ci test cases on clusters not deployed by ocs-ci itself is
+possible, but because ocs-ci was not maintained with this use case in
+mind, it requires few additional steps as explained below. Without
+paying attention to these details, test run could fail or report invalid
+results (both false negative or false positive results are possible).</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When the following issues are fixed, most of the <em>additional steps</em>
+explained here won’t be necessary:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/2347">#2347</a> platform detection/validation</p></li>
+<li><p><a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/2523">#2523</a> remove platform specific values from default_config.yaml file</p></li>
+<li><p><a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/3042">#3042</a> allow test execution on already installed IPI cluster without
+specifying platform details</p></li>
+</ul>
+</div>
+<div class="section" id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this headline">¶</a></h2>
+<p>We assume that you have:</p>
+<ul class="simple">
+<li><p>Admin access to OCP cluster, where OCS has been already installed.</p></li>
+<li><p>Admin access to cloud platform account where OCP cluster is running, if you
+plan to execute platform specific or disruption test cases on cloud platform
+already supported by ocs-ci.</p></li>
+<li><p>Cluster directory of this OCP/OCS cluster on your machine, with all
+files as produced by <code class="docutils literal notranslate"><span class="pre">openshift-install</span></code> tool.</p></li>
+<li><p>Local copy of ocs-ci, installed in virtualenv on your machine, see
+<em>Installing</em> section in <a class="reference internal" href="../getting_started.html"><span class="doc">Getting Started</span></a> guide for details.</p></li>
+<li><p><a class="reference external" href="https://bugzilla.redhat.com/">Red Hat bugzilla</a> account.</p></li>
+</ul>
+</div>
+<div class="section" id="preparation-of-test-execution-command">
+<h2>Preparation of test execution command<a class="headerlink" href="#preparation-of-test-execution-command" title="Permalink to this headline">¶</a></h2>
+<p>On your machine, go to ocs-ci directory and activate it’s virtual env.
+Check that <code class="docutils literal notranslate"><span class="pre">oc</span></code> tool is available (if not, update <code class="docutils literal notranslate"><span class="pre">PATH</span></code> environment
+variable or you can create symlink for it in <code class="docutils literal notranslate"><span class="pre">bin</span></code> directory where you have
+ocs-ci installed). You don’t need to set <code class="docutils literal notranslate"><span class="pre">KUBECONFIG</span></code> environment variable.</p>
+<p>Tests are executed via <code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command (a wrapper of <a class="reference external" href="https://docs.pytest.org/en/stable/usage.html">pytest cli tool</a>).
+But since ocs-ci was not used to deploy the cluster (and issues like <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/2347">#2347</a>),
+you have to specify the following information via command line options of
+<code class="docutils literal notranslate"><span class="pre">run-ci</span></code> command.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 72%" />
+<col style="width: 28%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Information</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">run-ci</span></code> option</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Path to openshift cluster dir (from <code class="docutils literal notranslate"><span class="pre">openshift-install</span></code> tool)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--cluster-path=PATH</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Path to ocs-ci config file with platform and deployment info</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--ocsci-conf=PATH</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Openshift cluster name (chosen during OCP installation)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--cluster-name=NAME</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>OCP version</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--ocp-version=VERSION</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>OCS version (check OCS operator)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--ocs-version=VERSION</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Is OCS using already released builds? Use option if yes.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--live-deploy</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Besides that, you will also need to specify which test cases to run and enable
+<a class="reference external" href="https://docs.pytest.org/en/stable/usage.html#creating-junitxml-format-files">JUnit XML</a> test report (which is important for sharing the test results). For
+example, to run <code class="docutils literal notranslate"><span class="pre">tier1</span></code> test suite, you will use the following <code class="docutils literal notranslate"><span class="pre">run-ci</span></code>
+options:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">--</span><span class="n">junit</span><span class="o">-</span><span class="n">xml</span><span class="o">=</span><span class="n">clustername</span><span class="mf">.2020</span><span class="o">-</span><span class="mi">10</span><span class="o">-</span><span class="mf">02.</span><span class="n">tier1</span><span class="o">.</span><span class="n">xml</span> <span class="o">-</span><span class="n">m</span> <span class="n">tier1</span> <span class="n">tests</span>
+</pre></div>
+</div>
+<p>Moreover you should also configure and enable <a class="reference external" href="https://github.com/eanxgeek/pytest_marker_bugzilla">bugzilla pytest plugin</a>,
+so that tests which are affected by known bugs will be skipped (see
+<a class="reference internal" href="../usage.html"><span class="doc">Usage</span></a> for example of expected config file).</p>
+<p>Putting it all together, a full example of ocs-ci execution command would look
+like this:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(venv)</span> <span class="gp">$ </span>run-ci<span class="w"> </span>--cluster-path<span class="o">=</span>~/cluster-2020-10-02<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>--ocsci-conf<span class="o">=</span>conf/deployment/gcp/ipi_1az_rhcos_3m_3w.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>--cluster-name<span class="o">=</span>mbukatov-2020-10-02<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>--ocp-version<span class="o">=</span><span class="m">4</span>.5<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>--ocs-version<span class="o">=</span><span class="m">4</span>.5<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>--bugzilla<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>-m<span class="w"> </span>tier1<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>--junit-xml<span class="o">=</span>mbukatov.2020-10-02.tier1.xml<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>tests
+</pre></div>
+</div>
+<p>This example assumes that:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">~/cluster-2020-10-02</span></code> is a cluster dir, as created by
+<code class="docutils literal notranslate"><span class="pre">openshift-install</span> <span class="pre">...</span> <span class="pre">--dir=~/cluster-2020-10-02</span></code> command</p></li>
+<li><p>Config file <code class="docutils literal notranslate"><span class="pre">bugzilla.cfg</span></code> (in ocs-ci directory or home directory) contains
+reference and credentials to <a class="reference external" href="https://bugzilla.redhat.com/">Red Hat bugzilla</a></p></li>
+<li><p>Config file <code class="docutils literal notranslate"><span class="pre">conf/deployment/gcp/ipi_1az_rhcos_3m_3w.yaml</span></code> describes both
+platform the cluster is deployed on, and it’s configuration - see details
+in a section below to learn how to select or create it.</p></li>
+<li><p>OCP version is <code class="docutils literal notranslate"><span class="pre">4.5.1</span></code>, so we specify it as <code class="docutils literal notranslate"><span class="pre">--ocp-version</span> <span class="pre">4.5</span></code>.</p></li>
+<li><p>OCS version is <code class="docutils literal notranslate"><span class="pre">4.5.0-543.ci</span></code>, so we specify it as <code class="docutils literal notranslate"><span class="pre">--ocs-version</span> <span class="pre">4.5</span></code>
+and don’t use <code class="docutils literal notranslate"><span class="pre">--live-deploy</span></code> option.</p></li>
+</ul>
+</div>
+<div class="section" id="how-do-i-specify-ocs-ci-config-with-platform-and-deployment-info">
+<h2>How do I specify ocs-ci config with platform and deployment info?<a class="headerlink" href="#how-do-i-specify-ocs-ci-config-with-platform-and-deployment-info" title="Permalink to this headline">¶</a></h2>
+<p>Check if platform where the cluster is deployed is available in
+<a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/conf/deployment">ocs-ci/conf/deployment</a> directory.</p>
+<p>If yes, go to the directory of the platform and check which config files
+matches your environment best. Then copy it into a new config file, open it
+and tweak it. Update at least the following values to match your cluster:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">deployment_type</span></code>: either <code class="docutils literal notranslate"><span class="pre">ipi</span></code> or <code class="docutils literal notranslate"><span class="pre">upi</span></code> (this is important because
+some tests cases are executed on particular type only)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">region</span></code>: cloud region as specified during openshift-install driven
+deployment (this is necessary to be correctly set for some MCG/NooBaa test
+cases)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">base_domain</span></code>: DNS zone as specified during openshift-install driven
+deployment (this is necessary to be correctly set for some MCG/NooBaa test
+cases)</p></li>
+</ul>
+<p>This is not a full list though, it’s possible that further tweaks are necessary
+in special cases (such as LSO, external cluster, …).</p>
+<p>When you are done with tweaking, pass this new config file to <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code>
+option as explained in previous section.</p>
+</div>
+<div class="section" id="access-to-platform-where-the-cluster-is-deployed">
+<h2>Access to platform where the cluster is deployed<a class="headerlink" href="#access-to-platform-where-the-cluster-is-deployed" title="Permalink to this headline">¶</a></h2>
+<p>If you are trying to run tests on a platfrom which is already supported by
+ocs-ci, and are planning to run platform specific test cases, you need to make
+sure you configure access to the underlying platform.</p>
+<p>For example you need to run a test case which kills Azure node directly via
+Azure API, and then observes how OCS handles that. Obviously, you need to have
+admin access to Azure project where the cluster is running. See an overview of
+expected file paths of platform credential files (these paths are based on file
+paths used by both platform native cli admin tools and openshift-install).</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 82%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Platform</p></td>
+<td><p>Credentials file</p></td>
+</tr>
+<tr class="row-even"><td><p>AWS</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/.aws/credentials</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Azure</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/.azure/osServicePrincipal.json</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>GCP</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/.gcp/osServiceAccount.json</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>See also description of credentials setup in <a class="reference internal" href="../getting_started.html"><span class="doc">Getting Started</span></a> guide,
+including additional files in <code class="docutils literal notranslate"><span class="pre">ocs-ci/data/</span></code> directory.</p>
+</div>
+<div class="section" id="access-to-cloud-object-storage-mcg-only">
+<h2>Access to cloud object storage (MCG only)<a class="headerlink" href="#access-to-cloud-object-storage-mcg-only" title="Permalink to this headline">¶</a></h2>
+<p>If you are going to run some of <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/tree/master/tests/manage/mcg">MCG test cases</a>, you also need to create
+<code class="docutils literal notranslate"><span class="pre">data/auth.yaml</span></code> file inside of ocs-ci directory, with credentials for cloud
+object storage accounts used by MCG.</p>
+<p>Minimal structure of the <code class="docutils literal notranslate"><span class="pre">auth.yaml</span></code> file is currently described in <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/2649#issuecomment-671037451">this
+github comment</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Known issues related to <code class="docutils literal notranslate"><span class="pre">auth.yaml</span></code> file:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/2649">#2649</a> Document changes to auth.yaml to be used by CloudManager</p></li>
+<li><p><a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/2623">#2623</a> Pick a source of truth for auth.yaml</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="what-if-i-need-to-run-tests-on-a-new-platform">
+<h2>What if I need to run tests on a new platform?<a class="headerlink" href="#what-if-i-need-to-run-tests-on-a-new-platform" title="Permalink to this headline">¶</a></h2>
+<p>Then you need to either try to reuse config for a similar platform, but whether
+such option is valid depends on a nature of a test cases to be executed and the
+platform itself.</p>
+<p>Another option is to create a minimal patch for ocs-ci which defines the new
+platform enough to allow a test execution. See example of <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/pull/2056/files">such patch for Azure
+platform</a>. Again,
+such quick approach is not sufficient for some platform specific test cases.</p>
+</div>
+<div class="section" id="what-if-i-see-lot-of-warnings-about-catalogsource">
+<h2>What if I see lot of warnings about catalogsource?<a class="headerlink" href="#what-if-i-see-lot-of-warnings-about-catalogsource" title="Permalink to this headline">¶</a></h2>
+<p>If you are using stable (aka live or released) version of OCS and specified OCS
+version via <code class="docutils literal notranslate"><span class="pre">run-ci</span></code> options (including <code class="docutils literal notranslate"><span class="pre">--live-deploy</span></code> option) as
+explained above, warnings similar to the ones show below the are a red
+herring:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Failedtogetresource:ocs-catalogsourceofkind:CatalogSource,selector:None,Error:Errorduringexecutionofcommand:oc-nopenshift-marketplace--kubeconfig/home/ocsqe/data/mbukatov-dc2-cluster_20200226T131741/auth/kubeconfiggetCatalogSourceocs-catalogsource-n
+openshift-marketplace-oyaml.
+ErrorisErrorfromserver(NotFound):catalogsources.operators.coreos.com&quot;ocs-catalogsource&quot;notfound
+
+Numberofattemptstogetresourcereached!
+Failedtogetresource:ocs-operatorsourceofkind:OperatorSource,selector:None,Error:Errorduringexecutionofcommand:oc-nopenshift-marketplace--kubeconfig/home/ocsqe/data/mbukatov-dc2-cluster_20200226T131741/auth/kubeconfiggetOperatorSourceocs-operatorsourc
+e-nopenshift-marketplace-oyaml.
+ErrorisErrorfromserver(NotFound):operatorsources.operators.coreos.com&quot;ocs-operatorsource&quot;notfound
+
+Numberofattemptstogetresourcereached!
+</pre></div>
+</div>
+<p>And as such can be safely ignored. This is a known ocs-ci issue <a class="reference external" href="https://github.com/red-hat-storage/ocs-ci/issues/1556">#1556</a>.</p>
+<p>So if you are running into some problem and see this error, you need to inspect
+the logs further to find the real problem.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="using_alternative_ocp_mirrors.html" class="btn btn-neutral float-right" title="How to use alternative mirrors/repositories for OCP installer/client download" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html" class="btn btn-neutral float-left" title="How to report test results from ocs-ci not executed by ocs-ci jenkins?" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

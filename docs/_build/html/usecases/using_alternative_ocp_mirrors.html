@@ -1,0 +1,268 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>How to use alternative mirrors/repositories for OCP installer/client download &mdash; OCS-CI  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Multi-cluster test example" href="../multicluster_test_example.html" />
+    <link rel="prev" title="How to execute tests on a cluster not deployed by ocs-ci?" href="running_tests_on_cluster_not_deployed_by_ocsci.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> OCS-CI
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Package documentations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../apidoc/modules.html">ocs_ci modules</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../code_review.html">Code review/contribution best practices in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coding_guidelines.html">Coding guidelines for OCS-CI project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_platforms.html">Supported platforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-getting-various-ocs-image-versions">usage for getting various ocs image versions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-cleanup">usage for cleanup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-to-shutdown-aws-nodes-when-nodes-are-not-in-use">usage to shutdown AWS nodes when nodes are not in use</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#usage-for-ocs-build-tool">Usage for ocs-build tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../upgrade.html">Upgrade</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results.html">Results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../writing_tests.html">Writing tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stable_branch.html">Stable Branch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmefiles/conf.README.html">Config directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fixture_usage.html">Guidelines for fixtures usage in OCS-CI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debugging.html">Debugging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../unit_tests.html">Unit tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workarounds.html">Tracking of workarounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release_guidelines.html">OCS-CI Release Branches</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Common Use cases and FAQ</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="deployment_without_ocs.html">Using ocs-ci to deploy OCP cluster without default OCS installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable_huge_pages.html">ENABLE HUGE PAGES</a></li>
+<li class="toctree-l2"><a class="reference internal" href="odf_with_kms.html">Using multiple instances of Vault KMS in OCS-CI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reporting_tests_results_from_cluster_not_deployed_by_ocsci.html">How to report test results from ocs-ci not executed by ocs-ci jenkins?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running_tests_on_cluster_not_deployed_by_ocsci.html">How to execute tests on a cluster not deployed by ocs-ci?</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">How to use alternative mirrors/repositories for OCP installer/client download</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../multicluster_test_example.html">Multi-cluster test example</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">OCS-CI</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="index.html">Common Use cases and FAQ</a> &raquo;</li>
+        
+      <li>How to use alternative mirrors/repositories for OCP installer/client download</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/usecases/using_alternative_ocp_mirrors.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="how-to-use-alternative-mirrors-repositories-for-ocp-installer-client-download">
+<h1>How to use alternative mirrors/repositories for OCP installer/client download<a class="headerlink" href="#how-to-use-alternative-mirrors-repositories-for-ocp-installer-client-download" title="Permalink to this headline">¶</a></h1>
+<p>By default, we pull the OCP installer and client from <code class="docutils literal notranslate"><span class="pre">https://openshift-release-artifacts.apps.ci.l2s4.p1.openshiftapps.com/</span></code>.
+Using a combination of the OCP version and OS type we construct the full path to the
+location of the binary we want to download.</p>
+<p>If you have a reason to pull installer or client images from another repository or mirror,
+you can do so by changing the <code class="docutils literal notranslate"><span class="pre">ocp_url_template</span></code> which is used to construct the full path.
+This can be especially useful if the default location does not support the arch type of
+the system the binary is running on.</p>
+<p>For example, if we want to use <code class="docutils literal notranslate"><span class="pre">https://mirror.openshift.com</span></code> as our mirror,
+so we might pull <code class="docutils literal notranslate"><span class="pre">s390x</span></code> binaries we could use the following config file and pass it to
+ocs-ci through the <code class="docutils literal notranslate"><span class="pre">--ocsci-conf</span></code> CLI argument.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">DEPLOYMENT</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ocp_url_template</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;https://mirror.openshift.com/pub/openshift-v4/s390x/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz&quot;</span>
+</pre></div>
+</div>
+<p>Note that this is in fact a template used to construct the full location of the installer or client.</p>
+<p>Some clarification around the formatting done:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">{version}</span></code> - OCP version</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{os_type}</span></code> - Operating System of the system running ocs-ci</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{file_name}</span></code> - “client” or “install” depending on which binary we are trying to download</p></li>
+</ul>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../multicluster_test_example.html" class="btn btn-neutral float-right" title="Multi-cluster test example" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="running_tests_on_cluster_not_deployed_by_ocsci.html" class="btn btn-neutral float-left" title="How to execute tests on a cluster not deployed by ocs-ci?" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2019, OCS-QE
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
