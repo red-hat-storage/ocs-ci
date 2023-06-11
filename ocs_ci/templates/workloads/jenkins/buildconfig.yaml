@@ -29,7 +29,7 @@ spec:
             // Using Maven build the war file
             stage('Build JAX-RS') {
               echo "Building war file"
-              sh "mvn -f jenkins/maven01/pom.xml clean package -DskipTests=true"
+              sh "mvn -f jenkins/maven01/pom.xml clean package"
             }
           }
         }
