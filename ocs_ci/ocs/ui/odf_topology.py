@@ -299,7 +299,7 @@ class OdfTopologyHelper:
             deployment_name (str): Name of the deployment.
 
         Returns:
-            OCP: Deployment object associated with the specified node and deployment.
+            ocs_ci.ocs.ocp.OCP: Deployment object associated with the specified node and deployment.
 
         Raises:
             ValueError: If no deployment with the specified name is found in the given node.
@@ -321,7 +321,7 @@ class OdfTopologyHelper:
         Args:
             node_name (str): Name of the node.
             deployment_name (str): Name of the deployment.
-            obj_new (OCP or Pod): New resource object to be set.
+            obj_new (ocs_ci.ocs.ocp.OCP or Pod): New resource object to be set.
 
         Returns:
             The newly set resource object.

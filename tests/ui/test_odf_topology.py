@@ -265,7 +265,7 @@ class TestODFTopology(object):
         )
         nodes.stop_nodes(nodes=[random_node_under_test], force=True)
 
-        min_wait_for_update = 3
+        min_wait_for_update = 6
         logger.info(f"wait {min_wait_for_update}min to get UI updated")
         time.sleep(min_wait_for_update * 60)
 
