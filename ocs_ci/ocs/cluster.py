@@ -2285,6 +2285,20 @@ def get_osd_pg_log_dups_tracked():
     return int(osd_pg_log_dups_count)
 
 
+def is_vsphere_ipi_cluster():
+    """
+    Check if the cluster is a vSphere IPI cluster
+
+    Returns:
+        bool: True, if the cluster is a vSphere IPI cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "ipi"
+    )
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities
