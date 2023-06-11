@@ -1634,18 +1634,7 @@ class TopologySidebar(BaseUI):
             read_canvas_alerts (bool): Optional. Indicates whether to read alerts in the canvas or not.
 
         Returns:
-            list: A list of alerts detected. Similar to
-                {
-                "Critical": [
-                    "CephNodeDown",
-                    "CephOSDDiskNotResponding",
-                    "CephMonQuorumAtRisk"
-                ],
-                "Warning": [
-                    "PodDisruptionBudgetAtLimit",
-                    "CephDataRecoveryTakingTooLong"
-                    ]
-                }
+            list: A list of alerts detected in side-bar
 
         """
         self.close_sidebar(soft=True)
