@@ -289,7 +289,7 @@ class OdfTopologyHelper:
         """
         return list(self.topology_cli_df.index[self.topology_cli_df[node_name].notna()])
 
-    def get_deployment_obj_from_node_df_cli(self, node_name, deployment_name) -> OCP:
+    def get_deployment_obj_from_node_df_cli(self, node_name, deployment_name):
         """
         Retrieves the deployment OCP object associated with a specific node and deployment name from the dataframe
         taken from CLI.
