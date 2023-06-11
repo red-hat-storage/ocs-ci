@@ -12,6 +12,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4,
     external_mode_required,
     bugzilla,
+    skipif_ibm_cloud_managed,
+    skipif_ocs_version,
+    skipif_managed_service,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_worker_nodes, get_node_names
@@ -51,6 +54,9 @@ def teardown_depl_busybox(request):
 
 
 @black_squad
+@skipif_ibm_cloud_managed
+@skipif_managed_service
+@skipif_ocs_version("<4.13")
 class TestODFTopology(object):
     @bugzilla("2214023")
     @tier3

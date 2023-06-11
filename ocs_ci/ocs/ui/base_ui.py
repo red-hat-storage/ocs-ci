@@ -1665,23 +1665,15 @@ class TopologySidebar(BaseUI):
     def read_alerts(self) -> dict:
         """
         Reads alerts from the alert tab and retrieves their details.
+
         Returns:
             dict: Dictionary containing the alerts and their corresponding levels.
-                  Each alert level is associated with a list of alert titles.
-            {
-            "Critical": [
-                "CephNodeDown",
-                "CephOSDDiskNotResponding",
-                "CephMonQuorumAtRisk"
-            ],
-            "Warning": [
-                "PodDisruptionBudgetAtLimit",
-                "CephDataRecoveryTakingTooLong"
-                ]
-            }
+            Each alert level is associated with a list of alert titles.
+
         Note:
             Alerts tab should be opened.
             The alert levels are expanded to read the titles and then shrunk back.
+
         """
         logger.info("reading alerts from the alert tab")
         alerts_dict = dict()
