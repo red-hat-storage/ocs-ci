@@ -2120,7 +2120,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
 
     def get_topology_str(self):
         """
-            Returns a Dataframe object similar to:
+            Get a dataframe with Topology as a str similar to:
             +----+--------------+---------------+----------------------------------------------------------------+
             |    | entity_name  | entity_status | nested_deployments                                             |
             +====+==============+===============+================================================================+
@@ -2133,7 +2133,9 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
             |    |              |               | 0                                    rook-ceph-osd-1   success |
             |    |              |               | 1                       csi-cephfsplugin-provisioner   success |
             +----+--------------+---------------+----------------------------------------------------------------+
-        :return:
+        Returns:
+            str: text representation of pandas Dataframe of ODF Topology view
+
         """
         return str(TopologyUiStr(self.__topology_df))
 

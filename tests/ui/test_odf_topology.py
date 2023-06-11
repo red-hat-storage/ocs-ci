@@ -241,7 +241,7 @@ class TestODFTopology(object):
     @tier4
     @skipif_external_mode
     @polarion_id("OCS-4905")
-    def test_stop_node_validate_topology(
+    def test_stop_start_node_validate_topology(
         self, nodes, setup_ui_class, teardown_nodes_job
     ):
         """
@@ -263,10 +263,11 @@ class TestODFTopology(object):
         random_node_idle = random.choice(
             [node for node in ocp_nodes if node != random_node_under_test]
         )
-        nodes.stop_nodes(nodes=random_node_under_test, force=True)
+        nodes.stop_nodes(nodes=[random_node_under_test], force=True)
 
-        # wait 3 min to get UI updated
-        time.sleep(3 * 60)
+        min_wait_for_update = 3
+        logger.info(f"wait {min_wait_for_update}min to get UI updated")
+        time.sleep(min_wait_for_update * 60)
 
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
         topology_tab.nodes_view.read_presented_topology()
@@ -282,7 +283,7 @@ class TestODFTopology(object):
             f"'{constants.ALERT_NODEDOWN}' alert has not been found in a sidebar",
         )
 
-        if not config.ENV_DATA["sno"]:
+        if not config.ENV_DATA["sno"] and bool(random_node_idle):
             logger.info(
                 "check that any random idle node do not show CephNodeDown when conditions not met"
             )
@@ -294,7 +295,7 @@ class TestODFTopology(object):
         logger.info(
             f"return node back to working state and check '{constants.ALERT_NODEDOWN}' alert removed"
         )
-        nodes.start_nodes(nodes=random_node_under_test, wait=True)
+        nodes.start_nodes(nodes=[random_node_under_test], wait=True)
 
         sleep_time_to_update_ui = 6 * 60
         logger.info(
