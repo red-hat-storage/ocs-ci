@@ -2120,21 +2120,23 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
 
     def get_topology_str(self):
         """
-            Get a dataframe with Topology as a str similar to:
-            +----+--------------+---------------+----------------------------------------------------------------+
-            |    | entity_name  | entity_status | nested_deployments                                             |
-            +====+==============+===============+================================================================+
-            |  0 | compute-0    | success       | entity_name entity_status                                      |
-            |    |              |               | 0                                    rook-ceph-osd-1   success |
-            |    |              |               | 1                       csi-cephfsplugin-provisioner   success |
-            |	 | 				| 				| ...															 |
-            +----+--------------+---------------+----------------------------------------------------------------+
-            |  1 | compute-1    | success       | entity_name entity_status                                      |
-            |    |              |               | 0                                    rook-ceph-osd-1   success |
-            |    |              |               | 1                       csi-cephfsplugin-provisioner   success |
-            +----+--------------+---------------+----------------------------------------------------------------+
+        Method to get a dataframe with Topology as a str to print in console
+            # +----+--------------+---------------+----------------------------------------------------------------+
+            # |    | entity_name  | entity_status | nested_deployments                                             |
+            # +====+==============+===============+================================================================+
+            # |  0 | compute-0    | success       | entity_name entity_status                                      |
+            # |    |              |               | 0                                    rook-ceph-osd-1   success |
+            # |    |              |               | 1                       csi-cephfsplugin-provisioner   success |
+            # |	   | 			  | 			  | ...															   |
+            # +----+--------------+---------------+----------------------------------------------------------------+
+            # |  1 | compute-1    | success       | entity_name entity_status                                      |
+            # |    |              |               | 0                                    rook-ceph-osd-1   success |
+            # |    |              |               | 1                       csi-cephfsplugin-provisioner   success |
+            # +----+--------------+---------------+----------------------------------------------------------------+
+
         Returns:
-            str: text representation of pandas Dataframe of ODF Topology view
+            str: text representation of pandas Dataframe of ODF Topology view, where cluster with node names, node
+            statuses and their deployment names and statuses may be found
 
         """
         return str(TopologyUiStr(self.__topology_df))
