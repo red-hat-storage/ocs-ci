@@ -5,7 +5,7 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
-  region: 'eastus'
+  region: 'EastUs'
   azure_base_domain_resource_group_name: 'odfqe'
   worker_availability_zones:
     - '1'
