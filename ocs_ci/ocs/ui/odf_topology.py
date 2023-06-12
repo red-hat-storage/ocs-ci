@@ -189,6 +189,37 @@ def get_deployment_details_cli(deployment_name) -> dict:
     return deployment_details
 
 
+def get_node_names_of_the_pods_by_pattern(pattern):
+    """
+    Get the node names of the pods matching the given pattern.
+
+    Args:
+        pattern (str): The pattern to match the pod names.
+
+    Returns:
+        dict: A dictionary mapping pod names to their corresponding node names.
+    """
+    pods_names = get_pod_name_by_pattern(pattern)
+
+    pod_to_node = dict()
+    for pod_name in pods_names:
+        ocp = OCP(
+            kind=constants.POD,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=pod_name,
+        )
+        pod = Pod(**ocp.get())
+
+        try:
+            pod_to_node[pod.name] = pod.get_node()
+        except KeyError:
+            logger.error(
+                f"pod '{pod.name}' does not have reference to the source node, skipping it"
+            )
+            continue
+    return pod_to_node
+
+
 class OdfTopologyHelper:
     """
     Helper class to automate procedures necessary for ODF Topology related tests
@@ -238,12 +269,6 @@ class OdfTopologyHelper:
                 )
                 pod = Pod(**ocp.get())
 
-                depl = OCP(
-                    kind=constants.DEPLOYMENT,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                    resource_name=depl_name,
-                )
-
                 try:
                     node_name = pod.get_node()
                 except KeyError:
@@ -251,6 +276,12 @@ class OdfTopologyHelper:
                         f"pod '{pod.name}' does not have reference to the source node, skipping it"
                     )
                     continue
+
+                depl = OCP(
+                    kind=constants.DEPLOYMENT,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=depl_name,
+                )
                 node_to_depls.setdefault(node_name, dict()).setdefault(
                     depl_name, []
                 ).extend([depl, pod])

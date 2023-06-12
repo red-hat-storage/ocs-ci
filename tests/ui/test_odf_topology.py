@@ -23,6 +23,7 @@ from ocs_ci.ocs.ui.odf_topology import (
     OdfTopologyHelper,
     get_deployment_details_cli,
     get_node_details_cli,
+    get_node_names_of_the_pods_by_pattern,
 )
 
 logger = logging.getLogger(__name__)
@@ -252,14 +253,30 @@ class TestODFTopology(object):
         2. Stop selected node with forcefully
         3. Wait 1 minute explicitly to get update from Prometheus
         4. Navigate to ODF console and read cluster configuration from Node level
-        5. Open side-bar of the node and read presented alerts
+        5. Open sidebar of the node and read presented alerts
         6. Check ceph cluster is in degraded state, ODF topology canvas border painted red
         7. Check expected CephNodeDown alert exists on Node level
         8. If 'not single node only deployment' verify that any random idle node do not show CephNodeDown alert
         9. Return node to working state and verify alert disappear, canvas shows cluster is healthy
         """
+
+        # exclude node(s) where the 'odf-console' is running. It may distruct work of the management-console
+        node_to_pods_odf_console = get_node_names_of_the_pods_by_pattern("odf-console")
+        logger.info(
+            f"excluding node(s) from the test '{node_to_pods_odf_console.values()}' "
+            "it should be only one 'odf-console' in default configuration"
+        )
+
         ocp_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
-        random_node_under_test = random.choice(ocp_nodes)
+        random_node_under_test = random.choice(
+            [
+                node
+                for node in ocp_nodes
+                if node not in node_to_pods_odf_console.values()
+            ]
+        )
+        logger.info(f"node to shut down will be '{random_node_under_test}'")
+
         random_node_idle = random.choice(
             [node for node in ocp_nodes if node != random_node_under_test]
         )
@@ -276,19 +293,20 @@ class TestODFTopology(object):
         test_checks[
             "cluster_in_danger_state_check_pass"
         ] = topology_tab.nodes_view.is_cluster_in_danger()
-        if test_checks["cluster_in_danger_state_check_pass"]:
+        if not test_checks["cluster_in_danger_state_check_pass"]:
             take_screenshot("cluster_in_danger_state_check")
             logger.error("cluster is not in danger, when one Worker node is down")
 
         test_checks[
             "ceph_node_down_alert_found_check_pass"
         ] = topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
-        if test_checks["ceph_node_down_alert_found_check_pass"]:
+        if not test_checks["ceph_node_down_alert_found_check_pass"]:
             logger.error("CephNodeDown alert has not been found after node went down")
 
         if not config.ENV_DATA["sno"] and bool(random_node_idle):
             logger.info(
-                "check that any random idle node do not show CephNodeDown when conditions not met"
+                f"check that any random idle node '{random_node_idle.name}' "
+                "do not show CephNodeDown when conditions not met"
             )
             test_checks[
                 "ceph_node_down_alert_found_on_idle_node_check_pass"

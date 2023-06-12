@@ -1599,10 +1599,14 @@ class TopologySidebar(BaseUI):
 
         """
 
-        if soft and len(self.get_elements(self.topology_loc["close_sidebar"])):
-            self.do_click(self.topology_loc["close_sidebar"])
+        if soft and self.get_elements(self.topology_loc["close_sidebar"]):
+            # sidebar has a slow transition and may be visible for a moment after it was closed
+            try:
+                self.do_click(self.topology_loc["close_sidebar"], enable_screenshot=True)
+            except TimeoutException:
+                pass
         elif not soft:
-            self.do_click(self.topology_loc["close_sidebar"])
+            self.do_click(self.topology_loc["close_sidebar"], enable_screenshot=True)
         else:
             return
         logger.info("Sidebar is closed")
@@ -2065,7 +2069,7 @@ class AbstractTopologyView(ABC, TopologySidebar):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        return bool(format_locator(self.topology_loc["select_entity"], entity_name))
+        return bool(self.get_elements(format_locator(self.topology_loc["select_entity"], entity_name)))
 
 
 class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
