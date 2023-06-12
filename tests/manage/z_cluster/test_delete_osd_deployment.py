@@ -4,6 +4,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
     skipif_ocs_version,
+    ignore_leftover_label,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_osd_deployments
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 @tier4c
 @skipif_ocs_version("<4.10")
+@ignore_leftover_label(constants.OSD_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3731")
 @pytest.mark.bugzilla("2032656")
 class TestDeleteOSDDeployment(ManageTest):
