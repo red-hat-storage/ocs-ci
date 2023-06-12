@@ -63,7 +63,7 @@ class QuayOperator(object):
         """
         if not channel:
             quay_package_manifest_obj = PackageManifest(
-                kind="PackageManifest", resource_name=constants.QUAY_OPERATOR
+                resource_name=constants.QUAY_OPERATOR
             )
             channel = quay_package_manifest_obj.get_default_channel()
         else:
