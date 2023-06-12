@@ -1,18 +1,21 @@
 import logging
 import os
 import pytest
+import yaml
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
-    E2ETest,
+    ManageTest,
     tier3,
 )
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import PVCNotCreated
 
 logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
@@ -21,7 +24,7 @@ ERRMSG = "Error in command"
 @tier3
 @skipif_ocp_version("<4.13")
 @skipif_ocs_version("<4.13")
-class TestCRRsourcesValidation(E2ETest):
+class TestCRRsourcesValidation(ManageTest):
     """
     Test that check that csi addons resources are not editable after creation
     """
@@ -29,6 +32,7 @@ class TestCRRsourcesValidation(E2ETest):
     def setup(self):
         self.temp_files_list = []
         self.object_name_to_delete = ""
+        self.pvc_objs_to_delete = []
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -43,36 +47,49 @@ class TestCRRsourcesValidation(E2ETest):
                     run_cmd(f"rm {temp_file}")
 
             if self.object_name_to_delete != "":
-                res = run_oc_command(cmd=f"delete {self.object_name_to_delete}")
-                assert (
-                    ERRMSG not in res[0]
-                ), f"Failed to delete network fence resource with name: {self.object_name_to_delete}, got result: {res}"
+                res = run_oc_command(
+                    cmd=f"delete -n {self.namespace} {self.object_name_to_delete}"
+                )
+                assert ERRMSG not in res[0], (
+                    f"Failed to delete {self.object_kind_to_delete} resource with name: {self.object_name_to_delete}, "
+                    f"got result: {res}"
+                )
+
+            for pvc_obj in self.pvc_objs_to_delete:
+                pvc_obj.delete()
 
         request.addfinalizer(finalizer)
 
     def cr_resource_not_editable(
-        self, cr_object_kind, yaml_name, non_editable_patches, editable_patches
+        self,
+        cr_object_kind,
+        cr_resource_yaml,
+        non_editable_patches,
+        editable_patches,
+        namespace="openshift-storage",
     ):
         """
         Test that cr object is not editable once created
 
         Args:
             cr_object_kind (str): cr object kind
-            yaml_name (str): name of the yaml file from which the object is to be created
+            cr_resource_yaml (str): full path  of the yaml file from which the object is to be created
             non_editable_patches (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
                     have no effect. If such a patch is sucessfully applied, the test should fail
             editable_patches (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
                     have an effect. If such a patch is not sucessfully applied, the test should fail
+            namespace (str): namespace in which cr object should be created
 
         """
-        cr_resource_yaml = os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, yaml_name)
-        res = run_oc_command(cmd=f"create -f {cr_resource_yaml}")
+        res = run_oc_command(cmd=f"create -n {namespace} -f {cr_resource_yaml}")
         assert (
             ERRMSG not in res[0]
         ), f"Failed to create resource {cr_object_kind} from yaml file {cr_resource_yaml}, got result {res}"
 
         cr_resource_name = res[0].split()[0]
         self.object_name_to_delete = cr_resource_name
+        self.object_kind_to_delete = cr_object_kind
+        self.namespace = namespace
 
         cr_resource_original_yaml = run_oc_command(f"get {cr_resource_name} -o yaml")
 
@@ -81,7 +98,9 @@ class TestCRRsourcesValidation(E2ETest):
         cr_resource_prev_yaml = cr_resource_original_yaml
         for patch in non_editable_patches:
             params = "'" + f"{non_editable_patches[patch]}" + "'"
-            command = f"oc -n openshift-storage patch {cr_resource_name} -p {params} --type merge"
+            command = (
+                f"oc -n {namespace} patch {cr_resource_name} -p {params} --type merge"
+            )
 
             temp_file = NamedTemporaryFile(
                 mode="w+", prefix="cr_resource_modification", suffix=".sh"
@@ -95,7 +114,7 @@ class TestCRRsourcesValidation(E2ETest):
             try:
                 run_cmd(f"sh {temp_file.name}")
                 cr_resource_modified_yaml = run_oc_command(
-                    f"get {cr_resource_name} -o yaml"
+                    f"get -n {namespace} {cr_resource_name} -o yaml"
                 )
 
                 if cr_resource_prev_yaml != cr_resource_modified_yaml:
@@ -105,6 +124,9 @@ class TestCRRsourcesValidation(E2ETest):
             except (
                 CommandFailed
             ):  # some properties are not editable and CommandFailed exception is thrown
+                logger.info(
+                    f"Properyy {patch} is not editable, patch command failed, continue to the next"
+                )
                 continue  # just continue to the next property
 
         if non_editable_properties_errors:
@@ -129,7 +151,9 @@ class TestCRRsourcesValidation(E2ETest):
         cr_resource_prev_yaml = cr_resource_original_yaml
         for patch in editable_patches:
             params = "'" + f"{editable_patches[patch]}" + "'"
-            command = f"oc -n openshift-storage patch {cr_resource_name} -p {params} --type merge"
+            command = (
+                f"oc -n {namespace} patch {cr_resource_name} -p {params} --type merge"
+            )
 
             temp_file = NamedTemporaryFile(
                 mode="w+", prefix="cr_resource_modification", suffix=".sh"
@@ -143,7 +167,7 @@ class TestCRRsourcesValidation(E2ETest):
             try:
                 run_cmd(f"sh {temp_file.name}")
                 cr_resource_modified_yaml = run_oc_command(
-                    f"get {cr_resource_name} -o yaml"
+                    f"get -n {namespace} {cr_resource_name} -o yaml"
                 )
 
                 if cr_resource_prev_yaml == cr_resource_modified_yaml:
@@ -154,6 +178,9 @@ class TestCRRsourcesValidation(E2ETest):
             except (
                 CommandFailed
             ):  # some properties are not editable and CommandFailed exception is thrown
+                logger.info(
+                    f"Properyy {patch} should be editable, but patch command failed, continue to the next"
+                )
                 editable_properties_errors[patch] = cr_resource_modified_yaml
                 continue  # just continue to the next property
 
@@ -185,7 +212,10 @@ class TestCRRsourcesValidation(E2ETest):
         }
 
         self.cr_resource_not_editable(
-            "Network fence", "NetworkFence.yaml", non_editable_patches, editable_patches
+            "Network fence",
+            os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "NetworkFence.yaml"),
+            non_editable_patches,
+            editable_patches,
         )
 
     def test_reclaim_space_cron_job_editable(self):
@@ -199,7 +229,7 @@ class TestCRRsourcesValidation(E2ETest):
 
         self.cr_resource_not_editable(
             "Reclaim space cron job",
-            "ReclaimSpaceCronJob.yaml",
+            os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "ReclaimSpaceCronJob.yaml"),
             non_editable_patches,
             {},
         )
@@ -215,7 +245,7 @@ class TestCRRsourcesValidation(E2ETest):
 
         self.cr_resource_not_editable(
             "Reclaim space job",
-            "ReclaimSpaceJob.yaml",
+            os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "ReclaimSpaceJob.yaml"),
             non_editable_patches,
             {},
         )
@@ -237,7 +267,54 @@ class TestCRRsourcesValidation(E2ETest):
 
         self.cr_resource_not_editable(
             "Volume Replication Class",
-            "volumeReplicationClass.yaml",
+            os.path.join(
+                constants.TEMPLATE_CSI_ADDONS_DIR, "volumeReplicationClass.yaml"
+            ),
             non_editable_patches,
             {},
+        )
+
+    def test_volume_replication_cr_editable(self):
+        """
+        Test case to check that some properties of volume replication class object are not editable
+        once object is created
+        """
+
+        with open(
+            os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "volumeReplicationCR.yaml")
+        ) as vrCR_yamml:
+            yaml_dict = yaml.safe_load(vrCR_yamml)
+
+        namespace = "default"
+        try:
+            pvc_obj = helpers.create_pvc(
+                sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
+                size="1Gi",
+                namespace=namespace,
+            )
+        except Exception as e:
+            logger.exception(f"The PVC was not created, exception [{str(e)}]")
+            raise PVCNotCreated("PVC did not reach BOUND state.")
+
+        self.pvc_objs_to_delete.append(pvc_obj)
+        yaml_dict["spec"]["dataSource"]["name"] = pvc_obj.name
+
+        new_yaml_file = NamedTemporaryFile(
+            mode="w+", prefix="volumeReplicationCR_modified", suffix=".yaml"
+        )
+        with open(new_yaml_file.name, "w") as y_file:
+            y_file.write(yaml.safe_dump(yaml_dict))
+        self.temp_files_list.append(new_yaml_file.name)
+
+        non_editable_patches = {  # dictionary: patch_name --> patch
+            "volume_replication_class": '{"spec": {"volumeReplicationClass": "volume-replication-class-new_sample"}}',
+            "pvc_name": '{"spec": {"dataSource": {"name": "aaa"}}}',
+        }
+
+        self.cr_resource_not_editable(
+            "Volume Replication CR",
+            new_yaml_file.name,
+            non_editable_patches,
+            {},
+            namespace=namespace,
         )
