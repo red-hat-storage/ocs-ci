@@ -9,12 +9,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier3,
     skipif_external_mode,
-    tier4,
     external_mode_required,
     bugzilla,
     skipif_ibm_cloud_managed,
     skipif_ocs_version,
     skipif_managed_service,
+    tier4a,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_worker_nodes, get_node_names
@@ -239,7 +239,7 @@ class TestODFTopology(object):
                 f"\n{deviations_df.to_markdown(headers='keys', index=True, tablefmt='grid')}"
             )
 
-    @tier4
+    @tier4a
     @skipif_external_mode
     @polarion_id("OCS-4905")
     def test_stop_start_node_validate_topology(
@@ -314,7 +314,7 @@ class TestODFTopology(object):
                 entity=random_node_idle.name
             )
 
-            if test_checks["ceph_node_down_alert_found_on_idle_node_check_pass"]:
+            if not test_checks["ceph_node_down_alert_found_on_idle_node_check_pass"]:
                 logger.error(f"'{constants.ALERT_NODEDOWN}' alert found on idle node")
 
         logger.info(
@@ -330,7 +330,9 @@ class TestODFTopology(object):
         test_checks[
             "ceph_node_down_alert_found_after_node_turned_on_check_pass"
         ] = not topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
-        if test_checks["ceph_node_down_alert_found_after_node_turned_on_check_pass"]:
+        if not test_checks[
+            "ceph_node_down_alert_found_after_node_turned_on_check_pass"
+        ]:
             take_screenshot("ceph_node_down_alert_found_after_node_turned_on_check")
             logger.error("CephNodeDown alert found after node returned back to work")
 
