@@ -117,7 +117,6 @@ class TestODFTopology(object):
             random_node_name = random.choice(get_worker_nodes())
             topology_tab.nodes_view.nav_back_main_topology_view(soft=True)
             topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
-            topology_tab.nodes_view.open_alerts_tab()
             if topology_tab.nodes_view.is_alert_tab_present():
                 logger.error(
                     "alert tab should not be present on External mode deployments"
