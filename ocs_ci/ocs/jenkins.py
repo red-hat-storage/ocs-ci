@@ -91,6 +91,13 @@ class Jenkins(object):
                     constants.JENKINS_BUILDCONFIG_YAML
                 )
                 jenkins_build_config["metadata"]["namespace"] = project
+                jenkins_build_config["spec"]["strategy"]["jenkinsPipelineStrategy"][
+                    "jenkinsfile"
+                ] = jenkins_build_config["spec"]["strategy"]["jenkinsPipelineStrategy"][
+                    "jenkinsfile"
+                ].replace(
+                    "latest", self.ocp_version
+                )
                 jenkins_build_config_obj = OCS(**jenkins_build_config)
                 jenkins_build_config_obj.create()
             except (CommandFailed, CalledProcessError) as cf:
