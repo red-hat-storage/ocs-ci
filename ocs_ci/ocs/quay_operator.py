@@ -16,6 +16,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd, exec_cmd
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,29 @@ class QuayOperator(object):
             else constants.DEFAULT_STORAGECLASS_RBD
         )
 
-    def setup_quay_operator(self):
+    def setup_quay_operator(self, channel=None):
         """
-        Deploys Quay operator
+        Deploys the Quay operator using the specified channel or the default channel if not provided
+
+        Args:
+            channel (str, optional): The channel of the Quay operator to deploy. If not provided, the default channel
+                will be used.
+
+        Raises:
+            TimeoutError: If the Quay operator pod fails to reach the 'Running' state
+            within the timeout.
 
         """
-        quay_operator_data = templating.load_yaml(file=constants.QUAY_SUB)
-        self.quay_operator = OCS(**quay_operator_data)
+        if not channel:
+            quay_package_manifest_obj = PackageManifest(
+                resource_name=constants.QUAY_OPERATOR
+            )
+            channel = quay_package_manifest_obj.get_default_channel()
+        else:
+            channel = channel
+        quay_operator_data_dict = templating.load_yaml(file=constants.QUAY_SUB)
+        quay_operator_data_dict["spec"]["channel"] = channel
+        self.quay_operator = OCS(**quay_operator_data_dict)
         logger.info(f"Installing Quay operator: {self.quay_operator.name}")
         self.quay_operator.create()
         for quay_pod in TimeoutSampler(
