@@ -12,6 +12,7 @@ ENV_DATA:
   disk_pattern: 'nvme-INTEL'
   is_multus_enabled: true
   multus_public_net_interface: 'enp1s0f0'
+  multus_cluster_net_interface: 'enp1s0f0'
   multus_create_public_net: true
   multus_create_cluster_net: false
   multus_public_net_namespace: "default"
