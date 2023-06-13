@@ -640,7 +640,7 @@ class Cosbench(object):
         self.cosbench_config.delete()
         switch_to_default_rook_cluster_project()
         self.ns_obj.delete_project(self.namespace)
-        self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=90)
+        self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=120)
 
     def get_performance_result(self, workload_name, workload_id, size):
         workload_file = self.get_result_csv(
