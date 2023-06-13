@@ -328,7 +328,7 @@ class MCG:
             f"api {api} {method} '{json.dumps(params)}' -ojson"
         )
 
-        # This class is needed to json method to the response dict
+        # This class is needed to add a json method to the response dict
         # which is needed to support existing usage
         class CLIResponseDict(dict):
             def json(self):
