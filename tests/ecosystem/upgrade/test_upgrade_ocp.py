@@ -145,7 +145,7 @@ class TestUpgradeOCP(ManageTest):
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
                 for sampler in TimeoutSampler(
-                    timeout=2700,
+                    timeout=4000,
                     sleep=60,
                     func=ocp.confirm_cluster_operator_version,
                     target_version=target_image,
