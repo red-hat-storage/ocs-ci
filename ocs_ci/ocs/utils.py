@@ -1007,9 +1007,10 @@ def get_logs_ocp_mg_pods(log_dir_path):
                 file_path_describe = os.path.join(
                     log_dir_path, f"describe_ocp_mg_{pod_mg_ns.name}.log"
                 )
+                pod_mg_describe = pod_mg_ns.describe()
                 with open(file_path_describe, "w") as df:
-                    df.write(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
-                log.debug(f"ocp mg pod describe:\n{pod_mg_ns.describe()}")
+                    df.write(f"ocp mg pod describe:\n{pod_mg_describe}")
+                log.debug(f"ocp mg pod describe:\n{pod_mg_describe}")
 
                 ocp_mg_pod_logs = get_pod_logs(
                     pod_name=pod_mg_ns.name, namespace=namespace, all_containers=True
@@ -1019,7 +1020,7 @@ def get_logs_ocp_mg_pods(log_dir_path):
                 )
                 with open(file_path_describe, "w") as df:
                     df.write(ocp_mg_pod_logs)
-                log.error(f"ocp mg pod logs:\n{ocp_mg_pod_logs}")
+                log.debug(f"ocp mg pod logs:\n{ocp_mg_pod_logs}")
     except Exception as e:
         log.error(e)
 
