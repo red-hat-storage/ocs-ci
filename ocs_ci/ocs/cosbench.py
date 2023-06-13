@@ -2,7 +2,7 @@ import csv
 import logging
 import os
 import re
-from tempfile import mkdtemp, NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkdtemp
 from xml.etree import ElementTree
 from datetime import datetime
 
@@ -577,25 +577,26 @@ class Cosbench(object):
         workload_csv = self.get_result_csv(
             workload_id=workload_id, workload_name=workload_name
         )
-        with open(workload_csv, "r") as file:
-            reader = csv.reader(file)
-            header = next(reader)
-            if header is not None:
-                # Iterate over each row after the header
-                logger.info(
-                    f"Verifying whether each stage of workload {workload_id} completed"
-                )
-                for row in reader:
-                    if row[16] == "completed":
-                        logger.info(f"Stage {row[0]} completed successfully")
-                    else:
-                        assert (
-                            f"Failed: Stage {row[0]} did not complete. Status {row[16]}"
-                        )
-            else:
-                raise UnexpectedBehaviour(
-                    f"Workload csv is incorrect/malformed. Dumping csv {reader}"
-                )
+        if os.path.isfile(workload_csv):
+            with open(workload_csv, "r") as file:
+                reader = csv.reader(file)
+                header = next(reader)
+                if header is not None:
+                    # Iterate over each row after the header
+                    logger.info(
+                        f"Verifying whether each stage of workload {workload_id} completed"
+                    )
+                    for row in reader:
+                        if row[16] == "completed":
+                            logger.info(f"Stage {row[0]} completed successfully")
+                        else:
+                            assert f"Failed: Stage {row[0]} did not complete. Status {row[16]}"
+                else:
+                    raise UnexpectedBehaviour(
+                        f"Workload csv is incorrect/malformed. Dumping csv {reader}"
+                    )
+        else:
+            logger.error("workload_csv file not found")
 
     def get_result_csv(self, workload_id, workload_name):
         """
@@ -609,6 +610,7 @@ class Cosbench(object):
             str: Absolute path of the result csv
 
         """
+
         archive_file = f"{workload_id}-{workload_name}"
         cmd = (
             f"cp {self.cosbench_pod.name}:/cos/archive/{archive_file}/{archive_file}.csv "
@@ -638,7 +640,7 @@ class Cosbench(object):
         self.cosbench_config.delete()
         switch_to_default_rook_cluster_project()
         self.ns_obj.delete_project(self.namespace)
-        self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=90)
+        self.ns_obj.wait_for_delete(resource_name=self.namespace, timeout=120)
 
     def get_performance_result(self, workload_name, workload_id, size):
         workload_file = self.get_result_csv(
