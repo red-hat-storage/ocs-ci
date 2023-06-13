@@ -60,7 +60,7 @@ class MCG:
         noobaa_user,
         noobaa_password,
         noobaa_token,
-    ) = (None,) * 12
+    ) = (None,) * 11
 
     def __init__(self, *args, **kwargs):
         """
