@@ -31,15 +31,6 @@ import ocs_ci.ocs.cluster
 log = logging.getLogger(__name__)
 
 
-class ResourceWithPhase(OCP):
-    """
-    A generic OCP object with Phase
-    for reusing wait_for_phase function
-    """
-
-    _has_phase = True
-
-
 def verify_provider_topology():
     """
     Verify topology in a Managed Services provider cluster
@@ -462,11 +453,12 @@ def verify_faas_provider_resources():
     )
 
     # Verify that Cephcluster is Ready and hostNetworking is True
-    cephcluster = ResourceWithPhase(
+    cephcluster = OCP(
         kind=constants.CEPH_CLUSTER,
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.CEPH_CLUSTER_NAME,
     )
+    cephcluster._has_phase = True
     log.info("Waiting for Cephcluster to be Ready")
     cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
     cephcluster_yaml = cephcluster.get()
