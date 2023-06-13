@@ -803,10 +803,12 @@ class Deployment(object):
                 interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
             worker_nodes = get_worker_nodes()
             node_obj = ocp.OCP(kind="node")
-            for node in worker_nodes:
-                for interface in interfaces:
-                    ip_link_cmd = f"ip link set promisc on {interface}"
-                    node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
+            platform = config.ENV_DATA.get("platform").lower()
+            if platform == "baremetal":
+                for node in worker_nodes:
+                    for interface in interfaces:
+                        ip_link_cmd = f"ip link set promisc on {interface}"
+                        node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
 
             if create_public_net:
                 logger.info("Creating Multus public network")
