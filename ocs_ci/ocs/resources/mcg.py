@@ -332,6 +332,8 @@ class MCG:
 
         """
 
+        logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
+
         # This version comparison is a workaround to make sure we still cover
         # the usage of the noobaa mgmt-endpoint via RPC calls
         # Once the release-4.13 branch is created we should remove the unused logic per version
@@ -349,8 +351,6 @@ class MCG:
             )
 
         else:
-            logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
-
             cli_output = self.exec_mcg_cmd(
                 f"api {api} {method} '{json.dumps(params)}' -ojson"
             )
