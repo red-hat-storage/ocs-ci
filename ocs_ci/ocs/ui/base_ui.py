@@ -1688,8 +1688,7 @@ class StorageSystemDetails(StorageSystemTab):
             CephHealthException if cephblockpool_status != 'Ready'
         """
         self.page_has_loaded(5, 5)
-        self.nav_ceph_blockpool()
-        self.verify_cephblockpool_status()
+        self.nav_ceph_blockpool().verify_cephblockpool_status()
 
     def nav_ceph_blockpool(self):
         logger.info("Click on 'BlockPools' tab")
