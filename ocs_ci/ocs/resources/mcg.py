@@ -7,7 +7,6 @@ import tempfile
 from time import sleep
 
 import boto3
-import requests
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
@@ -54,7 +53,6 @@ class MCG:
         s3_endpoint,
         s3_internal_endpoint,
         ocp_resource,
-        mgmt_endpoint,
         region,
         access_key_id,
         access_key,
@@ -105,13 +103,6 @@ class MCG:
             .get("serviceS3")
             .get("internalDNS")[0]
         )
-        self.mgmt_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceMgmt")
-            .get("externalDNS")[0]
-        ) + "/rpc"
         self.region = config.ENV_DATA["region"]
 
         creds_secret_name = (
@@ -332,17 +323,18 @@ class MCG:
 
         """
         logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
-        payload = {
-            "api": api,
-            "method": method,
-            "params": params,
-            "auth_token": self.noobaa_token,
-        }
-        return requests.post(
-            url=self.mgmt_endpoint,
-            data=json.dumps(payload),
-            verify=retrieve_verification_mode(),
+
+        cli_output = self.exec_mcg_cmd(
+            f"api {api} {method} '{json.dumps(params)}' -ojson"
         )
+
+        # This class is needed to json method to the response dict
+        # which is needed to support existing usage
+        class CLIResponseDict(dict):
+            def json(self):
+                return self
+
+        return CLIResponseDict({"reply": json.loads(cli_output.stdout)})
 
     def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
