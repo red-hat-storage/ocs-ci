@@ -8,6 +8,7 @@ import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_node_ips
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.utils import get_module_ip
 
@@ -150,6 +151,9 @@ def update_ntp_compute_nodes():
     """
     Updates NTP server on all compute nodes
     """
-    compute_nodes = get_node_ips_from_module(constants.COMPUTE_MODULE)
+    if config.ENV_DATA["deployment_type"] == "upi":
+        compute_nodes = get_node_ips_from_module(constants.COMPUTE_MODULE)
+    else:
+        compute_nodes = get_node_ips()
     for compute in compute_nodes:
         update_ntp_and_restart_chrony(compute)
