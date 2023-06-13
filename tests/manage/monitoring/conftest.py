@@ -341,10 +341,12 @@ def measure_corrupt_pg(request, measurement_dir):
     logger.info(f"Put object into {pool_name}")
     pool_object = "test_object"
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
+    logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
+    rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
 
     def corrupt_pg():
         """
-        Corrupt PG on one OSD in Ceph pool for 14 minutes and measure it.
+        PG on one OSD in Ceph pool should be corrupted. Measure it for 14 minutes.
         There should be only CephPGRepairTakingTooLong Pending alert as
         it takes 2 hours for it to become Firing.
         This configuration of alert can be observed in ceph-mixins which
@@ -356,14 +358,9 @@ def measure_corrupt_pg(request, measurement_dir):
         Returns:
             str: Name of corrupted pod
         """
+        nonlocal osd_deployment
         # run_time of operation
         run_time = 60 * 14
-        nonlocal pool_name
-        nonlocal pool_object
-        nonlocal osd_deployment
-
-        logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
-        rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return osd_deployment.name
