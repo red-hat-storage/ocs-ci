@@ -312,12 +312,16 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     logger.info("Setting osd nodeep-scrub flag")
     ct_pod.exec_ceph_cmd("ceph osd set nodeep-scrub")
 
+    logger.info(f"Looking for Placement Group ID with {pool_object} object")
+    pgid = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
+    logger.info(f"Found Placement Group ID: {pgid}")
+
     patch_change = (
-        f'[\{"op": "add", "path": "/spec/template/spec/initContainers/-", "value": '
+        '[\{"op": "add", "path": "/spec/template/spec/initContainers/-", "value": '
         f'\{ "args": [ "--data-path", "/var/lib/ceph/osd/ceph-{osd_id}", "--pgid", '
         f'"{pgid}", "{pool_object}", "set-bytes", "/etc/shadow", "--no-mon-config"], '
         f'"command": [ "ceph-bluestore-tool" ], "image": {ceph_image}, "imagePullPolicy": '
-        f'"IfNotPresent", "name": "corrupt-pg", "securityContext": \{ "privileged": "true", '
+        '"IfNotPresent", "name": "corrupt-pg", "securityContext": \{"privileged": "true", '
         f'"runAsUser": "0"\}, "volumeMounts": [\{"mountPath": "/var/lib/ceph/osd/ceph-0", '
         f'"name": "{bridge_name}", "subPath": "ceph-0"\}, \{"mountPath": '
         f'"/var/run/secrets/kubernetes.io/serviceaccount", "name":" "{kubeservice_name}", '
@@ -326,19 +330,6 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     osd_deployment.ocp.patch(
         resource_name=osd_deployment.name, params=patch_change, format_type="json"
     )
-
-    logger.info(f"Looking for Placement Group ID with {pool_object} object")
-    pgid = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
-    logger.info(f"Found Placement Group ID: {pgid}")
-
-    osd_deployment.wait_for_available_replicas()
-    osd_pod = osd_deployment.pods[0]
-    osd_pod.exec_sh_cmd_on_pod(
-        f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
-        f"{osd_id} --pgid {pgid} {pool_object} "
-        f"set-bytes /etc/shadow --no-mon-config"
-    )
-    osd_pod.exec_cmd_on_pod(original_osd_cmd + " " + original_osd_args)
     ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
 
 
