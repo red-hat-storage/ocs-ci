@@ -316,17 +316,17 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     pgid = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
     logger.info(f"Found Placement Group ID: {pgid}")
 
-    patch_change = (
-        '[\{"op": "add", "path": "/spec/template/spec/initContainers/-", "value": '
-        f'\{ "args": [ "--data-path", "/var/lib/ceph/osd/ceph-{osd_id}", "--pgid", '
-        f'"{pgid}", "{pool_object}", "set-bytes", "/etc/shadow", "--no-mon-config"], '
-        f'"command": [ "ceph-bluestore-tool" ], "image": {ceph_image}, "imagePullPolicy": '
-        '"IfNotPresent", "name": "corrupt-pg", "securityContext": \{"privileged": "true", '
-        f'"runAsUser": "0"\}, "volumeMounts": [\{"mountPath": "/var/lib/ceph/osd/ceph-0", '
-        f'"name": "{bridge_name}", "subPath": "ceph-0"\}, \{"mountPath": '
-        f'"/var/run/secrets/kubernetes.io/serviceaccount", "name":" "{kubeservice_name}", '
-        '"readOnly": "true"\}] \}\}]'
-    )
+patch_change = (
+    '[{"op": "add", "path": "/spec/template/spec/initContainers/-", "value": '
+    f'{{ "args": ["--data-path", "/var/lib/ceph/osd/ceph-{osd_id}", "--pgid", '
+    f'"{pgid}", "{pool_object}", "set-bytes", "/etc/shadow", "--no-mon-config"], '
+    f'"command": [ "ceph-bluestore-tool" ], "image": "{ceph_image}", "imagePullPolicy": '
+    '"IfNotPresent", "name": "corrupt-pg", "securityContext": {"privileged": "true", '
+    f'"runAsUser": "0"}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-0", '
+    f'"name": "{bridge_name}", "subPath": "ceph-0"}}, {{"mountPath": '
+    f'"/var/run/secrets/kubernetes.io/serviceaccount", "name":" "{kubeservice_name}", '
+    '"readOnly": "true"}] }}]'
+)
     osd_deployment.ocp.patch(
         resource_name=osd_deployment.name, params=patch_change, format_type="json"
     )
