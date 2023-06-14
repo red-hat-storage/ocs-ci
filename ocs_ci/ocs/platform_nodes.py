@@ -77,6 +77,7 @@ class PlatformNodesFactory:
     """
 
     def __init__(self):
+
         self.cls_map = {
             "AWS": AWSNodes,
             "vsphere": VMWareNodes,
@@ -92,6 +93,7 @@ class PlatformNodesFactory:
             "rosa": AWSNodes,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
+            "ibm_cloud_ipi": IBMCloudIPI
         }
 
     def get_nodes_platform(self):
@@ -102,7 +104,9 @@ class PlatformNodesFactory:
                 platform += "_lso"
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
-
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
         return self.cls_map[platform]()
 
 
@@ -2948,3 +2952,110 @@ class VMWareUPINodes(VMWareNodes):
         for vm_name in vm_names:
             node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
             node_cls_obj.change_terraform_tfvars_after_remove_vm()
+
+
+class IBMCloudIPI(object):
+    """
+    A base class for nodes related operations.
+    Should be inherited by specific platform classes
+
+    """
+
+    def __init__(self):
+        from ocs_ci.utility import ibmcloud
+
+        super(IBMCloudIPI, self).__init__()
+        self.ibmcloud_ipi = ibmcloud.IBMCloudIPI()
+
+    def get_data_volumes(self):
+        raise NotImplementedError("Get data volume functionality is not implemented")
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def stop_nodes(self, nodes, force=True):
+        self.ibmcloud_ipi.stop_nodes(nodes=nodes, force=force)
+
+    def start_nodes(self, nodes):
+        self.ibmcloud_ipi.start_nodes(nodes=nodes)
+
+    def restart_nodes(self, nodes, wait=True):
+        self.ibmcloud_ipi.restart_nodes(nodes=nodes, wait=wait)
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        self.ibmcloud_ipi.restart_nodes_by_stop_and_start(nodes=nodes, force=force)
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError("Detach volume functionality is not implemented")
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError("Attach volume functionality is not implemented")
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        self.ibmcloud_ipi.restart_nodes_by_stop_and_start_force()
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in
+        a single call
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+
+        """
+        node_list = self.create_nodes(node_conf, node_type, num_nodes)
+        self.attach_nodes_to_cluster(node_list)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
+
+    def terminate_nodes(self, nodes, wait=True):
+        self.ibmcloud_ipi.terminate_nodes(nodes=nodes, wait=wait)
+
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
