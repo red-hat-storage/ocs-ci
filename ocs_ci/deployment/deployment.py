@@ -396,7 +396,10 @@ class Deployment(object):
         """
         Install IBM Fusion operator
         """
-        if config.DEPLOYMENT.get("fusion_deployment"):
+        if (
+            config.DEPLOYMENT.get("fusion_deployment")
+            and not config.ENV_DATA["skip_ocs_deployment"]
+        ):
             # create catalog source
             create_fusion_catalog_source()
 
