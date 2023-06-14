@@ -454,13 +454,15 @@ def verify_faas_provider_resources():
 
     # Verify that Cephcluster is Ready and hostNetworking is True
     cephcluster = OCP(
-        kind=constants.CEPH_CLUSTER, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.CEPH_CLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_CLUSTER_NAME,
     )
-    cephcluster_yaml = cephcluster.get().get("items")[0]
-    log.info("Verifying that Cephcluster is Ready and hostNetworking is True")
-    assert (
-        cephcluster_yaml["status"]["phase"] == "Ready"
-    ), f"Status of cephcluster {cephcluster_yaml['metadata']['name']} is {cephcluster_yaml['status']['phase']}"
+    cephcluster._has_phase = True
+    log.info("Waiting for Cephcluster to be Ready")
+    cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
+    cephcluster_yaml = cephcluster.get()
+    log.info("Verifying that Cephcluster's hostNetworking is True")
     assert cephcluster_yaml["spec"]["network"][
         "hostNetwork"
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']} in Cephcluster"
