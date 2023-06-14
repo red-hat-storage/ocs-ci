@@ -746,7 +746,7 @@ def get_namespce_name_by_pattern(
     namespace_names = namespace_names.split("\n")
     namespace_list = []
     for namespace_name in namespace_names:
-        if filter is not None and re.search(filter, namespace_name):
+        if filter is not None and filter == namespace_name:
             log.info(f"Namespace name filtered {namespace_name}")
         elif re.search(pattern, namespace_name):
             (_, name) = namespace_name.split("/")
@@ -938,6 +938,7 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         timeout = 1500
     else:
         timeout = 600
+
     must_gather_timeout = cluster_config.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
@@ -977,8 +978,6 @@ def export_mg_pods_logs(log_dir_path):
 
     Args:
         log_dir_path (str): the path of copying the logs
-
-    Returns:
 
     """
     get_logs_ocp_mg_pods(log_dir_path)
@@ -1044,7 +1043,7 @@ def get_helper_pods_output(log_dir_path):
 
             describe_helper_pod = helper_pod_obj.describe()
             file_path_describe = os.path.join(
-                log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod_obj.name}.log"
+                log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod}.log"
             )
             with open(file_path_describe, "w") as df:
                 df.write(describe_helper_pod)
@@ -1054,7 +1053,7 @@ def get_helper_pods_output(log_dir_path):
 
             log_helper_pod = get_pod_logs(pod_name=helper_pod)
             file_path_describe = os.path.join(
-                log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod_obj.name}.log"
+                log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod}.log"
             )
             with open(file_path_describe, "w") as df:
                 df.write(log_helper_pod)
