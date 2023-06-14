@@ -2,8 +2,9 @@ import logging
 import os
 import pytest
 import yaml
-from tempfile import NamedTemporaryFile
 
+from tempfile import NamedTemporaryFile
+from ocs_ci.framework.pytest_customization.marks import bugzilla
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
@@ -274,6 +275,7 @@ class TestCRRsourcesValidation(ManageTest):
             {},
         )
 
+    @bugzilla("2207780")
     def test_volume_replication_cr_editable(self):
         """
         Test case to check that some properties of volume replication class object are not editable
