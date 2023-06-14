@@ -108,7 +108,6 @@ def test_ceph_mgr_dashboard_not_deployed():
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
-@pytest.mark.skip(reason="BZ 1779336 was closed as NOTABUG")
 @skipif_ocs_version("<4.6")
 @metrics_for_external_mode_required
 @tier1
