@@ -933,7 +933,7 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
     mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_10:
-        timeout = 50
+        timeout = 2100
     elif ocs_version >= version.VERSION_4_6:
         timeout = 1500
     else:
