@@ -392,6 +392,38 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
 
+    def do_deploy_fusion(self):
+        """
+        Install IBM Fusion operator
+        """
+        if config.DEPLOYMENT.get("fusion_deployment"):
+            # create catalog source
+            create_fusion_catalog_source()
+
+            # create namespace and operator group
+            logger.info("Creating namespace for IBM Fusion.")
+            run_cmd(f"oc create -f {constants.FUSION_NS_YAML}")
+
+            # deploy fusion
+            from ocs_ci.deployment.fusion import deploy_fusion
+
+            deploy_fusion()
+
+            # wait for subscription and csv to found
+            fusion_operator = defaults.FUSION_OPERATOR_NAME
+            fusion_namespace = defaults.FUSION_NAMESPACE
+            self.wait_for_subscription(fusion_operator, fusion_namespace)
+            self.wait_for_csv(fusion_operator, fusion_namespace)
+            logger.info(f"Sleeping for 30 seconds after {fusion_operator} created")
+            time.sleep(30)
+
+            # wait for package manifest to found and csv in Succeeded state
+            package_manifest = PackageManifest(resource_name=fusion_operator)
+            package_manifest.wait_for_resource(timeout=120)
+            csv_name = package_manifest.get_current_csv()
+            csv = CSV(resource_name=csv_name, namespace=fusion_namespace)
+            csv.wait_for_phase("Succeeded", timeout=300)
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -452,6 +484,7 @@ class Deployment(object):
         self.do_gitops_deploy()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
+        self.do_deploy_fusion()
 
     def get_rdr_conf(self):
         """
@@ -1890,6 +1923,30 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
+
+
+def create_fusion_catalog_source():
+    """
+    Create catalog source for fusion operator
+    """
+    logger.info("Adding CatalogSource for IBM Fusion")
+    fusion_catalog_source_data = templating.load_yaml(
+        constants.FUSION_CATALOG_SOURCE_YAML
+    )
+    fusion_catalog_source_manifest = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="fusion_catalog_source_manifest", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        fusion_catalog_source_data, fusion_catalog_source_manifest.name
+    )
+    run_cmd(f"oc apply -f {fusion_catalog_source_manifest.name}")
+    ibm_catalog_source = CatalogSource(
+        resource_name=constants.IBM_OPERATOR_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+
+    # Wait for catalog source is ready
+    ibm_catalog_source.wait_for_state("READY")
 
 
 @retry(CommandFailed, tries=8, delay=3)
