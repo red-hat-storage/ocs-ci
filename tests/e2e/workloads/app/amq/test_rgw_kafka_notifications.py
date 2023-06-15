@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 @bugzilla("1958818")
 @on_prem_platform_required
 @skipif_external_mode
-@skipif_ocs_version("4.13")
+@skipif_ocs_version(">=4.13")
 @pytest.mark.polarion_id("OCS-2514")
 class TestRGWAndKafkaNotifications(E2ETest):
     """
