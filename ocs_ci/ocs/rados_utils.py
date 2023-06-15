@@ -286,12 +286,6 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     osd_pod = osd_deployment.pods[0]
     osd_data = osd_pod.get()
     osd_containers = osd_data["spec"]["containers"]
-    original_osd_cmd = " ".join(osd_containers[0].get("command"))
-    original_osd_args = osd_containers[0].get("args")
-    original_osd_args = [",".join(arg.split()) for arg in original_osd_args]
-    original_osd_args.remove("--foreground")
-    original_osd_args = " ".join(original_osd_args)
-    logger.info(f"Original args for osd deployment: {original_osd_args}")
     osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
 
     for i_container in osd_data["spec"]["initContainers"]:
