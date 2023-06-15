@@ -724,6 +724,37 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
+def get_namespce_name_by_pattern(
+    pattern="client",
+    filter=None,
+):
+    """
+    Find namespace names that match the given pattern
+
+    Args:
+        pattern (str): name of the namespace with given pattern
+        filter (str): namespace name to filter from the list
+
+    Returns:
+        list: Namespace names matching the pattern
+
+    """
+    ocp_obj = OCP(kind="namespace")
+    namespace_names = ocp_obj.exec_oc_cmd(
+        "get namespace -o name", out_yaml_format=False
+    )
+    namespace_names = namespace_names.split("\n")
+    namespace_list = []
+    for namespace_name in namespace_names:
+        if filter is not None and filter == namespace_name:
+            log.info(f"Namespace name filtered {namespace_name}")
+        elif re.search(pattern, namespace_name):
+            (_, name) = namespace_name.split("/")
+            log.info(f"namespace name match found appending {namespace_name}")
+            namespace_list.append(name)
+    return namespace_list
+
+
 def get_rook_version():
     """
     Get the rook image information from rook-ceph-operator pod
@@ -921,6 +952,7 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         timeout = 1500
     else:
         timeout = 600
+
     must_gather_timeout = cluster_config.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
@@ -939,45 +971,109 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             cluster_config=cluster_config,
         )
     except CommandFailed as ex:
-        log.error(get_helper_pods_output())
         log.error(
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
+        export_mg_pods_logs(log_dir_path=log_dir_path)
+
     except TimeoutExpired as ex:
-        log.error(get_helper_pods_output())
         log.error(
-            f"Timeout {must_gather_timeout}s for must-gather reached, command"
-            f" exited with error: {ex}"
+            f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
+        export_mg_pods_logs(log_dir_path=log_dir_path)
     return mg_output
 
 
-def get_helper_pods_output():
+def export_mg_pods_logs(log_dir_path):
+    """
+    Export must gather pods logs
+
+    Args:
+        log_dir_path (str): the path of copying the logs
+
+    """
+    get_logs_ocp_mg_pods(log_dir_path)
+    get_helper_pods_output(log_dir_path)
+
+
+def get_logs_ocp_mg_pods(log_dir_path):
+    """
+    Get logs from OCP Must Gather pods
+
+    Args:
+        log_dir_path (str): the path of copying the logs
+
+    """
+    from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_logs
+
+    namespaces = get_namespce_name_by_pattern(pattern="openshift-must-gather")
+    try:
+        for namespace in namespaces:
+            pods_mg_ns = get_all_pods(namespace=namespace)
+            for pod_mg_ns in pods_mg_ns:
+                log.info(
+                    f"*** ocp_mg_pod_name: {pod_mg_ns.name} ocp_mg_pod_namespace: {namespace} ***"
+                )
+
+                file_path_describe = os.path.join(
+                    log_dir_path, f"describe_ocp_mg_{pod_mg_ns.name}.log"
+                )
+                pod_mg_describe = pod_mg_ns.describe()
+                with open(file_path_describe, "w") as df:
+                    df.write(f"ocp mg pod describe:\n{pod_mg_describe}")
+                log.debug(f"ocp mg pod describe:\n{pod_mg_describe}")
+
+                ocp_mg_pod_logs = get_pod_logs(
+                    pod_name=pod_mg_ns.name, namespace=namespace, all_containers=True
+                )
+                file_path_describe = os.path.join(
+                    log_dir_path, f"log_ocp_mg_{pod_mg_ns.name}.log"
+                )
+                with open(file_path_describe, "w") as df:
+                    df.write(ocp_mg_pod_logs)
+                log.debug(f"ocp mg pod logs:\n{ocp_mg_pod_logs}")
+    except Exception as e:
+        log.error(e)
+
+
+def get_helper_pods_output(log_dir_path):
     """
     Get the output of "oc describe mg-helper pods"
 
-    Returns:
-        str: the output of "oc describe pods mg-helper" and "oc logs mg-helper"
+    Args:
+        log_dir_path (str): the path of copying the logs
 
     """
     from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
 
-    output_describe_mg_helper = ""
     helper_pods = get_pod_name_by_pattern(pattern="helper")
     for helper_pod in helper_pods:
         try:
             helper_pod_obj = get_pod_obj(
                 name=helper_pod, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
             )
-            output_describe_mg_helper += (
-                f"****helper pod {helper_pod} describe****\n{helper_pod_obj.describe()}\n"
-                f"****helper pod {helper_pod} logs***\n{get_pod_logs(pod_name=helper_pod)}"
+
+            describe_helper_pod = helper_pod_obj.describe()
+            file_path_describe = os.path.join(
+                log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod}.log"
             )
+            with open(file_path_describe, "w") as df:
+                df.write(describe_helper_pod)
+            log.debug(
+                f"****helper pod {helper_pod} describe****\n{describe_helper_pod}\n"
+            )
+
+            log_helper_pod = get_pod_logs(pod_name=helper_pod)
+            file_path_describe = os.path.join(
+                log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod}.log"
+            )
+            with open(file_path_describe, "w") as df:
+                df.write(log_helper_pod)
+            log.debug(f"****helper pod {helper_pod} logs***\n{log_helper_pod}")
         except Exception as e:
             log.error(e)
-    return output_describe_mg_helper
 
 
 def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
