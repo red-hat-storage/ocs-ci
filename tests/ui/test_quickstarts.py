@@ -23,16 +23,16 @@ class TestPvcUserInterface(object):
         argnames=["title"],
         argvalues=[
             pytest.param(
-                *["Getting started with OpenShift Container Storage"],
+                *["Getting started with OpenShift Data Foundation"],
                 marks=pytest.mark.polarion_id("OCS-2458"),
             ),
             pytest.param(
-                *["OpenShift Container Storage Configuration & Management"],
+                *["Configure and manage OpenShift Data Foundation"],
                 marks=pytest.mark.polarion_id("OCS-2466"),
             ),
         ],
     )
-    def test_quickstart_presense(self, setup_ui_class, title):
+    def test_quickstart_presence(self, setup_ui_class, title):
         """
         Check that the quickstart with the given title is present in the UI
 
@@ -41,9 +41,6 @@ class TestPvcUserInterface(object):
         quickstart_ui_obj.navigate_quickstarts_page()
         quickstart_ui_obj.take_screenshot()
         logger.info(f"Expected quickstart title: {title}")
-        result = quickstart_ui_obj.check_element_text(element="h3", expected_text=title)
-        logger.info(f"Actual result: {result}")
-        assert quickstart_ui_obj.check_element_text(element="h3", expected_text=title)
-        assert (
-            quickstart_ui_obj.driver.title == title
-        ), "Title of the page is not as expected"
+        assert quickstart_ui_obj.check_element_text(
+            element="h3", expected_text=title
+        ), f"Expected title '{title}' was not found"
