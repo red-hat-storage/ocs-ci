@@ -665,7 +665,13 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
     # we only look at actual failing test calls, not setup/teardown
-    if rep.failed and ocsci_config.RUN.get("cli_params").get("collect-logs"):
+    # Don't collect must-gather for deployment here since its already
+    # handled in deployment
+    if (
+        rep.failed
+        and ocsci_config.RUN.get("cli_params").get("collect-logs")
+        and not ocsci_config.RUN.get("cli_params").get("deploy")
+    ):
         test_case_name = item.name
         ocp_logs_collection = (
             True
