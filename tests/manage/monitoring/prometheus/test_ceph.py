@@ -57,7 +57,6 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-898")
-@pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 @skipif_managed_service
 def test_ceph_health(measure_stop_ceph_mon, measure_corrupt_pg):
     """
