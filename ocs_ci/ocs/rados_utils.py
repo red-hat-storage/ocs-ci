@@ -308,6 +308,8 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     pgid = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
     logger.info(f"Found Placement Group ID: {pgid}")
 
+    # Update osd deployment with an initContainer that breaks the pool before
+    # the ceph daemon is loaded.
     patch_change = (
         '[{"op": "add", "path": "/spec/template/spec/initContainers/-", "value": '
         f'{{ "args": ["--data-path", "/var/lib/ceph/osd/ceph-{osd_id}", "--pgid", '
