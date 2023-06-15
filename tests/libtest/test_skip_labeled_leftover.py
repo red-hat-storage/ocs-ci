@@ -11,12 +11,13 @@ from ocs_ci.utility import (
 )
 
 from ocs_ci.helpers import helpers
-from ocs_ci.framework.testlib import BaseTest
+from ocs_ci.framework.testlib import BaseTest, libtest
 
 log = logging.getLogger(__name__)
 
 
-@ignore_leftover_label("test-label=test-value")
+@libtest
+@ignore_leftover_label("app=test-value")
 class TestClassWithMark(BaseTest):
     def test_labeled_leftover_pod_with_mark(self):
         """
@@ -26,6 +27,7 @@ class TestClassWithMark(BaseTest):
         create_labeled_pod(pod_name="marked")
 
 
+@libtest
 class TestClassWithoutMark(BaseTest):
     def test_labeled_leftover_pod_without_mark(self):
         """
@@ -45,6 +47,6 @@ def create_labeled_pod(pod_name):
     java_pod_dict["metadata"]["name"] = pod_name
 
     # Note that the given label here matches the label in line 19
-    java_pod_dict["metadata"]["labels"]["test-label"] = "test-value"
+    java_pod_dict["metadata"]["labels"]["app"] = "test-value"
 
     helpers.create_resource(**java_pod_dict)
