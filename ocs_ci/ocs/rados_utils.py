@@ -295,7 +295,6 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         raise ValueError("expand-bluefs container is missing")
     ceph_image = bluefs_container["image"]
     bridge_name = bluefs_container["volumeMounts"][0]["name"]
-    kubeservice_name = bluefs_container["volumeMounts"][1]["name"]
 
     ct_pod = pod.get_ceph_tools_pod()
     logger.info("Setting osd noout flag")
@@ -316,9 +315,7 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         f'"command": [ "ceph-bluestore-tool" ], "image": "{ceph_image}", "imagePullPolicy": '
         '"IfNotPresent", "name": "corrupt-pg", "securityContext": {"privileged": true, '
         f'"runAsUser": 0}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-0", '
-        f'"name": "{bridge_name}", "subPath": "ceph-0"}}, {{"mountPath": '
-        f'"/var/run/secrets/kubernetes.io/serviceaccount", "name": "{kubeservice_name}", '
-        '"readOnly": true}] }}]'
+        f'"name": "{bridge_name}", "subPath": "ceph-0"}}]}}}}]'
     )
     osd_deployment.ocp.patch(
         resource_name=osd_deployment.name, params=patch_change, format_type="json"
