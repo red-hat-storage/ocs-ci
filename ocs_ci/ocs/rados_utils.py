@@ -285,7 +285,6 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     """
     osd_pod = osd_deployment.pods[0]
     osd_data = osd_pod.get()
-    osd_containers = osd_data["spec"]["containers"]
     osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
 
     for i_container in osd_data["spec"]["initContainers"]:
@@ -315,11 +314,11 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         f'{{ "args": ["--data-path", "/var/lib/ceph/osd/ceph-{osd_id}", "--pgid", '
         f'"{pgid}", "{pool_object}", "set-bytes", "/etc/shadow", "--no-mon-config"], '
         f'"command": [ "ceph-bluestore-tool" ], "image": "{ceph_image}", "imagePullPolicy": '
-        '"IfNotPresent", "name": "corrupt-pg", "securityContext": {"privileged": "true", '
-        f'"runAsUser": "0"}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-0", '
+        '"IfNotPresent", "name": "corrupt-pg", "securityContext": {"privileged": true, '
+        f'"runAsUser": 0}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-0", '
         f'"name": "{bridge_name}", "subPath": "ceph-0"}}, {{"mountPath": '
-        f'"/var/run/secrets/kubernetes.io/serviceaccount", "name":" "{kubeservice_name}", '
-        '"readOnly": "true"}] }}]'
+        f'"/var/run/secrets/kubernetes.io/serviceaccount", "name": "{kubeservice_name}", '
+        '"readOnly": true}] }}]'
     )
     osd_deployment.ocp.patch(
         resource_name=osd_deployment.name, params=patch_change, format_type="json"
