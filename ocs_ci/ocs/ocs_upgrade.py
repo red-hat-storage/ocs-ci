@@ -576,7 +576,7 @@ def run_ocs_upgrade(
     )
 
     # Before ODF upgrade, login to OCP console and enable console plugin if not already,
-    # refresh the web console if pop-up is found
+    # refresh the web console using pop-up if found
     semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
     if semantic_upgrade_version >= version.VERSION_4_9:
         validation_ui_obj = ValidationUI()
