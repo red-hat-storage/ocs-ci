@@ -702,10 +702,24 @@ def get_ceph_tools_pod(skip_creating_pod=False):
         ToolBoxNotFoundException: In case of tool box not found
 
     """
+    if (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+        and config.ENV_DATA.get("cluster_type", "").lower()
+        == constants.MS_CONSUMER_TYPE
+    ):
+        provider_kubeconfig = os.path.join(
+            config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
+            config.clusters[config.get_provider_index()].RUN.get("kubeconfig_location"),
+        )
+        cluster_kubeconfig = provider_kubeconfig
+    else:
+        cluster_kubeconfig = ""
     ocp_pod_obj = OCP(
         kind=constants.POD,
         namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.TOOL_APP_LABEL,
+        cluster_kubeconfig=cluster_kubeconfig,
     )
     ct_pod_items = ocp_pod_obj.data["items"]
     if not (ct_pod_items or skip_creating_pod):
@@ -733,6 +747,7 @@ def get_ceph_tools_pod(skip_creating_pod=False):
 
     assert running_ct_pods, "No running Ceph tools pod found"
     ceph_pod = Pod(**running_ct_pods[0])
+    ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
     return ceph_pod
 
 
