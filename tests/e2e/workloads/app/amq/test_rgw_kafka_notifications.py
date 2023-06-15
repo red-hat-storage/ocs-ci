@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     on_prem_platform_required,
     bugzilla,
     skipif_external_mode,
+    skipif_ocs_version,
 )
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.amq import AMQ
@@ -33,6 +34,7 @@ log = logging.getLogger(__name__)
 @bugzilla("1958818")
 @on_prem_platform_required
 @skipif_external_mode
+@skipif_ocs_version("4.13")
 @pytest.mark.polarion_id("OCS-2514")
 class TestRGWAndKafkaNotifications(E2ETest):
     """
