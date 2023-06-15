@@ -149,21 +149,39 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         logger.info(f"Namespace bucket: {ns_bucket.name} created")
 
         # Noobaa S3 account
-        user = NoobaaAccount(
-            mcg_obj, name=user_name, email=email, buckets=[ns_bucket.name]
-        )
+        user = NoobaaAccount(mcg_obj, name=user_name, email=email)
         logger.info(f"Noobaa account: {user.email_id} with S3 access created")
 
-        bucket_policy_generated = gen_bucket_policy(
+        get_allow_bucket_policy_generated = gen_bucket_policy(
+            user_list=[user.email_id],
+            actions_list=["GetObject"],
+            resources_list=[f'{ns_bucket.name}/{"*"}'],
+        )
+
+        put_allow_bucket_policy_generated = gen_bucket_policy(
+            user_list=[user.email_id],
+            actions_list=["PutObject"],
+            resources_list=[f'{ns_bucket.name}/{"*"}'],
+        )
+
+        delete_deny_bucket_policy_generated = gen_bucket_policy(
             user_list=[user.email_id],
             actions_list=["DeleteObject"],
             effect="Deny",
             resources_list=[f'{ns_bucket.name}/{"*"}'],
         )
-        bucket_policy = json.dumps(bucket_policy_generated)
-        logger.info(
-            f"Creating bucket policy on bucket: {ns_bucket.name} with wildcard (*) Principal"
+
+        bucket_policy_dict = get_allow_bucket_policy_generated
+        bucket_policy_dict["Statement"].append(
+            put_allow_bucket_policy_generated["Statement"][0]
         )
+        bucket_policy_dict["Statement"].append(
+            delete_deny_bucket_policy_generated["Statement"][0]
+        )
+        bucket_policy = json.dumps(bucket_policy_dict)
+
+        logger.info(f"Creating bucket policy on bucket: {ns_bucket.name}")
+
         put_policy = put_bucket_policy(mcg_obj, ns_bucket.name, bucket_policy)
         logger.info(f"Put bucket policy response from Admin: {put_policy}")
 
