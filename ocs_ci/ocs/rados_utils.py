@@ -287,11 +287,12 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     osd_data = osd_pod.get()
     osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
 
+    bluefs_container = None
     for i_container in osd_data["spec"]["initContainers"]:
         if i_container["name"] == "expand-bluefs":
             bluefs_container = i_container
             break
-    if not bluefs_container:
+    else:
         raise ValueError("expand-bluefs container is missing")
     ceph_image = bluefs_container["image"]
     bridge_name = bluefs_container["volumeMounts"][0]["name"]
