@@ -312,7 +312,7 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         '[{"op": "add", "path": "/spec/template/spec/initContainers/-", "value": '
         f'{{ "args": ["--data-path", "/var/lib/ceph/osd/ceph-{osd_id}", "--pgid", '
         f'"{pgid}", "{pool_object}", "set-bytes", "/etc/shadow", "--no-mon-config"], '
-        f'"command": [ "ceph-bluestore-tool" ], "image": "{ceph_image}", "imagePullPolicy": '
+        f'"command": [ "ceph-objectstore-tool" ], "image": "{ceph_image}", "imagePullPolicy": '
         '"IfNotPresent", "name": "corrupt-pg", "securityContext": {"privileged": true, '
         f'"runAsUser": 0}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-0", '
         f'"name": "{bridge_name}", "subPath": "ceph-0"}}]}}}}]'
