@@ -143,7 +143,7 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'us-east-2'
   base_domain: 'qe.rh-ocs.com'
-  master_instance_type: 'm4.xlarge'
+  master_instance_type: 'm6i.xlarge'
   worker_instance_type: 'm5.4xlarge'
   # vm_type_bootstrap is used in AWS UPI deployments
   vm_type_bootstrap: 'i3.large'
