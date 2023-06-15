@@ -833,6 +833,7 @@ class Deployment(object):
                 public_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_public_net_mode"
                 )
+                public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
                 public_net_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="multus_public", delete=False
                 )
@@ -864,6 +865,7 @@ class Deployment(object):
                 cluster_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_cluster_net_mode"
                 )
+                cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
                 cluster_net_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="multus_public", delete=False
                 )
