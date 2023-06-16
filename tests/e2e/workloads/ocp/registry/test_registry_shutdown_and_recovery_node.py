@@ -89,7 +89,7 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
             )(wait_for_nodes_status)(timeout=900)
 
         # Validate all storage pods are running
-        wait_for_storage_pods()
+        retry(CommandFailed)(wait_for_storage_pods)(timeout=900)
 
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check(tries=40)
