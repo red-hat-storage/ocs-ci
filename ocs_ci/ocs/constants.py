@@ -26,6 +26,7 @@ REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
 TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER = os.path.join(TEMPLATE_DIR, "cert-manager")
+TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
@@ -632,8 +633,12 @@ OLM_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml")
 CERT_MANAGER_NS_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER, "namespace_opg_cert_manager.yaml"
 )
+FUSION_NS_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_FUSION, "namespace.yaml")
 
 CATALOG_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml")
+FUSION_CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION, "catalog-source.yaml"
+)
 
 OCS_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "ocs-secret.yaml")
 
@@ -642,6 +647,9 @@ STAGE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
 )
 
 SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml")
+FUSION_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION, "subscription.yaml"
+)
 
 SUBSCRIPTION_ODF_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "subscription_odf.yaml")
 
@@ -915,6 +923,7 @@ NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "redhat-operators"
+IBM_OPERATOR_CATALOG_SOURCE_NAME = "ibm-operator-catalog"
 OSBS_BOUNDLE_IMAGE = "registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pending"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 MONITORING_NAMESPACE = "openshift-monitoring"
