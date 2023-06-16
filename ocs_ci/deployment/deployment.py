@@ -1913,7 +1913,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
     # apply icsp if present in the catalog image
-    get_and_aply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
+    get_and_apply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
@@ -1992,7 +1992,7 @@ def setup_persistent_monitoring():
     )(pods_list)
 
 
-def get_and_aply_icsp_from_catalog(image, apply=True):
+def get_and_apply_icsp_from_catalog(image, apply=True):
     """
     Get ICSP from catalog image (if exists) and apply it on the cluster (if
     requiested).
