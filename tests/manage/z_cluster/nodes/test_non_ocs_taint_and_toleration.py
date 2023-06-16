@@ -84,9 +84,12 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ocs_nodes = get_worker_nodes()
         taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
 
+        resource_name = constants.DEFAULT_CLUSTERNAME
+        if config.DEPLOYMENT["external_mode"]:
+            resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
         # Add tolerations to the storagecluster
         storagecluster_obj = ocp.OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
+            resource_name=resource_name,
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )
@@ -99,6 +102,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
         if config.ENV_DATA["mcg_only_deployment"]:
             param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
+        elif config.DEPLOYMENT["external_mode"]:
+            param = (
+                f'{{"spec": {{"placement": {{"all": {tolerations}, '
+                f'"noobaa-core": {tolerations}, }}}}}}'
+            )
         else:
             param = (
                 f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
@@ -188,7 +196,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ), "Number of pods didn't match"
 
         # Add capacity to check if new osds has toleration
-        if not config.ENV_DATA["mcg_only_deployment"]:
+        if not (
+            config.ENV_DATA["mcg_only_deployment"] or config.ENV_DATA["external_mode"]
+        ):
             osd_size = storage_cluster.get_osd_size()
             count = storage_cluster.add_capacity(osd_size)
             pod = ocp.OCP(
