@@ -1,0 +1,3 @@
+DEPLOYMENT:
+  fusion_deployment: True
+  channel: v2.0
