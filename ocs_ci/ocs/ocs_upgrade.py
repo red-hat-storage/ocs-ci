@@ -11,6 +11,7 @@ from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
     Deployment,
+    get_and_apply_icsp_from_catalog,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -538,6 +539,7 @@ class OCSUpgrade(object):
             with NamedTemporaryFile() as cs_yaml:
                 dump_data_to_temp_yaml(cs_data, cs_yaml.name)
                 ocs_catalog.apply(cs_yaml.name)
+                get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
 
 
 def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
