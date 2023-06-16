@@ -2032,7 +2032,7 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     create_directory_path(icsp_file_dest_dir)
     cmd = (
-        f"oc image extract --registry-config {pull_secret_path} "
+        f"oc image extract --filter-by-os linux/amd64 --registry-config {pull_secret_path} "
         f"{image} --confirm "
         f"--path {icsp_file_location}:{icsp_file_dest_dir}"
     )
