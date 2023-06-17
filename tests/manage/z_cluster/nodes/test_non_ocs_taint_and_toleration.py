@@ -86,7 +86,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
 
         resource_name = constants.DEFAULT_CLUSTERNAME
-        if config.ENV_DATA["external_mode"]:
+        if config.DEPLOYMENT["external_mode"]:
             resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
 
         # Add tolerations to the storagecluster
@@ -105,7 +105,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
         if config.ENV_DATA["mcg_only_deployment"]:
             param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
-        elif config.ENV_DATA["external_mode"]:
+        elif config.DEPLOYMENT["external_mode"]:
             param = (
                 f'{{"spec": {{"placement": {{"all": {tolerations}, '
                 f'"noobaa-core": {tolerations}, }}}}}}'
@@ -209,7 +209,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # Add capacity to check if new osds has toleration
         logger.info("Add capacity to check if new osds has toleration")
         if not (
-            config.ENV_DATA["mcg_only_deployment"] or config.ENV_DATA["external_mode"]
+            config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
         ):
             osd_size = storage_cluster.get_osd_size()
             count = storage_cluster.add_capacity(osd_size)
