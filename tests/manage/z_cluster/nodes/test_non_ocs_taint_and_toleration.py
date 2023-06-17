@@ -81,13 +81,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
 
         # Taint all nodes with non-ocs taint
+        logger.info("Taint all nodes with non-ocs taint")
         ocs_nodes = get_worker_nodes()
         taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
 
         resource_name = constants.DEFAULT_CLUSTERNAME
-        if config.DEPLOYMENT["external_mode"]:
+        if config.ENV_DATA["external_mode"]:
             resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
         # Add tolerations to the storagecluster
+        logger.info("Add tolerations to storagecluster")
         storagecluster_obj = ocp.OCP(
             resource_name=resource_name,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -102,7 +105,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
         if config.ENV_DATA["mcg_only_deployment"]:
             param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
-        elif config.DEPLOYMENT["external_mode"]:
+        elif config.ENV_DATA["external_mode"]:
             param = (
                 f'{{"spec": {{"placement": {{"all": {tolerations}, '
                 f'"noobaa-core": {tolerations}, }}}}}}'
@@ -117,6 +120,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
 
         # Add tolerations to the subscription
+        logger.info("Add tolerations to the subscription")
         sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
         param = (
             '{"spec": {"config":  {"tolerations": '
@@ -134,6 +138,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         if not config.ENV_DATA["mcg_only_deployment"]:
             # Add tolerations to the ocsinitializations.ocs.openshift.io
+            logger.info("Add tolerations to the ocsinitializations.ocs.openshift.io")
             param = (
                 '{"spec":  {"tolerations": '
                 '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
@@ -148,6 +153,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
 
             # Add tolerations to the configmap rook-ceph-operator-config
+            logger.info("Add tolerations to the configmap rook-ceph-operator-config")
             configmap_obj = ocp.OCP(
                 kind=constants.CONFIGMAP,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -168,11 +174,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         if config.ENV_DATA["mcg_only_deployment"]:
             # Wait some time after adding toleration for pods respin.
+            logger.info("Wait some time after adding toleration for pods respin")
             waiting_time = 60
             logger.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
 
             # Force delete all pods.
+            logger.info("Force delete all pods")
             pod_list = get_all_pods(
                 namespace=config.ENV_DATA["cluster_namespace"],
                 exclude_selector=True,
@@ -181,13 +189,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 pod.delete(wait=False)
 
         # After edit noticed few pod respins as expected
+        logger.info("After edit noticed few pod respins as expected")
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
 
-        # Check non ocs toleration on all pods under openshift-storage
+        # Check non-ocs toleration on all pods under openshift-storage
+        logger.info("Check non-ocs toleration on all pods under openshift-storage")
         check_toleration_on_pods(toleration_key="xyz")
         self.sanity_helpers.health_check()
 
-        # check number of pods before and after adding non ocs taint
+        # Check number of pods before and after adding non ocs taint
+        logger.info("Check number of pods before and after adding non ocs taint")
         number_of_pods_after = len(
             get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         )
@@ -196,6 +207,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ), "Number of pods didn't match"
 
         # Add capacity to check if new osds has toleration
+        logger.info("Add capacity to check if new osds has toleration")
         if not (
             config.ENV_DATA["mcg_only_deployment"] or config.ENV_DATA["external_mode"]
         ):
