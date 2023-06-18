@@ -780,6 +780,8 @@ GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE = [
 
 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11 = ["odf-csi-addons-operator.yaml"]
 
+GATHER_COMMANDS_OTHERS_EXCLUDE_4_13 = ["noobaa-db-pg-0-init.log"]
+
 if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
     GATHER_COMMANDS_OTHERS = list(
         set(GATHER_COMMANDS_OTHERS) - set(GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE)
@@ -911,7 +913,10 @@ GATHER_COMMANDS_VERSION = {
                 + GATHER_COMMANDS_OTHERS_4_7
                 + GATHER_COMMANDS_OTHERS_4_10
             )
-            - set(GATHER_COMMANDS_OTHERS_EXCLUDE_4_11)
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
         ),
         "OTHERS_MANAGED_SERVICES": list(
             set(
