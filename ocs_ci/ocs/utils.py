@@ -31,7 +31,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
+from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd, exec_cmd
 
 
 log = logging.getLogger(__name__)
@@ -1266,8 +1266,8 @@ def _collect_ocs_logs(
             log.warning(
                 "Subctl binary doesn't exists, checking if submariner pods exists..."
             )
-            out = run_cmd("oc get pods -n submariner-operator")
-            if "No resources" in out:
+            out = exec_cmd("oc get pods -n submariner-operator")
+            if out.stderr and ("No resources" in out.stderr):
                 log.warning(
                     "Not able to find submariner resources, skipping submariner log collection"
                 )
