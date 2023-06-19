@@ -14,7 +14,6 @@ import zipfile
 import traceback
 from functools import reduce
 
-import pandas
 import pandas as pd
 import pytest
 from selenium import webdriver
@@ -1676,11 +1675,12 @@ class TopologySidebar(BaseUI):
         alert_levels_exists = [
             alert for alert, value in alerts_lvl_to_num.items() if value > 0
         ]
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
         for alert_lvl in alert_levels_exists:
 
             # expand each alert and read number of alerts
             # to work with large number of alerts need to scroll and pick all titles
-            from ocs_ci.ocs.ui.helpers_ui import format_locator
 
             self.do_click(
                 format_locator(self.topology_loc["alert_list_expand_arrow"], alert_lvl)
@@ -1736,8 +1736,9 @@ class TopologySidebar(BaseUI):
                   {'Critical': <critical_alerts>, 'Warning': <warning_alerts>, 'Info': <info_alerts>}
         """
         alerts_dict = {"Critical": -1, "Warning": -1, "Info": -1}
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
         for alert_lvl, val in alerts_dict.items():
-            from ocs_ci.ocs.ui.helpers_ui import format_locator
 
             alert_num = self.get_element_text(
                 format_locator(self.topology_loc["number_of_alerts"], alert_lvl)
@@ -1794,7 +1795,7 @@ class AbstractTopologyView(ABC, TopologySidebar):
         DataFrame.
 
         Returns:
-            pandas.DataFrame: DataFrame containing the presented topology with entity names and statuses.
+            pd.DataFrame: DataFrame containing the presented topology with entity names and statuses.
 
         Example:
             topology = read_presented_topology()
@@ -2088,7 +2089,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
         DataFoundationTabBar.__init__(self)
         AbstractTopologyView.__init__(self)
         self.nodes_len = -1
-        self.__topology_df: pandas.DataFrame = pd.DataFrame()
+        self.__topology_df: pd.DataFrame = pd.DataFrame()
         self.__topology_str: TopologyUiStr
         self.topology_helper = OdfTopologyHelper()
 
@@ -2499,9 +2500,9 @@ class OdfTopologyNodesView(TopologyTab):
             == "Node details"
         ):
             filtered_dict = {
-                k: v
-                for k, v in self.topology_loc.items()
-                if k.startswith("details_sidebar_node_")
+                locator_name: locator_tuple
+                for locator_name, locator_tuple in self.topology_loc.items()
+                if locator_name.startswith("details_sidebar_node_")
             }
 
             for detail_name, loc in filtered_dict.items():
