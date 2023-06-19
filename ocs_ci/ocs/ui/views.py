@@ -907,7 +907,15 @@ block_pool = {
         By.CSS_SELECTOR,
     ),
     "pool_confirm_create": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
-    "actions_inside_pool": ('button[aria-label="Actions"]', By.CSS_SELECTOR),
+    "actions_outside_pool": ('button[aria-label="Actions"]', By.CSS_SELECTOR),
+    "edit_labels_of_pool": ("//a[normalize-space()='Edit labels']", By.XPATH),
+    "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
+    "invalid_label_name_note_edit_label_pool": (
+        "//h4[@class='pf-c-alert__title']",
+        By.XPATH,
+    ),
+    "edit_labels_of_pool_save": ("//button[normalize-space()='Save']", By.XPATH),
+    "cancel_edit_labels_of_pool": ("//button[normalize-space()='Cancel']", By.XPATH),
     "edit_pool_inside_pool": (
         'button[data-test-action="Edit BlockPool"]',
         By.CSS_SELECTOR,
