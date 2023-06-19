@@ -1642,7 +1642,10 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
     # apply icsp if present in the catalog image
-    get_and_apply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
+    image = f"{image}:{image_tag if image_tag else 'latest'}"
+    insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
+
+    get_and_apply_icsp_from_catalog(image=image, insecure=insecure_mode)
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
