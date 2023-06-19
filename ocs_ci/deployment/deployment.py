@@ -1913,7 +1913,10 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
     # apply icsp if present in the catalog image
-    get_and_apply_icsp_from_catalog(f"{image}:{image_tag if image_tag else 'latest'}")
+    image = f"{image}:{image_tag if image_tag else 'latest'}"
+    insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
+
+    get_and_apply_icsp_from_catalog(image=image, insecure=insecure_mode)
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
@@ -1992,15 +1995,16 @@ def setup_persistent_monitoring():
     )(pods_list)
 
 
-def get_and_apply_icsp_from_catalog(image, apply=True):
+def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
     """
     Get ICSP from catalog image (if exists) and apply it on the cluster (if
-    requiested).
+    requested).
 
     Args:
         image (str): catalog image of ocs registry.
         apply (bool): controls if the ICSP should be applied or not
             (default: true)
+        insecure (bool): If True, it allows push and pull operations to registries to be made over HTTP
 
     Returns:
         str: path to the icsp.yaml file or empty string, if icsp not available
@@ -2015,11 +2019,14 @@ def get_and_apply_icsp_from_catalog(image, apply=True):
     icsp_file_dest_location = os.path.join(icsp_file_dest_dir, "icsp.yaml")
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     create_directory_path(icsp_file_dest_dir)
-    exec_cmd(
+    cmd = (
         f"oc image extract --registry-config {pull_secret_path} "
         f"{image} --confirm "
         f"--path {icsp_file_location}:{icsp_file_dest_dir}"
     )
+    if insecure:
+        cmd = f"{cmd} --insecure"
+    exec_cmd(cmd)
     if not os.path.exists(icsp_file_dest_location):
         return ""
 
