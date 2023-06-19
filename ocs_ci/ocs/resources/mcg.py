@@ -337,7 +337,7 @@ class MCG:
         # This version comparison is a workaround to make sure we still cover
         # the usage of the noobaa mgmt-endpoint via RPC calls
         # Once the release-4.13 branch is created we should remove the unused logic per version
-        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_13:
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_10:
             payload = {
                 "api": api,
                 "method": method,
