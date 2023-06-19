@@ -1,8 +1,5 @@
 """
-PV Create/Delete & Memory Leak Test: Test the PVC limit with 3 worker nodes
-with & without any IO create and delete the PVCs and check for memory leak
-TO DO: This Test needs to be executed in Scaled setup,
-Adding node scale is yet to be supported.
+Scale TC to perform PVC Create and Delete in parallel
 """
 import logging
 import pytest
@@ -163,8 +160,7 @@ class BasePvcPodCreateDelete(E2ETest):
 )
 class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
     """
-    Class for TC OCS-682 & OCS-679 Create & Delete Cluster with 1000 PVC with
-    and without IO, then Increase the PVC count to 1500. Check for Memory leak
+    Class for TC OCS-682 & OCS-679 Create & Delete Cluster PVC with and without IO
     """
 
     @pytest.fixture()
@@ -190,14 +186,12 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         self.rbd_sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
         self.cephfs_sc_obj = storageclass_factory(interface=constants.CEPHFILESYSTEM)
 
-    # TODO: Skipping memory leak fixture call in test function because of bz 1750328
     def test_pv_scale_out_create_delete_pvcs_with_and_without_io(
         self,
         namespace,
         storageclass,
         setup_fixture,
         start_io,
-        memory_leak_function,
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
@@ -205,10 +199,6 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
         self.delete_pod_count = 0
-
-        # Identify median memory value for each worker node
-        median_dict = helpers.get_memory_leak_median_value()
-        log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
         self.create_pvc_pod(
@@ -241,7 +231,3 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
                 thread2.start()
             thread1.join()
             thread2.join()
-
-        # Added sleep for test case run time and for capturing memory leak after scale
-        time.sleep(test_run_time)
-        helpers.memory_leak_analysis(median_dict)

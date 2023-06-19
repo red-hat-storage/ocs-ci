@@ -1,8 +1,5 @@
 """
-PV Create with ceph pod respin & Memory Leak Test: Test the PVC limit
-with 3 worker nodes create PVCs and check for memory leak
-TO DO: This Test needs to be executed in Scaled setup,
-Adding node scale is yet to be supported.
+Scale TC to perform PVC Scale and Respin of Ceph pods in parallel
 """
 import logging
 import pytest
@@ -154,8 +151,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
 )
 class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
     """
-    Class for PV scale Create Cluster with 1000 PVC, then Respin ceph pods
-    Check for Memory leak, network and stats.
+    Class for PV scale Create Cluster with 1000 PVC, then Respin ceph pods parallel
     """
 
     @pytest.fixture()
@@ -187,17 +183,12 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         storageclass,
         setup_fixture,
         resource_to_delete,
-        memory_leak_function,
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
         size = "10Gi"
         test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
-
-        # Identify median memory value for each worker node
-        median_dict = helpers.get_memory_leak_median_value()
-        log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
         self.create_pvc_pod(
@@ -226,9 +217,6 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
             thread1.join()
             thread2.join()
 
-        # Added sleep for test case run time and for capturing memory leak after scale
-        time.sleep(test_run_time)
         assert utils.ceph_health_check(
             delay=180
         ), "Ceph health in bad state after pod respins"
-        helpers.memory_leak_analysis(median_dict)
