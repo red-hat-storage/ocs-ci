@@ -804,7 +804,7 @@ class Deployment(object):
             worker_nodes = get_worker_nodes()
             node_obj = ocp.OCP(kind="node")
             platform = config.ENV_DATA.get("platform").lower()
-            if platform != "baremetal":
+            if platform != constants.BAREMETAL_PLATFORM:
                 for node in worker_nodes:
                     for interface in interfaces:
                         ip_link_cmd = f"ip link set promisc on {interface}"
