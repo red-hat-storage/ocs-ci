@@ -24,7 +24,7 @@ def get_current_primary_cluster_name(namespace, workload_type=constants.SUBSCRIP
 
     Args:
         namespace (str): Name of the namespace
-        workload_type(str): Type of workload ie Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         str: Current primary cluster name
@@ -48,7 +48,7 @@ def get_current_secondary_cluster_name(namespace, workload_type=constants.SUBSCR
 
     Args:
         namespace (str): Name of the namespace
-        workload_type(str): Type of workload ie Subscription or ApplicationSet
+       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         str: Current secondary cluster name
@@ -73,7 +73,7 @@ def set_current_primary_cluster_context(
 
     Args:
         namespace (str): Name of the namespace
-        workload_type(str): Type of workload ie Subscription or ApplicationSet
+       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
     if workload_type == constants.APPLICATION_SET:
@@ -90,7 +90,7 @@ def set_current_secondary_cluster_context(
 
     Args:
         namespace (str): Name of the namespace
-        workload_type(str): Type of workload ie Subscription or ApplicationSet
+       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
     if workload_type == constants.APPLICATION_SET:
@@ -105,7 +105,7 @@ def get_scheduling_interval(namespace, workload_type=constants.SUBSCRIPTION):
 
     Args:
         namespace (str): Name of the namespace
-        workload_type(str): Type of workload ie Subscription or ApplicationSet
+       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         int: scheduling interval value from DRPolicy
@@ -132,8 +132,8 @@ def failover(
     Args:
         failover_cluster (str): Cluster name to which the workload should be failed over
         namespace (str): Namespace where workload is running
-        workload_type(str): Type of workload ie Subscription or ApplicationSet
-        workload_placement_name(str): Placement name
+       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
 
     """
     restore_index = config.cur_index
@@ -172,8 +172,8 @@ def relocate(
     Args:
         preferred_cluster (str): Cluster name to which the workload should be relocated
         namespace (str): Namespace where workload is running
-        workload_type(str): Type of workload ie Subscription or ApplicationSet
-        workload_placement_name(str): Placement name
+       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
 
     """
     restore_index = config.cur_index
@@ -547,7 +547,7 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
 
 
 def wait_for_all_resources_creation(
-    pvc_count, pod_count, namespace, timeout=900, skip_vr=False
+    pvc_count, pod_count, namespace, timeout=900, skip_replication_resources=False
 ):
     """
     Wait for workload and replication resources to be created
@@ -557,7 +557,7 @@ def wait_for_all_resources_creation(
         pod_count (int): Expected number of Pods
         namespace (str): the namespace of the workload
         timeout (int): time in seconds to wait for resource creation
-        skip_vr (bool): if true vr status wont't be check
+        skip_replication_resources (bool): if true vr status wont't be check
 
     """
     logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
@@ -577,7 +577,7 @@ def wait_for_all_resources_creation(
         sleep=5,
     )
 
-    if not skip_vr:
+    if not skip_replication_resources:
         wait_for_replication_resources_creation(pvc_count, namespace, timeout)
 
 

@@ -343,10 +343,9 @@ class BusyBox_AppSet(DRWorkload):
         templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {self.appset_yaml_file}")
-        self.check_pod_pvc_status(skip_vr=True)
+        self.check_pod_pvc_status(skip_replication_resources=True)
         self.add_annotation_to_placement()
         run_cmd(f"oc create -f {drcp_data_yaml.name}")
-        sleep(20)
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
@@ -412,13 +411,11 @@ class BusyBox_AppSet(DRWorkload):
 
         self.check_pod_pvc_status()
 
-        dr_helpers.wait_for_mirroring_status_ok()
-
-    def check_pod_pvc_status(self, skip_vr=False):
+    def check_pod_pvc_status(self, skip_replication_resources=False):
         """
 
         Args:
-            skip_vr (bool): Skip Volumereplication check
+            skip_replication_resources (bool): Skip Volumereplication check
 
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -426,7 +423,7 @@ class BusyBox_AppSet(DRWorkload):
             self.workload_pvc_count,
             self.workload_pod_count,
             self.workload_namespace,
-            skip_vr=skip_vr,
+            skip_replication_resources=skip_replication_resources,
         )
 
     def delete_workload(self, force=False):
@@ -440,17 +437,31 @@ class BusyBox_AppSet(DRWorkload):
 
         """
         drpc_name = f"{self.appset_placement_name}-drpc"
+        image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
         try:
             config.switch_acm_ctx()
             run_cmd(f"oc delete -f {self.appset_yaml_file}")
 
-            log.info("Verify backend RBD images are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
                     check_replication_resources_state=False,
                 )
+
+            log.info("Verify backend RBD images are deleted")
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                for image_uuid in image_uuids:
+                    status = verify_volume_deleted_in_backend(
+                        interface=constants.CEPHBLOCKPOOL,
+                        image_uuid=image_uuid,
+                        pool_name=constants.DEFAULT_CEPHBLOCKPOOL,
+                    )
+                    if not status:
+                        raise UnexpectedBehaviour(
+                            "RBD image(s) still exists on backend"
+                        )
 
         except (
             TimeoutExpired,
@@ -461,7 +472,6 @@ class BusyBox_AppSet(DRWorkload):
             err_msg = f"Failed to delete the workload: {ex}"
             log.exception(err_msg)
             if force:
-                pass
                 self.resources_cleanup(self.workload_namespace)
             else:
                 raise ResourceNotDeleted(err_msg)
