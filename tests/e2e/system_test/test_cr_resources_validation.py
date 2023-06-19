@@ -180,7 +180,7 @@ class TestCRRsourcesValidation(ManageTest):
                 CommandFailed
             ):  # some properties are not editable and CommandFailed exception is thrown
                 logger.info(
-                    f"Properyy {patch} should be editable, but patch command failed, continue to the next"
+                    f"Property {patch} should be editable, but patch command failed, continue to the next"
                 )
                 editable_properties_errors[patch] = cr_resource_modified_yaml
                 continue  # just continue to the next property
