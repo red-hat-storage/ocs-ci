@@ -49,7 +49,7 @@ class TestCRRsourcesValidation(ManageTest):
 
             if self.object_name_to_delete != "":
                 res = run_oc_command(
-                    cmd=f"delete -n {self.namespace} {self.object_name_to_delete}"
+                    cmd=f"delete {self.object_name_to_delete}", namespace=self.namespace
                 )
                 assert ERRMSG not in res[0], (
                     f"Failed to delete {self.object_kind_to_delete} resource with name: {self.object_name_to_delete}, "
@@ -82,7 +82,7 @@ class TestCRRsourcesValidation(ManageTest):
             namespace (str): namespace in which cr object should be created
 
         """
-        res = run_oc_command(cmd=f"create -n {namespace} -f {cr_resource_yaml}")
+        res = run_oc_command(cmd=f"create -f {cr_resource_yaml}", namespace=namespace)
         assert (
             ERRMSG not in res[0]
         ), f"Failed to create resource {cr_object_kind} from yaml file {cr_resource_yaml}, got result {res}"
@@ -92,7 +92,9 @@ class TestCRRsourcesValidation(ManageTest):
         self.object_kind_to_delete = cr_object_kind
         self.namespace = namespace
 
-        cr_resource_original_yaml = run_oc_command(f"get {cr_resource_name} -o yaml")
+        cr_resource_original_yaml = run_oc_command(
+            f"get {cr_resource_name} -o yaml", namespace=namespace
+        )
 
         # test that all non editable properties are really not editable
         non_editable_properties_errors = {}
@@ -115,7 +117,7 @@ class TestCRRsourcesValidation(ManageTest):
             try:
                 run_cmd(f"sh {temp_file.name}")
                 cr_resource_modified_yaml = run_oc_command(
-                    f"get -n {namespace} {cr_resource_name} -o yaml"
+                    f"get {cr_resource_name} -o yaml", namespace=namespace
                 )
 
                 if cr_resource_prev_yaml != cr_resource_modified_yaml:
@@ -168,7 +170,7 @@ class TestCRRsourcesValidation(ManageTest):
             try:
                 run_cmd(f"sh {temp_file.name}")
                 cr_resource_modified_yaml = run_oc_command(
-                    f"get -n {namespace} {cr_resource_name} -o yaml"
+                    f"get {cr_resource_name} -o yaml", namespace=namespace
                 )
 
                 if cr_resource_prev_yaml == cr_resource_modified_yaml:
