@@ -126,7 +126,7 @@ class TestCRRsourcesValidation(ManageTest):
                 CommandFailed
             ):  # some properties are not editable and CommandFailed exception is thrown
                 logger.info(
-                    f"Properyy {patch} is not editable, patch command failed, continue to the next"
+                    f"Property {patch} is not editable, patch command failed, continue to the next"
                 )
                 continue  # just continue to the next property
 
