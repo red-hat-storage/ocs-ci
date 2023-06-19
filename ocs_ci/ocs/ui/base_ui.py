@@ -642,16 +642,16 @@ class EditLabelForm(PageNavigator):
 
     def check_edit_labels(self, block_pool_name: str = None):
         """
-        Method to validate that rule warning message appears when input rule is violated
+        Method to validate that warning message appears when input rule is violated
            Rule (visible on warning):
-               Labels must start and end with an alphanumeric character,
-               can consist of lower-case letters, numbers and non-consecutive dots (.),
-               and hyphens (-), forward slash (/), underscore(_) and equal to (=)
+               # Labels must start and end with an alphanumeric character,
+               # can consist of lower-case letters, numbers and non-consecutive dots (.),
+               # and hyphens (-), forward slash (/), underscore(_) and equal to (=)
 
            Error (visible on metadata.label rule violated):
-               Error "Invalid value: <value>: name part must consist of alphanumeric characters, '-', '_' or '.',
-               and must start and end with an alphanumeric character (e.g. 'MyName', or 'my.name', or '123-abc',
-               regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')" for field "metadata.labels".
+               # Error "Invalid value: <value>: name part must consist of alphanumeric characters, '-', '_' or '.',
+               # and must start and end with an alphanumeric character (e.g. 'MyName', or 'my.name', or '123-abc',
+               # regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')" for field "metadata.labels".
 
            Args:
                block_pool_name (str): Name of the block pool. If not provided, the value will be retrieved from the
