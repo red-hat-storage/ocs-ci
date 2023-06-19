@@ -178,6 +178,4 @@ class TestMillionCephfsFiles(E2ETest):
         wait_for_storage_pods()
 
         # Validate cluster health ok and all pods are running
-        assert ceph_health_check(
-            delay=180
-        ), "Ceph health in bad state"
+        assert ceph_health_check(delay=180), "Ceph health in bad state"
