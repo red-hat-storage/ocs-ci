@@ -729,6 +729,7 @@ def storageclass_factory_fixture(
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
+            sc_obj.interface_name = interface_name
 
         instances.append(sc_obj)
         return sc_obj

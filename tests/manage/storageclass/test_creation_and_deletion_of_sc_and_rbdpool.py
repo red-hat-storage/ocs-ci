@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
@@ -71,7 +72,6 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
         sc_obj = storageclass_factory(
             interface=interface_type,
             new_rbd_pool=True,
-            pool_name="test-block-pool",
             replica=replica,
             compression=compression,
             volume_binding_mode=volume_binding_mode,
@@ -89,12 +89,17 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
         log.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
 
         # TODO:
-        # verify sc
         # verify block pool stats post running of IO
 
         # verifying rbd pool in ui
+        blockpool_name = sc_obj.interface_name
         blockpool_ui_obj = BlockPoolUI()
-        assert blockpool_ui_obj.check_pool_existence("test-block-pool")
+        assert blockpool_ui_obj.check_pool_existence(blockpool_name)
+
+        # verify storage classs in UI
+        storageclass_name = sc_obj.name
+        storageclass_ui_obj = StorageClassUI()
+        assert storageclass_ui_obj.verify_storageclass_existence(storageclass_name)
 
         # Run IO on each app pod for sometime
         log.info(f"Running FIO on {pod_obj.name}")

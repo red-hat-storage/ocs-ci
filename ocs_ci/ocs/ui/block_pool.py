@@ -67,7 +67,7 @@ class BlockPoolUI(PageNavigator):
         self.navigate_block_pool_page()
         self.page_has_loaded()
         pool_existence = self.wait_until_expected_text_is_found(
-            (f"a[data-test-operand-link={pool_name}]", By.CSS_SELECTOR), pool_name, 5
+            (f"a[data-test={pool_name}]", By.CSS_SELECTOR), pool_name, 5
         )
         logger.info(f"Pool name {pool_name} existence is {pool_existence}")
         return pool_existence
