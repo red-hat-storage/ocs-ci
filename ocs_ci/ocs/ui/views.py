@@ -837,6 +837,42 @@ block_pool_4_12 = {
 }
 block_pool_4_13 = {
     "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
+    "pool_name": (
+        "//dt[normalize-space()='Pool name']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "block_pool_volume_type": (
+        "//dt[normalize-space()='Volume type']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "block_pool_replica": (
+        "//dt[normalize-space()='Replicas']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "block_pool_used_capacity": (
+        "//div[normalize-space()='Used']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_avail_capacity": (
+        "//div[normalize-space()='Available']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_compression_status": (
+        "//dt[normalize-space()='Compression status']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "blockpool_compression_eligibility": (
+        "//div[normalize-space()='Compression eligibility']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_compression_ratio": (
+        "//div[normalize-space()='Compression ratio']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_compression_savings": (
+        "//div[normalize-space()='Compression savings']/following-sibling::div",
+        By.XPATH,
+    ),
 }
 
 block_pool = {
@@ -1023,6 +1059,7 @@ validation = {
         "input[data-ouia-component-id='OUIA-Generated-TextInputBase-1']",
         By.CSS_SELECTOR,
     ),
+    "blockpool_status": ("//span[@data-test='status-text']", By.XPATH),
 }
 
 validation_4_7 = {

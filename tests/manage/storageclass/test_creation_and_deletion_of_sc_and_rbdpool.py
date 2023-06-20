@@ -88,9 +88,6 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
         pod_obj = pod_factory(interface=interface_type, pvc=pvc_obj)
         log.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
 
-        # TODO:
-        # verify block pool stats post running of IO
-
         # verifying rbd pool in ui
         blockpool_name = sc_obj.interface_name
         blockpool_ui_obj = BlockPoolUI()
@@ -123,3 +120,22 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
         if compression != "none":
             validate_compression(cbp_name)
         validate_replica_data(cbp_name, replica)
+
+        # verify block pool stats post running of IO
+        assert (
+            blockpool_ui_obj.check_pool_status(blockpool_name) == "Ready"
+        ), "Block Pool currently not in ready state"
+
+        assert (
+            blockpool_ui_obj.check_pool_replicas(blockpool_name) == replica
+        ), "Replica do not match."
+
+        assert blockpool_ui_obj.check_pool_compression_status(
+            blockpool_name
+        ), "Compression status is not Enabled."
+
+        blockpool_ui_obj.check_pool_used_capacity(blockpool_name)
+        blockpool_ui_obj.check_pool_avail_capacity(blockpool_name)
+        blockpool_ui_obj.check_pool_compression_ratio(blockpool_name)
+        blockpool_ui_obj.check_pool_compression_eligibility(blockpool_name)
+        blockpool_ui_obj.check_pool_compression_savings(blockpool_name)
