@@ -9,6 +9,7 @@ import os
 import gc
 import time
 import zipfile
+import traceback
 from functools import reduce
 
 import pandas as pd
@@ -82,11 +83,11 @@ class BaseUI:
         )
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
-        logger.info(f"screenshots pictures:{self.screenshots_folder}")
+        logger.info(f"screenshots folder:{self.screenshots_folder}")
 
         if not os.path.isdir(self.dom_folder):
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
-        logger.info(f"screenshots pictures:{self.dom_folder}")
+        logger.info(f"dom files folder:{self.dom_folder}")
 
         self.ocp_version = get_ocp_version()
         self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
@@ -1999,18 +2000,22 @@ def screenshot_dom_location(type_loc="screenshot"):
         )
 
 
-def copy_dom():
+def copy_dom(name_suffix: str = ""):
     """
     Copy DOM using python code
 
+    Args:
+        name_suffix (str): name suffix, will be added before extension. Optional argument
     """
     dom_folder = screenshot_dom_location(type_loc="dom")
     if not os.path.isdir(dom_folder):
         Path(dom_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)
+    if name_suffix:
+        name_suffix = f"_{name_suffix}"
     filename = os.path.join(
         dom_folder,
-        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}_DOM.txt",
     )
     logger.info(f"Copy DOM file: {filename}")
     html = SeleniumDriver().page_source
@@ -2019,18 +2024,22 @@ def copy_dom():
     time.sleep(0.5)
 
 
-def take_screenshot():
+def take_screenshot(name_suffix: str = ""):
     """
     Take screenshot using python code
 
+    Args:
+        name_suffix (str): name suffix, will be added before extension. Optional argument
     """
     screenshots_folder = screenshot_dom_location(type_loc="screenshot")
     if not os.path.isdir(screenshots_folder):
         Path(screenshots_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)
+    if name_suffix:
+        name_suffix = f"_{name_suffix}"
     filename = os.path.join(
         screenshots_folder,
-        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
+        f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}{name_suffix}.png",
     )
     logger.debug(f"Creating screenshot: {filename}")
     SeleniumDriver().save_screenshot(filename)
@@ -2157,7 +2166,7 @@ class SeleniumDriver(WebDriver):
 
 
 @retry(
-    exception_to_check=(TimeoutException, WebDriverException),
+    exception_to_check=(TimeoutException, WebDriverException, AttributeError),
     tries=3,
     delay=3,
     backoff=2,
@@ -2201,7 +2210,8 @@ def login_ui(console_url=None, username=None, password=None):
                         login_loc["username_my_htpasswd"][1],
                         login_loc["username_my_htpasswd"][0],
                     )
-                )
+                ),
+                message="'Log in with my_htpasswd_provider' text is not present",
             )
         else:
             element = wait.until(
@@ -2210,18 +2220,17 @@ def login_ui(console_url=None, username=None, password=None):
                         login_loc["kubeadmin_login_approval"][1],
                         login_loc["kubeadmin_login_approval"][0],
                     )
-                )
+                ),
+                message="'Log in with kube:admin' test is not present",
             )
         element.click()
-    except TimeoutException as e:
-        take_screenshot()
-        copy_dom()
-        logger.error(e)
+    except TimeoutException:
+        take_screenshot("fail_login_2")
+        copy_dom("fail_login_2")
+        logger.error(traceback.format_stack())
     element = wait.until(
         ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
     )
-    take_screenshot()
-    copy_dom()
     if username is None:
         username = constants.KUBEADMIN
     element.send_keys(username)
@@ -2236,7 +2245,12 @@ def login_ui(console_url=None, username=None, password=None):
     )
     element.click()
     if default_console is True and username is constants.KUBEADMIN:
-        WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
+        try:
+            WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
+        except TimeoutException:
+            copy_dom("fail_login_title_3")
+            take_screenshot("fail_login_title_3")
+            raise
     if username is not constants.KUBEADMIN:
         element = wait.until(ec.element_to_be_clickable((login_loc["skip_tour"])))
         element.click()
@@ -2249,7 +2263,7 @@ def close_browser():
 
     """
     logger.info("Close browser")
-    take_screenshot()
+    take_screenshot("close_browser")
     copy_dom()
     SeleniumDriver().quit()
     SeleniumDriver.remove_instance()
@@ -2275,4 +2289,9 @@ def proceed_to_login_console():
             value=login_loc["proceed_to_login_btn"][0],
         )
         proceed_btn.click()
-        WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
+        try:
+            WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
+        except TimeoutException:
+            copy_dom("fail_login_title_1")
+            take_screenshot("fail_login_title_1")
+            raise
