@@ -12,7 +12,6 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-903")
-@pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 @skipif_managed_service
 def test_corrupt_pg_alerts(measure_corrupt_pg):
     """
@@ -58,18 +57,17 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-898")
-@pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 @skipif_managed_service
-def test_ceph_health(measure_stop_ceph_mon, measure_corrupt_pg):
+def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg):
     """
     Test that there are appropriate alerts for Ceph health triggered.
-    For this check of Ceph Warning state is used measure_stop_ceph_mon
+    For this check of Ceph Warning state is used measure_stop_ceph_osd
     utilization monitor and for Ceph Error state is used measure_corrupt_pg
     utilization.
     """
     api = prometheus.PrometheusAPI()
 
-    alerts = measure_stop_ceph_mon.get("prometheus_alerts")
+    alerts = measure_stop_ceph_osd.get("prometheus_alerts")
     target_label = constants.ALERT_CLUSTERWARNINGSTATE
     target_msg = "Storage cluster is in degraded state"
     target_states = ["pending", "firing"]
@@ -83,7 +81,7 @@ def test_ceph_health(measure_stop_ceph_mon, measure_corrupt_pg):
     )
     api.check_alert_cleared(
         label=target_label,
-        measure_end_time=measure_stop_ceph_mon.get("stop"),
+        measure_end_time=measure_stop_ceph_osd.get("stop"),
     )
 
     alerts = measure_corrupt_pg.get("prometheus_alerts")
