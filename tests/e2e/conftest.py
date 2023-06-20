@@ -701,3 +701,26 @@ def benchmark_fio_factory_fixture(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to skip tests from summary report
+    Args:
+        items: list of collected tests
+    """
+    skip_list = [
+        "test_create_scale_pods_and_pvcs_using_kube_job_ms",
+        "test_create_scale_pods_and_pvcs_with_ms_consumer",
+        "test_create_scale_pods_and_pvcs_with_ms_consumers",
+        "test_create_and_delete_scale_pods_and_pvcs_with_ms_consumers",
+    ]
+    if not config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        for item in items.copy():
+            for testname in skip_list:
+                if testname in str(item.fspath):
+                    logger.debug(
+                        f"Test {item} is removed from the collected items"
+                        f" since it requires Managed service platform"
+                    )
+                    items.remove(item)
