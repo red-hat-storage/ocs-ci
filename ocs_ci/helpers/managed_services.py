@@ -579,6 +579,7 @@ def verify_faas_consumer_resources():
 
     1. Verify CSV phase
     2. Verify client endpoint
+    3. Check that there's no storagecluster
 
     """
 
@@ -613,6 +614,16 @@ def verify_faas_consumer_resources():
     ep_ip = client_ep_yaml["subsets"][0]["addresses"][0]["ip"]
     log.info(f"Client endpoint IP is {ep_ip}")
     assert re.match("\\d+(\\.\\d+){3}", ep_ip)
+
+    # Check that there's no storagecluster on consumer
+    sc_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    log.info("Verifying there's no storagecluster")
+    assert not sc_obj.get(
+        resource_name=constants.STORAGECLUSTER, dont_raise=True
+    ), f"Storagecluster found on consumer: {sc_obj.get()['items']}"
 
 
 def verify_faas_cluster_secrets():
