@@ -226,8 +226,8 @@ NON_MS_CLUSTER_TYPE = "non_ms"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
-must_gather_pod_label = "must-gather"
-drain_canary_pod_label = "rook-ceph-drain-canary"
+must_gather_pod_label = "app=must-gather"
+drain_canary_pod_label = "app=rook-ceph-drain-canary"
 OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 
 # AMQ
@@ -364,7 +364,7 @@ MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
 S3CLI_LABEL = "app=s3cli"
 PROVIDER_SERVER_LABEL = "app=ocsProviderApiServer"
 PROMETHEUS_OPERATOR_LABEL = "app.kubernetes.io/name=prometheus-operator"
-MUST_GATHER_HELPER_LABEL = "must-gather-helper-pod"
+MUST_GATHER_HELPER_LABEL = "must-gather-helper-pod="
 MANAGED_FUSION_ALERTMANAGER_LABEL = "alertmanager=managed-fusion-alertmanager"
 MANAGED_FUSION_AWS_DATA_GATHER = "name=aws-data-gather"
 MANAGED_FUSION_PROMETHEUS_LABEL = "prometheus=managed-fusion-prometheus"
@@ -1159,7 +1159,7 @@ REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
-S3CLI_APP_LABEL = "s3cli"
+S3CLI_APP_LABEL = "app=s3cli"
 OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
 OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-storage"
 
