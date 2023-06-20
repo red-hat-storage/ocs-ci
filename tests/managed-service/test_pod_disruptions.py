@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 @tier4c
 @managed_service_required
-@ignore_leftover_label("rook-ceph-tools")
+@ignore_leftover_label(constants.TOOL_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3924")
 class TestPodDisruptions(ManageTest):
     """
