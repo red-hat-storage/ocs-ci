@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from shutil import rmtree, copyfile
+from subprocess import TimeoutExpired
 import time
 import requests
 import base64
@@ -983,7 +984,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         f"--log-level {log_cli_level}",
                         timeout=3600,
                     )
-                except CommandFailed as e:
+                except (CommandFailed, TimeoutExpired) as e:
                     if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                         try:
                             gather_bootstrap()
@@ -1441,7 +1442,7 @@ class VSPHEREIPI(VSPHEREBASE):
                     f"--log-level {log_cli_level}",
                     timeout=7200,
                 )
-            except CommandFailed as e:
+            except (CommandFailed, TimeoutExpired) as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                     try:
                         gather_bootstrap()
