@@ -705,9 +705,11 @@ def benchmark_fio_factory_fixture(request):
 
 def pytest_collection_modifyitems(items):
     """
-    A pytest hook to skip tests from summary report
+    A pytest hook to
+
     Args:
         items: list of collected tests
+
     """
     skip_list = [
         "test_create_scale_pods_and_pvcs_using_kube_job_ms",
