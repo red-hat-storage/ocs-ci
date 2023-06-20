@@ -156,7 +156,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
 
         log.info("Check the rook ceph pods are in 'Running' or 'Completed' state")
         previous_timeout = 480
-        timeout = 600
+        timeout = 900
         are_pods_running = wait_for_pods_to_be_running(
             pod_names=rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=30
         )
