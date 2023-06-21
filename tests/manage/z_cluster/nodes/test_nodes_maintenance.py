@@ -493,7 +493,6 @@ class TestNodesMaintenance(ManageTest):
         - Check cluster and Ceph health
 
         """
-        log.info(config.ENV_DATA)
         # Validate OSD PDBs before drain operation
         assert (
             not validate_existence_of_blocking_pdb()
