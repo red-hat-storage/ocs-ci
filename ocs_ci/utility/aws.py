@@ -377,12 +377,13 @@ class AWS(object):
         )
         self.attach_volume(volume, instance_id, device)
 
-    def get_volumes_by_name_pattern(self, pattern):
+    def get_volumes_by_tag_pattern(self, tag, pattern):
         """
-        Get volumes by pattern
+        Get volumes by tag pattern
 
         Args:
-            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+            tag (str): Tag name
+            pattern (str): Pattern of tag value (e.g. '*cl-vol-*')
 
         Returns:
             list: Volume information like id and attachments
@@ -390,7 +391,7 @@ class AWS(object):
         volumes_response = self.ec2_client.describe_volumes(
             Filters=[
                 {
-                    "Name": "tag:Name",
+                    "Name": f"tag:{tag}",
                     "Values": [pattern],
                 },
             ],
@@ -404,6 +405,38 @@ class AWS(object):
                 )
             )
         return volumes
+
+    def get_volume_data(self, volume_id):
+        """
+        Get volume information
+
+        Args:
+            volume_id(str): ID of the volume
+
+        Returns:
+            dict: complete volume information
+        """
+        volumes_response = self.ec2_client.describe_volumes(
+            Filters=[
+                {
+                    "Name": "VolumeId",
+                    "Values": volume_id,
+                },
+            ],
+        )
+        return volumes_response
+
+    def get_volumes_by_name_pattern(self, pattern):
+        """
+        Get volumes by pattern
+
+        Args:
+            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+
+        Returns:
+            list: Volume information like id and attachments
+        """
+        return self.get_volumes_by_tag_pattern("Name", pattern)
 
     def detach_volume(self, volume, timeout=120):
         """

@@ -26,6 +26,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_pod_node
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.utility.utils import convert_device_size, TimeoutSampler
+from ocs_ci.utility.aws import AWS
 import ocs_ci.ocs.cluster
 
 log = logging.getLogger(__name__)
@@ -421,6 +422,7 @@ def verify_faas_provider_resources():
     8. Check that mon PVCs have gp3-csi storageclass
     9. Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
     10. Verify the version of Prometheus
+    11. Verify aws volumes
 
     """
     # Verify CSV phase
@@ -571,6 +573,38 @@ def verify_faas_provider_resources():
         f"Prometheus version is {prometheus_version} "
         f"but it should be {config.ENV_DATA['prometheus_version']}"
     )
+    # Verify aws volumes
+    verify_provider_aws_volumes()
+
+
+def verify_provider_aws_volumes():
+    """
+    Verify provider AWS volumes:
+    1. Volumes for OSD have size 4096
+    2. Volumes for OSD have IOPS 12000
+    3. Namespace should be fusion-storage
+    """
+    aws_obj = AWS()
+    osd_pvc_objs = get_all_pvc_objs(
+        namespace=cluster_namespace, selector=constants.OSD_PVC_GENERIC_LABEL
+    )
+    for osd_pvc_obj in osd_pvc_objs:
+        log.info(f"Verifying AWS volume for {osd_pvc_obj.name} PVC")
+        osd_volume = aws_obj.get_volumes_by_tag_pattern(
+            "kubernetes.io/created-for/pvc/name", osd_pvc_obj.name
+        )
+        assert (
+            osd_volume["Size"] == 4096
+        ), f"Volume size is {osd_volume['Size']}, should be 4096"
+        assert (
+            osd_volume["Iops"] == 12000
+        ), f"Volume IOPS is {osd_volume['Iops']}, should be 12000"
+        assert (
+            osd_volume["Tags"]["kubernetes.io/created-for/pvc/namespace"]
+            == config.ENV_DATA["cluster_namespace"]
+        ), (
+            f"Namespace is {osd_volume['Tags']['kubernetes.io/created-for/pvc/namespace']}. "
+            f"It should be fusion-storage"
 
 
 def verify_faas_consumer_resources():
