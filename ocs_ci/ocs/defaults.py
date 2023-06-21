@@ -46,6 +46,7 @@ ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 CERT_MANAGER_OPERATOR_NAME = "cert-manager-operator"
 FUSION_OPERATOR_NAME = "isf-operator"
+FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
 
