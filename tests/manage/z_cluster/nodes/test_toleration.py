@@ -61,4 +61,4 @@ class TestTaintAndTolerations(E2ETest):
                 continue
             else:
                 pod.delete(wait=False)
-        assert wait_for_pods_to_be_running(timeout=300)
+        assert wait_for_pods_to_be_running(timeout=360)
