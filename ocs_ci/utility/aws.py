@@ -417,14 +417,11 @@ class AWS(object):
             dict: complete volume information
         """
         volumes_response = self.ec2_client.describe_volumes(
-            Filters=[
-                {
-                    "Name": "VolumeId",
-                    "Values": volume_id,
-                },
+            VolumeIds=[
+                volume_id,
             ],
         )
-        return volumes_response
+        return volumes_response["Volumes"][0]
 
     def get_volumes_by_name_pattern(self, pattern):
         """
