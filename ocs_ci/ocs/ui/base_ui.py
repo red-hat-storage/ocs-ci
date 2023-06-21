@@ -2221,7 +2221,7 @@ def login_ui(console_url=None, username=None, password=None):
                         login_loc["kubeadmin_login_approval"][0],
                     )
                 ),
-                message="'Log in with kube:admin' test is not present",
+                message="'Log in with kube:admin' text is not present",
             )
         element.click()
     except TimeoutException:
@@ -2264,7 +2264,7 @@ def close_browser():
     """
     logger.info("Close browser")
     take_screenshot("close_browser")
-    copy_dom()
+    copy_dom("close_browser")
     SeleniumDriver().quit()
     SeleniumDriver.remove_instance()
     time.sleep(10)
