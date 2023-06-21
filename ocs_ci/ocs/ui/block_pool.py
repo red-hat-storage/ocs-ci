@@ -178,16 +178,14 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         pool_status = self.get_element_text(self.validation_loc["blockpool_status"])
         logger.info(f"Pool name {pool_name} current status is {pool_status}")
         return pool_status
 
     def check_pool_volume_type(self, pool_name):
         """
-        Check if volume type of the pool
+        Check the volume type of the pool
 
         Args:
             pool_name (str): Name of the pool to check
@@ -197,16 +195,14 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         pool_volume_type = self.get_element_text(self.bp_loc["block_pool_volume_type"])
         logger.info(f"Pool name {pool_name} existence is {pool_volume_type}")
         return pool_volume_type
 
     def check_pool_replicas(self, pool_name):
         """
-        Check if number of replicas for the pool
+        Check the number of replicas for the pool
 
         Args:
             pool_name (str): Name of the pool to check
@@ -216,9 +212,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         block_pool_replica = self.get_element_text(self.bp_loc["block_pool_replica"])
         logger.info(f"Pool name {pool_name} existence is {block_pool_replica}")
         return int(block_pool_replica)
@@ -235,9 +229,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         block_pool_used_capacity = self.get_element_text(
             self.bp_loc["block_pool_used_capacity"]
         )
@@ -258,9 +250,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         blockpool_avail_capacity = self.get_element_text(
             self.bp_loc["blockpool_avail_capacity"]
         )
@@ -279,9 +269,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         blockpool_compression_status = self.get_element_text(
             self.bp_loc["blockpool_compression_status"]
         )
@@ -304,9 +292,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         blockpool_compression_ratio = self.get_element_text(
             self.bp_loc["blockpool_compression_ratio"]
         )
@@ -317,7 +303,7 @@ class BlockPoolUI(PageNavigator):
 
     def check_pool_compression_eligibility(self, pool_name):
         """
-        Check if pool the percentage of incoming data that is compressible
+        Check the pool the percentage of incoming data that is compressible
 
         Args:
             pool_name (str): Name of the pool to check
@@ -327,9 +313,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         blockpool_compression_eligibility = self.get_element_text(
             self.bp_loc["blockpool_compression_eligibility"]
         )
@@ -350,9 +334,7 @@ class BlockPoolUI(PageNavigator):
 
         """
         self.navigate_block_pool_page()
-        self.page_has_loaded()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
-        self.page_has_loaded(retries=5)
         blockpool_compression_savings = self.get_element_text(
             self.bp_loc["blockpool_compression_savings"]
         )

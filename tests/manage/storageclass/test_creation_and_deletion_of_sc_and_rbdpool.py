@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_external_mode
-@skipif_ocs_version("<4.6")
+@skipif_ocs_version("<4.9")
 class TestCreateNewScWithNeWRbDPool(ManageTest):
     """
     Create a new  Storage Class on a new rbd pool with
@@ -122,6 +122,18 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
         validate_replica_data(cbp_name, replica)
 
         # verify block pool stats post running of IO
+        checks = {
+            "block_pool_ready_state": (
+                blockpool_ui_obj.check_pool_status(blockpool_name) == "Ready"
+            ),
+            "eplica_match": (
+                blockpool_ui_obj.check_pool_replicas(blockpool_name) == replica
+            ),
+            "compression_status_enabled": (
+                blockpool_ui_obj.check_pool_compression_status(blockpool_name)
+            ),
+        }
+        assert all(checks.values())
         assert (
             blockpool_ui_obj.check_pool_status(blockpool_name) == "Ready"
         ), "Block Pool currently not in ready state"
