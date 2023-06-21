@@ -25,6 +25,7 @@ from ocs_ci.helpers.dr_helpers import (
     gracefully_reboot_ocp_nodes,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
+    check_cluster_status_on_acm_console,
     failover_relocate_ui,
     verify_failover_relocate_status_ui,
 )
@@ -32,14 +33,14 @@ from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
-polarion_id_primary_up = ""
+polarion_id_primary_up = "OCS-4914"
 polarion_id_primary_down = "OCS-4346"
 
 
 @tier1
 class TestApplicationFailoverAndRelocate:
     """
-    Test Failover and Relocate actions for a busybox application
+    Test Failover and Relocate actions for application
     """
 
     @pytest.fixture(autouse=True)
@@ -81,7 +82,7 @@ class TestApplicationFailoverAndRelocate:
         """
         Tests to verify application failover and relocate between managed clusters
         There are two test cases:
-            1) Failover and relocate of only application between managed clusters
+            1) Failover and relocate of application between managed clusters
             2) Failover to secondary cluster when primary cluster is DOWN and Relocate
                 back to primary cluster once it recovers
 
@@ -114,6 +115,15 @@ class TestApplicationFailoverAndRelocate:
         if primary_cluster_down:
             logger.info("Stopping primary cluster nodes")
             nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
+
+            # Verify if cluster is marked unavailable on ACM console
+            if config.RUN.get("mdr_failover_via_ui"):
+                config.switch_acm_ctx()
+                check_cluster_status_on_acm_console(
+                    acm_obj,
+                    down_cluster_name=primary_cluster_name,
+                    expected_text="Unknown",
+                )
 
         # Fenced the primary managed cluster
         enable_fence(drcluster_name=self.drcluster_name)
@@ -152,17 +162,17 @@ class TestApplicationFailoverAndRelocate:
             verify_failover_relocate_status_ui(acm_obj)
 
         # Start nodes if cluster is down
-        wait_time = 60
+        wait_time = 120
         if primary_cluster_down:
             logger.info(
-                f"Waiting for {wait_time} minutes before starting nodes of previous primary cluster"
+                f"Waiting for {wait_time} seconds before starting nodes of previous primary cluster"
             )
-            time.sleep(60)
+            time.sleep(wait_time)
             nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
             logger.info(
-                "Waiting for some minutes after starting nodes of previous primary cluster"
+                f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
             )
-            time.sleep(120)
+            time.sleep(wait_time)
             wait_for_nodes_status([node.name for node in node_objs])
             logger.info(
                 "Wait for all the pods in openshift-storage to be in running state"
@@ -214,8 +224,8 @@ class TestApplicationFailoverAndRelocate:
             workload.workload_namespace,
         )
 
-        # Verify Relocate statis from UI
-        if config.RUN.get("rdr_relocate_via_ui"):
+        # Verify Relocate status from UI
+        if config.RUN.get("mdr_relocate_via_ui"):
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE

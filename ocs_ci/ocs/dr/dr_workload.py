@@ -121,7 +121,7 @@ class BusyBox(DRWorkload):
 
     def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
-        log.info(f"{workload_repo_url}")
+        log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
         super().__init__("busybox", workload_repo_url, workload_repo_branch)
 
@@ -212,10 +212,7 @@ class BusyBox(DRWorkload):
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
 
-        if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-            dr_helpers.wait_for_mirroring_status_ok()
-
-    def delete_workload(self, force=False, rbd_name="rbdpool"):
+    def delete_workload(self, force=False, rbd_name="rbd"):
         """
         Delete busybox workload
 

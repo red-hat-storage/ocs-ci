@@ -398,7 +398,7 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
         logger.error(error_msg)
         raise TimeoutExpiredError(error_msg)
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.ENV_DATA["multicluster_mode"] != "metro-dr":
         logger.info(f"Waiting for {vr_count} VRs to be created")
         sample = TimeoutSampler(
             timeout=timeout,
@@ -487,7 +487,7 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         logger.info(error_msg)
         raise TimeoutExpiredError(error_msg)
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.ENV_DATA["multicluster_mode"] != "metro-dr":
         logger.info("Waiting for all VRs to be deleted")
         sample = TimeoutSampler(
             timeout=timeout,
@@ -559,7 +559,7 @@ def wait_for_all_resources_deletion(
             resource_name=pvc_obj.name, timeout=timeout, sleep=5
         )
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.ENV_DATA["multicluster_mode"] != "metro-dr":
         logger.info("Waiting for all PVs to be deleted")
         sample = TimeoutSampler(
             timeout=timeout,
