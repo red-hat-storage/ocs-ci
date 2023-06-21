@@ -108,7 +108,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         elif config.DEPLOYMENT["external_mode"]:
             param = (
                 f'{{"spec": {{"placement": {{"all": {tolerations}, '
-                f'"noobaa-core": {tolerations}, }}}}}}'
+                f'"noobaa-core": {tolerations}}}}}}}'
             )
         else:
             param = (
