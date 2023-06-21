@@ -605,7 +605,7 @@ def verify_provider_aws_volumes():
         ), (
             f"Namespace is {osd_volume['Tags']['kubernetes.io/created-for/pvc/namespace']}. "
             f"It should be fusion-storage"
-
+        )
 
 def verify_faas_consumer_resources():
     """
