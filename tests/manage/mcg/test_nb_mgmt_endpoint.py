@@ -7,27 +7,37 @@ from ocs_ci.framework.testlib import tier1
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.testlib import skipif_ocs_version
 
+from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
+
 logger = logging.getLogger(name=__file__)
 
 
 @tier1
-@skipif_ocs_version("<4.14")
+@skipif_ocs_version(">4.13")
 class TestNoobaaMgmtEndpoint(MCGTest):
     """
     Test the noobaa mgmt route functionality
     """
 
-    def test_noobaa_mgmt_route(self, mcg_obj_session):
+    def test_noobaa_mgmt_endpoint(self, mcg_obj_session):
         """
-        Test the noobaa mgmt route via an RPC call
+        Test the noobaa mgmt route via an RPC
         """
         rpc_response = send_rpc_request_to_mgmt_endpoint(
             mcg_obj_session, "system_api", "read_system"
         )
-        assert rpc_response
+
+        assert (
+            rpc_response.ok
+        ), f"RPC to {mcg_obj_session.mgmt_endpoint} failed with {rpc_response.status_code} status code"
+        assert (
+            "error" not in rpc_response.json()
+        ), f"RPC failed with message: {rpc_response.json()['error']['message']}"
+
+        logger.info("RPC to the noobaa-mgmt endpoint was successful")
 
 
-def send_rpc_request_to_mgmt_endpoint(mcg_obj, api, method, params):
+def send_rpc_request_to_mgmt_endpoint(mcg_obj, api, method, params={}):
     """
     Send an RPC request to the noobaa mgmt route
     """
@@ -46,5 +56,5 @@ def send_rpc_request_to_mgmt_endpoint(mcg_obj, api, method, params):
     return requests.post(
         url=mcg_obj.mgmt_endpoint,
         data=json.dumps(payload),
-        verify=mcg_obj.retrieve_verification_mode(),
-    ).json()
+        verify=retrieve_verification_mode(),
+    )
