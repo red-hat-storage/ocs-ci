@@ -39,6 +39,7 @@ from ocs_ci.framework.testlib import (
     skipif_bm,
     bugzilla,
     skipif_managed_service,
+    skipif_more_than_three_workers,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.resources import pod
@@ -467,6 +468,7 @@ class TestNodesMaintenance(ManageTest):
     @bugzilla("1861104")
     @bugzilla("1946573")
     @skipif_managed_service
+    @skipif_more_than_three_workers
     @pytest.mark.polarion_id("OCS-2524")
     @tier4a
     def test_pdb_check_simultaneous_node_drains(
@@ -491,7 +493,7 @@ class TestNodesMaintenance(ManageTest):
         - Check cluster and Ceph health
 
         """
-
+        log.info(config.ENV_DATA)
         # Validate OSD PDBs before drain operation
         assert (
             not validate_existence_of_blocking_pdb()
