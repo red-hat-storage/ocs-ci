@@ -30,9 +30,12 @@ class TestNoobaaMgmtEndpoint(MCGTest):
         assert (
             rpc_response.ok
         ), f"RPC to {mcg_obj_session.mgmt_endpoint} failed with {rpc_response.status_code} status code"
+
+        json_response = rpc_response.json()
+
         assert (
-            "error" not in rpc_response.json()
-        ), f"RPC failed with message: {rpc_response.json()['error']['message']}"
+            "error" not in json_response
+        ), f"RPC failed with message: {json_response['error']['message']}"
 
         logger.info("RPC to the noobaa-mgmt endpoint was successful")
 
