@@ -586,7 +586,8 @@ def verify_provider_aws_volumes():
     """
     aws_obj = AWS()
     osd_pvc_objs = get_all_pvc_objs(
-        namespace=cluster_namespace, selector=constants.OSD_PVC_GENERIC_LABEL
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.OSD_PVC_GENERIC_LABEL,
     )
     for osd_pvc_obj in osd_pvc_objs:
         log.info(f"Verifying AWS volume for {osd_pvc_obj.name} PVC")
@@ -606,6 +607,7 @@ def verify_provider_aws_volumes():
             f"Namespace is {osd_volume['Tags']['kubernetes.io/created-for/pvc/namespace']}. "
             f"It should be fusion-storage"
         )
+
 
 def verify_faas_consumer_resources():
     """
