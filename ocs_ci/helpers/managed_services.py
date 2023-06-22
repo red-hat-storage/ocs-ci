@@ -612,6 +612,28 @@ def verify_provider_aws_volumes():
         assert (
             volume_namespace == config.ENV_DATA["cluster_namespace"]
         ), f"Namespace is {volume_namespace}. It should be fusion-storage"
+    mon_pvc_objs = get_all_pvc_objs(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.MON_APP_LABEL,
+    )
+    for mon_pvc_obj in mon_pvc_objs:
+        log.info(
+            f"Verifying AWS volume for {mon_pvc_obj.name} PVC "
+            f", PV name {mon_pvc_obj.backed_pv}"
+        )
+        mon_volume_id = aws_obj.get_volumes_by_tag_pattern(
+            constants.AWS_VOL_PV_NAME_TAG, mon_pvc_obj.backed_pv
+        )[0]["id"]
+        log.info(f"AWS volume id: {mon_volume_id}")
+        mon_volume_data = aws_obj.get_volume_data(mon_volume_id)
+        assert mon_volume_data["Size"] == constants.AWS_VOL_MON_SIZE, (
+            f"Volume size is {mon_volume_data['Size']}, "
+            f"it should be {constants.AWS_VOL_MON_SIZE}"
+        )
+        assert mon_volume_data["Iops"] == constants.AWS_VOL_MON_IOPS, (
+            f"Volume IOPS is {mon_volume_data['Iops']}, "
+            f"it should be {constants.AWS_VOL_MON_IOPS}"
+        )
 
 
 def verify_faas_consumer_resources():
