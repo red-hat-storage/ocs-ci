@@ -67,7 +67,6 @@ class TestDefaultNfsDisabled(ManageTest):
 
 
 @skipif_external_mode
-@aws_platform_required
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
@@ -126,6 +125,7 @@ class TestNfsEnable(ManageTest):
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
+        platform = config.ENV_DATA.get("platform", "").lower()
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
         log.info(f"nfs mount point out of cluster is----- {self.test_folder}")
@@ -151,10 +151,11 @@ class TestNfsEnable(ManageTest):
             self.namespace,
         )
 
-        # Create loadbalancer service for nfs
-        self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
-            self.storage_cluster_obj,
-        )
+        if platform == "aws":
+            # Create loadbalancer service for nfs
+            self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
+                self.storage_cluster_obj,
+            )
         yield
 
         log.info("-----Teardown-----")
@@ -166,10 +167,11 @@ class TestNfsEnable(ManageTest):
             self.sc,
             nfs_ganesha_pod_name,
         )
-        # Delete ocs nfs Service
-        nfs_utils.delete_nfs_load_balancer_service(
-            self.storage_cluster_obj,
-        )
+        if platform == "aws":
+            # Delete ocs nfs Service
+            nfs_utils.delete_nfs_load_balancer_service(
+                self.storage_cluster_obj,
+            )
 
     def teardown(self):
         """
@@ -285,6 +287,7 @@ class TestNfsEnable(ManageTest):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
+    @aws_platform_required
     @polarion_id("OCS-4273")
     def test_outcluster_nfs_export(
         self,
@@ -469,6 +472,7 @@ class TestNfsEnable(ManageTest):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
+    @aws_platform_required
     @polarion_id("OCS-4274")
     def test_multiple_nfs_based_PVs(
         self,
@@ -619,6 +623,7 @@ class TestNfsEnable(ManageTest):
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
+    @aws_platform_required
     @polarion_id("OCS-4293")
     def test_multiple_mounts_of_same_nfs_volume(
         self,
@@ -764,6 +769,7 @@ class TestNfsEnable(ManageTest):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
+    @aws_platform_required
     @polarion_id("OCS-4312")
     def test_external_nfs_client_can_write_read_new_file(
         self,
