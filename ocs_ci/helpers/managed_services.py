@@ -592,20 +592,22 @@ def verify_provider_aws_volumes():
     for osd_pvc_obj in osd_pvc_objs:
         log.info(f"Verifying AWS volume for {osd_pvc_obj.name} PVC")
         osd_volume_id = aws_obj.get_volumes_by_tag_pattern(
-            "kubernetes.io/created-for/pvc/name", osd_pvc_obj.name
+            constants.AWS_VOL_PVC_NAME_TAG, osd_pvc_obj.name
         )[0]["id"]
         log.info(f"AWS volume id: {osd_volume_id}")
         osd_volume_data = aws_obj.get_volume_data(osd_volume_id)
         log.info(osd_volume_data)
-        assert (
-            osd_volume_data["Size"] == 4096
-        ), f"Volume size is {osd_volume_data['Size']}, should be 4096"
-        assert (
-            osd_volume_data["Iops"] == 12000
-        ), f"Volume IOPS is {osd_volume_data['Iops']}, should be 12000"
+        assert osd_volume_data["Size"] == constants.AWS_VOL_OSD_SIZE, (
+            f"Volume size is {osd_volume_data['Size']}, "
+            f"it should be {constants.AWS_VOL_OSD_SIZE}"
+        )
+        assert osd_volume_data["Iops"] == constants.AWS_VOL_OSD_IOPS, (
+            f"Volume IOPS is {osd_volume_data['Iops']}, "
+            f"it should be {constants.AWS_VOL_OSD_IOPS}"
+        )
         tags = osd_volume_data["Tags"]
         for tag in tags:
-            if tag["Key"] == "kubernetes.io/created-for/pvc/namespace":
+            if tag["Key"] == constants.AWS_VOL_PVC_NAMESPACE:
                 volume_namespace = tag["Value"]
         assert (
             volume_namespace == config.ENV_DATA["cluster_namespace"]
