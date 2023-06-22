@@ -50,9 +50,12 @@ class TestApplicationFailoverAndRelocate:
         """
 
         def finalizer():
-            if self.drcluster_name and get_fence_state(self.drcluster_name) == "Fenced":
-                enable_unfence(self.drcluster_name)
-                gracefully_reboot_ocp_nodes(self.namespace, self.drcluster_name)
+            if (
+                self.primary_cluster_name
+                and get_fence_state(self.primary_cluster_name) == "Fenced"
+            ):
+                enable_unfence(self.primary_cluster_name)
+                gracefully_reboot_ocp_nodes(self.namespace, self.primary_cluster_name)
 
         request.addfinalizer(finalizer)
 
@@ -100,16 +103,15 @@ class TestApplicationFailoverAndRelocate:
 
         acm_obj = AcmAddClusters()
         workload = dr_workload(num_of_subscription=1)[0]
+        self.namespace = workload.workload_namespace
 
         # Create application on Primary managed cluster
         set_current_primary_cluster_context(workload.workload_namespace)
         primary_cluster_index = config.cur_index
         node_objs = get_node_objs()
-        primary_cluster_name = get_current_primary_cluster_name(
+        self.primary_cluster_name = get_current_primary_cluster_name(
             namespace=workload.workload_namespace
         )
-        self.drcluster_name = primary_cluster_name
-        self.namespace = workload.workload_namespace
 
         # Stop primary cluster nodes
         if primary_cluster_down:
@@ -121,12 +123,12 @@ class TestApplicationFailoverAndRelocate:
                 config.switch_acm_ctx()
                 check_cluster_status_on_acm_console(
                     acm_obj,
-                    down_cluster_name=primary_cluster_name,
+                    down_cluster_name=self.primary_cluster_name,
                     expected_text="Unknown",
                 )
 
         # Fenced the primary managed cluster
-        enable_fence(drcluster_name=self.drcluster_name)
+        enable_fence(drcluster_name=self.primary_cluster_name)
 
         # Application Failover to Secondary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
@@ -157,7 +159,7 @@ class TestApplicationFailoverAndRelocate:
         )
 
         # Verify the failover status from UI
-        if config.RUN.get("mdr_relocate_via_ui"):
+        if config.RUN.get("mdr_failover_via_ui"):
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(acm_obj)
 
@@ -190,10 +192,12 @@ class TestApplicationFailoverAndRelocate:
         validate_data_integrity(workload.workload_namespace)
 
         # Unfenced the managed cluster which was Fenced earlier
-        enable_unfence(drcluster_name=self.drcluster_name)
+        enable_unfence(drcluster_name=self.primary_cluster_name)
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_ocp_nodes(workload.workload_namespace, self.drcluster_name)
+        gracefully_reboot_ocp_nodes(
+            workload.workload_namespace, self.primary_cluster_name
+        )
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
@@ -202,6 +206,7 @@ class TestApplicationFailoverAndRelocate:
         if config.RUN.get("mdr_relocate_via_ui"):
             logger.info("Start the process of Relocate from ACM UI")
             # Relocate via ACM UI
+            check_cluster_status_on_acm_console(acm_obj)
             failover_relocate_ui(
                 acm_obj,
                 workload_to_move=f"{workload.workload_name}-1",

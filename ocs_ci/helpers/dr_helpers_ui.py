@@ -254,9 +254,13 @@ def failover_relocate_ui(
             )
         else:
             log.info("Select target cluster on ACM UI")
-            xpath = f"//button[text()='{failover_or_preferred_cluster}']"
-            element = acm_obj.find_an_element_by_xpath(xpath)
-            element.click()
+            acm_obj.do_click(
+                format_locator(
+                    acm_loc["failover-preferred-cluster-name"],
+                    failover_or_preferred_cluster,
+                ),
+                enable_screenshot=True,
+            )
         log.info("Check operation readiness")
         if action == constants.ACTION_FAILOVER:
             if move_workloads_to_same_cluster:
