@@ -336,6 +336,7 @@ def workload_fio_storageutilization(
     with_checksum=False,
     keep_fio_data=False,
     minimal_time=480,
+    throw_skip=True,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -380,6 +381,8 @@ def workload_fio_storageutilization(
             storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
             (See more details in the function 'measure_operation')
+        throw_skip (bool): if True function will raise pytest.skip.Exception and test will be skipped,
+            otherwise return None
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -448,7 +451,10 @@ def workload_fio_storageutilization(
             f"the target utilization {target_percentage*100}% is already met"
         )
         logger.warning(skip_msg)
-        pytest.skip(skip_msg)
+        if throw_skip:
+            pytest.skip(skip_msg)
+        else:
+            return
 
     fio_conf = textwrap.dedent(
         """
