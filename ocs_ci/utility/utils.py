@@ -32,7 +32,7 @@ from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
-from tempfile import NamedTemporaryFile, mkdtemp
+from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -738,6 +738,15 @@ def get_openshift_installer(
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
+    client_binary_path = os.path.join(bin_dir, "oc")
+    client_exist = os.path.isfile(client_binary_path)
+    custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
+    if not client_exist:
+        get_openshift_client()
+        config.RUN["custom_client_downloaded_from_installer"] = True
+    if custom_ocp_image:
+        extract_ocp_binary_from_image("openshift-install", custom_ocp_image, bin_dir)
+        return installer_binary_path
     if os.path.isfile(installer_binary_path) and force_download:
         delete_file(installer_binary_path)
     if os.path.isfile(installer_binary_path):
@@ -859,6 +868,39 @@ def get_rosa_cli(
     return rosa_binary_path
 
 
+def extract_ocp_binary_from_image(binary, image, bin_dir):
+    """
+    Extract binary (oc client or openshift installer) from custom OCP image
+
+    Args:
+        binary (str): type of binary (oc or openshift-install)
+        image (str): image URL
+        bin_dir (str): path to bin folder where to extract the binary
+
+    """
+    binary_path = os.path.join(bin_dir, binary)
+    binary_path_exists = os.path.isfile(binary_path)
+    with TemporaryDirectory() as temp_dir:
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        cmd = f'oc adm release extract -a {pull_secret_path} --to {temp_dir} --command={binary} "{image}"'
+        exec_cmd(cmd)
+        temp_binary = os.path.join(temp_dir, binary)
+        if binary_path_exists:
+            backup_file = f"{binary_path}.bak"
+            os.rename(binary_path, backup_file)
+            try:
+                shutil.move(temp_binary, binary_path)
+                delete_file(backup_file)
+                log.info("Deleted backup binaries.")
+            except FileNotFoundError as ex:
+                log.error(
+                    f"Something went wrong with copying binary, reverting backup file. Exception: {ex}"
+                )
+                shutil.move(backup_file, binary_path)
+        else:
+            shutil.move(temp_binary, binary_path)
+
+
 def get_openshift_client(
     version=None, bin_dir=None, force_download=False, skip_comparison=False
 ):
@@ -892,9 +934,21 @@ def get_openshift_client(
         download_client = False
         force_download = False
 
+    client_exist = os.path.isfile(client_binary_path)
+    custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
+    skip_if_client_downloaded_from_installer = config.RUN.get(
+        "custom_client_downloaded_from_installer"
+    )
+    if (
+        client_exist
+        and custom_ocp_image
+        and not skip_if_client_downloaded_from_installer
+    ):
+        extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
+        return
     if force_download:
         log.info("Forcing client download.")
-    elif os.path.isfile(client_binary_path) and not skip_comparison:
+    elif client_exist and not skip_comparison:
         current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
@@ -930,12 +984,12 @@ def get_openshift_client(
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball} oc kubectl")
         delete_file(tarball)
-
+        if custom_ocp_image and not skip_if_client_downloaded_from_installer:
+            extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
         try:
             client_version = run_cmd(f"{client_binary_path} version --client")
         except CommandFailed:
             log.error("Unable to get version from downloaded client.")
-
         if client_version:
             try:
                 delete_file(client_binary_backup)
