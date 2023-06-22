@@ -599,17 +599,17 @@ def verify_provider_aws_volumes():
         log.info(osd_volume_data)
         assert (
             osd_volume_data["Size"] == 4096
-        ), f"Volume size is {osd_volume['Size']}, should be 4096"
+        ), f"Volume size is {osd_volume_data['Size']}, should be 4096"
         assert (
             osd_volume_data["Iops"] == 12000
-        ), f"Volume IOPS is {osd_volume['Iops']}, should be 12000"
+        ), f"Volume IOPS is {osd_volume_data['Iops']}, should be 12000"
         tags = osd_volume_data["Tags"]
         for tag in tags:
             if tag["Key"] == "kubernetes.io/created-for/pvc/namespace":
                 volume_namespace = tag["Value"]
-        assert volume_namespace == config.ENV_DATA["cluster_namespace"], (
-            f"Namespace is {volume_namespace}. " f"It should be fusion-storage"
-        )
+        assert (
+            volume_namespace == config.ENV_DATA["cluster_namespace"]
+        ), f"Namespace is {volume_namespace}. It should be fusion-storage"
 
 
 def verify_faas_consumer_resources():
