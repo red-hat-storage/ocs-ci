@@ -104,6 +104,7 @@ def get_scheduling_interval(namespace):
 def failover(failover_cluster, namespace):
     """
     Initiates Failover action to the specified cluster
+
     Args:
         failover_cluster (str): Cluster name to which the workload should be failed over
         namespace (str): Namespace where workload is running
@@ -659,6 +660,7 @@ def enable_unfence(drcluster_name):
 def fence_state(drcluster_name, fence_state):
     """
     Sets the specified clusterFence state
+
     Args:
        drcluster_name (str): Name of the DRcluster which needs to be fenced
        fence_state (str): Specify the clusterfence state either constants.ACTION_UNFENCE and ACTION_FENCE
@@ -683,8 +685,10 @@ def fence_state(drcluster_name, fence_state):
 def get_fence_state(drcluster_name):
     """
     Returns the clusterfence state of given drcluster
+
     Args:
         drcluster_name (str): Name of the DRcluster
+
     Returns:
         state (str): If drcluster are fenced: Fenced or Unfenced, else None if not defined
 
@@ -701,9 +705,11 @@ def gracefully_reboot_ocp_nodes(namespace, drcluster_name):
     """
     Gracefully reboot OpenShift Container Platform
     nodes which was fenced before
+
     Args:
         namespace (str): Name of the namespace
         drcluster_name (str): Name of the drcluster which need to be reboot
+
     """
 
     primary_cluster_name = get_current_primary_cluster_name(namespace=namespace)

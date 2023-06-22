@@ -277,11 +277,14 @@ class BusyBox(DRWorkload):
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
     """
     Verifies the md5sum values of files are OK
+
     Args:
         namespace (str): Namespace where the workload running
         path (str): Path of the hashfile saved of each files
         timeout (int): Time taken in seconds to run command inside pod
+
     Raises: If there is a mismatch in md5sum value or None
+
     """
     all_pods = get_all_pods(namespace=namespace)
     for pod_obj in all_pods:

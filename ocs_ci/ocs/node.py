@@ -2697,7 +2697,9 @@ def generate_nodes_for_provider_worker_node_tests():
 
 def gracefully_reboot_nodes():
     """
+
     Gracefully reboot OpenShift Container Platform nodes
+
     """
     from ocs_ci.ocs import platform_nodes
 
