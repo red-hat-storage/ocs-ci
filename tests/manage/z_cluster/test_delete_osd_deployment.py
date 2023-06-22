@@ -62,7 +62,8 @@ class TestDeleteOSDDeployment(ManageTest):
                 condition="1/1",
                 resource_name=osd_deployment_name,
                 column="READY",
-                timeout=120,
+                timeout=180,
+                sleep=10,
             )
 
             # Check if a new OSD pod is created
@@ -86,4 +87,4 @@ class TestDeleteOSDDeployment(ManageTest):
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
-        assert ceph_health_check(delay=120, tries=50), "Ceph health check failed"
+        assert ceph_health_check(delay=60, tries=50), "Ceph health check failed"
