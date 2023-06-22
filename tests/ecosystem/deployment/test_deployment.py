@@ -12,6 +12,7 @@ from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 from ocs_ci.utility.rosa import post_onboarding_verification
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
+from ocs_ci.utility.azure_utils import azure_storageaccount_check
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,12 @@ def test_deployment(pvc_factory, pod_factory):
                     return
                 else:
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)
+
+                if (
+                    config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
+                    and config.ENV_DATA["deployment_type"] != "managed"
+                ):
+                    azure_storageaccount_check()
 
                 # Check basic cluster functionality by creating resources
                 # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
