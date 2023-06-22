@@ -64,6 +64,8 @@ Deployment related parameters. Only deployment related params not used
 anywhere else.
 
 * `installer_version` - OCP installer version
+* `custom_ocp_image` - Custom OCP image from which extract the installer and
+  client and isntall OCP
 * `force_download_installer` - Download the OCP installer even if one already exists in the bin_dir
 * `force_download_client` - Download the OCP client even if one already exists in the bin_dir
 * `skip_download_client` - Skip the openshift client download step or not (Default: false)
