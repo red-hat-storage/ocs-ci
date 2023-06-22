@@ -1529,6 +1529,7 @@ def get_pods_having_label(
     cluster_config=None,
     statuses=None,
 ):
+
     """
     Fetches pod resources with given label in given namespace
 
