@@ -6,6 +6,7 @@ from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
     check_ceph_health_after_add_capacity,
+    CephClusterExternal,
 )
 from ocs_ci.framework.testlib import (
     tier4b,
@@ -185,7 +186,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         logger.info("Check non-ocs toleration on all pods under openshift-storage")
         check_toleration_on_pods(toleration_key="xyz")
-        self.sanity_helpers.health_check()
+        if config.DEPLOYMENT["external_mode"]:
+            CephClusterExternal()
+        else:
+            self.sanity_helpers.health_check()
 
         logger.info("Check number of pods before and after adding non ocs taint")
         number_of_pods_after = len(
@@ -195,10 +199,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             number_of_pods_before == number_of_pods_after
         ), "Number of pods didn't match"
 
-        logger.info("Add capacity to check if new osds has toleration")
         if not (
             config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
         ):
+            logger.info("Add capacity to check if new osds has toleration")
             osd_size = storage_cluster.get_osd_size()
             count = storage_cluster.add_capacity(osd_size)
             pod = ocp.OCP(
