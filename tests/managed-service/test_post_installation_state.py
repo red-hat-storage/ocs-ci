@@ -77,6 +77,7 @@ class TestPostInstallationState(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-3917")
+    @runs_on_provider
     @ms_provider_required
     def test_provider_server_logs(self):
         """
@@ -102,6 +103,7 @@ class TestPostInstallationState(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-3918")
+    @runs_on_provider
     @ms_provider_required
     def test_ceph_clients(self):
         """
