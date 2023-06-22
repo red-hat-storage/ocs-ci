@@ -57,7 +57,10 @@ def test_deployment(pvc_factory, pod_factory):
                 else:
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)
 
-                if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+                if (
+                    config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
+                    and config.ENV_DATA["deployment_type"] != "managed"
+                ):
                     azure_storageaccount_check()
 
                 # Check basic cluster functionality by creating resources
