@@ -10,4 +10,4 @@ DEPLOYMENT:
   ignition_version: "3.2.0"
 ENV_DATA:
   vm_template: "rhcos-413.92.202305021736-0-vmware.x86_64"
-  acm_hub_channel: release-2.7 # To be changed when acm 2.8 get's released
+  acm_hub_channel: release-2.8
