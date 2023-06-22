@@ -187,7 +187,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info("Check non-ocs toleration on all pods under openshift-storage")
         check_toleration_on_pods(toleration_key="xyz")
         if config.DEPLOYMENT["external_mode"]:
-            CephClusterExternal()
+            cephcluster = CephClusterExternal()
+            cephcluster.cluster_health_check()
         else:
             self.sanity_helpers.health_check()
 
