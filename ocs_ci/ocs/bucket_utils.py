@@ -275,7 +275,7 @@ def list_objects_from_bucket(
         signed_request_creds (dictionary, optional): the access_key, secret_key,
             endpoint and region to use when willing to send signed aws s3 requests
         timeout (int): timeout for the exec_oc_cmd
-        recurive (bool): If true, list objects recursively using the --recursive option
+        recursive (bool): If true, list objects recursively using the --recursive option
 
     Returns:
         List of objects in a bucket
@@ -287,6 +287,7 @@ def list_objects_from_bucket(
         retrieve_cmd = f"ls {target}"
     if recursive:
         retrieve_cmd += " --recursive"
+
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -864,6 +865,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         region (str): which region to create backingstore (should be the same as uls)
 
     """
+
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
@@ -901,7 +903,6 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         f"--target-bucket {uls_name}",
         use_yes=True,
     )
-
 
 def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     """
