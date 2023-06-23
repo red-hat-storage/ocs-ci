@@ -195,7 +195,6 @@ def failover_relocate_ui(
     Function to perform Failover/Relocate operations via ACM UI
 
     Args:
-
         acm_obj (AcmAddClusters): ACM Page Navigator Class
         scheduling_interval (int): scheduling interval value from DRPolicy
         workload_to_move (str): Name of running workloads on which action to be taken
