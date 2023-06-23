@@ -134,17 +134,6 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             ),
         }
         assert all(checks.values())
-        assert (
-            blockpool_ui_obj.check_pool_status(blockpool_name) == "Ready"
-        ), "Block Pool currently not in ready state"
-
-        assert (
-            blockpool_ui_obj.check_pool_replicas(blockpool_name) == replica
-        ), "Replica do not match."
-
-        assert blockpool_ui_obj.check_pool_compression_status(
-            blockpool_name
-        ), "Compression status is not Enabled."
 
         blockpool_ui_obj.check_pool_used_capacity(blockpool_name)
         blockpool_ui_obj.check_pool_avail_capacity(blockpool_name)
