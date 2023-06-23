@@ -26,6 +26,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_pod_node
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.utility.utils import convert_device_size, TimeoutSampler
+from ocs_ci.utility.aws import AWS
 import ocs_ci.ocs.cluster
 
 log = logging.getLogger(__name__)
@@ -421,6 +422,7 @@ def verify_faas_provider_resources():
     8. Check that mon PVCs have gp3-csi storageclass
     9. Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
     10. Verify the version of Prometheus
+    11. Verify aws volumes
 
     """
     # Verify CSV phase
@@ -571,6 +573,67 @@ def verify_faas_provider_resources():
         f"Prometheus version is {prometheus_version} "
         f"but it should be {config.ENV_DATA['prometheus_version']}"
     )
+    # Verify aws volumes
+    verify_provider_aws_volumes()
+
+
+def verify_provider_aws_volumes():
+    """
+    Verify provider AWS volumes:
+    1. Volumes for OSD have size 4096
+    2. Volumes for OSD have IOPS 12000
+    3. Namespace should be fusion-storage
+    """
+    aws_obj = AWS()
+    osd_pvc_objs = get_all_pvc_objs(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.OSD_PVC_GENERIC_LABEL,
+    )
+    for osd_pvc_obj in osd_pvc_objs:
+        log.info(f"Verifying AWS volume for {osd_pvc_obj.name} PVC")
+        osd_volume_id = aws_obj.get_volumes_by_tag_pattern(
+            constants.AWS_VOL_PVC_NAME_TAG, osd_pvc_obj.name
+        )[0]["id"]
+        log.info(f"AWS volume id: {osd_volume_id}")
+        osd_volume_data = aws_obj.get_volume_data(osd_volume_id)
+        log.info(osd_volume_data)
+        assert osd_volume_data["Size"] == constants.AWS_VOL_OSD_SIZE, (
+            f"Volume size is {osd_volume_data['Size']}, "
+            f"it should be {constants.AWS_VOL_OSD_SIZE}"
+        )
+        assert osd_volume_data["Iops"] == constants.AWS_VOL_OSD_IOPS, (
+            f"Volume IOPS is {osd_volume_data['Iops']}, "
+            f"it should be {constants.AWS_VOL_OSD_IOPS}"
+        )
+        tags = osd_volume_data["Tags"]
+        for tag in tags:
+            if tag["Key"] == constants.AWS_VOL_PVC_NAMESPACE:
+                volume_namespace = tag["Value"]
+        assert (
+            volume_namespace == config.ENV_DATA["cluster_namespace"]
+        ), f"Namespace is {volume_namespace}. It should be fusion-storage"
+    mon_pvc_objs = get_all_pvc_objs(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.MON_APP_LABEL,
+    )
+    for mon_pvc_obj in mon_pvc_objs:
+        log.info(
+            f"Verifying AWS volume for {mon_pvc_obj.name} PVC "
+            f", PV name {mon_pvc_obj.backed_pv}"
+        )
+        mon_volume_id = aws_obj.get_volumes_by_tag_pattern(
+            constants.AWS_VOL_PV_NAME_TAG, mon_pvc_obj.backed_pv
+        )[0]["id"]
+        log.info(f"AWS volume id: {mon_volume_id}")
+        mon_volume_data = aws_obj.get_volume_data(mon_volume_id)
+        assert mon_volume_data["Size"] == constants.AWS_VOL_MON_SIZE, (
+            f"Volume size is {mon_volume_data['Size']}, "
+            f"it should be {constants.AWS_VOL_MON_SIZE}"
+        )
+        assert mon_volume_data["Iops"] == constants.AWS_VOL_MON_IOPS, (
+            f"Volume IOPS is {mon_volume_data['Iops']}, "
+            f"it should be {constants.AWS_VOL_MON_IOPS}"
+        )
 
 
 def verify_faas_consumer_resources():
