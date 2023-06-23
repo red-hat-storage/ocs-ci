@@ -4,3 +4,5 @@
 RUN:
   rdr_failover_via_ui: true
   rdr_relocate_via_ui: true
+  mdr_failover_via_ui: true
+  mdr_relocate_via_ui: true

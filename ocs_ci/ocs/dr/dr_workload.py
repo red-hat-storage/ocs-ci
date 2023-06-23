@@ -21,6 +21,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     ResourceNotDeleted,
 )
+from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import clone_repo, run_cmd
@@ -120,6 +121,7 @@ class BusyBox(DRWorkload):
 
     def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
         super().__init__("busybox", workload_repo_url, workload_repo_branch)
 
@@ -210,12 +212,13 @@ class BusyBox(DRWorkload):
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
 
-    def delete_workload(self, force=False):
+    def delete_workload(self, force=False, rbd_name="rbd"):
         """
         Delete busybox workload
 
         Args:
             force (bool): If True, force remove the stuck resources, default False
+            rbd_name (str): Name of the pool
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -238,11 +241,16 @@ class BusyBox(DRWorkload):
             log.info("Verify backend RBD images are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                rbd_pool_name = (
+                    (config.ENV_DATA.get("rbd_name") or rbd_name)
+                    if config.DEPLOYMENT["external_mode"]
+                    else constants.DEFAULT_CEPHBLOCKPOOL
+                )
                 for image_uuid in image_uuids:
                     status = verify_volume_deleted_in_backend(
                         interface=constants.CEPHBLOCKPOOL,
                         image_uuid=image_uuid,
-                        pool_name=constants.DEFAULT_CEPHBLOCKPOOL,
+                        pool_name=rbd_pool_name,
                     )
                     if not status:
                         raise UnexpectedBehaviour(
@@ -264,3 +272,30 @@ class BusyBox(DRWorkload):
         finally:
             config.switch_acm_ctx()
             run_cmd(f"oc delete -k {self.workload_subscription_dir}")
+
+
+def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
+    """
+    Verifies the md5sum values of files are OK
+
+    Args:
+        namespace (str): Namespace where the workload running
+        path (str): Path of the hashfile saved of each files
+        timeout (int): Time taken in seconds to run command inside pod
+
+    Raises: If there is a mismatch in md5sum value or None
+
+    """
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        log.info("Verify the md5sum values are OK")
+        cmd = f"md5sum -c {path}"
+        try:
+            pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
+            log.info(f"Pod {pod_obj.name}: All files checksums value matches")
+        except CommandFailed as ex:
+            if "computed checksums did NOT match" in str(ex):
+                log.error(
+                    f"Pod {pod_obj.name}: One or more files or datas are modified"
+                )
+            raise ex

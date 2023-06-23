@@ -374,6 +374,7 @@ def login_to_acm():
         driver (Selenium WebDriver)
 
     """
+
     acm_version = ".".join(get_running_acm_version().split(".")[:2])
     if not acm_version:
         raise UnexpectedDeploymentConfiguration("ACM not found")
