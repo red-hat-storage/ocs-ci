@@ -126,6 +126,8 @@ class TestApplicationFailoverAndRelocate:
                     down_cluster_name=self.primary_cluster_name,
                     expected_text="Unknown",
                 )
+        elif config.RUN.get("rdr_failover_via_ui"):
+            check_cluster_status_on_acm_console(acm_obj)
 
         # Fenced the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
