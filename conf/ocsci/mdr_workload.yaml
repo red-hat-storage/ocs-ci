@@ -1,0 +1,6 @@
+ENV_DATA:
+  dr_workload_repo_url: "https://github.com/Akarsha-rai/ocs-workloads.git"
+  dr_workload_repo_branch: "master"
+  dr_workload_subscription: [
+    {name: "busybox-1", workload_dir: "mdr/subscriptions/app-1", pod_count: 2, pvc_count: 2},
+  ]
