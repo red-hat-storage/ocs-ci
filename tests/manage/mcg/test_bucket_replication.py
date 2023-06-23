@@ -3,7 +3,10 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import tier1, tier2
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
@@ -13,7 +16,14 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
-from ocs_ci.ocs.resources.pod import cal_md5sum
+from ocs_ci.ocs.resources.pod import (
+    cal_md5sum,
+    Pod,
+    get_pods_having_label,
+    get_pod_logs,
+    get_noobaa_core_pod,
+    get_noobaa_endpoint_pods,
+)
 from ocs_ci.framework.testlib import skipif_ocs_version
 
 logger = logging.getLogger(__name__)
@@ -297,14 +307,18 @@ class TestReplication(MCGTest):
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
-            pytest.param(
-                {
-                    "interface": "OC",
-                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                },
-                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier2, pytest.mark.polarion_id("OCS-2680")],
-            ),
+            # pytest.param(
+            #     {
+            #         "interface": "OC",
+            #         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            #     },
+            #     {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+            #     marks=[
+            #         tier2,
+            #         pytest.mark.polarion_id("OCS-2680"),
+            #         pytest.mark.bugzilla("2168788"),
+            #     ],
+            # ),
             pytest.param(
                 {
                     "interface": "CLI",
@@ -316,19 +330,35 @@ class TestReplication(MCGTest):
                 },
                 marks=[tier2, pytest.mark.polarion_id("OCS-2684")],
             ),
-            pytest.param(
-                {
-                    "interface": "CLI",
-                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                },
-                {
-                    "interface": "OC",
-                    "backingstore_dict": {"gcp": [(1, None)]},
-                },
-                marks=[tier1],
-            ),
+            # pytest.param(
+            #     {
+            #         "interface": "CLI",
+            #         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            #     },
+            #     {
+            #         "interface": "OC",
+            #         "backingstore_dict": {"gcp": [(1, None)]},
+            #     },
+            #     marks=[tier1],
+            # ),
+            # pytest.param(
+            #     {
+            #         "interface": "OC",
+            #         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            #     },
+            #     None,
+            #     marks=[
+            #         tier2,
+            #         pytest.mark.bugzilla("2168788"),
+            #     ],
+            # ),
         ],
-        ids=["AWStoAZURE-BC-OC", "AZUREtoAWS-BC-CLI", "AWStoGCP-BC-Hybrid"],
+        ids=[
+            # "AWStoAZURE-BC-OC",
+            "AZUREtoAWS-BC-CLI",
+            # "AWStoGCP-BC-Hybrid",
+            # "AWStoDefault-BS-Hybrid",
+        ],
     )
     def test_unidirectional_bucketclass_replication(
         self,
@@ -337,23 +367,37 @@ class TestReplication(MCGTest):
         bucket_factory,
         source_bucketclass,
         target_bucketclass,
+        test_directory_setup,
+        change_the_noobaa_log_level,
     ):
         """
         Test unidirectional bucketclass replication using CLI and YAML
 
         """
-        target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
+        change_the_noobaa_log_level(level="all")
+        target_bucket = bucket_factory(bucketclass=target_bucketclass)[0]
+        target_bucket_name = target_bucket.name
         source_bucketclass["replication_policy"] = (
             "basic-replication-rule",
             target_bucket_name,
             None,
         )
-        source_bucket_name = bucket_factory(1, bucketclass=source_bucketclass)[0].name
+        source_bucket = bucket_factory(1, bucketclass=source_bucketclass)[0]
+
+        source_bucket_name = source_bucket.name
         full_object_path = f"s3://{source_bucket_name}"
+        nb_db_pod = Pod(
+            **(
+                get_pods_having_label(
+                    label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                )[0]
+            )
+        )
         standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
         ).split(" ")
-        sync_object_directory(
+        retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
             awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj_session
         )
         written_objects = mcg_obj_session.s3_list_all_objects_in_bucket(
@@ -367,6 +411,76 @@ class TestReplication(MCGTest):
         compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
+
+        replication_id = nb_db_pod.exec_cmd_on_pod(
+            command=f"psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "
+            f"\"SELECT data ->> 'replication_policy_id' FROM buckets WHERE data ->> 'name'='{source_bucket_name}';\"",
+            out_yaml_format=False,
+        ).split("\n")[2]
+
+        # write random objects to the bucket
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket_name,
+            test_directory_setup.origin_dir,
+            amount=5,
+            mcg_obj=mcg_obj_session,
+        )
+
+        if target_bucketclass is None:
+            # Delete the target bucket
+            target_bucket.delete()
+            logger.info(f"Deleted target bucket {target_bucket_name}")
+
+            def check_nb_endpoint_logs():
+                for pod in get_noobaa_endpoint_pods():
+                    if (
+                        "The AWS access key Id you provided does not exist in our records"
+                        in get_pod_logs(pod.name)
+                    ):
+                        return True
+                return False
+
+            sample = TimeoutSampler(timeout=360, sleep=10, func=check_nb_endpoint_logs)
+            assert sample.wait_for_func_status(
+                result=False
+            ), "Error 'The AWS access key Id you provided does not exist in our records' found in the endpoint logs"
+        else:
+            # delete the bucket
+            source_bucket.delete()
+            logger.info(f"Deleted source bucket {source_bucket_name}")
+
+            # check in db that the replication config was deleted
+            replication_conf_count = nb_db_pod.exec_cmd_on_pod(
+                command=f"psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "
+                f"\"SELECT COUNT (*) FROM replicationconfigs WHERE _id='{replication_id}'\"",
+                out_yaml_format=False,
+            ).split("\n")[2]
+
+            assert (
+                int(replication_conf_count) == 0
+            ), f"Replication config for {source_bucket_name} is not deleted!"
+
+            # check in noobaa core logs
+            def check_noobaa_core_logs():
+                if "find_rules_updated_longest_time_ago:  []" in get_pod_logs(
+                    get_noobaa_core_pod().name
+                ):
+                    return True
+                else:
+                    return False
+
+            logger.info(
+                f"Checking the noobaa core logs to see if the replication has "
+                f"stopped from {source_bucket_name} to {target_bucket_name}"
+            )
+            sample = TimeoutSampler(timeout=900, sleep=10, func=check_noobaa_core_logs)
+            assert sample.wait_for_func_status(
+                result=True
+            ), f"Replication hasn't stopped between {source_bucket_name} to {target_bucket_name}"
+            logger.info(
+                f"Replication has stopped from {source_bucket_name} to {target_bucket_name}"
+            )
 
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],

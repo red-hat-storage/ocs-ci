@@ -856,6 +856,38 @@ def get_noobaa_operator_pod(
     return noobaa_operator_pod
 
 
+def get_noobaa_core_pod():
+    """
+    Fetches Noobaa core pod details
+
+    Returns:
+        Pod object: Noobaa core pod object
+
+    """
+    noobaa_core = get_pods_having_label(
+        label=constants.NOOBAA_CORE_POD_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    noobaa_core_pod = Pod(**noobaa_core[0])
+    return noobaa_core_pod
+
+
+def get_noobaa_endpoint_pods():
+    """
+    Fetches noobaa endpoint pod details
+
+    Returns:
+        List: List containing noobaa endpoint pod objects
+
+    """
+    noobaa_endpoints = get_pods_having_label(
+        label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    noobaa_endpoint_pods = [Pod(**pod) for pod in noobaa_endpoints]
+    return noobaa_endpoint_pods
+
+
 def get_odf_operator_controller_manager(
     ocs_label=constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL, namespace=None
 ):

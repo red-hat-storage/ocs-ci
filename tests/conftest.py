@@ -80,6 +80,7 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     get_all_pods,
     verify_data_integrity_for_multi_pvc_objs,
+    get_noobaa_pods,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -6437,3 +6438,32 @@ def ceph_monstore_tool_fixture(request):
     request.addfinalizer(teardown)
 
     return mot_obj
+
+
+@pytest.fixture()
+def change_the_noobaa_log_level(request):
+    """
+    This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
+    """
+    noobaa_cm = OCP(
+        kind="configmap",
+        resource_name="noobaa-config",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    def factory(level="all"):
+        assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
+        noobaa_cm.patch(
+            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
+        )
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+
+    def finalizer():
+        level = "default_level"
+        noobaa_cm.patch(
+            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
+        )
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+
+    request.addfinalizer(finalizer)
+    return factory
