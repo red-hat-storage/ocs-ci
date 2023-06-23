@@ -236,10 +236,7 @@ class TestCephOSDSlowOps(object):
         set_osd_op_complaint_time(0.1)
         # reduce storage utilization speed by number of monitors slowed down
         # in order to calculate workload timeout correctly during workload_fio_storageutilization
-        fio_storage_util_reduced = (
-            constants.DEFAULT_OSD_OP_COMPLAINT_TIME
-            - (constants.DEFAULT_OSD_OP_COMPLAINT_TIME / self.mon_pods_num)
-        ) - 1
+        fio_storage_util_reduced = constants.DEFAULT_OSD_OP_COMPLAINT_TIME / 3
         config.ENV_DATA["fio_storageutilization_min_mbps"] = fio_storage_util_reduced
 
         def finalizer():
@@ -302,7 +299,7 @@ class TestCephOSDSlowOps(object):
                 throw_skip=False,
             )
 
-            if workload_operation is None:
+            if not workload_operation:
                 continue
 
             start_operation = workload_operation.get("start")
