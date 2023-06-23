@@ -605,13 +605,21 @@ def verify_provider_aws_volumes():
             f"Volume IOPS is {osd_volume_data['Iops']}, "
             f"it should be {constants.AWS_VOL_OSD_IOPS}"
         )
-        tags = osd_volume_data["Tags"]
-        for tag in tags:
-            if tag["Key"] == constants.AWS_VOL_PVC_NAMESPACE:
-                volume_namespace = tag["Value"]
+        volume_namespace = aws.get_volume_tag_value(
+            osd_volume_data,
+            constants.AWS_VOL_PVC_NAMESPACE,
+        )
         assert (
             volume_namespace == config.ENV_DATA["cluster_namespace"]
         ), f"Namespace is {volume_namespace}. It should be fusion-storage"
+        volume_name = ws.get_volume_tag_value(
+            osd_volume_data,
+            "Name",
+        )
+        log.info(f"Volume name: {volume_name}")
+        assert volume_name.endswith(
+            osd_pvc_obj.backed_pv
+        ), f"Volume name should end with {osd_pvc_obj.backed_pv}"
     mon_pvc_objs = get_all_pvc_objs(
         namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.MON_APP_LABEL,

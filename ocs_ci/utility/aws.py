@@ -423,6 +423,22 @@ class AWS(object):
         )
         return volumes_response["Volumes"][0]
 
+    def get_volume_tag_value(self, volume_data, tag_name):
+        """
+        Get the value of the volume's tag
+
+        Args:
+            volume_data(dict): complete volume information
+            tag_name(str): name of the tag
+        Returns:
+            str: value of the tag or None if there's no such tag
+        """
+        tags = volume_data["Tags"]
+        for tag in tags:
+            if tag["Key"] == constants.AWS_VOL_PVC_NAMESPACE:
+                return tag["Value"]
+        return None
+
     def get_volumes_by_name_pattern(self, pattern):
         """
         Get volumes by pattern
