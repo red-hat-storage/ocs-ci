@@ -195,7 +195,7 @@ def list_objects_from_bucket(
         ]
     else:
         secrets = None
-    return pod_obj.exec_cmd_on_pod(
+    cmd_output = pod_obj.exec_cmd_on_pod(
         command=craft_s3_command(
             retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
         ),
@@ -204,6 +204,13 @@ def list_objects_from_bucket(
         timeout=timeout,
         **kwargs,
     )
+
+    obj_list = []
+    try:
+        obj_list = [row.split()[3] for row in cmd_output.splitlines()]
+    except Exception:
+        logger.warn(f"Failed to parse output of {retrieve_cmd} command: {cmd_output}")
+    return obj_list
 
 
 def copy_objects(
