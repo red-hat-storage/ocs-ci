@@ -1594,7 +1594,9 @@ def get_bucket_available_size(mcg_obj, bucket_name):
     return bucket_size
 
 
-def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
+def compare_bucket_object_list(
+    mcg_obj, first_bucket_name, second_bucket_name, timeout=600
+):
     """
     Compares the object lists of two given buckets
 
@@ -1602,6 +1604,7 @@ def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
         mcg_obj (MCG): An initialized MCG object
         first_bucket_name (str): The name of the first bucket to compare
         second_bucket_name (str): The name of the second bucket to compare
+        timeout (int): The maximum time in seconds to wait for the buckets to be identical
 
     Returns:
         bool: True if both buckets contain the same object names in all objects,
@@ -1637,12 +1640,12 @@ def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
             return False
 
     try:
-        for comparison_result in TimeoutSampler(2100, 30, _comparison_logic):
+        for comparison_result in TimeoutSampler(timeout, 30, _comparison_logic):
             if comparison_result:
                 return True
     except TimeoutExpiredError:
         logger.error(
-            "The compared buckets did not contain the same set of objects after thirty five minutes"
+            f"The compared buckets did not contain the same set of objects after {timeout} seconds"
         )
         return False
 
