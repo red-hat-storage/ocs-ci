@@ -24,7 +24,10 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_node,
 )
 from ocs_ci.utility.aws import AWSTimeoutException
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.resources.storage_cluster import (
+    osd_encryption_verification,
+    verify_multus_network,
+)
 from ocs_ci.ocs import osd_operations
 
 logger = logging.getLogger(__name__)
@@ -106,6 +109,10 @@ class TestDiskFailures(ManageTest):
             # Verify OSD encrypted
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
+
+            # Verify Multus networks
+            if config.ENV_DATA.get("is_multus_enabled"):
+                verify_multus_network()
 
             logger.info("Clear crash warnings and osd removal leftovers")
             clear_crash_warning_and_osd_removal_leftovers()
