@@ -2299,6 +2299,36 @@ def is_vsphere_ipi_cluster():
     )
 
 
+def is_faas_consumer_cluster():
+    """
+    Check if the cluster is a Fusion Service consumer cluster
+
+    Returns:
+        bool: True, if the cluster is a Fusion Service consumer cluster. False, otherwise.
+
+    """
+    return (
+        config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+        and config.ENV_DATA.get("cluster_type", "").lower()
+        == constants.MS_CONSUMER_TYPE
+    )
+
+
+def is_faas_provider_cluster():
+    """
+    Check if the cluster is a Fusion Service provider cluster
+
+    Returns:
+        bool: True, if the cluster is a Fusion Service provider cluster. False, otherwise.
+
+    """
+    return (
+        config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+        and config.ENV_DATA.get("cluster_type", "").lower()
+        == constants.MS_PROVIDER_TYPE
+    )
+
+
 class CephClusterExternal(CephCluster):
     """
     Handle all external ceph cluster related functionalities
