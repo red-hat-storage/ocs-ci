@@ -13,7 +13,10 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import label_worker_node, remove_label_from_worker_node
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.resources.storage_cluster import (
+    osd_encryption_verification,
+    verify_multus_network,
+)
 from ocs_ci.ocs.node import (
     get_osd_running_nodes,
     get_app_pod_running_nodes,
@@ -45,6 +48,10 @@ class TestNodeReplacement(ManageTest):
             # Verify OSD encrypted
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
+
+            # Verify Multus networks
+            if config.ENV_DATA.get("is_multus_enabled"):
+                verify_multus_network()
 
         request.addfinalizer(finalizer)
 

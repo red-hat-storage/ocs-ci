@@ -13,7 +13,10 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_cluster
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.resources.storage_cluster import (
+    osd_encryption_verification,
+    verify_multus_network,
+)
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_bmpsi,
@@ -243,6 +246,10 @@ class TestNodeReplacementWithIO(ManageTest):
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
+        # Verify Multus networks
+        if config.ENV_DATA.get("is_multus_enabled"):
+            verify_multus_network()
+
 
 @tier4a
 @ignore_leftovers
@@ -278,6 +285,10 @@ class TestNodeReplacement(ManageTest):
         # Verify OSD encrypted
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
+
+        # Verify Multus networks
+        if config.ENV_DATA.get("is_multus_enabled"):
+            verify_multus_network()
 
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
