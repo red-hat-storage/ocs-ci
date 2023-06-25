@@ -30,7 +30,10 @@ from ocs_ci.ocs.cluster import (
     check_ceph_health_after_add_capacity,
     is_flexible_scaling_enabled,
 )
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.resources.storage_cluster import (
+    osd_encryption_verification,
+    verify_multus_network,
+)
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 
@@ -91,6 +94,9 @@ def add_capacity_test(ui_flag=False):
     # Verify OSDs are encrypted.
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
+
+    if config.ENV_DATA.get("is_multus_enabled"):
+        verify_multus_network()
 
     check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
 
