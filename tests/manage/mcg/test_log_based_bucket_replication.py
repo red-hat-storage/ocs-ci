@@ -84,6 +84,9 @@ class TestLogBasedBucketReplication(MCGTest):
 
     @tier2
     def test_deletion_sync_opt_out(self, mcg_obj_session, log_based_replication_setup):
+        """
+        Test that deletion sync can be disabled.
+        """
         mockup_logger, source_bucket, target_bucket = log_based_replication_setup
 
         mockup_logger.upload_test_objs_and_log(source_bucket.name)
