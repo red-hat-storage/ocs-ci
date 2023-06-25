@@ -1723,6 +1723,29 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+def update_replication_policy(bucket_name, replication_policy_dict):
+    """
+    Updates the replication policy of a bucket
+
+    Args:
+        bucket_name (str): The name of the bucket to update
+        replication_policy_dict (dict): A dictionary containing the new replication
+        policy
+    """
+    replication_policy_patch_dict = {
+        "spec": {
+            "additionalConfig": {
+                "replicationPolicy": json.dumps(replication_policy_dict)
+            }
+        }
+    }
+    OCP(
+        kind="obc",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucket_name,
+    ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+
+
 def random_object_round_trip_verification(
     io_pod,
     bucket_name,
