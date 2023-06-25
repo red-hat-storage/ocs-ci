@@ -101,13 +101,17 @@ def get_consumer_names():
     return [consumer["metadata"]["name"] for consumer in consumer_yamls]
 
 
-def patch_consumer_toolbox(ceph_admin_key=None):
+def patch_consumer_toolbox(ceph_admin_key=None, consumer_tools_pod=None):
     """
     Patch the rook-ceph-tools deployment with ceph.admin key. Applicable for MS platform only to enable rook-ceph-tools
     to run ceph commands.
 
     Args:
         ceph_admin_key (str): The ceph admin key which should be used to patch rook-ceph-tools deployment on consumer
+        consumer_tools_pod (OCS): The rook-ceph-tools pod object.
+
+    Returns:
+        OCS: The new pod object after patching the rook-ceph-tools deployment. If it fails to patch, it returns None.
 
     """
 
@@ -124,21 +128,22 @@ def patch_consumer_toolbox(ceph_admin_key=None):
             "Ceph admin key not found to patch rook-ceph-tools deployment on consumer with ceph.admin key. "
             "Skipping the step."
         )
-        return
+        return None
 
-    consumer_tools_pod = get_ceph_tools_pod()
+    if not consumer_tools_pod:
+        consumer_tools_pod = get_ceph_tools_pod()
 
     # Check whether ceph command is working on tools pod. Patch is needed only if the error is "RADOS permission error"
     try:
         consumer_tools_pod.exec_ceph_cmd("ceph health")
-        return
+        return consumer_tools_pod
     except Exception as exc:
         if not is_rados_connect_error_in_ex(exc):
             logger.warning(
                 f"Ceph command on rook-ceph-tools deployment is failing with error {str(exc)}. "
                 "This error cannot be fixed by patching the rook-ceph-tools deployment with ceph admin key."
             )
-            return
+            return None
 
     consumer_tools_deployment = ocp.OCP(
         kind=constants.DEPLOYMENT,
@@ -157,7 +162,7 @@ def patch_consumer_toolbox(ceph_admin_key=None):
             "Failed to patch rook-ceph-tools deployment in consumer cluster. "
             f"The patch can be applied manually after deployment. Error {str(exe)}"
         )
-        return
+        return None
 
     # Wait for the existing tools pod to delete
     consumer_tools_pod.ocp.wait_for_delete(resource_name=consumer_tools_pod.name)
@@ -169,6 +174,7 @@ def patch_consumer_toolbox(ceph_admin_key=None):
     )[0]
     new_tools_pod = Pod(**new_tools_pod_info)
     helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
+    return new_tools_pod
 
 
 def update_non_ga_version():

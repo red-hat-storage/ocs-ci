@@ -50,6 +50,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
     InteractivePromptException,
     NotFoundError,
+    CephToolBoxNotFoundException,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -2228,32 +2229,8 @@ def ceph_health_check_base(namespace=None):
         boolean: True if HEALTH_OK
 
     """
-    # Import here to avoid circular loop
-    from ocs_ci.ocs.cluster import is_ms_consumer_cluster
-    from ocs_ci.ocs.managedservice import (
-        patch_consumer_toolbox,
-        is_rados_connect_error_in_ex,
-    )
-
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    run_cmd(
-        f"oc wait --for condition=ready pod "
-        f"-l app=rook-ceph-tools "
-        f"-n {namespace} "
-        f"--timeout=300s"
-    )
-    ceph_health_cmd = create_ceph_health_cmd(namespace)
-    try:
-        health = run_cmd(ceph_health_cmd)
-    except CommandFailed as ex:
-        if is_rados_connect_error_in_ex(ex) and is_ms_consumer_cluster():
-            log.info("Patch the consumer rook-ceph-tools deployment")
-            patch_consumer_toolbox()
-            # get the new tool box pod since patching creates the new tool box pod
-            ceph_health_cmd = create_ceph_health_cmd(namespace)
-            health = run_cmd(ceph_health_cmd)
-        else:
-            raise ex
+    health = run_ceph_health_cmd(namespace)
 
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
@@ -2280,6 +2257,33 @@ def create_ceph_health_cmd(namespace):
     )
     ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
     return ceph_health_cmd
+
+
+def run_ceph_health_cmd(namespace):
+    """
+    Run the ceph health command
+
+    Args:
+        namespace: Namespace of OCS
+
+    Raises:
+        CommandFailed: In case the rook-ceph-tools pod failed to reach the Ready state.
+
+    Returns:
+        str: The output of the ceph health command
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    try:
+        ct_pod = get_ceph_tools_pod(namespace=namespace)
+    except (AssertionError, CephToolBoxNotFoundException) as ex:
+        raise CommandFailed(ex)
+
+    return ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
+    )
 
 
 def get_rook_repo(branch="master", to_checkout=None):
