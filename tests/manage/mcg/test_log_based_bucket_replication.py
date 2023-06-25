@@ -1,4 +1,5 @@
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.ocs.bucket_utils import compare_bucket_object_list
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 
 from ocs_ci.ocs import constants
@@ -15,6 +16,7 @@ class TestLogBasedBucketReplication(MCGTest):
 
     # TODO do we already have this const in the project?
     DEFAULT_AWS_REGION = "us-east-2"
+    TIMEOUT = 15 * 60
 
     def test_deletion_sync(
         self,
@@ -54,4 +56,18 @@ class TestLogBasedBucketReplication(MCGTest):
 
         mockup_logger.upload_test_objs_and_log(source_bucket_name)
 
-        assert source_bucket_name
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket_name,
+            target_bucket_name,
+            timeout=self.TIMEOUT,
+        ), f"Standard replication failed to complete in {self.TIMEOUT} seconds."
+
+        mockup_logger.delete_files_and_log(source_bucket_name)
+
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket_name,
+            target_bucket_name,
+            timeout=self.TIMEOUT,
+        ), f"Deletion sync failed to complete in {self.TIMEOUT} seconds."
