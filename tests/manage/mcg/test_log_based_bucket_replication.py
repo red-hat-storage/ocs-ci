@@ -103,6 +103,8 @@ class TestLogBasedBucketReplication(MCGTest):
 
         update_replication_policy(source_bucket.name, disabled_del_sync_policy)
 
+        mockup_logger.delete_all_objects_and_log(source_bucket.name)
+
         assert not compare_bucket_object_list(
             mcg_obj_session,
             source_bucket.name,
