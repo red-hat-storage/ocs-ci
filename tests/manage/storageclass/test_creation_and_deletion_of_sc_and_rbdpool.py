@@ -121,12 +121,19 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             validate_compression(cbp_name)
         validate_replica_data(cbp_name, replica)
 
+        # printing out values of the stats of blockpool
+        blockpool_ui_obj.check_pool_used_capacity(blockpool_name)
+        blockpool_ui_obj.check_pool_avail_capacity(blockpool_name)
+        blockpool_ui_obj.check_pool_compression_ratio(blockpool_name)
+        blockpool_ui_obj.check_pool_compression_eligibility(blockpool_name)
+        blockpool_ui_obj.check_pool_compression_savings(blockpool_name)
+
         # verify block pool stats post running of IO
         checks = {
             "block_pool_ready_state": (
                 blockpool_ui_obj.check_pool_status(blockpool_name) == "Ready"
             ),
-            "eplica_match": (
+            "replica_match": (
                 blockpool_ui_obj.check_pool_replicas(blockpool_name) == replica
             ),
             "compression_status_enabled": (
@@ -134,9 +141,3 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             ),
         }
         assert all(checks.values())
-
-        blockpool_ui_obj.check_pool_used_capacity(blockpool_name)
-        blockpool_ui_obj.check_pool_avail_capacity(blockpool_name)
-        blockpool_ui_obj.check_pool_compression_ratio(blockpool_name)
-        blockpool_ui_obj.check_pool_compression_eligibility(blockpool_name)
-        blockpool_ui_obj.check_pool_compression_savings(blockpool_name)
