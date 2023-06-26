@@ -5,6 +5,7 @@ import json
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.helpers import helpers
@@ -39,28 +40,44 @@ def create_configmap_cluster_monitoring_pod(sc_name=None, telemeter_server_url=N
     """
     logger.info("Creating configmap cluster-monitoring-config")
     config_map = templating.load_yaml(constants.CONFIGURE_PVC_ON_MONITORING_POD)
-    config = yaml.safe_load(config_map["data"]["config.yaml"])
+    config_data = yaml.safe_load(config_map["data"]["config.yaml"])
     if sc_name is not None:
         logger.info(
             f"Setting {sc_name} as storage backed for Prometheus and Alertmanager"
         )
-        config["prometheusK8s"]["volumeClaimTemplate"]["spec"][
+        config_data["prometheusK8s"]["volumeClaimTemplate"]["spec"][
             "storageClassName"
         ] = sc_name
-        config["alertmanagerMain"]["volumeClaimTemplate"]["spec"][
+        config_data["alertmanagerMain"]["volumeClaimTemplate"]["spec"][
             "storageClassName"
         ] = sc_name
     else:
-        del config["prometheusK8s"]
-        del config["alertmanagerMain"]
+        del config_data["prometheusK8s"]
+        del config_data["alertmanagerMain"]
     if telemeter_server_url is not None:
         logger.info(f"Setting {telemeter_server_url} as telemeter server url")
-        config["telemeterClient"] = {}
-        config["telemeterClient"]["telemeterServerURL"] = telemeter_server_url
-    config = yaml.dump(config)
-    config_map["data"]["config.yaml"] = config
-    assert helpers.create_resource(**config_map)
+        config_data["telemeterClient"] = {}
+        config_data["telemeterClient"]["telemeterServerURL"] = telemeter_server_url
+    config_data = yaml.dump(config_data)
+    config_map["data"]["config.yaml"] = config_data
     ocp = OCP("v1", "ConfigMap", defaults.OCS_MONITORING_NAMESPACE)
+    config_map_exists = False
+    if (
+        config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    ):
+        try:
+            assert ocp.get(resource_name="cluster-monitoring-config")
+            logger.info(
+                "For Azure ARO cluster the cluster-monitoring-config exists and we need only apply the data!"
+            )
+            config_map_exists = True
+            config_map_obj = OCS(**config_map)
+            config_map_obj.apply(**config_map)
+        except CommandFailed:
+            pass
+    if not config_map_exists:
+        assert helpers.create_resource(**config_map)
     assert ocp.get(resource_name="cluster-monitoring-config")
     logger.info("Successfully created configmap cluster-monitoring-config")
 

@@ -52,6 +52,7 @@ class OCP(object):
         cluster_kubeconfig="",
         threading_lock=None,
         silent=False,
+        skip_tls_verify=False,
     ):
         """
         Initializer function. Avoid shallow request, func is resource consuming
@@ -69,6 +70,8 @@ class OCP(object):
             threading_lock (threading.Lock): threading.Lock object that is used
                 for handling concurrent oc commands
             silent (bool): If True will silent errors from the server, default false
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command for
+                exec_oc_cmd
         """
         self._api_version = api_version
         self._kind = kind
@@ -80,6 +83,7 @@ class OCP(object):
         self.cluster_kubeconfig = cluster_kubeconfig
         self.threading_lock = threading_lock
         self.silent = silent
+        self.skip_tls_verify = skip_tls_verify
 
     @property
     def api_version(self):
@@ -121,6 +125,7 @@ class OCP(object):
         ignore_error=False,
         silent=False,
         cluster_config=None,
+        skip_tls_verify=False,
         **kwargs,
     ):
         """
@@ -140,6 +145,7 @@ class OCP(object):
             silent (bool): If True will silent errors from the server, default false
             cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
                 executions
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -165,6 +171,8 @@ class OCP(object):
 
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "
+        if skip_tls_verify or self.skip_tls_verify:
+            command += " --insecure-skip-tls-verify"
 
         oc_cmd += command
         out = run_cmd(
@@ -234,6 +242,7 @@ class OCP(object):
         silent=False,
         field_selector=None,
         cluster_config=None,
+        skip_tls_verify=False,
     ):
         """
         Get command - 'oc get <resource>'
@@ -248,6 +257,7 @@ class OCP(object):
             dont_raise (bool): If True will raise when get is not found
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
 
         Example:
             get('my-pv1')
@@ -279,7 +289,10 @@ class OCP(object):
         while retry:
             try:
                 return self.exec_oc_cmd(
-                    command, silent=silent, cluster_config=cluster_config
+                    command,
+                    silent=silent,
+                    cluster_config=cluster_config,
+                    skip_tls_verify=skip_tls_verify,
                 )
             except CommandFailed as ex:
                 if not silent:
