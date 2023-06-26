@@ -29,9 +29,8 @@ with the same parameters, and executes the checksum verification.
 The original idea was to use fio verification feature, but testing showed that
 when this fails for some reason or gets stuck, it's hard to debug.
 """
-
 import logging
-import random
+import time
 import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import blue_squad, tier3
@@ -41,14 +40,15 @@ from ocs_ci.framework.testlib import (
     post_upgrade,
     skipif_managed_service,
 )
-from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import fiojob
-from ocs_ci.ocs.fiojob import workload_fio_storageutilization
+from ocs_ci.ocs.cluster import CephCluster, get_percent_used_capacity
+from ocs_ci.ocs.fiojob import get_timeout
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods, Pod
+from ocs_ci.ocs.resources.pod import get_osd_pods, Pod
 from ocs_ci.utility import prometheus
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
 
@@ -200,127 +200,117 @@ def get_mon_pod_by_pvc_name(pvc_name: str):
 
 
 class TestCephOSDSlowOps(object):
-    @pytest.fixture
-    def setup(self, request, pod_factory):
+    @pytest.fixture(scope="function")
+    def setup(self, request, pod_factory, multi_pvc_factory):
         """
-        Set values for:
-          osd_op_complaint_time=0.1
+        Set preconditions to trigger CephOSDSlowOps
         """
-
-        self.mon_pods = get_mon_pods()
-        self.mon_pods_num = len(self.mon_pods)
-        self.mon_pod_selected = random.choice(self.mon_pods)
-        self.pvc_name = self.mon_pod_selected.labels.get("pvc_name")
+        self.test_pass = None
+        reduced_osd_complaint_time = 0.1
 
         def set_osd_op_complaint_time(osd_op_complaint_time_val: float):
-            self.mon_pod_selected = get_mon_pod_by_pvc_name(self.pvc_name)
-            logger.info(f"Selected mon pod is: {self.mon_pod_selected.name}")
-            logger.info(
-                f"Setting values: osd_op_complaint_time={osd_op_complaint_time_val}"
-            )
             self.ct_pod = pod.get_ceph_tools_pod()
-            # mon in the "tell" command should be mon.a / mon.b / mon.c
-            mon_id = (
-                self.mon_pod_selected.get().get("metadata").get("labels").get("mon")
-            )
             self.ct_pod.exec_ceph_cmd(
-                ceph_cmd=f"ceph tell mon.{mon_id} injectargs "
-                f"--osd_op_complaint_time={osd_op_complaint_time_val}"
+                f"ceph config set osd osd_op_complaint_time {osd_op_complaint_time_val}"
             )
 
-            # restart mon pod
-            self.mon_pod_selected.delete()
-            self.mon_pod_selected = get_mon_pod_by_pvc_name(self.pvc_name)
-            wait_for_resource_state(self.mon_pod_selected, constants.STATUS_RUNNING)
+        set_osd_op_complaint_time(reduced_osd_complaint_time)
 
-        set_osd_op_complaint_time(0.1)
-        # reduce storage utilization speed by number of monitors slowed down
-        # in order to calculate workload timeout correctly during workload_fio_storageutilization
-        fio_storage_util_reduced = constants.DEFAULT_OSD_OP_COMPLAINT_TIME / 3
-        config.ENV_DATA["fio_storageutilization_min_mbps"] = fio_storage_util_reduced
+        ceph_cluster = CephCluster()
+
+        # max possible cap to get CephOSDSlowOps is 90 %; alert should appear much earlier
+        pvc_size = ceph_cluster.get_ceph_free_capacity() * 0.90
+
+        # assuming storageutilization speed reduced to less than 1, estimation timeout to fill the storage
+        # will be reduced by number of osds. That should be more than enough to trigger an alert,
+        # otherwise the failure is legitimate
+        storageutilization_min_mbps = config.ENV_DATA[
+            "fio_storageutilization_min_mbps"
+        ] / len(get_osd_pods())
+        self.timeout_sec = get_timeout(storageutilization_min_mbps, int(pvc_size))
+
+        access_modes = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
+
+        num_of_load_objs = 2
+        self.pvc_objs = multi_pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=pvc_size / num_of_load_objs,
+            access_modes=access_modes,
+            status=constants.STATUS_BOUND,
+            num_of_pvc=num_of_load_objs,
+            wait_each=True,
+        )
+        self.pod_objs = []
+
+        for pvc_obj in self.pvc_objs:
+            pod_obj = pod_factory(
+                interface=constants.CEPHFILESYSTEM, pvc=pvc_obj, replica_count=3
+            )
+            self.pod_objs.append(pod_obj)
+            file_name = pod_obj.name
+            pod_obj.fillup_fs(size=f"{round(pvc_size * 1024)}M", fio_filename=file_name)
+            pod_obj.run_io(
+                storage_type="fs",
+                size="3G",
+                runtime=self.timeout_sec,
+                fio_filename=f"{pod_obj.name}_io",
+            )
+
+        self.start_workload_time = time.perf_counter()
 
         def finalizer():
             """
             Set default values for:
               osd_op_complaint_time=30.000000
             """
-
+            # set the osd_op_complaint_time to selected monitor back to default value
             set_osd_op_complaint_time(constants.DEFAULT_OSD_OP_COMPLAINT_TIME)
-            config.ENV_DATA[
-                "fio_storageutilization_min_mbps"
-            ] = constants.DEFAULT_OSD_OP_COMPLAINT_TIME
+
+            # delete resources
+            for pod_obj in self.pod_objs:
+                pod_obj.delete()
+                pod_obj.delete(wait=True)
+
+            for pvc_obj in self.pvc_objs:
+                pvc_obj.delete(wait=True)
 
         request.addfinalizer(finalizer)
 
     @tier3
     @blue_squad
-    def test_ceph_osd_low_ops_alert(
-        self,
-        setup,
-        pvc_factory_session,
-        pod_factory_session,
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
-    ):
+    def test_ceph_osd_low_ops_alert(self, setup):
         """
-        Test to verify bz #1966139
+        Test to verify bz #1966139, more info about Prometheus alert - #1885441
 
         CephOSDSlowOps. An Object Storage Device (OSD) with slow requests is every OSD that is not able to service
         the I/O operations per second (IOPS) in the queue within the time defined by the osd_op_complaint_time
         parameter. By default, this parameter is set to 30 seconds.
 
-        1. As precondition test setup is to reduce osd_op_complaint_time to 0.1
-        to prepare condition to get CephOSDSlowOps
-        2. Run workload_fio_storageutilization gradually filling up the storage by 5% and verify the alerts
-        2.1 Validate the CephOSDSlowOps fired during workload_fio_storageutilization,
-         if so - finish the test, if not continue workload_fio_storageutilization operations
+        1. As precondition test setup is to reduce osd_op_complaint_time to 0.1 to prepare condition
+        to get CephOSDSlowOps
+        2. Run workload_fio_storageutilization gradually filling up the storage up to 90% in a background
+        2.1 Validate the CephOSDSlowOps fired if so check an alert message and finish the test
+        2.2 If CephOSDSlowOps has not been fired while the storage filled up to 90% or time to fill up the storage ends
+        - fail the test
         """
-        # starting from 1% fill up the storage until CephOSDSlowOps will be found or storage utilization
-        percent_step = 5
-        fill_storage_up_to = 97
-        test_pass = False
-        for i in range(10, fill_storage_up_to + 1, percent_step):
-            logger.info(f"running workload storage utilization up to {i}p")
-            fixture_name = f"workload_storageutilization_{i}p_rbd"
 
-            workload_operation = workload_fio_storageutilization(
-                fixture_name,
-                project,
-                fio_pvc_dict,
-                fio_job_dict,
-                fio_configmap_dict,
-                measurement_dir,
-                tmp_path,
-                target_percentage=i / 100.0,
-                throw_skip=False,
+        api = PrometheusAPI()
+
+        while get_percent_used_capacity() < 89:
+            time_passed_sec = time.perf_counter() - self.start_workload_time
+            if time_passed_sec > self.timeout_sec:
+                pytest.fail("failed to fill the storage in calculated time")
+
+            delay_time = 60
+            logger.info(f"sleep {delay_time}s")
+            time.sleep(delay_time)
+
+            alerts_response = api.get(
+                "alerts", payload={"silenced": False, "inhibited": False}
             )
-
-            if not workload_operation:
-                continue
-
-            start_operation = workload_operation.get("start")
-            logger.debug(f"workload started {start_operation}")
-
-            stop_operation = workload_operation.get("stop")
-            logger.debug(f"workload stopped {stop_operation}")
-
-            osd_pods = get_osd_pods()
-            for osd_pod in osd_pods:
-                logger.info(f"gathering ops data from {osd_pod.name}")
-                name_split = osd_pod.name.split("-")
-                osd_index = name_split[3]
-                ops = osd_pod.exec_cmd_on_pod(f"ceph daemon osd.{osd_index} ops")
-                logger.info(ops)
-                historic_ops = osd_pod.exec_cmd_on_pod(
-                    f"ceph daemon osd.{osd_index} dump_historic_ops"
-                )
-                logger.info(historic_ops)
-
-            prometheus_alerts = workload_operation.get("prometheus_alerts")
+            assert alerts_response.ok is True, "got bad response from Prometheus"
+            prometheus_alerts = alerts_response.json()["data"]["alerts"]
+            logger.info(f"Prometheus Alerts: {prometheus_alerts}")
             for target_label, target_msg, target_states, target_severity in [
                 (
                     constants.ALERT_CEPHOSDSLOWOPS,
@@ -338,16 +328,18 @@ class TestCephOSDSlowOps(object):
                         severity=target_severity,
                         ignore_more_occurences=True,
                     )
-                    test_pass = True
+                    self.test_pass = True
                 except AssertionError:
-                    if i + percent_step >= fill_storage_up_to:
-                        logger.info(
-                            f"workload storage utilization {i}p complete. "
-                            f"{constants.ALERT_CEPHOSDSLOWOPS} alert not found. "
-                            f"Fill the storage to {percent_step}p more"
-                        )
-                    else:
-                        raise
-
-            if test_pass:
+                    logger.info(
+                        "workload storage utilization job did not finish\n"
+                        f"current utilization {round(get_percent_used_capacity(), 1)}p\n"
+                        f"time passed since start workload: {round(time.perf_counter() - self.start_workload_time)}s\n"
+                        f"timeout = {round(self.timeout_sec)}s"
+                    )
+            if self.test_pass:
                 break
+        else:
+            # if test got to this point, the alert was found, test PASS
+            pytest.fail(
+                "failed to get 'CephOSDSlowOps' while workload filled up the storage to 90 percents"
+            )
