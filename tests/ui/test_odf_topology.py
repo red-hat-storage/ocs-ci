@@ -9,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier3,
     skipif_external_mode,
-    external_mode_required,
     bugzilla,
     skipif_ibm_cloud_managed,
     skipif_ocs_version,
@@ -57,28 +56,16 @@ def teardown_depl_busybox(request):
 @black_squad
 @skipif_ibm_cloud_managed
 @skipif_managed_service
+@skipif_external_mode
 @skipif_ocs_version("<4.13")
 class TestODFTopology(object):
-    @bugzilla("2214023")
     @tier3
-    @pytest.mark.parametrize(
-        argnames="deployment_mode",
-        argvalues=[
-            pytest.param(
-                "internal",
-                marks=[pytest.mark.polarion_id("OCS-4901"), skipif_external_mode],
-            ),
-            pytest.param(
-                "external",
-                marks=[pytest.mark.polarion_id("OCS-4902"), external_mode_required],
-            ),
-        ],
-    )
+    @bugzilla("2209251")
+    @polarion_id("OCS-4901")
     def test_validate_topology_configuration(
         self,
         setup_ui_class,
         teardown_depl_busybox,
-        deployment_mode,
     ):
         """
         Test to validate configuration of ODF Topology for internal and external deployments,
@@ -113,16 +100,13 @@ class TestODFTopology(object):
 
         topology_deviation = topology_tab.validate_topology_configuration()
 
-        if deployment_mode == "external":
-            random_node_name = random.choice(get_worker_nodes())
-            topology_tab.nodes_view.nav_back_main_topology_view(soft=True)
-            topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
-            if topology_tab.nodes_view.is_alert_tab_present():
-                logger.error(
-                    "alert tab should not be present on External mode deployments"
-                )
-                topology_tab.take_screenshot()
-                topology_deviation["alert_tab_present_external_mode"] = True
+        random_node_name = random.choice(get_worker_nodes())
+        topology_tab.nodes_view.nav_back_main_topology_view(soft=True)
+        topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
+        if topology_tab.nodes_view.is_alert_tab_present():
+            logger.error("alert tab should not be present on External mode deployments")
+            topology_tab.take_screenshot()
+            topology_deviation["alert_tab_present_external_mode"] = True
 
         if len(topology_deviation):
             pytest.fail(
@@ -130,9 +114,8 @@ class TestODFTopology(object):
                 f"{topology_deviation}"
             )
 
-    @bugzilla("2214023")
     @tier3
-    @skipif_external_mode
+    @bugzilla("2214023")
     @polarion_id("OCS-4903")
     def test_validate_topology_node_details(self, setup_ui_class):
         """
@@ -180,7 +163,6 @@ class TestODFTopology(object):
             )
 
     @tier3
-    @skipif_external_mode
     @polarion_id("OCS-4904")
     def test_validate_topology_deployment_details(self, setup_ui_class):
         """
@@ -239,7 +221,6 @@ class TestODFTopology(object):
             )
 
     @tier4a
-    @skipif_external_mode
     @polarion_id("OCS-4905")
     def test_stop_start_node_validate_topology(
         self, nodes, setup_ui_class, teardown_nodes_job
