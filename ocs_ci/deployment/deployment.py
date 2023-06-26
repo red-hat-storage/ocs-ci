@@ -839,10 +839,12 @@ class Deployment(object):
                 interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
             worker_nodes = get_worker_nodes()
             node_obj = ocp.OCP(kind="node")
-            for node in worker_nodes:
-                for interface in interfaces:
-                    ip_link_cmd = f"ip link set promisc on {interface}"
-                    node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
+            platform = config.ENV_DATA.get("platform").lower()
+            if platform != constants.BAREMETAL_PLATFORM:
+                for node in worker_nodes:
+                    for interface in interfaces:
+                        ip_link_cmd = f"ip link set promisc on {interface}"
+                        node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
 
             if create_public_net:
                 logger.info("Creating Multus public network")
@@ -867,6 +869,7 @@ class Deployment(object):
                 public_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_public_net_mode"
                 )
+                public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
                 public_net_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="multus_public", delete=False
                 )
@@ -898,6 +901,7 @@ class Deployment(object):
                 cluster_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_cluster_net_mode"
                 )
+                cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
                 cluster_net_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="multus_public", delete=False
                 )
