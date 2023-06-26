@@ -616,10 +616,16 @@ def verify_provider_aws_volumes():
             osd_volume_data,
             "Name",
         )
-        log.info(f"Volume name: {volume_name}")
+        log.info(
+            f"Vefitying that {volume_name} name starts with cluster name "
+            "{config.ENV_DATA['cluster_name']} and ends with PV name"
+        )
         assert volume_name.endswith(
             osd_pvc_obj.backed_pv
         ), f"Volume name should end with {osd_pvc_obj.backed_pv}"
+        assert volume_name.startswith(
+            config.ENV_DATA["cluster_name"]
+        ), "Volume name should end with cluster name"
     mon_pvc_objs = get_all_pvc_objs(
         namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.MON_APP_LABEL,
