@@ -332,7 +332,7 @@ def verify_storageclient_storageclass_claims(storageclient):
 
     # Wait for the storageclassclaims to be in Ready state
     for sc_claim in sc_claim_objs:
-        for claim_info in TimeoutSampler(timeout=180, sleep=10, func=sc_claim.get):
+        for claim_info in TimeoutSampler(timeout=600, sleep=10, func=sc_claim.get):
             if claim_info.get("status", {}).get("phase") == constants.STATUS_READY:
                 log.info(
                     f"Storageclassclaim {sc_claim.name} associated with the storageclient {storageclient} is "
