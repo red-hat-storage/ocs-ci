@@ -321,3 +321,10 @@ class PvcUI(PageNavigator):
 
         logger.info("Click on Clone button")
         self.do_click(generic_locators["confirm_action"], enable_screenshot=True)
+
+    def shrivaibavi_func(self):
+        from selenium.webdriver.common.by import By
+
+        self.navigate_persistentvolumeclaims_page()
+        self.do_click(locator=(By.CSS_SELECTOR, 'button[data-test="Control Plane"]'))
+        self.sc_click()

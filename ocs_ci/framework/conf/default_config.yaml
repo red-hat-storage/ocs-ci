@@ -283,7 +283,7 @@ EXTERNAL_MODE:
 UI_SELENIUM:
   browser_type: "chrome"
   chrome_type: "google-chrome"
-  headless: True
+  headless: False
   screenshot: True
   ignore_ssl: True
 
