@@ -111,3 +111,56 @@ class TestLogBasedBucketReplication(MCGTest):
             target_bucket.name,
             timeout=self.TIMEOUT,
         ), "Deletion sync occurred despite being disabled."
+
+    @tier2
+    def test_patch_deletion_sync_to_existing_bucket(
+        self, awscli_pod_session, mcg_obj_session, bucket_factory
+    ):
+        """
+        Test patching deletion sync onto an existing bucket.
+        """
+
+        bucketclass_dict = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Single",
+                "namespacestore_dict": {constants.AWS_PLATFORM: [(1, "us-east-2")]},
+            },
+        }
+        target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
+        source_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
+
+        mockup_logger = MockupBucketLogger(
+            awscli_pod=awscli_pod_session,
+            mcg_obj=mcg_obj_session,
+            bucket_factory=bucket_factory,
+            platform=constants.AWS_PLATFORM,
+            region="us-east-2",
+        )
+        logs_bucket_name = mockup_logger.logs_bucket_uls_name
+
+        replication_policy = LogBasedReplicationPolicy(
+            destination_bucket=target_bucket.name,
+            sync_deletions=True,
+            logs_bucket=logs_bucket_name,
+        )
+
+        update_replication_policy(source_bucket.name, replication_policy.to_dict())
+
+        mockup_logger.upload_test_objs_and_log(source_bucket.name)
+
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=self.TIMEOUT,
+        ), f"Standard replication failed to complete in {self.TIMEOUT} seconds."
+
+        mockup_logger.delete_all_objects_and_log(source_bucket.name)
+
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=self.TIMEOUT * 2,
+        ), f"Deletion sync failed to complete in {self.TIMEOUT * 2} seconds."
