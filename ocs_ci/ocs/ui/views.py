@@ -33,6 +33,10 @@ login_4_11 = {
     "ocp_page": f"Overview · {azure_managed}Red Hat OpenShift",
     "login_page_title": "Log in · Red Hat OpenShift",
 }
+# Bug opened in Jira https://issues.redhat.com/browse/OCPBUGS-15419. Tmp solution to check locators
+login_4_14 = {
+    "ocp_page": "Cluster · Red Hat OpenShift",
+}
 
 deployment = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
@@ -1472,7 +1476,7 @@ topology = {
 
 locators = {
     "4.14": {
-        "login": {**login, **login_4_11},
+        "login": {**login, **login_4_11, **login_4_14},
         "page": {**page_nav, **page_nav_4_10},
         "generic": generic_locators,
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
