@@ -8,6 +8,7 @@ from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
+    ui,
 )
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
@@ -18,6 +19,7 @@ from ocs_ci.ocs.cluster import (
 log = logging.getLogger(__name__)
 
 
+@ui
 @tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.9")
