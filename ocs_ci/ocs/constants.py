@@ -854,6 +854,7 @@ DR_WORKLOAD_REPO_BASE_DIR = "ocs-workloads"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 DRPOLICY_STATUS = "Validated"
 RDR_REPLICATION_POLICY = "async"
+RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -1998,6 +1999,8 @@ PATCH_SPECIFIC_SOURCES_CMD = (
 )
 
 # Submariner constants
+SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"
+SUBMARINER_GATEWAY_ACTIVE_LABEL = "gateway.submariner.io/status=active"
 SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
 GLOBALNET_STATUS = "True"
 
