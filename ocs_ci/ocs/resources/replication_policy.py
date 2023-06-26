@@ -1,5 +1,4 @@
 import uuid
-from typing import Dict
 
 
 class ReplicationPolicy:
@@ -8,7 +7,7 @@ class ReplicationPolicy:
         self.destination_bucket = destination_bucket
         self.prefix = prefix
 
-    def to_dict(self) -> Dict[str, any]:
+    def to_dict(self):
         return {
             "rules": [
                 {
@@ -37,7 +36,7 @@ class LogBasedReplicationPolicy(ReplicationPolicy):
         self.logs_bucket = logs_bucket
         self.logs_location_prefix = logs_location_prefix
 
-    def to_dict(self) -> Dict[str, any]:
+    def to_dict(self):
         dict = super().to_dict()
         dict["rules"][0]["sync_deletions"] = self.sync_deletions
         dict["log_replication_info"] = {
