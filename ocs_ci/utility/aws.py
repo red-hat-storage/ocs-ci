@@ -435,7 +435,7 @@ class AWS(object):
         """
         tags = volume_data["Tags"]
         for tag in tags:
-            if tag["Key"] == constants.AWS_VOL_PVC_NAMESPACE:
+            if tag["Key"] == tag_name:
                 return tag["Value"]
         return None
 
