@@ -201,15 +201,24 @@ def get_root_ca_cert():
     return ssl_ca_cert
 
 
-def configure_custom_ingress_cert():
+def configure_custom_ingress_cert(
+    skip_tls_verify=False, wait_for_machineconfigpool=True
+):
     """
     Configure custom SSL certificate for ingress. If the certificate doesn't
     exists, generate new one signed by automatic certificate signing service.
+
+    Args:
+        skip_tls_verify (bool): True if allow skipping TLS verification
+        wait_for_machineconfigpool (bool): True if it should wait for machineConfigPool
 
     Raises:
         ConfigurationError: when some required parameter is not configured
 
     """
+    ignore_tls = ""
+    if skip_tls_verify:
+        ignore_tls = "--insecure-skip-tls-verify "
     logger.info("Configure custom ingress certificate")
     base_domain = config.ENV_DATA["base_domain"]
     cluster_name = config.ENV_DATA["cluster_name"]
@@ -247,29 +256,118 @@ def configure_custom_ingress_cert():
     ssl_ca_cert = get_root_ca_cert()
     if ssl_ca_cert:
         logger.debug(f"Configure '{ssl_ca_cert}' for proxy configuration object")
-        configure_trusted_ca_bundle(ssl_ca_cert)
+        configure_trusted_ca_bundle(ssl_ca_cert, skip_tls_verify=skip_tls_verify)
 
     logger.debug(f"Configuring '{ssl_key}' and '{ssl_cert}' for ingress")
     cmd = (
-        "oc create secret tls ocs-cert -n openshift-ingress "
+        f"oc create secret tls ocs-cert -n openshift-ingress {ignore_tls}"
         f"--cert={ssl_cert} --key={ssl_key}"
     )
     exec_cmd(cmd)
 
     cmd = (
-        "oc patch ingresscontroller.operator default -n openshift-ingress-operator "
+        f"oc patch ingresscontroller.operator default -n openshift-ingress-operator {ignore_tls}"
         '--type=merge -p \'{"spec":{"defaultCertificate": {"name": "ocs-cert"}}}\''
     )
     exec_cmd(cmd)
-    wait_for_machineconfigpool_status("all", timeout=1800)
+    if wait_for_machineconfigpool:
+        wait_for_machineconfigpool_status(
+            "all", timeout=1800, skip_tls_verify=skip_tls_verify
+        )
 
 
-def configure_trusted_ca_bundle(ca_cert_path):
+def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=True):
+    """
+    Configure custom SSL certificate for API. If the certificate doesn't
+    exists, generate new one signed by automatic certificate signing service.
+
+    Args:
+        skip_tls_verify (bool): True if allow skipping TLS verification
+        wait_for_machineconfigpool (bool): True if it should wait for machineConfigPool
+
+    Raises:
+        ConfigurationError: when some required parameter is not configured
+
+    """
+    ignore_tls = ""
+    if skip_tls_verify:
+        ignore_tls = "--insecure-skip-tls-verify "
+    logger.info("Configure custom API certificate")
+    base_domain = config.ENV_DATA["base_domain"]
+    cluster_name = config.ENV_DATA["cluster_name"]
+    api_domain = f"api.{cluster_name}.{base_domain}"
+
+    ssl_key = config.DEPLOYMENT.get("api_ssl_key")
+    ssl_cert = config.DEPLOYMENT.get("api_ssl_cert")
+
+    signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
+
+    if not (os.path.exists(ssl_key) and os.path.exists(ssl_cert)):
+        if not signing_service_url:
+            msg = (
+                "Custom certificate files for ingress doesn't exists and "
+                "`DEPLOYMENT['cert_signing_service_url']` is not defined. "
+                "Unable to generate custom Ingress certificate!"
+            )
+            logger.error(msg)
+            raise exceptions.ConfigurationError(msg)
+
+        logger.debug(
+            f"Files '{ssl_key}' and '{ssl_cert}' doesn't exist, generate certificate"
+        )
+        cert = OCSCertificate(
+            signing_service=signing_service_url,
+            cn=api_domain,
+            sans=[f"DNS:{api_domain}"],
+        )
+        logger.debug(f"Certificate key: {cert.key}")
+        logger.debug(f"Certificate: {cert.crt}")
+        cert.save_key(ssl_key)
+        cert.save_crt(ssl_cert)
+        logger.info(f"Certificate saved to '{ssl_cert}' and key to '{ssl_key}'")
+
+    logger.debug(f"Configuring '{ssl_key}' and '{ssl_cert}' for api")
+    cmd = (
+        f"oc create secret tls api-cert -n openshift-config {ignore_tls}"
+        f"--cert={ssl_cert} --key={ssl_key}"
+    )
+    exec_cmd(cmd)
+
+    cmd = (
+        f"oc patch apiserver cluster {ignore_tls}"
+        '--type=merge -p \'{"spec":{"servingCerts": {"namedCertificates": '
+        f'[{{"names": ["{api_domain}"], "servingCertificate": '
+        '{"name": "api-cert"}}]}}}\''
+    )
+    exec_cmd(cmd)
+    if wait_for_machineconfigpool:
+        wait_for_machineconfigpool_status(
+            "all", timeout=1800, skip_tls_verify=skip_tls_verify
+        )
+
+
+def configure_ingress_and_api_certificates(skip_tls_verify=False):
+    """
+    Configure custom SSL certificate for ingress and API.
+
+    Args:
+        skip_tls_verify (bool): True if allow skipping TLS verification
+
+    """
+    configure_custom_ingress_cert(skip_tls_verify, wait_for_machineconfigpool=False)
+    configure_custom_api_cert(skip_tls_verify, wait_for_machineconfigpool=False)
+    wait_for_machineconfigpool_status(
+        "all", timeout=3600, skip_tls_verify=skip_tls_verify
+    )
+
+
+def configure_trusted_ca_bundle(ca_cert_path, skip_tls_verify=False):
     """
     Configure cluster-wide trusted CA bundle in Proxy object
 
     Args:
         ca_cert_path (str): path to CA Certificate(s) bundle file
+        skip_tls_verify (bool): True if allow skipping TLS verification
 
     """
     ocs_ca_bundle_name = "ocs-ca-bundle"
@@ -280,20 +378,23 @@ def configure_trusted_ca_bundle(ca_cert_path):
         kind=constants.CONFIGMAP,
         namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
         resource_name=ocs_ca_bundle_name,
+        skip_tls_verify=skip_tls_verify,
     )
     if configmap_obj.is_exist():
         existing_ca_bundle = configmap_obj.get()["data"]["ca-bundle.crt"]
         with open(ca_cert_path, "a") as fd:
             fd.write(existing_ca_bundle)
         configmap_obj.delete(resource_name=ocs_ca_bundle_name, wait=True)
-
+    ignore_tls = ""
+    if skip_tls_verify:
+        ignore_tls = "--insecure-skip-tls-verify "
     cmd = (
-        f"oc create configmap {ocs_ca_bundle_name} -n openshift-config "
+        f"oc create configmap {ocs_ca_bundle_name} -n openshift-config {ignore_tls}"
         f"--from-file=ca-bundle.crt={ca_cert_path}"
     )
     exec_cmd(cmd)
     cmd = (
-        "oc patch proxy/cluster --type=merge "
+        f"oc patch proxy/cluster --type=merge {ignore_tls}"
         f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{ocs_ca_bundle_name}"}}}}}}\''
     )
     exec_cmd(cmd)

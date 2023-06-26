@@ -103,7 +103,10 @@ from ocs_ci.utility import (
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
-from ocs_ci.utility.ssl_certs import configure_custom_ingress_cert
+from ocs_ci.utility.ssl_certs import (
+    configure_custom_ingress_cert,
+    configure_custom_api_cert,
+)
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
@@ -523,8 +526,17 @@ class Deployment(object):
         """
         Function does post OCP deployment stuff we need to do.
         """
-        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
-            configure_custom_ingress_cert()
+        managed_azure = (
+            config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        # In the case of ARO deployment we are handling it much earlier in deployment
+        # itself as it's needed sooner.
+        if not managed_azure:
+            if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+                configure_custom_ingress_cert()
+            if config.DEPLOYMENT.get("use_custom_api_ssl_cert"):
+                configure_custom_api_cert()
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
@@ -2024,7 +2036,7 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     create_directory_path(icsp_file_dest_dir)
     cmd = (
-        f"oc image extract --registry-config {pull_secret_path} "
+        f"oc image extract --filter-by-os linux/amd64 --registry-config {pull_secret_path} "
         f"{image} --confirm "
         f"--path {icsp_file_location}:{icsp_file_dest_dir}"
     )

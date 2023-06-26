@@ -342,7 +342,10 @@ def create_custom_machineset(
                     raise ResourceNotFoundError("Machineset resource not found")
 
     # check for azure and IPI platform
-    elif config.ENV_DATA["platform"] == "azure":
+    elif (
+        config.ENV_DATA["platform"] == "azure"
+        and config.ENV_DATA["deployment_type"] != "managed"
+    ):
         machinesets_obj = OCP(
             kind=constants.MACHINESETS,
             namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE,
@@ -457,6 +460,17 @@ def create_custom_machineset(
                     return f"{cls_id}-{role}-{az_zone}"
                 else:
                     raise ResourceNotFoundError("Machineset resource not found")
+
+    # check for azure and ARO managed platform
+    elif (
+        config.ENV_DATA["platform"] == "azure"
+        and config.ENV_DATA["deployment_type"] == "managed"
+    ):
+        # TODO: we need to re-implement it for ARO as it differ from Azure IPI!
+        raise UnsupportedPlatformError(
+            "Functionality not supported in this platform, issue: "
+            "https://github.com/red-hat-storage/ocs-ci/issues/7247"
+        )
 
     # check for RHV and IPI platform
     elif config.ENV_DATA["platform"] == "rhv":
