@@ -17,6 +17,7 @@ ENV_DATA:
   multus_create_cluster_net: true
   multus_cluster_net_namespace: "default"
   multus_cluster_net_type: "ipvlan"
+  multus_cluster_net_mode: "l2"
 REPORTING:
   polarion:
     deployment_id: 'OCS-2510'
