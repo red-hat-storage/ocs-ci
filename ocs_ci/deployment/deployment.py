@@ -126,6 +126,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     load_auth_config,
     TimeoutSampler,
+    get_latest_acm_tag_unreleased,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2054,33 +2055,6 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
         wait_for_machineconfigpool_status("all")
 
     return icsp_file_dest_location
-
-
-def get_latest_acm_tag_unreleased(version):
-    """
-    Get Latest tag for acm unreleased image
-
-     Args:
-        version (str): version of acm for getting latest tag
-
-    Returns:
-        str: image tag for the specified version
-
-    Raises:
-        TagNotFoundException: When the given version is not found
-
-
-    """
-    response = requests.get(
-        "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/"
-    )
-    responce_data = response.json()
-    for data in responce_data["tags"]:
-        if version in data["name"] and "v" not in data["name"]:
-            logger.info(f"Found Image Tag {data['name']}")
-            return data["name"]
-
-    raise TagNotFoundException("Couldn't find given tag!")
 
 
 class RBDDRDeployOps(object):
