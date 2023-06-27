@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 import base64
 import yaml
+import requests
 
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 import boto3
@@ -50,6 +51,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
     MDRDeploymentException,
+    TagNotFoundException,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -1748,9 +1750,10 @@ class Deployment(object):
         run_cmd(f"oc create -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
-        image_tag = config.ENV_DATA.get(
-            "acm_unreleased_image", config.ENV_DATA.get("default_acm_unreleased_image")
-        )
+        image_tag = get_latest_acm_tag_unreleased(version=version)
+        if not image_tag:
+            raise TagNotFoundException("Couldn't find given tag!")
+
         with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
 
@@ -2052,6 +2055,26 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
 
     return icsp_file_dest_location
 
+
+def get_latest_acm_tag_unreleased(version):
+    """
+    Get Latest tag for acm unreleased image
+
+     Args:
+        version (str): version of acm for getting latest tag
+
+    Returns:
+        str: image tag for the specified version, False when no tag found
+
+
+    """
+    response = requests.get('https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/')
+    responce_data = response.json()
+    for data in responce_data['tags']:
+        if version in data['name'] and "v" not in data['name']:
+            return logger.info(data['name'])
+
+    return False
 
 class RBDDRDeployOps(object):
     """
