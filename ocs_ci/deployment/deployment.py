@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 import base64
 import yaml
-import requests
 
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 import boto3
@@ -51,7 +50,6 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
     MDRDeploymentException,
-    TagNotFoundException,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
