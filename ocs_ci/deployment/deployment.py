@@ -1750,7 +1750,9 @@ class Deployment(object):
         run_cmd(f"oc create -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
-        image_tag = get_latest_acm_tag_unreleased(version=version)
+        acm_version = config.ENV_DATA.get("acm_version")
+
+        image_tag = get_latest_acm_tag_unreleased(version=acm_version)
         if not image_tag:
             raise TagNotFoundException("Couldn't find given tag!")
 
