@@ -9,6 +9,8 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 from ocs_ci.ocs import machine, constants, ocp
+from ocs_ci.helpers.helpers import verify_only_ocs_nodes_in_storagecluster
+from ocs_ci.utility import version
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -45,6 +47,12 @@ class TestNodeReplacement(ManageTest):
             # Verify OSD encrypted
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
+
+            ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+            if ocs_version_semantic >= version.VERSION_4_13:
+                assert (
+                    verify_only_ocs_nodes_in_storagecluster
+                ), "Not only nodes with OCS label in storagecluster"
 
         request.addfinalizer(finalizer)
 

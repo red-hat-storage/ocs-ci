@@ -4219,3 +4219,25 @@ def disable_vm_network_for_duration(
     logger.info(f"Enabled network connectivity for virtual machine {ip}")
 
     return True
+
+
+def verify_only_ocs_nodes_in_storagecluster():
+    """
+    Verify only nodes with OCS label in storagecluster under nodeTopologies block
+
+    Returns:
+        bool: return True if storagecluster contain only nodes with OCS label
+
+    """
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+    from ocs_ci.ocs.node import get_ocs_nodes
+
+    storage_cluster_obj = get_storage_cluster()
+    nodes_storage_cluster = storage_cluster_obj.data["items"][0]["status"][
+        "nodeTopologies"
+    ]["labels"]["kubernetes.io/hostname"]
+    ocs_node_objs = get_ocs_nodes()
+    ocs_node_names = []
+    for node_obj in ocs_node_objs:
+        ocs_node_names.append(node_obj.name)
+    return ocs_node_names.sort() == nodes_storage_cluster.sort()

@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
+from ocs_ci.utility import version
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
@@ -22,7 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ms_consumer,
     brown_squad,
 )
-
+from ocs_ci.helpers.helpers import verify_only_ocs_nodes_in_storagecluster
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -283,6 +284,12 @@ class TestNodeReplacement(ManageTest):
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=1800
         ), "Data re-balance failed to complete"
+
+        ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        if ocs_version_semantic >= version.VERSION_4_13:
+            assert (
+                verify_only_ocs_nodes_in_storagecluster
+            ), "Not only nodes with OCS label in storagecluster"
 
 
 @tier4a
