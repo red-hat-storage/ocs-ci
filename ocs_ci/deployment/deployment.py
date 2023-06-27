@@ -2076,7 +2076,7 @@ def get_latest_acm_tag_unreleased(version):
     responce_data = response.json()
     for data in responce_data["tags"]:
         if version in data["name"] and "v" not in data["name"]:
-            return logger.info(data["name"])
+            return data["name"]
 
     return False
 
