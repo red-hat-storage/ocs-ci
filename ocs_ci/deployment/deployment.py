@@ -1753,8 +1753,6 @@ class Deployment(object):
         acm_version = config.ENV_DATA.get("acm_version")
 
         image_tag = get_latest_acm_tag_unreleased(version=acm_version)
-        if not image_tag:
-            raise TagNotFoundException("Couldn't find given tag!")
 
         with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
@@ -2066,7 +2064,10 @@ def get_latest_acm_tag_unreleased(version):
         version (str): version of acm for getting latest tag
 
     Returns:
-        str: image tag for the specified version, False when no tag found
+        str: image tag for the specified version
+
+    Raises:
+        TagNotFoundException: When the given version is not found
 
 
     """
@@ -2076,9 +2077,10 @@ def get_latest_acm_tag_unreleased(version):
     responce_data = response.json()
     for data in responce_data["tags"]:
         if version in data["name"] and "v" not in data["name"]:
+            logger.info(f"Found Image Tag {data['name']}")
             return data["name"]
 
-    return False
+    raise TagNotFoundException("Couldn't find given tag!")
 
 
 class RBDDRDeployOps(object):
