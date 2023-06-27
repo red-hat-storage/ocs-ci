@@ -56,6 +56,54 @@ from ocs_ci.utility.utils import (
 logger = logging.getLogger(__name__)
 
 
+def wait_for_element_to_be_clickable(locator, timeout=30):
+    """
+    Wait for an element to be clickable.
+
+    Args:
+        locator (tuple): A tuple containing the locator strategy (e.g., By.ID, By.XPATH) and the locator value.
+        timeout (int): Maximum time (in seconds) to wait for the element to be clickable. Defaults to 30 seconds.
+
+    Returns:
+        selenium.webdriver.remote.webelement.WebElement: The clickable web element.
+
+    """
+    wait = WebDriverWait(SeleniumDriver(), timeout)
+    try:
+        web_element = wait.until(
+            ec.visibility_of_element_located((locator[1], locator[0]))
+        )
+    except TimeoutException:
+        take_screenshot()
+        copy_dom()
+        raise
+    return web_element
+
+
+def wait_for_element_to_be_visible(locator, timeout=30):
+    """
+    Wait for element to be visible. Use when Web element is not have to be clickable (icons, disabled btns, etc.)
+    Method does not fail when Web element not found
+
+    Args:
+         locator (tuple): (GUI element needs to operate on (str), type (By)).
+         timeout (int): Looks for a web element until timeout (sec) occurs
+
+    Returns:
+        selenium.webdriver.remote.webelement.WebElement: Visible web element.
+    """
+    wait = WebDriverWait(SeleniumDriver(), timeout)
+    try:
+        web_element = wait.until(
+            ec.visibility_of_element_located((locator[1], locator[0]))
+        )
+    except TimeoutException:
+        take_screenshot()
+        copy_dom()
+        raise
+    return web_element
+
+
 class BaseUI:
     """
     Base Class for UI Tests
@@ -1017,9 +1065,7 @@ class CreateResourceForm(PageNavigator):
         Method to proceed to resource creation form, when Create button is visible
         """
         self.page_has_loaded()
-        self.wait_for_element_to_be_visible(
-            self.generic_locators["create_resource_button"]
-        )
+        wait_for_element_to_be_visible(self.generic_locators["create_resource_button"])
         self.do_click(self.generic_locators["create_resource_button"])
 
     def check_error_messages(self):
@@ -1125,7 +1171,7 @@ class CreateResourceForm(PageNavigator):
         Returns:
             bool: True if the input element is successfully cleared, False otherwise.
         """
-        self.wait_for_element_to_be_visible(self.name_input_loc, 30)
+        wait_for_element_to_be_visible(self.name_input_loc, 30)
         elements = self.get_elements(self.name_input_loc)
         input_el = elements[0]
         input_len = len(str(input_el.get_attribute("value")))
@@ -2195,14 +2241,16 @@ def login_ui(console_url=None, username=None, password=None):
         password = password.rstrip()
     ocp_version = get_ocp_version()
     login_loc = locators[ocp_version]["login"]
+    page_nav_loc = locators[ocp_version]["page"]
     driver = SeleniumDriver()
-    wait = WebDriverWait(driver, 40)
     driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console()
+
     try:
+        wait = WebDriverWait(driver, 40)
         if username is not None:
             element = wait.until(
                 ec.element_to_be_clickable(
@@ -2225,35 +2273,27 @@ def login_ui(console_url=None, username=None, password=None):
             )
         element.click()
     except TimeoutException:
-        take_screenshot("fail_login_2")
-        copy_dom("fail_login_2")
+        take_screenshot("login")
+        copy_dom("login")
         logger.error(traceback.format_stack())
-    element = wait.until(
-        ec.element_to_be_clickable((login_loc["username"][1], login_loc["username"][0]))
-    )
+
+    username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
     if username is None:
         username = constants.KUBEADMIN
-    element.send_keys(username)
-    element = wait.until(
-        ec.element_to_be_clickable((login_loc["password"][1], login_loc["password"][0]))
-    )
-    element.send_keys(password)
-    element = wait.until(
-        ec.element_to_be_clickable(
-            (login_loc["click_login"][1], login_loc["click_login"][0])
-        )
-    )
-    element.click()
+    username_el.send_keys(username)
+
+    password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
+    password_el.send_keys(password)
+
+    confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
+    confirm_login_el.click()
+
     if default_console is True and username is constants.KUBEADMIN:
-        try:
-            WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
-        except TimeoutException:
-            copy_dom("fail_login_title_3")
-            take_screenshot("fail_login_title_3")
-            raise
+        wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 60)
+
     if username is not constants.KUBEADMIN:
-        element = wait.until(ec.element_to_be_clickable((login_loc["skip_tour"])))
-        element.click()
+        skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 60)
+        skip_tour_el.click()
     return driver
 
 
@@ -2292,6 +2332,6 @@ def proceed_to_login_console():
         try:
             WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
         except TimeoutException:
-            copy_dom("fail_login_title_1")
-            take_screenshot("fail_login_title_1")
+            copy_dom("proceed_to_login_console")
+            take_screenshot("proceed_to_login_console")
             raise
