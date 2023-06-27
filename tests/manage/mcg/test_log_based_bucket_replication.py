@@ -13,11 +13,16 @@ from ocs_ci.ocs import constants
 
 from ocs_ci.framework.testlib import (
     skipif_aws_creds_are_missing,
+    skipif_vsphere_ipi,
+    ignore_leftover_label,
     tier1,
     tier2,
     tier3,
+    tier4b,
 )
+from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
 from ocs_ci.ocs.resources.replication_policy import LogBasedReplicationPolicy
+from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +76,7 @@ def log_based_replication_setup(awscli_pod_session, mcg_obj_session, bucket_fact
     return mockup_logger, source_bucket, target_bucket
 
 
+@ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
 @skipif_aws_creds_are_missing
 class TestLogBasedBucketReplication(MCGTest):
     """
@@ -211,7 +217,7 @@ class TestLogBasedBucketReplication(MCGTest):
             mcg_obj_session,
             source_bucket.name,
             target_bucket.name,
-            timeout=self.TIMEOUT * 2,
+            timeout=self.TIMEOUT * 2,  # Deletion sync takes longer in this scenario
         ), f"Deletion sync failed to complete in {self.TIMEOUT * 2} seconds"
 
     @tier3
@@ -232,7 +238,11 @@ class TestLogBasedBucketReplication(MCGTest):
         mockup_logger.upload_arbitrary_object_and_log(source_bucket.name)
         mockup_logger.delete_all_objects_and_log(source_bucket.name)
 
-        # Comparing the objects immediately will always pass because both of the buckets are initially empty
+        # Comparing the buckets immediately will almost always pass because
+        # both buckets should be empty at this point. The source bucket has
+        # just been emptied, and potential replication to the target bucket
+        # probably didn't start yet.
+        # The waiting time also has to account for potential deletion sync.
         logger.info(
             "Waiting for potential replications and deletions before comparing the contents of the buckets"
         )
@@ -244,3 +254,66 @@ class TestLogBasedBucketReplication(MCGTest):
             target_bucket.name,
             timeout=self.TIMEOUT,
         ), f"Target and source buckets do not match after {self.TIMEOUT} seconds"
+
+    _nodes_tested = []
+
+    @tier4b
+    @skipif_vsphere_ipi
+    @pytest.mark.parametrize("target_pod_name", ["noobaa-db", "noobaa-core"])
+    def test_deletion_sync_after_node_restart(
+        self, mcg_obj_session, log_based_replication_setup, target_pod_name
+    ):
+        """
+        Test deletion sync behavior after a node restart.
+
+        1. Check if the node that the target pode is located on has already passed this test with a previous param
+            1.1 If it has, skip the rest of the test and pass
+        2. Upload a set of objects to the source bucket
+        3. Wait for the objects to be replicated to the target bucket
+        4. Restart the node that the source bucket is located on
+        5. Delete all objects from the source bucket
+        6. Verify that the objects are deleted from the target bucket
+
+        """
+        mockup_logger, source_bucket, target_bucket = log_based_replication_setup
+
+        # Skip the rest of the test and pass if the target pod's node
+        # was already reset with a previous passing parametrization of this test
+        logger.info(
+            f"Checking if {target_pod_name}'s node has already passed this test with a previous param"
+        )
+        target_pod = [
+            pods for pods in get_noobaa_pods() if target_pod_name in pods.name
+        ][0]
+        target_node_name = get_pod_node(target_pod).name
+        if target_node_name in self._nodes_tested:
+            logger.info(
+                f"Skipping the rest of the test because {target_pod_name}'s node has already passed this test"
+            )
+            return
+
+        logger.info(f"{target_pod_name}'s node has not passed this test yet")
+
+        logger.info("Uploading test objects and waiting for replication to complete")
+        mockup_logger.upload_test_objs_and_log(source_bucket.name)
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=self.TIMEOUT,
+        ), f"Standard replication failed to complete in {self.TIMEOUT} seconds"
+
+        logger.info(f"Restarting {target_pod_name}'s node")
+        noobaa_running_node_restart(pod_name=target_pod_name)
+
+        logger.info("Deleting source objects and checking deletion sync with target")
+        mockup_logger.delete_all_objects_and_log(source_bucket.name)
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=self.TIMEOUT,
+        ), f"Deletion sync failed to complete in {self.TIMEOUT} seconds"
+
+        # Keep tack of the target node to prevent its redundant testing in this scenario
+        self._nodes_tested.append(target_node_name)
