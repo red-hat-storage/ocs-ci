@@ -1,5 +1,6 @@
 import pytest
 import logging
+from time import sleep
 
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.bucket_utils import (
@@ -10,7 +11,12 @@ from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 
 from ocs_ci.ocs import constants
 
-from ocs_ci.framework.testlib import skipif_aws_creds_are_missing, tier1, tier2
+from ocs_ci.framework.testlib import (
+    skipif_aws_creds_are_missing,
+    tier1,
+    tier2,
+    tier3,
+)
 from ocs_ci.ocs.resources.replication_policy import LogBasedReplicationPolicy
 
 logger = logging.getLogger(__name__)
@@ -207,3 +213,34 @@ class TestLogBasedBucketReplication(MCGTest):
             target_bucket.name,
             timeout=self.TIMEOUT * 2,
         ), f"Deletion sync failed to complete in {self.TIMEOUT * 2} seconds"
+
+    @tier3
+    def test_deletion_sync_after_instant_deletion(
+        self, mcg_obj_session, log_based_replication_setup
+    ):
+        """
+        Test deletion sync behavior when an object is immediately deleted after being uploaded to the source bucket.
+
+        1. Upload an object to the source bucket
+        2. Delete the object from the source bucket
+        3. Wait for potential replications and deletions
+        4. Verify that the source and target buckets are in sync
+
+        """
+        mockup_logger, source_bucket, target_bucket = log_based_replication_setup
+
+        mockup_logger.upload_arbitrary_object_and_log(source_bucket.name)
+        mockup_logger.delete_all_objects_and_log(source_bucket.name)
+
+        # Comparing the objects immediately will always pass because both of the buckets are initially empty
+        logger.info(
+            "Waiting for potential replications and deletions before comparing the contents of the buckets"
+        )
+        sleep(self.TIMEOUT)
+
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=self.TIMEOUT,
+        ), f"Target and source buckets do not match after {self.TIMEOUT} seconds"
