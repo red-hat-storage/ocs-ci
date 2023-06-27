@@ -2068,13 +2068,16 @@ def get_latest_acm_tag_unreleased(version):
 
 
     """
-    response = requests.get('https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/')
+    response = requests.get(
+        "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/"
+    )
     responce_data = response.json()
-    for data in responce_data['tags']:
-        if version in data['name'] and "v" not in data['name']:
-            return logger.info(data['name'])
+    for data in responce_data["tags"]:
+        if version in data["name"] and "v" not in data["name"]:
+            return logger.info(data["name"])
 
     return False
+
 
 class RBDDRDeployOps(object):
     """
