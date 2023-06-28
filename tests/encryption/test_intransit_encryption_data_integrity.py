@@ -34,6 +34,7 @@ class TestDataIntegrityWithInTransitEncryption:
 
     @tier1
     @skipif_ocs_version("<4.13")
+    @pytest.mark.polarion_id("OCS-4920")
     def test_data_integrity_with_intransit_encryption(self, pvc_factory, pod_factory):
         """
         Test data integrity with in-transit encryption.
@@ -50,12 +51,16 @@ class TestDataIntegrityWithInTransitEncryption:
         """
         if not get_in_transit_encryption_config_state():
             if config.ENV_DATA.get("in_transit_encryption"):
-                pytest.fail("In-transit encryption is not enabled on the setup")
+                pytest.fail(
+                    "In-transit encryption is not enabled on the setup while it was supposed to be."
+                )
             else:
                 set_in_transit_encryption()
 
         log.info("Verifying the in-transit encryption is enable on setup.")
-        assert in_transit_encryption_verification()
+        assert (
+            in_transit_encryption_verification()
+        ), "In transit encryption verification failed."
 
         pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, status=STATUS_BOUND)
         pod_obj = pod_factory(interface=CEPHBLOCKPOOL, pvc=pvc_obj)
@@ -77,7 +82,10 @@ class TestDataIntegrityWithInTransitEncryption:
         # Disable in-transit encryption for 10 seconds.
         log.info("IO thread started. Disabling in-transit encryption for 10 seconds...")
         set_in_transit_encryption(enabled=False)
+
+        # Sleeping for 10 seconds to allow some IO workload to occur in the in-transit encryption disabled state.
         time.sleep(10)
+
         set_in_transit_encryption()
 
         # Wait for IO thread to finish
