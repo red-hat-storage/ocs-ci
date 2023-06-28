@@ -21,7 +21,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
 )
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
-from ocs_ci.ocs.resources.replication_policy import LogBasedReplicationPolicy
+from ocs_ci.ocs.resources.mcg_replication_policy import LogBasedReplicationPolicy
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)

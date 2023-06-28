@@ -1,7 +1,14 @@
 import uuid
 
 
-class ReplicationPolicy:
+class McgReplicationPolicy:
+    """
+    A class representing an MCG bucket replication policy.
+
+    This class handles the parsing of the relevant parameters to a dictionary that matches the expected JSON structure.
+
+    """
+
     def __init__(self, destination_bucket, prefix=""):
         self.rule_id = f"replication-rule-{uuid.uuid4().hex}"
         self.destination_bucket = destination_bucket
@@ -22,7 +29,12 @@ class ReplicationPolicy:
         return str(self.to_dict())
 
 
-class LogBasedReplicationPolicy(ReplicationPolicy):
+class LogBasedReplicationPolicy(McgReplicationPolicy):
+    """
+    A subclass of ReplicationPolicy that includes log-based replication information.
+
+    """
+
     def __init__(
         self,
         destination_bucket,
