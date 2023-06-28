@@ -475,7 +475,7 @@ class AWS(object):
         Raises:
             UnexpectedAttributeValue if the actual value differs from the expected one
         """
-        volume_data = self.get_volume_data(osd_volume_id)
+        volume_data = self.get_volume_data(volume_id)
         volume_name = self.get_volume_tag_value(
             volume_data,
             "Name",

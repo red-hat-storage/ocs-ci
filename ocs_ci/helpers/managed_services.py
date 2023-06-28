@@ -595,7 +595,7 @@ def verify_provider_aws_volumes():
             constants.AWS_VOL_PVC_NAME_TAG, osd_pvc_obj.name
         )[0]["id"]
         log.info(f"AWS volume id: {osd_volume_id}")
-        check_volume_attributes(
+        aws_obj.check_volume_attributes(
             volume_id=osd_volume_id,
             name_end=osd_pvc_obj.backed_pv,
             size=constants.AWS_VOL_OSD_SIZE,
@@ -615,7 +615,7 @@ def verify_provider_aws_volumes():
             constants.AWS_VOL_PV_NAME_TAG, mon_pvc_obj.backed_pv
         )[0]["id"]
         log.info(f"AWS volume id: {mon_volume_id}")
-        check_volume_attributes(
+        aws_obj.check_volume_attributes(
             volume_id=mon_volume_id,
             name_end=mon_pvc_obj.backed_pv,
             size=constants.AWS_VOL_MON_SIZE,
