@@ -67,7 +67,7 @@ class BlockPoolUI(PageNavigator):
         self.navigate_block_pool_page()
         self.page_has_loaded()
         pool_existence = self.wait_until_expected_text_is_found(
-            (f"a[data-test-operand-link={pool_name}]", By.CSS_SELECTOR), pool_name, 5
+            (f"a[data-test={pool_name}]", By.CSS_SELECTOR), pool_name, 5
         )
         logger.info(f"Pool name {pool_name} existence is {pool_existence}")
         return pool_existence
@@ -165,3 +165,180 @@ class BlockPoolUI(PageNavigator):
                     raise PoolStateIsUnknow(
                         f"pool {pool_name} is in unexpected state {pool_state}"
                     )
+
+    def check_pool_status(self, pool_name):
+        """
+        Check the status of the pool
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            str: status of the pool
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        pool_status = self.get_element_text(self.validation_loc["blockpool_status"])
+        logger.info(f"Pool name {pool_name} current status is {pool_status}")
+        return pool_status
+
+    def check_pool_volume_type(self, pool_name):
+        """
+        Check the volume type of the pool
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            str: Volume type of pool if set otherwise
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        pool_volume_type = self.get_element_text(self.bp_loc["block_pool_volume_type"])
+        logger.info(f"Pool name {pool_name} existence is {pool_volume_type}")
+        return pool_volume_type
+
+    def check_pool_replicas(self, pool_name):
+        """
+        Check the number of replicas for the pool
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            int: Number of replicas for the pool
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        block_pool_replica = self.get_element_text(self.bp_loc["block_pool_replica"])
+        logger.info(f"Pool name {pool_name} existence is {block_pool_replica}")
+        return int(block_pool_replica)
+
+    def check_pool_used_capacity(self, pool_name):
+        """
+        Check the total used capacity of the blockpool
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            str: The total used capacity of the blockpool
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        block_pool_used_capacity = self.get_element_text(
+            self.bp_loc["block_pool_used_capacity"]
+        )
+        logger.info(
+            f"Pool name {pool_name} used capacity is {block_pool_used_capacity}"
+        )
+        return block_pool_used_capacity
+
+    def check_pool_avail_capacity(self, pool_name):
+        """
+        Check the available capacity of the blockpool
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            str: The total available capacity of blockpool
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        blockpool_avail_capacity = self.get_element_text(
+            self.bp_loc["blockpool_avail_capacity"]
+        )
+        logger.info(f"Pool name {pool_name} existence is {blockpool_avail_capacity}")
+        return blockpool_avail_capacity
+
+    def check_pool_compression_status(self, pool_name):
+        """
+        Check what is the status of pool compression
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            bool: True if pool is in the Enabled, otherwise False
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        blockpool_compression_status = self.get_element_text(
+            self.bp_loc["blockpool_compression_status"]
+        )
+        logger.info(
+            f"Pool name {pool_name} existence is {blockpool_compression_status}"
+        )
+        if blockpool_compression_status == "Enabled":
+            return True
+        return False
+
+    def check_pool_compression_ratio(self, pool_name):
+        """
+        Check the blockpool compression ratio
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            str: Compression ratio of blockpool
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        blockpool_compression_ratio = self.get_element_text(
+            self.bp_loc["blockpool_compression_ratio"]
+        )
+        logger.info(
+            f"Pool name {blockpool_compression_ratio} existence is {blockpool_compression_ratio}"
+        )
+        return blockpool_compression_ratio
+
+    def check_pool_compression_eligibility(self, pool_name):
+        """
+        Check the pool the percentage of incoming data that is compressible
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            str: percentage of incoming compressible data
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        blockpool_compression_eligibility = self.get_element_text(
+            self.bp_loc["blockpool_compression_eligibility"]
+        )
+        logger.info(
+            f"Pool name {pool_name} existence is {blockpool_compression_eligibility}"
+        )
+        return blockpool_compression_eligibility
+
+    def check_pool_compression_savings(self, pool_name):
+        """
+        Check the total savings gained from compression for this pool, including replicas
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            str: The total savings gained from compression for this pool, including replicas
+
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        blockpool_compression_savings = self.get_element_text(
+            self.bp_loc["blockpool_compression_savings"]
+        )
+        logger.info(
+            f"Pool name {pool_name} existence is {blockpool_compression_savings}"
+        )
+        return blockpool_compression_savings
