@@ -4298,8 +4298,13 @@ def get_latest_acm_tag_unreleased(version):
 
 
     """
+    params = {
+        "onlyActiveTags": "true",
+        "limit": "100",
+    }
     response = requests.get(
-        "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/"
+        "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/",
+        params=params,
     )
     responce_data = response.json()
     for data in responce_data["tags"]:
@@ -4307,4 +4312,4 @@ def get_latest_acm_tag_unreleased(version):
             log.info(f"Found Image Tag {data['name']}")
             return data["name"]
 
-    raise TagNotFoundException("Couldn't find given tag!")
+    raise TagNotFoundException("Couldn't find given ACM tag!")
