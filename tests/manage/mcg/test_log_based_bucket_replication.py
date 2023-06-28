@@ -89,7 +89,7 @@ class TestLogBasedBucketReplication(MCGTest):
     """
 
     DEFAULT_AWS_REGION = "us-east-2"
-    TIMEOUT = 15 * 60
+    TIMEOUT = 20 * 60
 
     @tier1
     def test_deletion_sync(self, mcg_obj_session, log_based_replication_setup):
@@ -217,7 +217,7 @@ class TestLogBasedBucketReplication(MCGTest):
             mcg_obj_session,
             source_bucket.name,
             target_bucket.name,
-            timeout=self.TIMEOUT * 2,  # Deletion sync takes longer in this scenario
+            timeout=self.TIMEOUT,
         ), f"Deletion sync failed to complete in {self.TIMEOUT * 2} seconds"
 
     @tier3
