@@ -618,7 +618,3 @@ class TerrafromFileNotFoundException(Exception):
 
 class IncorrectUIOptionRequested(Exception):
     pass
-
-
-class UnexpectedAttributeValue(Exception):
-    pass

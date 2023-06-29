@@ -473,7 +473,7 @@ class AWS(object):
             namespace(str): expected value of kubernetes.io/created-for/pvc/namespace tag
 
         Raises:
-            UnexpectedAttributeValue if the actual value differs from the expected one
+            ValueError if the actual value differs from the expected one
         """
         volume_data = self.get_volume_data(volume_id)
         volume_name = self.get_volume_tag_value(
@@ -484,31 +484,29 @@ class AWS(object):
             f"Verifying that volume name {volume_name} starts with cluster name"
         )
         if not volume_name.startswith(config.ENV_DATA["cluster_name"]):
-            raise exceptions.UnexpectedAttributeValue(
+            raise ValueError(
                 f"Volume name should start with cluster name {config.ENV_DATA['cluster_name']}"
             )
         if name_end:
             logger.info(f"Verifying that volume name ends with {name_end}")
             if not volume_name.endswith(name_end):
-                raise exceptions.UnexpectedAttributeValue(
-                    f"Volume name should end with {name_end}"
-                )
+                raise ValueError(f"Volume name should end with {name_end}")
         if size:
             logger.info(f"Verifying that volume size is {size}")
             if volume_data["Size"] != size:
-                raise exceptions.UnexpectedAttributeValue(
+                raise ValueError(
                     f"Volume size should be {size} but it's {volume_data['Size']}"
                 )
         if iops:
             logger.info(f"Verifying that volume IOPS is {iops}")
             if volume_data["Iops"] != iops:
-                raise exceptions.UnexpectedAttributeValue(
+                raise ValueError(
                     f"Volume IOPS should be {iops} but it's {volume_data['Iops']}"
                 )
         if throughput:
             logger.info(f"Verifying that volume throughput is {throughput}")
             if volume_data["Throughput"] != throughput:
-                raise exceptions.UnexpectedAttributeValue(
+                raise ValueError(
                     f"Volume size should be {throughput} but it's {volume_data['Throughput']}"
                 )
         if namespace:
@@ -518,7 +516,7 @@ class AWS(object):
                 constants.AWS_VOL_PVC_NAMESPACE,
             )
             if volume_namespace != namespace:
-                raise exceptions.UnexpectedAttributeValue(
+                raise ValueError(
                     "Namespace in kubernetes.io/created-for/pvc/namespace tag "
                     f"should be {namespace} but it's {volume_namespace}"
                 )
