@@ -1621,7 +1621,7 @@ class TopologySidebar(BaseUI):
             read_canvas_alerts (bool, optional): Whether to read alerts from the canvas (default: False).
 
         Returns:
-            (bool): if the node down alert visible in Alerts tab of the Topology
+            bool: if the node down alert visible in Alerts tab of the Topology
         """
         alerts_dict = self.read_alerts_procedure(entity, read_canvas_alerts)
         return (
@@ -1942,7 +1942,7 @@ class AbstractTopologyView(ABC, TopologySidebar):
             This method is primarily used internally after reading the Topology.
 
         Returns:
-            (str): status of entity if the node was found
+            str: status of entity if the node was found
         """
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
