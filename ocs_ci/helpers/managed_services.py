@@ -423,6 +423,7 @@ def verify_faas_provider_resources():
     9. Check managedFusionOffering release, usableCapacityInTiB and onboardingValidationKey
     10. Verify the version of Prometheus
     11. Verify aws volumes
+    12. Verify configmaps
 
     """
     # Verify CSV phase
@@ -575,6 +576,27 @@ def verify_faas_provider_resources():
     )
     # Verify aws volumes
     verify_provider_aws_volumes()
+
+    # Verify configmaps
+    configmaps_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    configmap_names = [
+        constants.ROOK_CEPH_MON_ENDPOINTS,
+        constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
+        constants.ROOK_OPERATOR_CONFIGMAP,
+        constants.ROOK_CEPH_CSI_CONFIG,
+        constants.PDBSTATEMAP,
+        constants.CSI_MAPPING_CONFIG,
+        constants.OCS_OPERATOR_CONFIG,
+        constants.METRICS_EXPORTER_CONF,
+    ]
+    for configmap_name in configmap_names:
+        log.info(f"Verifying existence of {configmap_name} config map")
+        assert configmaps_obj.is_exist(
+            resource_name=configmap_name
+        ), f"Configmap {conifgmap_name} does not exist in the cluster namespace"
 
 
 def verify_provider_aws_volumes():
