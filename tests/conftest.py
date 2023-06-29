@@ -1474,9 +1474,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 ceph_add_cmd = (
                     "ceph config set osd osd_mclock_profile high_recovery_ops"
                 )
-                ceph_remove_cmd = (
-                    "ceph config set osd osd_mclock_profile balanced"
-                )
+                ceph_remove_cmd = "ceph config set osd osd_mclock_profile balanced"
                 if not (
                     teardown
                     or skip_ocs_deployment
