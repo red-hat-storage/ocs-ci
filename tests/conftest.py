@@ -1470,7 +1470,6 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 teardown = config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
                 ceph_cluster_installed = config.RUN.get("cephcluster")
-                ct_pod = get_ceph_tools_pod()
                 ceph_add_cmd = (
                     "ceph config set osd osd_mclock_profile high_recovery_ops"
                 )
@@ -1481,6 +1480,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
+                    ct_pod = get_ceph_tools_pod()
                     ceph_health_retry = False
                     log.info("Adding Faster recovery profile")
                     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_add_cmd)
@@ -1506,6 +1506,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 # for next test
                 ceph_health_check()
                 log.info("Removing Faster recovery profile")
+                ct_pod = get_ceph_tools_pod()
                 ct_pod.exec_ceph_cmd(ceph_cmd=ceph_remove_cmd)
                 raise
 
