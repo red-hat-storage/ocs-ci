@@ -211,8 +211,10 @@ generic_locators = {
     ),
     "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
     "confirm_action": (
-        'button[id="confirm-action"],button[data-test="delete-action"]',
-        By.CSS_SELECTOR,
+        '//button[normalize-space()="Delete"] | '
+        '//button[@id="confirm-action"] | '
+        '//button[@data-test="delete-action"]',
+        By.XPATH,
     ),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
