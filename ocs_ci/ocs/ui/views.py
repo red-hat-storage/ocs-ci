@@ -21,7 +21,7 @@ login = {
         'a[title="Log in with my_htpasswd_provider"]',
         By.CSS_SELECTOR,
     ),
-    "skip_tour": (By.CSS_SELECTOR, 'button[data-test="tour-step-footer-secondary"]'),
+    "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),
 }
 azure_managed = ""
 if (
