@@ -596,7 +596,7 @@ def verify_faas_provider_resources():
         log.info(f"Verifying existence of {configmap_name} config map")
         assert configmaps_obj.is_exist(
             resource_name=configmap_name
-        ), f"Configmap {conifgmap_name} does not exist in the cluster namespace"
+        ), f"Configmap {configmap_name} does not exist in the cluster namespace"
 
 
 def verify_provider_aws_volumes():
