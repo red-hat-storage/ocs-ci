@@ -284,6 +284,11 @@ kms_config_required = pytest.mark.skipif(
     reason="KMS config not found in auth.yaml",
 )
 
+external_mode_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("external_mode") is not True,
+    reason="Test will run on External Mode cluster only",
+)
+
 skipif_aws_i3 = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "aws"
     and config.DEPLOYMENT.get("local_storage") is True,

@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier3,
     bugzilla,
+    skipif_ocs_version,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @black_squad
 @skipif_ibm_cloud_managed
 @skipif_managed_service
+@skipif_ocs_version("<4.13")
 class TestErrorMessageImprovements(ManageTest):
     @bugzilla("2193109")
     @polarion_id("OCS-4865")
