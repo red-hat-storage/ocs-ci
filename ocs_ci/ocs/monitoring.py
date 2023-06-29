@@ -299,3 +299,92 @@ def check_if_monitoring_stack_exists():
     else:
         logger.info("Monitoring stack is not configured on the cluster")
         return False
+
+
+def get_ceph_capacity_metrics():
+    """
+    Get CEPH capacity breakdown data from Prometheus, return all response texts collected to a dict
+    Use the queries from ceph-storage repo:
+    https://github.com/red-hat-storage/odf-console/blob/master/packages/ocs/queries/ceph-storage.ts
+
+    To get the data use format similar to:
+        data.get('PROJECTS_TOTAL_USED').get('data').get('result')[0].get('value')
+
+    Returns:
+        dict: A dictionary containing the CEPH capacity breakdown data
+    """
+    api = ocs_ci.utility.prometheus.PrometheusAPI()
+
+    ceph_capacity = {}
+    logger.info("Get CEPH capacity breakdown data from Prometheus")
+
+    def get_prometheus_response(query) -> dict:
+        """
+        Get the response from Prometheus based on the provided query
+
+        Args:
+            query (str): The Prometheus query string
+
+        Returns:
+            dict: A dictionary representing the parsed JSON response from Prometheus
+        """
+        resp = api.get("query", payload={"query": query})
+        if resp.ok:
+            logger.debug(query)
+            logger.debug(resp.text)
+            return json.loads(resp.text)
+
+    # use get_prometheus_response to store the response text to a dict
+    ceph_capacity["PROJECTS_TOTAL_USED"] = get_prometheus_response(
+        "sum(sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
+        "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
+        "on (storageclass)  group_left(provisioner) "
+        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
+        "by (namespace))"
+    )
+    ceph_capacity["STORAGE_CLASSES_BY_USED"] = get_prometheus_response(
+        "sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
+        "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
+        "on (storageclass) group_left(provisioner) "
+        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
+        "by (storageclass, provisioner)"
+    )
+    ceph_capacity["STORAGE_CLASSES_TOTAL_USED"] = get_prometheus_response(
+        "sum(sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
+        "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
+        "on (storageclass) group_left(provisioner) "
+        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
+        "by (storageclass, provisioner))"
+    )
+    ceph_capacity["PODS_BY_USED"] = get_prometheus_response(
+        "sum by(namespace,pod) (((max by(namespace,persistentvolumeclaim) (kubelet_volume_stats_used_bytes)) * "
+        "on (namespace,persistentvolumeclaim) group_right() ((kube_running_pod_ready*0+1) * "
+        "on(namespace, pod)  group_right() kube_pod_spec_volumes_persistentvolumeclaims_info)) * "
+        "on(namespace,persistentvolumeclaim) group_left(provisioner) (kube_persistentvolumeclaim_info * "
+        "on (storageclass)  group_left(provisioner) "
+        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))"
+    )
+    ceph_capacity["PODS_TOTAL_USED"] = get_prometheus_response(
+        "sum(sum by(namespace,pod) (((max by(namespace,persistentvolumeclaim) (kubelet_volume_stats_used_bytes)) * "
+        "on (namespace,persistentvolumeclaim) group_right() ((kube_running_pod_ready*0+1) * "
+        "on(namespace, pod)  group_right() kube_pod_spec_volumes_persistentvolumeclaims_info)) * "
+        "on(namespace,persistentvolumeclaim) group_left(provisioner) (kube_persistentvolumeclaim_info * "
+        "on (storageclass)  group_left(provisioner) "
+        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})))"
+    )
+    ceph_capacity["CEPH_CAPACITY_TOTAL"] = get_prometheus_response(
+        "ceph_cluster_total_bytes"
+    )
+    ceph_capacity["CEPH_CAPACITY_USED"] = get_prometheus_response(
+        "max(ceph_pool_max_avail * on (pool_id) group_left(name)ceph_pool_metadata{name=~'(.*file.*)|(.*block.*)'})"
+    )
+
+    # convert the values from string to dict
+    ceph_capacity = {
+        key: json.loads(value) if isinstance(value, str) else value
+        for key, value in ceph_capacity.items()
+    }
+
+    # convert dict to json and print it with pretty format
+    logger.info(json.dumps(ceph_capacity, indent=4))
+    return ceph_capacity
