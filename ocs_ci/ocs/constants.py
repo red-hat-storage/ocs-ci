@@ -84,6 +84,7 @@ CHRONY_TEMPLATE = os.path.join(
 )
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
+BUSYBOX_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "busybox.yaml")
 # Statuses
 STATUS_READY = "Ready"
 PEER_READY = "Peer ready"
