@@ -1480,9 +1480,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    ct_pod = get_ceph_tools_pod()
                     ceph_health_retry = False
                     log.info("Adding Faster recovery profile")
+                    ct_pod = get_ceph_tools_pod()
                     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_add_cmd)
                     for mark in node.iter_markers():
                         if "ceph_health_retry" == mark.name:
@@ -1499,6 +1499,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         ceph_health_check_base()
                         log.info("Ceph health check passed at teardown")
                         log.info("Removing Faster recovery profile")
+                        ct_pod = get_ceph_tools_pod()
                         ct_pod.exec_ceph_cmd(ceph_cmd=ceph_remove_cmd)
             except CephHealthException:
                 log.info("Ceph health check failed at teardown")
