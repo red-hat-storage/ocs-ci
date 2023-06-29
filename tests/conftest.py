@@ -1471,6 +1471,12 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
                 ceph_cluster_installed = config.RUN.get("cephcluster")
                 ct_pod = get_ceph_tools_pod()
+                ceph_add_cmd = (
+                    "ceph config set osd osd_mclock_profile high_recovery_ops"
+                )
+                ceph_remove_cmd = (
+                    "ceph config set osd osd_mclock_profile balanced"
+                )
                 if not (
                     teardown
                     or skip_ocs_deployment
@@ -1479,10 +1485,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 ):
                     ceph_health_retry = False
                     log.info("Adding Faster recovery profile")
-                    ceph_cmd = (
-                        "ceph config set osd osd_mclock_profile high_recovery_ops"
-                    )
-                    ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+                    ct_pod.exec_ceph_cmd(ceph_cmd=ceph_add_cmd)
                     for mark in node.iter_markers():
                         if "ceph_health_retry" == mark.name:
                             ceph_health_retry = True
@@ -1498,16 +1501,14 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         ceph_health_check_base()
                         log.info("Ceph health check passed at teardown")
                         log.info("Removing Faster recovery profile")
-                        ceph_cmd = "ceph config set osd osd_mclock_profile balanced"
-                        ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+                        ct_pod.exec_ceph_cmd(ceph_cmd=ceph_remove_cmd)
             except CephHealthException:
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
                 ceph_health_check()
                 log.info("Removing Faster recovery profile")
-                ceph_cmd = "ceph config set osd osd_mclock_profile balanced"
-                ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+                ct_pod.exec_ceph_cmd(ceph_cmd=ceph_remove_cmd)
                 raise
 
     request.addfinalizer(finalizer)
