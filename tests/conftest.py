@@ -1479,7 +1479,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 ):
                     ceph_health_retry = False
                     log.info("Adding Faster recovery profile")
-                    ceph_cmd = "ceph config set osd osd_mclock_profile high_recovery_ops"
+                    ceph_cmd = (
+                        "ceph config set osd osd_mclock_profile high_recovery_ops"
+                    )
                     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
                     for mark in node.iter_markers():
                         if "ceph_health_retry" == mark.name:
