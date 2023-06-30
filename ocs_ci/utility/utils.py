@@ -4281,3 +4281,35 @@ def list_insert_at_position(lst, index, element):
 
     """
     return lst[:index] + element + lst[index:]
+
+
+def get_latest_acm_tag_unreleased(version):
+    """
+    Get Latest tag for acm unreleased image
+
+     Args:
+        version (str): version of acm for getting latest tag
+
+    Returns:
+        str: image tag for the specified version
+
+    Raises:
+        TagNotFoundException: When the given version is not found
+
+
+    """
+    params = {
+        "onlyActiveTags": "true",
+        "limit": "100",
+    }
+    response = requests.get(
+        "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/",
+        params=params,
+    )
+    responce_data = response.json()
+    for data in responce_data["tags"]:
+        if version in data["name"] and "v" not in data["name"]:
+            log.info(f"Found Image Tag {data['name']}")
+            return data["name"]
+
+    raise TagNotFoundException("Couldn't find given ACM tag!")
