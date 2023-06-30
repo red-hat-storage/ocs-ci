@@ -595,23 +595,13 @@ def verify_provider_aws_volumes():
             constants.AWS_VOL_PVC_NAME_TAG, osd_pvc_obj.name
         )[0]["id"]
         log.info(f"AWS volume id: {osd_volume_id}")
-        osd_volume_data = aws_obj.get_volume_data(osd_volume_id)
-        log.info(osd_volume_data)
-        assert osd_volume_data["Size"] == constants.AWS_VOL_OSD_SIZE, (
-            f"Volume size is {osd_volume_data['Size']}, "
-            f"it should be {constants.AWS_VOL_OSD_SIZE}"
+        aws_obj.check_volume_attributes(
+            volume_id=osd_volume_id,
+            name_end=osd_pvc_obj.backed_pv,
+            size=constants.AWS_VOL_OSD_SIZE,
+            iops=constants.AWS_VOL_OSD_IOPS,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
-        assert osd_volume_data["Iops"] == constants.AWS_VOL_OSD_IOPS, (
-            f"Volume IOPS is {osd_volume_data['Iops']}, "
-            f"it should be {constants.AWS_VOL_OSD_IOPS}"
-        )
-        tags = osd_volume_data["Tags"]
-        for tag in tags:
-            if tag["Key"] == constants.AWS_VOL_PVC_NAMESPACE:
-                volume_namespace = tag["Value"]
-        assert (
-            volume_namespace == config.ENV_DATA["cluster_namespace"]
-        ), f"Namespace is {volume_namespace}. It should be fusion-storage"
     mon_pvc_objs = get_all_pvc_objs(
         namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.MON_APP_LABEL,
@@ -625,14 +615,12 @@ def verify_provider_aws_volumes():
             constants.AWS_VOL_PV_NAME_TAG, mon_pvc_obj.backed_pv
         )[0]["id"]
         log.info(f"AWS volume id: {mon_volume_id}")
-        mon_volume_data = aws_obj.get_volume_data(mon_volume_id)
-        assert mon_volume_data["Size"] == constants.AWS_VOL_MON_SIZE, (
-            f"Volume size is {mon_volume_data['Size']}, "
-            f"it should be {constants.AWS_VOL_MON_SIZE}"
-        )
-        assert mon_volume_data["Iops"] == constants.AWS_VOL_MON_IOPS, (
-            f"Volume IOPS is {mon_volume_data['Iops']}, "
-            f"it should be {constants.AWS_VOL_MON_IOPS}"
+        aws_obj.check_volume_attributes(
+            volume_id=mon_volume_id,
+            name_end=mon_pvc_obj.backed_pv,
+            size=constants.AWS_VOL_MON_SIZE,
+            iops=constants.AWS_VOL_MON_IOPS,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
 

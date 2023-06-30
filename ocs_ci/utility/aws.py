@@ -423,6 +423,22 @@ class AWS(object):
         )
         return volumes_response["Volumes"][0]
 
+    def get_volume_tag_value(self, volume_data, tag_name):
+        """
+        Get the value of the volume's tag
+
+        Args:
+            volume_data(dict): complete volume information
+            tag_name(str): name of the tag
+        Returns:
+            str: value of the tag or None if there's no such tag
+        """
+        tags = volume_data["Tags"]
+        for tag in tags:
+            if tag["Key"] == tag_name:
+                return tag["Value"]
+        return None
+
     def get_volumes_by_name_pattern(self, pattern):
         """
         Get volumes by pattern
@@ -434,6 +450,76 @@ class AWS(object):
             list: Volume information like id and attachments
         """
         return self.get_volumes_by_tag_pattern("Name", pattern)
+
+    def check_volume_attributes(
+        self,
+        volume_id,
+        name_end=None,
+        size=None,
+        iops=None,
+        throughput=None,
+        namespace=None,
+    ):
+        """
+        Verify aws volume attributes
+        Primarily used for faas
+
+        Args:
+            volume_id(str): id of the volume to be checked
+            name_end(str): expected ending of Name tag
+            size(int): expected value of volume's size
+            iops(int): expected value of IOPS
+            throughput(int): expected value of Throughput
+            namespace(str): expected value of kubernetes.io/created-for/pvc/namespace tag
+
+        Raises:
+            ValueError if the actual value differs from the expected one
+        """
+        volume_data = self.get_volume_data(volume_id)
+        volume_name = self.get_volume_tag_value(
+            volume_data,
+            "Name",
+        )
+        logger.info(
+            f"Verifying that volume name {volume_name} starts with cluster name"
+        )
+        if not volume_name.startswith(config.ENV_DATA["cluster_name"]):
+            raise ValueError(
+                f"Volume name should start with cluster name {config.ENV_DATA['cluster_name']}"
+            )
+        if name_end:
+            logger.info(f"Verifying that volume name ends with {name_end}")
+            if not volume_name.endswith(name_end):
+                raise ValueError(f"Volume name should end with {name_end}")
+        if size:
+            logger.info(f"Verifying that volume size is {size}")
+            if volume_data["Size"] != size:
+                raise ValueError(
+                    f"Volume size should be {size} but it's {volume_data['Size']}"
+                )
+        if iops:
+            logger.info(f"Verifying that volume IOPS is {iops}")
+            if volume_data["Iops"] != iops:
+                raise ValueError(
+                    f"Volume IOPS should be {iops} but it's {volume_data['Iops']}"
+                )
+        if throughput:
+            logger.info(f"Verifying that volume throughput is {throughput}")
+            if volume_data["Throughput"] != throughput:
+                raise ValueError(
+                    f"Volume size should be {throughput} but it's {volume_data['Throughput']}"
+                )
+        if namespace:
+            logger.info(f"Verifying that namespace is {namespace}")
+            volume_namespace = self.get_volume_tag_value(
+                volume_data,
+                constants.AWS_VOL_PVC_NAMESPACE,
+            )
+            if volume_namespace != namespace:
+                raise ValueError(
+                    "Namespace in kubernetes.io/created-for/pvc/namespace tag "
+                    f"should be {namespace} but it's {volume_namespace}"
+                )
 
     def detach_volume(self, volume, timeout=120):
         """
