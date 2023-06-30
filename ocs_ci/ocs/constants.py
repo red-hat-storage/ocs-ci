@@ -1690,8 +1690,10 @@ AWS_VOL_PV_NAME_TAG = "kubernetes.io/created-for/pv/name"
 AWS_VOL_PVC_NAMESPACE = "kubernetes.io/created-for/pvc/namespace"
 AWS_VOL_OSD_SIZE = 4096
 AWS_VOL_OSD_IOPS = 12000
+OSD_THROUGHPUT = 250
 AWS_VOL_MON_SIZE = 50
 AWS_VOL_MON_IOPS = 3000
+MON_THROUGHPUT = 125
 
 # Bare Metal constants
 PXE_CONF_FILE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "dnsmasq.pxe.conf")

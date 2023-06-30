@@ -601,6 +601,7 @@ def verify_provider_aws_volumes():
             size=constants.AWS_VOL_OSD_SIZE,
             iops=constants.AWS_VOL_OSD_IOPS,
             namespace=config.ENV_DATA["cluster_namespace"],
+            throughput=constants.OSD_THROUGHPUT,
         )
     mon_pvc_objs = get_all_pvc_objs(
         namespace=config.ENV_DATA["cluster_namespace"],
@@ -621,6 +622,7 @@ def verify_provider_aws_volumes():
             size=constants.AWS_VOL_MON_SIZE,
             iops=constants.AWS_VOL_MON_IOPS,
             namespace=config.ENV_DATA["cluster_namespace"],
+            throughput=constants.MON_THROUGHPUT,
         )
 
 
