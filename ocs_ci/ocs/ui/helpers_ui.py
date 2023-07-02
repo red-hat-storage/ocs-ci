@@ -121,7 +121,16 @@ def ui_add_capacity_conditions():
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
-    elif ocp_version not in ("4.7", "4.8", "4.9", "4.10", "4.11", "4.12", "4.13"):
+    elif ocp_version not in (
+        "4.7",
+        "4.8",
+        "4.9",
+        "4.10",
+        "4.11",
+        "4.12",
+        "4.13",
+        "4.14",
+    ):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
         )
