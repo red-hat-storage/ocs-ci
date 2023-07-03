@@ -233,4 +233,4 @@ def unmount(con, test_folder):
 
     # Check mount point unmounted successfully
     retcode, _, _ = con.exec_cmd("findmnt -M " + test_folder)
-    assert retcode == 1
+    assert retcode == 1, f"unmount of {test_folder} failed"
