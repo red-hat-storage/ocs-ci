@@ -11,3 +11,4 @@ DEPLOYMENT:
 ENV_DATA:
   vm_template: "rhcos-412.86.202301311551-0-vmware.x86_64"
   acm_hub_channel: release-2.7 # To be changed when acm 2.8 get's released
+  acm_version: "2.7"
