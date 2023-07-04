@@ -48,7 +48,7 @@ def get_current_secondary_cluster_name(namespace, workload_type=constants.SUBSCR
 
     Args:
         namespace (str): Name of the namespace
-       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         str: Current secondary cluster name
@@ -73,7 +73,7 @@ def set_current_primary_cluster_context(
 
     Args:
         namespace (str): Name of the namespace
-       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
     if workload_type == constants.APPLICATION_SET:
@@ -90,7 +90,7 @@ def set_current_secondary_cluster_context(
 
     Args:
         namespace (str): Name of the namespace
-       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
     if workload_type == constants.APPLICATION_SET:
@@ -105,7 +105,7 @@ def get_scheduling_interval(namespace, workload_type=constants.SUBSCRIPTION):
 
     Args:
         namespace (str): Name of the namespace
-       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         int: scheduling interval value from DRPolicy
@@ -132,7 +132,7 @@ def failover(
     Args:
         failover_cluster (str): Cluster name to which the workload should be failed over
         namespace (str): Namespace where workload is running
-       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
 
     """
@@ -172,7 +172,7 @@ def relocate(
     Args:
         preferred_cluster (str): Cluster name to which the workload should be relocated
         namespace (str): Namespace where workload is running
-       workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
 
     """

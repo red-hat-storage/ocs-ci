@@ -409,10 +409,11 @@ class BusyBox_AppSet(DRWorkload):
 
         """
 
-        self.check_pod_pvc_status()
+        self.check_pod_pvc_status(skip_replication_resources=False)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
+        Check for Pod and PVC status
 
         Args:
             skip_replication_resources (bool): Skip Volumereplication check
@@ -472,9 +473,8 @@ class BusyBox_AppSet(DRWorkload):
             err_msg = f"Failed to delete the workload: {ex}"
             log.exception(err_msg)
             if force:
-                self.resources_cleanup(self.workload_namespace)
-            else:
-                raise ResourceNotDeleted(err_msg)
+                self.resources_cleanup(self.workload_namespace, image_uuids)
+            raise ResourceNotDeleted(err_msg)
 
         finally:
             config.switch_acm_ctx()
