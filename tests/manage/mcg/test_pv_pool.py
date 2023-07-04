@@ -285,6 +285,7 @@ class TestPvPool:
             s3_obj=OBC(bucket_name),
         )
 
+    @tier2
     @bugzilla("2187789")
     @polarion_id("OCS-4862")
     def test_ephemeral_for_pv_bs(self, backingstore_factory):
