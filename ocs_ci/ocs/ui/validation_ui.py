@@ -10,6 +10,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from selenium.common.exceptions import NoSuchElementException
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
 
 logger = logging.getLogger(__name__)
@@ -545,7 +546,14 @@ class ValidationUI(PageNavigator):
             )
             logger.info("Click on Resources")
             self.do_click(self.validation_loc["resources-tab"], enable_screenshot=True)
-            logger.info("Storage Cluster Status Check")
+            logger.info("Checking Storage Cluster status on CLI")
+            storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+            storage_cluster = StorageCluster(
+                resource_name=storage_cluster_name,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            assert storage_cluster.check_phase("Ready")
+            logger.info("Storage Cluster Status Check on UI")
             storage_cluster_status_check = self.wait_until_expected_text_is_found(
                 locator=self.validation_loc["storage_cluster_readiness"],
                 expected_text="Ready",
@@ -553,14 +561,15 @@ class ValidationUI(PageNavigator):
             )
             assert (
                 storage_cluster_status_check
-            ), "Storage Cluster Status reported on UI is not 'Ready', Timeout 1200 seconds exceeded"
+            ), "Storage Cluster Status reported on UI is not 'Ready'"
             logger.info(
                 "Storage Cluster Status reported on UI is 'Ready', verification successful"
             )
-            logger.info("Click on 'ocs-storagecluster")
+            logger.info("Click on 'ocs-storagecluster'")
             self.do_click(
                 self.validation_loc["ocs-storagecluster"], enable_screenshot=True
             )
+            logger.info("Test passed!")
         else:
             warnings.warn("Not supported for OCP version less than 4.9")
 
