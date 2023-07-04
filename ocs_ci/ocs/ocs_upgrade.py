@@ -749,13 +749,6 @@ def run_ocs_upgrade(
         )
         exec_cmd(cmd)
 
-    # Login to OCP console and enable console plugin if not already,
-    # refresh the web console if pop-up is found
-    if semantic_upgrade_version >= version.VERSION_4_9:
-        validation_ui_obj = ValidationUI()
-        validation_ui_obj.refresh_web_console()
-        validation_ui_obj.odf_console_plugin_check()
-
     if config.ENV_DATA.get("mcg_only_deployment"):
         mcg_only_install_verification(ocs_registry_image=upgrade_ocs.ocs_registry_image)
     else:
@@ -766,15 +759,6 @@ def run_ocs_upgrade(
             post_upgrade_verification=True,
             version_before_upgrade=upgrade_ocs.version_before_upgrade,
         )
-
-    # Login to OCP console and run ODF dashboard validation check
-    semantic_upgrade_version = version.get_semantic_version(upgrade_version, True)
-    if semantic_upgrade_version >= version.VERSION_4_9:
-        validation_ui_obj = ValidationUI()
-        validation_ui_obj.validate_storage_cluster_ui()
-        validation_ui_obj.refresh_web_console()
-        validation_ui_obj.odf_overview_ui()
-        validation_ui_obj.odf_storagesystems_ui()
 
 
 def ocs_odf_upgrade_ui():

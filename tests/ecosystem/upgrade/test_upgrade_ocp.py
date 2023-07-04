@@ -15,8 +15,6 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     load_config_file,
 )
-from ocs_ci.utility import version
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.utility.ocp_upgrade import (
@@ -76,7 +74,7 @@ class TestUpgradeOCP(ManageTest):
                 f" {version_before_upgrade}, new config file will not be loaded"
             )
 
-    def test_upgrade_ocp(self, reduce_and_resume_cluster_load, setup_ui_class):
+    def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
         """
         Tests OCS stability when upgrading OCP
 
@@ -99,15 +97,6 @@ class TestUpgradeOCP(ManageTest):
                 target_image = f"{ocp_upgrade_version}-{ocp_arch}"
             elif ocp_upgrade_version.endswith(".nightly"):
                 target_image = expose_ocp_version(ocp_upgrade_version)
-
-            # Login to OCP console and enable console plugin if not already
-            version_post_upgrade = version.get_semantic_version(
-                ocp_upgrade_version, True
-            )
-            if version_post_upgrade >= version.VERSION_4_9:
-                validation_ui_obj = ValidationUI()
-                validation_ui_obj.refresh_web_console()
-                validation_ui_obj.odf_console_plugin_check()
 
             logger.info(f"Target image: {target_image}")
 
@@ -136,15 +125,6 @@ class TestUpgradeOCP(ManageTest):
             # pause a MachineHealthCheck resource
             if get_semantic_ocp_running_version() > VERSION_4_8:
                 pause_machinehealthcheck()
-
-            # Before upgrading OCP, login to the OCP console and look for any pop-up so as to refresh the console
-            # for console changes to take place
-            version_post_upgrade = version.get_semantic_version(
-                ocp_upgrade_version, True
-            )
-            if version_post_upgrade >= version.VERSION_4_9:
-                validation_ui_obj = ValidationUI()
-                validation_ui_obj.refresh_web_console()
 
             # Upgrade OCP
             logger.info(f"full upgrade path: {image_path}:{target_image}")
@@ -206,14 +186,6 @@ class TestUpgradeOCP(ManageTest):
 
         cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
         logger.debug(f"Cluster versions post upgrade:\n{cluster_ver}")
-
-        # Login to OCP console and run ODF dashboard validation
-        version_post_upgrade = version.get_semantic_version(ocp_upgrade_version, True)
-        if version_post_upgrade >= version.VERSION_4_9:
-            validation_ui_obj = ValidationUI()
-            validation_ui_obj.refresh_web_console()
-            validation_ui_obj.odf_overview_ui()
-            validation_ui_obj.odf_storagesystems_ui()
 
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)

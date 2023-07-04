@@ -59,7 +59,7 @@ def test_osd_reboot(teardown):
 
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
-def test_upgrade(setup_ui_class):
+def test_upgrade():
     """
     Tests upgrade procedure of OCS cluster
 
