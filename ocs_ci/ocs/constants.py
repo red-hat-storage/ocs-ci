@@ -1567,9 +1567,13 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
         "odf-operator",
     ],
 }
-# the list of packages for 4.13 seems to be the same as 4.12
+# the list of packages for 4.13 and 4.14 seems to be the same as 4.12
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.13"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.14"
 ] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
 
