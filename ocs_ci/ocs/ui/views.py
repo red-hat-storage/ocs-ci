@@ -21,7 +21,7 @@ login = {
         'a[title="Log in with my_htpasswd_provider"]',
         By.CSS_SELECTOR,
     ),
-    "skip_tour": (By.CSS_SELECTOR, 'button[data-test="tour-step-footer-secondary"]'),
+    "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),
 }
 azure_managed = ""
 if (
@@ -32,6 +32,10 @@ if (
 login_4_11 = {
     "ocp_page": f"Overview · {azure_managed}Red Hat OpenShift",
     "login_page_title": "Log in · Red Hat OpenShift",
+}
+# Bug opened in Jira https://issues.redhat.com/browse/OCPBUGS-15419. Tmp solution to check locators
+login_4_14 = {
+    "ocp_page": "Cluster · Red Hat OpenShift",
 }
 
 deployment = {
@@ -1471,6 +1475,39 @@ topology = {
 }
 
 locators = {
+    "4.14": {
+        "login": {**login, **login_4_11, **login_4_14},
+        "page": {**page_nav, **page_nav_4_10},
+        "generic": generic_locators,
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+        },
+        "obc": obc,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+    },
     "4.13": {
         "login": {**login, **login_4_11},
         "page": {**page_nav, **page_nav_4_10},

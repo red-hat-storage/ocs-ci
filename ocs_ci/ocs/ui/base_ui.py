@@ -75,9 +75,7 @@ def wait_for_element_to_be_clickable(locator, timeout=30):
     """
     wait = WebDriverWait(SeleniumDriver(), timeout)
     try:
-        web_element = wait.until(
-            ec.visibility_of_element_located((locator[1], locator[0]))
-        )
+        web_element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
     except TimeoutException:
         take_screenshot()
         copy_dom()
