@@ -119,5 +119,8 @@ class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
                 enable_screenshot=True,
             )
 
-        from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
+        from ocs_ci.ocs.ui.page_objects.storage_system_details import (
+            StorageSystemDetails,
+        )
+
         return StorageSystemDetails()

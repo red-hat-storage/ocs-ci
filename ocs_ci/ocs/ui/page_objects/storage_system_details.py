@@ -79,6 +79,7 @@ class StorageSystemDetails(StorageSystemTab):
         self.page_has_loaded(retries=15, sleep_time=2)
 
         from ocs_ci.ocs.ui.page_objects.block_pools import BlockPools
+
         return BlockPools()
 
     def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
