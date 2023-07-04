@@ -23,7 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ms_consumer,
     brown_squad,
 )
-from ocs_ci.helpers.helpers import verify_only_ocs_nodes_in_storagecluster
+from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -244,6 +244,12 @@ class TestNodeReplacementWithIO(ManageTest):
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
+        ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+        if ocs_version_semantic >= version.VERSION_4_13:
+            assert (
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+
 
 @tier4a
 @ignore_leftovers
@@ -288,8 +294,8 @@ class TestNodeReplacement(ManageTest):
         ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         if ocs_version_semantic >= version.VERSION_4_13:
             assert (
-                verify_only_ocs_nodes_in_storagecluster
-            ), "Not only nodes with OCS label in storagecluster"
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
 
 @tier4a
@@ -326,3 +332,10 @@ class TestNodeReplacementTwice(ManageTest):
             assert not (
                 node_name_to_delete in str(tree_output)
             ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"
+
+            ocs_version_semantic = version.get_semantic_ocs_version_from_config()
+
+            if ocs_version_semantic >= version.VERSION_4_13:
+                assert (
+                    verify_storagecluster_nodetopology
+                ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"

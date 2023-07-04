@@ -4221,7 +4221,7 @@ def disable_vm_network_for_duration(
     return True
 
 
-def verify_only_ocs_nodes_in_storagecluster():
+def verify_storagecluster_nodetopology():
     """
     Verify only nodes with OCS label in storagecluster under nodeTopologies block
 
