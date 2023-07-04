@@ -70,14 +70,17 @@ class TestSequentialRelocate:
             check_cluster_status_on_acm_console(acm_obj)
             # Initiate relocate for all the workloads one after another via ACM UI
             for workload in workloads:
-                failover_relocate_ui(
-                    acm_obj,
-                    scheduling_interval=scheduling_interval,
-                    workload_to_move=f"{workload.workload_name}-1",
-                    policy_name=workload.dr_policy_name,
-                    failover_or_preferred_cluster=secondary_cluster_name,
-                    action=constants.ACTION_RELOCATE,
-                )
+                workload_number = 1
+                while workload_number <= 5:
+                    failover_relocate_ui(
+                        acm_obj,
+                        scheduling_interval=scheduling_interval,
+                        workload_to_move=f"{workload.workload_name}-{workload_number}",
+                        policy_name=workload.dr_policy_name,
+                        failover_or_preferred_cluster=secondary_cluster_name,
+                        action=constants.ACTION_RELOCATE,
+                    )
+                workload_number += 1
         else:
             # Initiate relocate for all the workloads one after another
             config.switch_acm_ctx()
