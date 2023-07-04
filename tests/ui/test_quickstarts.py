@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.framework.testlib import ui, skipif_ocs_version, tier2, skipif_ibm_cloud
 from ocs_ci.framework.pytest_customization.marks import black_squad
 

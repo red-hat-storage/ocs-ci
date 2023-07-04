@@ -18,7 +18,8 @@ from ocs_ci.framework.testlib import (
     ui,
 )
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
-from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI, ObUI
+from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI
+from ocs_ci.ocs.ui.page_objects.object_bucket_claim import ObcUI, ObUI
 
 logger = logging.getLogger(__name__)
 

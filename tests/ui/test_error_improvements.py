@@ -11,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
 

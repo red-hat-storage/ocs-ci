@@ -1,7 +1,7 @@
 import logging
 import time
 
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
