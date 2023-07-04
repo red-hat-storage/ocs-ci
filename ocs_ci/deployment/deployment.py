@@ -112,6 +112,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     load_auth_config,
     TimeoutSampler,
+    get_latest_acm_tag_unreleased,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -1459,9 +1460,8 @@ class Deployment(object):
         run_cmd(f"oc create -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
-        image_tag = config.ENV_DATA.get(
-            "acm_unreleased_image", config.ENV_DATA.get("default_acm_unreleased_image")
-        )
+        acm_version = config.ENV_DATA.get("acm_version")
+        image_tag = get_latest_acm_tag_unreleased(version=acm_version)
         with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
 
