@@ -268,6 +268,13 @@ Scenarios that use this data include MDR and RDR deployments.
 * `primary_cluster` - True if the cluster is the primary cluster, otherwise False.
 * `active_acm_cluster` - True if the cluster is the active ACM hub cluster, False if passive.
 
+#### Regional DR and Metro DR UI tests
+
+This section of the config is used to run RDR and MDR UI tests.
+
+* `dr_ui.yaml` - Perform Failover/Relocate via ACM console (combination of ODF>=4.13 and ACM>=2.7 is supported).
+
+
 ##### ibmcloud
 
 IBM Cloud related section under AUTH config.
