@@ -1,6 +1,5 @@
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import logger, BaseUI
-from ocs_ci.ocs.ui.page_objects.block_pools import BlockPools
 from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
 from ocs_ci.utility import version
 
@@ -78,6 +77,8 @@ class StorageSystemDetails(StorageSystemTab):
         else:
             self.do_click(self.validation_loc["blockpools"], enable_screenshot=True)
         self.page_has_loaded(retries=15, sleep_time=2)
+
+        from ocs_ci.ocs.ui.page_objects.block_pools import BlockPools
         return BlockPools()
 
     def get_blockpools_compression_status_from_storagesystem(self) -> tuple:

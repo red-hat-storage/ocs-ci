@@ -7,7 +7,6 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationTabBar,
     CreateResourceForm,
 )
-from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 
 
 class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
@@ -119,4 +118,6 @@ class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
                 self.validation_loc["ocs-external-storagecluster-storagesystem"],
                 enable_screenshot=True,
             )
+
+        from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
         return StorageSystemDetails()
