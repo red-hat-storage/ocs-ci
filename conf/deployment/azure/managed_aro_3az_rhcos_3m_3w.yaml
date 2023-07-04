@@ -18,7 +18,6 @@ ENV_DATA:
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'
   worker_instance_type: 'Standard_D16s_v3'
-# TODO add the polarion ID for ARO deployment
-#REPORTING:
-  #polarion:
-    #deployment_id: ''
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-4924'
