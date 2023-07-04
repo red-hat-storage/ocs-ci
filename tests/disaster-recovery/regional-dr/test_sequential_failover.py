@@ -172,8 +172,13 @@ class TestSequentialFailover:
         )
 
         if config.RUN.get("rdr_failover_via_ui"):
+            config.switch_acm_ctx()
             for workload in workloads:
-                config.switch_acm_ctx()
-                verify_failover_relocate_status_ui(
-                    acm_obj, workload_to_check=f"{workload.workload_name}-1"
-                )
+                workload_number = 1
+                while workload_number <= 5:
+                    config.switch_acm_ctx()
+                    verify_failover_relocate_status_ui(
+                        acm_obj,
+                        workload_to_check=f"{workload.workload_name}-{workload_number}",
+                    )
+                workload_number += 1
