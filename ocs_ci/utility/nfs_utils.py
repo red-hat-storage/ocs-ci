@@ -6,9 +6,12 @@ Module that contains all operations related to nfs feature in a cluster
 import logging
 import yaml
 import time
+import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 
 log = logging.getLogger(__name__)
@@ -27,6 +30,12 @@ def nfs_enable(
     2:- Enable ROOK_CSI_ENABLE_NFS via patch request
     3:- Check nfs-ganesha server is up and running
     4:- Check csi-nfsplugin pods are up and running
+
+    Args:
+        storage_cluster_obj (obj): storage cluster object
+        config_map_obj (obj): config map object
+        pod_obj (obj): pod object
+        namespace (str): namespace name
 
     Returns:
         str: nfs-ganesha pod name
@@ -97,6 +106,13 @@ def nfs_disable(
     3:- Delete CephNFS, ocs nfs Service and the nfs StorageClass
     4:- Wait untill nfs-ganesha pod deleted
 
+    Args:
+        storage_cluster_obj (obj): storage cluster object
+        config_map_obj (obj): config map object
+        pod_obj (obj): pod object
+        sc (str): nfs storage class
+        nfs_ganesha_pod_name (str): rook-ceph-nfs * pod name
+
     """
 
     nfs_spec_disable = '{"spec": {"nfs":{"enable": false}}}'
@@ -129,6 +145,13 @@ def nfs_disable(
 def create_nfs_load_balancer_service(
     storage_cluster_obj,
 ):
+    """
+    Create the nfs loadbalancer service
+
+    Args:
+        storage_cluster_obj (obj): storage cluster object
+
+    """
     # Create loadbalancer service for nfs
     log.info("----create loadbalancer service----")
     service = """
@@ -165,6 +188,49 @@ def create_nfs_load_balancer_service(
 def delete_nfs_load_balancer_service(
     storage_cluster_obj,
 ):
+    """
+    Delete the nfs loadbalancer service
+
+    Args:
+        storage_cluster_obj (obj): storage cluster object
+
+    """
     # Delete ocs nfs Service
     cmd_delete_nfs_service = "delete service rook-ceph-nfs-my-nfs-load-balancer"
     storage_cluster_obj.exec_oc_cmd(cmd_delete_nfs_service)
+
+
+def skip_test_if_nfs_client_unavailable(nfs_client_ip):
+    """
+    Skip the tests if a valid nfs client ip is not
+    available for outside mounts
+
+    Args:
+        nfs_client_ip(str): nfs client ip address
+
+    """
+    if not nfs_client_ip:
+        pytest.skip(
+            "Skipped the test as a valid nfs client ip is required, "
+            " for nfs outcluster export validation. "
+        )
+
+
+def unmount(con, test_folder):
+    """
+    Unmount existing mount points
+
+    Args:
+        con (obj): connection object
+        test_folder (str) : Mount path
+
+    """
+    retry(
+        (CommandFailed),
+        tries=600,
+        delay=10,
+    )(con.exec_cmd(cmd="umount -f " + test_folder))
+
+    # Check mount point unmounted successfully
+    retcode, _, _ = con.exec_cmd("findmnt -M " + test_folder)
+    assert retcode == 1, f"unmount of {test_folder} failed"
