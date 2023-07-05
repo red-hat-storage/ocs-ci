@@ -10,7 +10,7 @@ ENV_DATA:
   availability_zone_count: 3
   master_replicas: 3
   worker_replicas: 3
-  master_instance_type: 'm4.xlarge'
+  master_instance_type: 'm6i.xlarge'
   worker_instance_type: 'm5.4xlarge'
 
 # Override flexy params here
