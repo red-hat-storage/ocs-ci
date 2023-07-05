@@ -145,6 +145,7 @@ class TestRbDPool(ManageTest):
         }
         assert all(checks.values())
 
+    @pytest.mark.polarion_id("OCS-3890")
     def test_multiple_sc_one_pool(
         self,
         setup_ui_class,
