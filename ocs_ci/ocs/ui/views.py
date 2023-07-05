@@ -461,6 +461,11 @@ pvc_4_9 = {
     "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
+
+pvc_4_10 = {
+    "test-project-link": ("(//*[contains(text(),'{}')])[1]", By.XPATH),
+}
+
 pvc_4_12 = {
     "resize-value": ("//input[@data-test='pvc-expand-size-input']", By.XPATH),
 }
@@ -1063,6 +1068,7 @@ validation = {
     ),
     "capacity_breakdown_projects": ("//button[text()='Projects']", By.XPATH),
     "capacity_breakdown_pods": ("//button[text()='Pods']", By.XPATH),
+    "storage_cluster_readiness": ("//*[contains(text(),'Ready')]", By.XPATH),
     "backingstore_name": ("input[placeholder='my-backingstore']", By.CSS_SELECTOR),
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
     "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
@@ -1153,7 +1159,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
-    "warning-alert": ("div[aria-label='Warning Alert']", By.CSS_SELECTOR),
+    "warning-alert": ("//div[@class='pf-c-alert pf-m-warning']", By.XPATH),
     "refresh-web-console": (
         "//button[normalize-space()='Refresh web console']",
         By.XPATH,
@@ -1161,7 +1167,7 @@ validation_4_9 = {
     "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
     "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
-    "plugin-available": (".pf-c-button.pf-m-link.pf-m-inline", By.CSS_SELECTOR),
+    "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
     "storage-system-on-installed-operators": (
         "a[title='storagesystems.odf.openshift.io']",
         By.CSS_SELECTOR,
@@ -1221,6 +1227,8 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
+    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "developer_dropdown": (
         'button[data-test-id="perspective-switcher-toggle"]',
         By.CSS_SELECTOR,
@@ -1287,6 +1295,13 @@ validation_4_11 = {
     ),
     "select_administrator": (
         "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
+        By.XPATH,
+    ),
+}
+
+validation_4_12 = {
+    "storage-system-on-installed-operators": (
+        "//a[normalize-space()='Storage System']",
         By.XPATH,
     ),
 }
@@ -1488,13 +1503,6 @@ locators = {
             **deployment_4_11,
             **deployment_4_12,
         },
-        "validation": {
-            **validation,
-            **validation_4_8,
-            **validation_4_9,
-            **validation_4_10,
-            **validation_4_11,
-        },
         "obc": obc,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
         "acm_page": {
@@ -1503,6 +1511,14 @@ locators = {
             **acm_configuration_4_11,
             **acm_configuration_4_12,
             **acm_configuration_4_13,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
@@ -1562,8 +1578,9 @@ locators = {
             **validation_4_9,
             **validation_4_10,
             **validation_4_11,
+            **validation_4_12,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10, **pvc_4_12},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
@@ -1591,7 +1608,7 @@ locators = {
             **validation_4_10,
             **validation_4_11,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
@@ -1617,7 +1634,7 @@ locators = {
             **validation_4_9,
             **validation_4_10,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10},
         "acm_page": {**acm_page_nav, **acm_configuration},
     },
     "4.9": {

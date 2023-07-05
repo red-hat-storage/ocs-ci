@@ -542,7 +542,11 @@ class OCSUpgrade(object):
                 get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
 
 
-def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
+def run_ocs_upgrade(
+    operation=None,
+    *operation_args,
+    **operation_kwargs,
+):
     """
     Run upgrade procedure of OCS cluster
 
@@ -570,6 +574,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
         host, user, password, ssh_key = get_external_cluster_client()
@@ -702,6 +707,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         old_image = upgrade_ocs.get_images_post_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
+
     verify_image_versions(
         old_image,
         upgrade_ocs.get_parsed_versions()[1],
