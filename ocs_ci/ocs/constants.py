@@ -2040,6 +2040,9 @@ ACM_HUB_SUBSCRIPTION_YAML = os.path.join(
 ACM_HUB_MULTICLUSTERHUB_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "multiclusterhub.yaml"
 )
+ACM_HUB_KLUSTERLET_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "klusterlet-addon-config.yaml"
+)
 ACM_HUB_NAMESPACE = "open-cluster-management"
 ACM_HUB_OPERATOR_NAME = "advanced-cluster-management"
 ACM_MULTICLUSTER_HUB = "MultiClusterHub"
@@ -2054,6 +2057,7 @@ ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
 ACM_MANAGEDCLUSTER = "managedclusters.cluster.open-cluster-management.io"
 ACM_LOCAL_CLUSTER = "local-cluster"
 ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
+ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
