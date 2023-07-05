@@ -9,6 +9,9 @@ from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from selenium.common.exceptions import NoSuchElementException
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +174,23 @@ class ValidationUI(PageNavigator):
             logger.error(err)
         assert len(self.err_list) == 0, f"{self.err_list}"
 
+    def refresh_web_console(self):
+        refresh_web_console_popup = self.wait_until_expected_text_is_found(
+            locator=self.validation_loc["warning-alert"],
+            expected_text="Refresh web console",
+            timeout=120,
+        )
+        if refresh_web_console_popup:
+            logger.info(
+                "Refresh web console option is now available, click on it to see the console changes"
+            )
+            self.do_click(
+                self.validation_loc["refresh-web-console"],
+                enable_screenshot=True,
+            )
+        else:
+            logger.warning("Refresh web console pop-up was not found")
+
     def odf_console_plugin_check(self):
         """
         Function to verify if console plugin is enabled on UI or not,
@@ -202,13 +222,14 @@ class ValidationUI(PageNavigator):
             self.do_click(
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
+            self.page_has_loaded(retries=25, sleep_time=10)
             logger.info(
                 "Check if 'Plugin available' option is available on the Installed Operators page"
             )
             plugin_availability_check = self.wait_until_expected_text_is_found(
                 locator=self.dep_loc["plugin-available"],
                 expected_text="Plugin available",
-                timeout=10,
+                timeout=15,
             )
             if plugin_availability_check:
                 logger.info(
@@ -227,6 +248,7 @@ class ValidationUI(PageNavigator):
                     self.do_click(self.dep_loc["enable_console_plugin"])
                     self.do_click(self.validation_loc["save_console_plugin_settings"])
                     logger.info("Waiting for warning alert to refresh the web console")
+                    self.refresh_web_console()
                     refresh_web_console_popup = self.wait_until_expected_text_is_found(
                         locator=self.validation_loc["warning-alert"],
                         expected_text="Refresh web console",
@@ -298,6 +320,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Storage system under Status card on Data Foundation Overview tab is missing"
             )
+            raise NoSuchElementException
 
         system_capacity_check = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["system-capacity"],
@@ -311,6 +334,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "System Capacity Card not found on OpenShift Data Foundation Overview page"
             )
+            raise NoSuchElementException
         logger.info(
             "Navigate to System Capacity Card and Click on storage system hyperlink"
         )
@@ -328,6 +352,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from System Capacity Card"
             )
+            raise NoSuchElementException
         logger.info("Click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Navigate back to ODF Overview page")
@@ -346,6 +371,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Couldn't find 'Performance' card on Data Foundation Overview page"
             )
+            raise NoSuchElementException
         navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["storagesystem-details"],
             timeout=15,
@@ -359,6 +385,7 @@ class ValidationUI(PageNavigator):
             logger.critical(
                 "Couldn't navigate to 'StorageSystem details' page from Performance Card"
             )
+            raise NoSuchElementException
         logger.info("Now again click on StorageSystems breadcrumb")
         self.do_click((self.validation_loc["storagesystems"]))
         logger.info("Click on Backing Store")
@@ -491,6 +518,60 @@ class ValidationUI(PageNavigator):
             logger.error(f"The pod {pod_name} not found on capacity_breakdown")
             res = False
         return res
+
+    def validate_storage_cluster_ui(self):
+        """
+
+        Function to validate Storage Cluster on UI for ODF 4.9 and above
+
+        """
+        if self.ocp_version_semantic >= version.VERSION_4_9:
+            self.navigate_installed_operators_page()
+            logger.info("Search and select openshift-storage namespace")
+            self.do_click(self.validation_loc["pvc_project_selector"])
+            self.do_send_keys(
+                self.validation_loc["search-project"], text="openshift-storage"
+            )
+            self.wait_for_namespace_selection(project_name="openshift-storage")
+            logger.info(
+                "Click on Storage System under Provided APIs on Installed Operators Page"
+            )
+            self.do_click(self.validation_loc["storage-system-on-installed-operators"])
+            logger.info(
+                "Click on 'ocs-storagecluster-storagesystem' on Operator details page"
+            )
+            self.do_click(
+                self.validation_loc["ocs-storagecluster-storgesystem"],
+                enable_screenshot=True,
+            )
+            logger.info("Click on Resources")
+            self.do_click(self.validation_loc["resources-tab"], enable_screenshot=True)
+            logger.info("Checking Storage Cluster status on CLI")
+            storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+            storage_cluster = StorageCluster(
+                resource_name=storage_cluster_name,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            assert storage_cluster.check_phase("Ready")
+            logger.info("Storage Cluster Status Check on UI")
+            storage_cluster_status_check = self.wait_until_expected_text_is_found(
+                locator=self.validation_loc["storage_cluster_readiness"],
+                expected_text="Ready",
+                timeout=600,
+            )
+            assert (
+                storage_cluster_status_check
+            ), "Storage Cluster Status reported on UI is not 'Ready'"
+            logger.info(
+                "Storage Cluster Status reported on UI is 'Ready', verification successful"
+            )
+            logger.info("Click on 'ocs-storagecluster'")
+            self.do_click(
+                self.validation_loc["ocs-storagecluster"], enable_screenshot=True
+            )
+            logger.info("Test passed!")
+        else:
+            warnings.warn("Not supported for OCP version less than 4.9")
 
     def validate_unprivileged_access(self):
         """
