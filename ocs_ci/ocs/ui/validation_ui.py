@@ -525,7 +525,7 @@ class ValidationUI(PageNavigator):
         Function to validate Storage Cluster on UI for ODF 4.9 and above
 
         """
-        if self.ocp_version_semantic > version.VERSION_4_9:
+        if self.ocp_version_semantic >= version.VERSION_4_9:
             self.navigate_installed_operators_page()
             logger.info("Search and select openshift-storage namespace")
             self.do_click(self.validation_loc["pvc_project_selector"])
