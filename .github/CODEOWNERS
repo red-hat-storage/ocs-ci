@@ -30,6 +30,7 @@
 # subdirectories.
 #/build/logs/ @doctocat
 /tests/disaster-recovery/regional-dr/ @red-hat-storage/turquoise-squad
+/tests/disaster-recovery/mdr/ @red-hat-storage/turquoise-squad
 /tests/lvmo/ @red-hat-storage/aqua-squad
 /tests/manage/z_cluster/ @red-hat-storage/brown-squad
 /tests/manage/pv_services/ @red-hat-storage/green-squad

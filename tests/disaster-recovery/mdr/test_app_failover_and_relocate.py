@@ -3,7 +3,7 @@ import pytest
 import time
 
 
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, turquoise_squad
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
@@ -38,6 +38,7 @@ polarion_id_primary_down = "OCS-4346"
 
 
 @tier1
+@turquoise_squad
 class TestApplicationFailoverAndRelocate:
     """
     Test Failover and Relocate actions for application
