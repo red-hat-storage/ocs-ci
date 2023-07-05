@@ -34,6 +34,7 @@ class TestUserInterfaceValidation(object):
     @ui
     @tier1
     @black_squad
+    @polarion_id("OCS-4925")
     @skipif_ui_not_support("validation")
     def test_storage_cluster_validation_ui(self, setup_ui_class):
         """
