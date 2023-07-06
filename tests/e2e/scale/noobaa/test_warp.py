@@ -22,7 +22,7 @@ def warps3(request):
     warps3.create_resource_warp()
 
     def teardown():
-        warps3.cleanup()
+        warps3.cleanup(multi_client=False)
 
     request.addfinalizer(teardown)
     return warps3
