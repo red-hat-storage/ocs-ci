@@ -65,6 +65,7 @@ class TestWarp(E2ETest):
             obj_size="1.5MiB",
             validate=True,
             timeout=4000,
+            multi_client=False,
         )
 
         # Check ceph health status
