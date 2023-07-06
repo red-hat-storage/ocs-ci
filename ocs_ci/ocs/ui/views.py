@@ -890,6 +890,7 @@ block_pool_4_13 = {
         "//div[normalize-space()='Compression savings']/following-sibling::div",
         By.XPATH,
     ),
+    "storage_class_attached": ("//a[@data-test='inventory-sc']", By.XPATH),
 }
 
 block_pool = {

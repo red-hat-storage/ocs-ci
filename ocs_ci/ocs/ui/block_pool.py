@@ -342,3 +342,25 @@ class BlockPoolUI(PageNavigator):
             f"Pool name {pool_name} existence is {blockpool_compression_savings}"
         )
         return blockpool_compression_savings
+
+    def check_storage_class_attached(self, pool_name):
+        """
+        Checks the number of storage class attached to the pool.
+
+        Args:
+            pool_name (str): Name of the pool to check
+
+        Return:
+            int: The total number of storage classes attached to the pool.
+        """
+        self.navigate_block_pool_page()
+        self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
+        time.sleep(10)
+        storage_class_attached = self.get_element_text(
+            self.bp_loc["storage_class_attached"]
+        )
+        storage_class_attached = storage_class_attached.split(" ")[0]
+        logger.info(
+            f"Pool name {pool_name} has {storage_class_attached} storageclass attached to it."
+        )
+        return int(storage_class_attached)
