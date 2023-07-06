@@ -6,6 +6,7 @@ import yaml
 from ocs_ci.ocs.exceptions import ConfigurationError
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.managedservice import (
     remove_header_footer_from_key,
     generate_onboarding_token,
@@ -167,3 +168,27 @@ def deploy_odf():
         timeout=1200, sleep=15, func=check_all_csvs_are_succeeded, namespace=ns_name
     )
     sample.wait_for_func_value(value=True)
+
+
+def remove_agent():
+    """
+    Remove agent and offering
+    """
+    if config.ENV_DATA.get("cluster_type") == "consumer":
+        logger.error("Removal of agent on application cluster is not supported.")
+        return
+    logger.info(f"Deleting the secret {constants.FUSION_AGENT_CONFIG_SECRET}")
+    managed_fusion_agent_config_secret = OCP(
+        kind=constants.SECRET,
+        namespace=config.ENV_DATA["service_namespace"],
+        resource_name=constants.FUSION_AGENT_CONFIG_SECRET,
+    )
+    managed_fusion_agent_config_secret.delete(
+        resource_name=constants.FUSION_AGENT_CONFIG_SECRET
+    )
+    managed_fusion_agent_config_secret.wait_for_delete(
+        resource_name=constants.FUSION_AGENT_CONFIG_SECRET
+    )
+    project_obj = OCP(kind=constants.NAMESPACE)
+    project_obj.wait_for_delete(resource_name=config.ENV_DATA["cluster_namespace"])
+    project_obj.wait_for_delete(resource_name=config.ENV_DATA["service_namespace"])

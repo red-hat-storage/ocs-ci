@@ -2,6 +2,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.fusion import remove_agent
 from ocs_ci.ocs.machine import get_labeled_nodes
 from ocs_ci.ocs.node import label_nodes, taint_nodes, get_all_nodes, get_node_objs
 from ocs_ci.ocs.ocp import switch_to_project
@@ -163,6 +164,13 @@ def uninstall_ocs():
             for pvc in get_all_pvcs_in_storageclass(sc.get("metadata").get("name"))
             if "noobaa" not in pvc.name
         )
+
+    if config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM:
+        log.info("Deleting OCS PVCs")
+        for pvc in pvc_to_delete:
+            log.info(f"Deleting PVC: {pvc.name}")
+            pvc.delete()
+        remove_agent()
 
     if config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM:
         log.info("Deleting OCS PVCs")
