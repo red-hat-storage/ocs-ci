@@ -515,12 +515,12 @@ def import_clusters_via_cli(clusters):
             resource_name=cluster[0],
         )
 
-        log.info("Create the Klusterlet addon configuration")
+        log.info("Creating the klusterlet addon configuration")
         klusterlet_config = templating.load_yaml(constants.ACM_HUB_KLUSTERLET_YAML)
         klusterlet_config["metadata"]["name"] = cluster[0]
         klusterlet_config["metadata"]["namespace"] = cluster[0]
         klusterlet_config_obj = OCS(**klusterlet_config)
-        klusterlet_config_obj.apply(**klusterlet_config)
+        klusterlet_config_obj.create()
 
         log.info("Wait for up to 60s for addon pods to be initialized")
         time.sleep(60)
