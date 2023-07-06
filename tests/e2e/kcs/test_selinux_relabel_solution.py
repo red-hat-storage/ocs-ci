@@ -24,6 +24,7 @@ class TestSelinuxrelabel(E2ETest):
     def create_deploymentconfig_pod(self, **kwargs):
         """
         create deployment pod.
+
         """
 
         # Create service_account to get privilege for deployment pods
@@ -52,7 +53,8 @@ class TestSelinuxrelabel(E2ETest):
 
     def get_cephfs_test_pod(self):
         """
-        Return cephfs app pods
+        Returns cephfs app pods
+
         """
         pod_objs = res_pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -128,6 +130,11 @@ class TestSelinuxrelabel(E2ETest):
     def get_pod_start_time(self, pod_name):
         """
         Get the time required for pod to come in a running state
+        Args:
+            pod_name (str): Pod to look for
+
+        Returns:
+            datetime: time required for pod restart
 
         """
         try:
