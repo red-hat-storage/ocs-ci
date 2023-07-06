@@ -316,13 +316,18 @@ class Pod(OCS):
         """
         return self.pod_data.get("metadata").get("labels")
 
-    def exec_ceph_cmd(self, ceph_cmd, format="json-pretty"):
+    def exec_ceph_cmd(
+        self, ceph_cmd, format="json-pretty", out_yaml_format=True, timeout=600
+    ):
         """
         Execute a Ceph command on the Ceph tools pod
 
         Args:
             ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
             format (str): The returning output format of the Ceph command
+            out_yaml_format (bool): whether to return yaml loaded python
+                object OR to return raw output
+            timeout (int): timeout for the exec_cmd_on_pod, defaults to 600 seconds
 
         Returns:
             dict: Ceph command output
@@ -335,7 +340,9 @@ class Pod(OCS):
         ceph_cmd = ceph_cmd
         if format:
             ceph_cmd += f" --format {format}"
-        out = self.exec_cmd_on_pod(ceph_cmd)
+        out = self.exec_cmd_on_pod(
+            ceph_cmd, out_yaml_format=out_yaml_format, timeout=timeout
+        )
 
         # For some commands, like "ceph fs ls", the returned output is a list
         if isinstance(out, list):
@@ -687,13 +694,14 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod(skip_creating_pod=False):
+def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     """
     Get the Ceph tools pod
 
     Args:
         skip_creating_pod (bool): True if user doesn't want to create new tool box
             if it doesn't exist
+        namespace: Namespace of OCS
 
     Returns:
         Pod object: The Ceph tools pod object
@@ -702,6 +710,8 @@ def get_ceph_tools_pod(skip_creating_pod=False):
         ToolBoxNotFoundException: In case of tool box not found
 
     """
+    from ocs_ci.ocs.managedservice import patch_consumer_toolbox
+
     if (
         config.multicluster
         and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
@@ -715,9 +725,11 @@ def get_ceph_tools_pod(skip_creating_pod=False):
         cluster_kubeconfig = provider_kubeconfig
     else:
         cluster_kubeconfig = ""
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_pod_obj = OCP(
         kind=constants.POD,
-        namespace=config.ENV_DATA["cluster_namespace"],
+        namespace=namespace,
         selector=constants.TOOL_APP_LABEL,
         cluster_kubeconfig=cluster_kubeconfig,
     )
@@ -727,7 +739,7 @@ def get_ceph_tools_pod(skip_creating_pod=False):
         setup_ceph_toolbox()
         ocp_pod_obj = OCP(
             kind=constants.POD,
-            namespace=config.ENV_DATA["cluster_namespace"],
+            namespace=namespace,
             selector=constants.TOOL_APP_LABEL,
         )
         ct_pod_items = ocp_pod_obj.data["items"]
@@ -748,6 +760,16 @@ def get_ceph_tools_pod(skip_creating_pod=False):
     assert running_ct_pods, "No running Ceph tools pod found"
     ceph_pod = Pod(**running_ct_pods[0])
     ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
+
+    if (
+        config.ENV_DATA.get("platform", "").lower() == constants.ROSA_PLATFORM
+        and config.ENV_DATA.get("cluster_type", "").lower()
+        == constants.MS_CONSUMER_TYPE
+    ):
+        # If the cluster is an MS consumer cluster, we need to patch the rook-ceph-tool box
+        new_ceph_pod = patch_consumer_toolbox(consumer_tools_pod=ceph_pod)
+        ceph_pod = new_ceph_pod or ceph_pod
+
     return ceph_pod
 
 
