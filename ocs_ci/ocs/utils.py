@@ -1538,6 +1538,20 @@ def get_all_acm_indexes():
     return acm_indexes
 
 
+def enable_mco_console_plugin():
+    """
+    Enables console plugin for MCO
+    """
+    patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-multicluster-console"]}]\''
+    patch_cmd = (
+        f"patch console.operator cluster -n openshift-console"
+        f" --type json -p {patch}"
+    )
+    log.info("Enabling MCO console plugin")
+    ocp_obj = OCP()
+    ocp_obj.exec_oc_cmd(command=patch_cmd)
+
+
 def get_active_acm_index():
     """
     Get index of active acm cluster
