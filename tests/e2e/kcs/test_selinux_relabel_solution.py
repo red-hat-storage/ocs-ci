@@ -4,18 +4,18 @@ import yaml
 import random
 import time
 import tempfile
+from datetime import datetime
 
-from ocs_ci.ocs import ocp, constants
+from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs import ocp, constants
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.exceptions import PodNotCreated
 from ocs_ci.ocs.resources import pod as res_pod
-from ocs_ci.ocs.resources.pod import (
-    wait_for_pods_to_be_running,
-)
-from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
-from ocs_ci.framework import config
+
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class TestSelinuxrelabel(E2ETest):
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         try:
-            pod_obj = helpers.create_pod(
+            pod_objs = helpers.create_pod(
                 interface_type=constants.CEPHFS_INTERFACE,
                 pvc_name=self.pvc_obj.name,
                 namespace=self.project_namespace,
@@ -45,20 +45,27 @@ class TestSelinuxrelabel(E2ETest):
             )
         except Exception as e:
             log.exception(
-                f"Pod attached to PVC {pod_obj.name} was not created, exception [{str(e)}]"
+                f"Pod attached to PVC {pod_objs.name} was not created, exception [{str(e)}]"
             )
             raise PodNotCreated("Pod attached to PVC was not created.")
-        return pod_obj
+        return pod_objs
 
     def get_cephfs_test_pod(self):
-        pod_obj = res_pod.get_all_pods(
+        """
+        Return cephfs app pods
+        """
+        pod_objs = res_pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
             selector=[self.pod_selector],
             selector_label="deploymentconfig",
         )
-        return pod_obj
+        return pod_objs
 
     def apply_selinux_solution(self, pvc_obj):
+        """
+        Apply selinux relabeling solution on existing PV
+
+        """
         pv_name = pvc_obj.get().get("spec").get("volumeName")
         ocp_obj = ocp.OCP(
             kind=constants.POD,
@@ -99,9 +106,10 @@ class TestSelinuxrelabel(E2ETest):
             format_type="merge",
         )
         ocp_pv.wait_for_delete(resource_name=ocp_obj)
-        log.info(f"pv {pv_name} deleted")
+        log.info(f"PersistentVolume {pv_name} deleted")
 
         run_cmd(f"oc apply -f {backup_file}")
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
         log.info(f"Backup pv {pv_name} created")
 
         params = [
@@ -117,29 +125,71 @@ class TestSelinuxrelabel(E2ETest):
             format_type="json",
         )
 
+    def get_pod_start_time(self, pod_name):
+        """
+        Get the time required for pod to come in a running state
+
+        """
+        try:
+            # Get the pod conditions
+            pod = ocp.OCP(kind="pod", namespace=self.project_namespace)
+            conditions = pod.exec_oc_cmd(
+                f"get pod {pod_name} -n openshift-storage -o jsonpath='{{.status.conditions}}'"
+            )
+            conditions = [
+                {key: None if value == "null" else value for key, value in item.items()}
+                for item in conditions
+            ]
+
+            # Get lastTransitionTime for different condition type of pod
+            containers_ready_time = None
+            pod_scheduled_time = None
+            for condition in conditions:
+                if condition["type"] == "ContainersReady":
+                    containers_ready_time = datetime.strptime(
+                        condition["lastTransitionTime"], "%Y-%m-%dT%H:%M:%SZ"
+                    )
+                elif condition["type"] == "PodScheduled":
+                    pod_scheduled_time = datetime.strptime(
+                        condition["lastTransitionTime"], "%Y-%m-%dT%H:%M:%SZ"
+                    )
+
+            # Calculate the difference between ContainersReady and PodScheduled time
+            if containers_ready_time and pod_scheduled_time:
+                time_difference = containers_ready_time - pod_scheduled_time
+                return time_difference.total_seconds()
+
+        except Exception as e:
+            log.info(f"Error retrieving pod information for '{pod_name}': {e}")
+
+        return None
+
     def teardown(self):
         """
         Cleanup the test environment
         """
         res_pod.delete_deploymentconfig_pods(self.pod_objs[0])
         self.pvc_obj.delete()
-        time.sleep(30)
         self.sa_name.delete()
 
-    @pytest.mark.parametrize("copies", [3])
+    @pytest.mark.parametrize("copies", [5])
     def test_selinux_relabel(self, copies):
         """
         Steps:
-            1. Create multiple cephfs pvcs and 100K files each across multiple nested directories
-            2. Run the IOs for some random files and take md5sum for them
-            3. Apply the fix/solution as mentioned in the “Existing PVs” section
-            4. Restart the pods which are hosting cephfs files in large numbers
+            1. Create cephfs pvcs and attach pod with more than 100K files across multiple nested directories
+            2. Take md5sum for them some random files and get pod restart time
+            3. Apply the fix/solution from kcs https://access.redhat.com/solutions/6906261
+            4. Restart the pods which are hosting cephfs files in large numbers.
             5. Check data integrity.
             6. Check for relabeling - this should not be happening.
 
+        Args:
+            copies: number of copies to write kernel files in pod
+
         """
         self.project_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
-        # Create pvc
+
+        # Create cephfs pvc
         self.pvc_obj = helpers.create_pvc(
             namespace=self.project_namespace,
             sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
@@ -147,83 +197,74 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         # Create deployment pod
-        self.pod_obj = self.create_deploymentconfig_pod(
+        self.pod_objs = self.create_deploymentconfig_pod(
             command=["/opt/multiple_files.sh"],
             command_args=[f"{copies}", "/mnt"],
         )
-        log.info(f"files copied to pod {self.pod_obj}")
-        self.pod_selector = self.pod_obj.labels.get("deploymentconfig")
+        log.info(f"files copied to pod {self.pod_objs.name}")
+        self.pod_selector = self.pod_objs.labels.get("deploymentconfig")
         pod1_name = self.pod_selector + "-1-deploy"
         pod = ocp.OCP(kind="pod", namespace=self.project_namespace)
         pod.delete(resource_name=pod1_name, wait=True)
 
-        # Wait to use pod for some time
-        waiting_time = 360
+        # Leave pod for some time to run
+        waiting_time = 120
         log.info(f"Waiting for {waiting_time} seconds")
-        time.sleep(waiting_time)
+        time.sleep(120)
 
+        # Get the md5sum of some random files
         ocp_obj = ocp.OCP(
             kind=constants.POD,
             namespace=self.project_namespace,
         )
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         num_of_files = random.randint(3, 9)
-        random_files = [
-            ocp_obj.exec_oc_cmd(
-                f"exec -it {self.pod_obj.name} -- /bin/bash"
-                f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
-                timeout=300,
-            )
-        ]
-        log.info(f"files are {random_files}")
-        initial_data = []
-        for file_number in range(len(random_files)):
-            initial_data[file_number] = res_pod.cal_md5sum(
-                pod_obj=self.pod_obj, file_name=random_files[file_number]
-            )
-
-        # Check data integrity before applying selinux relabeling solution
-        start_time1 = time.time()
-        self.pod_obj.delete(wait=True)
-        self.pod_obj = self.get_cephfs_test_pod()
-        assert wait_for_pods_to_be_running(
-            pod_names=[self.pod_obj[0].name], timeout=600, sleep=15
+        random_files = ocp_obj.exec_oc_cmd(
+            f"exec -it {self.pod_objs.name} -- /bin/bash"
+            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
+            timeout=300,
         )
-        end_time1 = time.time()
-        total_time1 = end_time1 - start_time1
-        log.info(f"Time taken by pod to restart is  {total_time1}")
+        random_files = random_files.split()
+        log.info(f"files are {random_files}")
+        initial_data_on_pod = []
+        for file_path in random_files:
+            md5sum = res_pod.cal_md5sum(
+                pod_obj=self.pod_objs,
+                file_name=file_path,
+            )
+            initial_data_on_pod.append(md5sum)
+
+        # Delete pod and Get time for pod restart
+        self.pod_objs.delete(wait=True)
+        self.pod_objs = self.get_cephfs_test_pod()
+        log.info(f"pod name is {self.pod_objs[0].name}")
+
+        assert wait_for_pods_to_be_running(
+            pod_names=[self.pod_objs[0].name], timeout=600, sleep=15
+        )
+        pod_restart_time1 = self.get_pod_start_time(pod_name=self.pod_objs[0].name)
+        log.info(f"Time taken by pod to restart is  {pod_restart_time1}")
 
         # Apply the fix/solution for “Existing PVCs”
         self.apply_selinux_solution(self.pvc_obj)
 
-        # wait for some time before running data integrity
+        # Delete pod so that fix will be applied for new pod
         self.pod_objs = self.get_cephfs_test_pod()
-
-        # Check data integrity and get time for pod restart
-        start_time2 = time.time()
         self.pod_objs[0].delete(wait=True)
         self.pod_objs = self.get_cephfs_test_pod()
+        log.info(f"pod name is {self.pod_objs[0].name}")
         assert wait_for_pods_to_be_running(
             pod_names=[self.pod_objs[0].name], timeout=600, sleep=15
         )
-        end_time2 = time.time()
-        total_time2 = end_time2 - start_time2
-        log.info(f"Time taken by pod to restart is  {total_time2}")
+        pod_restart_time2 = self.get_pod_start_time(pod_name=self.pod_objs[0].name)
+        log.info(f"Time taken by pod to restart is  {pod_restart_time2}")
 
-        final_data = []
-        for file_number in range(len(random_files) - 1):
-            final_data[file_number] = res_pod.cal_md5sum(
-                pod_obj=self.pod_objs[0], file_name=random_files[file_number]
-            )
-
-        # Get deployment pod obj
+        # Get the node of cephfs pod
         self.pod_objs = self.get_cephfs_test_pod()
-
-        # Get the node running this pod
         node_name = res_pod.get_pod_node(pod_obj=self.pod_objs[0]).name
         oc_cmd = ocp.OCP(namespace=self.project_namespace)
 
-        # Check SeLinux Relabeling
+        # Check SeLinux Relabeling is set to false
         cmd1 = "crictl inspect $(crictl ps --name perf -q)"
         output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
         key = '"selinuxRelabel": false'
@@ -232,6 +273,27 @@ class TestSelinuxrelabel(E2ETest):
         log.info(
             f"SeLinux Realabeling is not happening for the pvc {self.pvc_obj.name}"
         )
-        assert initial_data == final_data
 
-        assert total_time1 > total_time2
+        # Get time for pod restart
+        self.pod_objs = self.get_cephfs_test_pod()
+        self.pod_objs[0].delete(wait=True)
+        self.pod_objs = self.get_cephfs_test_pod()
+        log.info(f"pod name is {self.pod_objs[0].name}")
+        assert wait_for_pods_to_be_running(
+            pod_names=[self.pod_objs[0].name], timeout=600, sleep=15
+        )
+        pod_restart_time2 = self.get_pod_start_time(pod_name=self.pod_objs[0].name)
+        log.info(f"Time taken by pod to restart is  {pod_restart_time2}")
+
+        assert pod_restart_time1 > pod_restart_time2
+
+        # Check data integrity.
+        final_data_on_pod = []
+        for file_path in random_files:
+            md5sum = res_pod.cal_md5sum(
+                pod_obj=self.pod_objs[0],
+                file_name=file_path,
+            )
+            final_data_on_pod.append(md5sum)
+
+        assert initial_data_on_pod == final_data_on_pod
