@@ -2655,6 +2655,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         for i in acm_indexes:
             config.switch_ctx(i)
             self.deploy_dr_multicluster_orchestrator()
+            # Enable MCO console plugin
+            enable_mco_console_plugin()
         # Configure mirror peer
         self.configure_mirror_peer()
         # Deploy dr policy
