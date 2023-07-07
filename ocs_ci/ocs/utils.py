@@ -1542,7 +1542,7 @@ def enable_mco_console_plugin():
     """
     Enables console plugin for MCO
     """
-    patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-multicluster-console"]}]\''
+    patch = '\'[{"op": "add", "path": "/spec/plugins/-", "value": ["odf-multicluster-console"]}]\''
     patch_cmd = (
         f"patch console.operator cluster -n openshift-console"
         f" --type json -p {patch}"
