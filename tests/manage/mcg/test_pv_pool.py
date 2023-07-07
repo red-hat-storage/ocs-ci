@@ -1,10 +1,14 @@
 import json
 import logging
-
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier2, tier3
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    tier3,
+    bugzilla,
+    polarion_id,
+)
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
@@ -13,9 +17,10 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     Pod,
     wait_for_pods_to_be_running,
+    get_pod_node,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB
+from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import TimeoutSampler
@@ -279,3 +284,46 @@ class TestPvPool:
             amount=1,
             s3_obj=OBC(bucket_name),
         )
+
+    @tier2
+    @bugzilla("2187789")
+    @polarion_id("OCS-4862")
+    def test_ephemeral_for_pv_bs(self, backingstore_factory):
+
+        """
+        Test if ephemeral storage on pv backingstore pod node is getting consumed
+        """
+
+        # create pv pool backingstore
+        pv_backingstore = backingstore_factory(
+            "OC",
+            {"pv": [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC)]},
+        )[0]
+
+        pv_bs_pod = Pod(
+            **(
+                get_pods_having_label(
+                    label=f"pool={pv_backingstore.name}",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )[0]
+            )
+        )
+
+        # create some dummy data under /noobaa_storage mount point in pv pool bs pod
+        pv_bs_pod.exec_sh_cmd_on_pod(
+            command="cd /noobaa_storage && dd if=/dev/urandom of=test_object bs=512 count=1"
+        )
+        logger.info("Generated test_object under /noobaa_storage")
+
+        pod_node = get_pod_node(pv_bs_pod).name
+        logger.info(f"{pv_bs_pod.name} is scheduled on {pod_node}!")
+
+        # check if the dummy data is also present in pv backingstore pod node ephemeral storage
+        logger.info("Checking if the test_object present in ephemeral storage")
+        base_dir = "/var/lib/kubelet/plugins/kubernetes.io/csi/openshift-storage.rbd.csi.ceph.com/"
+        search_output = OCP().exec_oc_debug_cmd(
+            node=pod_node, cmd_list=[f"find {base_dir} -name test_object"]
+        )
+        assert (
+            "test_object" in search_output
+        ), "Dummy data was not found in the node ephemeral storage!"
