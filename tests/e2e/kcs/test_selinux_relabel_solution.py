@@ -176,7 +176,7 @@ class TestSelinuxrelabel(E2ETest):
         Cleanup the test environment
         """
         res_pod.delete_deploymentconfig_pods(self.pod_objs[0])
-        self.pvc_obj.delete()
+        self.pvc_obj.delete(wait=True)
         self.sa_name.delete()
 
     @pytest.mark.parametrize("copies", [5])
