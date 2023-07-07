@@ -4,7 +4,6 @@ Scale TC to perform PVC Scale and Respin of Ceph pods in parallel
 import logging
 import pytest
 import threading
-import time
 
 from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs import constants
@@ -118,6 +117,12 @@ class BasePvcCreateRespinCephPods(E2ETest):
         no_of_resource = disruption.resource_count
         for i in range(0, no_of_resource):
             disruption.delete_resource(resource_id=i)
+            # Validate storage pods are running
+            assert pod.wait_for_storage_pods(), "ODF Pods are not in good shape"
+            # Validate cluster health ok and all pods are running
+            assert utils.ceph_health_check(
+                delay=180
+            ), "Ceph health in bad state after node reboots"
 
     def cleanup(self):
         """
@@ -187,7 +192,6 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         pvc_count_each_itr = 10
         scale_pod_count = 120
         size = "10Gi"
-        test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
 
         # First Iteration call to create PVC and POD

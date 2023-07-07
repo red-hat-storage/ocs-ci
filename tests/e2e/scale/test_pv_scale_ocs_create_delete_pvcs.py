@@ -4,7 +4,6 @@ Scale TC to perform PVC Create and Delete in parallel
 import logging
 import pytest
 import random
-import time
 import threading
 
 from ocs_ci.helpers import helpers
@@ -196,7 +195,6 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         pvc_count_each_itr = 10
         scale_pod_count = 120
         size = "10Gi"
-        test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
         self.delete_pod_count = 0
 
