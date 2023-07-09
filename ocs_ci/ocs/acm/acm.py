@@ -17,6 +17,7 @@ from ocs_ci.ocs.acm.acm_constants import (
 )
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
@@ -513,6 +514,21 @@ def import_clusters_via_cli(clusters):
             column="JOINED",
             resource_name=cluster[0],
         )
+
+        log.info("Creating klusterlet addon configuration")
+        klusterlet_config = templating.load_yaml(constants.ACM_HUB_KLUSTERLET_YAML)
+        klusterlet_config["metadata"]["name"] = cluster[0]
+        klusterlet_config["metadata"]["namespace"] = cluster[0]
+        klusterlet_config_obj = OCS(**klusterlet_config)
+        klusterlet_config_obj.create()
+
+        log.info("Waiting for addon pods to be in running state")
+        config.switch_to_cluster_by_name(cluster[0])
+        wait_for_pods_to_be_running(
+            namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
+        )
+
+        config.switch_acm_ctx()
         ocp_obj.wait_for_resource(
             timeout=1200,
             condition="true",
