@@ -51,11 +51,11 @@ class RGW(object):
 
         if storagecluster_independent_check():
             secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
-            cos_ocp_obj = OCP(
+            ceph_objstore_ocp_obj = OCP(
                 kind=constants.CEPHOBJECTSTORE,
                 namespace=config.ENV_DATA["cluster_namespace"],
             )
-            cephobjectstore = cos_ocp_obj.get(
+            cephobjectstore = ceph_objstore_ocp_obj.get(
                 resource_name=constants.RGW_ROUTE_EXTERNAL_MODE
             )
             endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
