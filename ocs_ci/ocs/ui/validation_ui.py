@@ -1,5 +1,6 @@
 import logging
 import warnings
+import time
 
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
@@ -611,21 +612,6 @@ class ValidationUI(PageNavigator):
         else:
             warnings.warn("Not supported for OCP version less than 4.9")
 
-    def validate_unprivileged_access(self):
-        """
-        Function to verify the unprivileged users can't access ODF dashbaord
-        """
-        self.do_click(self.validation_loc["developer_dropdown"])
-        self.do_click(self.validation_loc["select_administrator"], timeout=5)
-        try:
-            self.nav_odf_default_page()
-        except TimeoutException:
-            logger.info(
-                "As expected, ODF dashboard is not available for the unprivileged user"
-            )
-        else:
-            raise UnexpectedODFAccessException
-
     def verify_odf_without_ocs_in_installed_operator(self) -> bool:
         """
         Function to validate ODF operator is present post ODF installation,
@@ -652,7 +638,7 @@ class ValidationUI(PageNavigator):
         )
         return odf_operator_presence and not ocs_operator_presence
 
-    def check_upgrade_status_and_odf_catalog_source_health(self):
+    def check_odf_upgrade_status_and_odf_catalog_source_health(self):
         """
         Check the ODF upgrade status is up to date and the ODF Catalog Source is Healthy on UI
 
@@ -686,3 +672,18 @@ class ValidationUI(PageNavigator):
             timeout=120,
         )
         assert check_upgrade_status, "ODF Catalog Source is not Healthy on UI"
+
+    def validate_unprivileged_access(self):
+        """
+        Function to verify the unprivileged users can't access ODF dashbaord
+        """
+        self.do_click(self.validation_loc["developer_dropdown"])
+        self.do_click(self.validation_loc["select_administrator"], timeout=5)
+        try:
+            self.nav_odf_default_page()
+        except TimeoutException:
+            logger.info(
+                "As expected, ODF dashboard is not available for the unprivileged user"
+            )
+        else:
+            raise UnexpectedODFAccessException
