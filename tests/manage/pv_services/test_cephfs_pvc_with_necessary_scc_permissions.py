@@ -18,19 +18,27 @@ log = logging.getLogger(__name__)
 @polarion_id("OCS-4931")
 @bugzilla("2182943")
 @skipif_ocs_version("<4.12")
-class TestToVerifyfsgroupSetForDirectoriesInCephfsPVC(ManageTest):
+class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
     """
-    Test to verify fsgroup set for directories in cephfs PVC
+    Test to verify fsgroup set on subpath volume for cephfs PVC
     """
 
-    def test_verify_fsgroup_set_for_directories_in_cephfs_pvc(self):
+    def test_verify_fsgroup_set_on_subpath_volume_for_cephfs(self, request):
         """
-        Test to verify fsgroup set correctly for directories in cephfs PVC
         1. Create cephfs pvc
         2. Create pod with scc
         3. rsh into the pod to check if owner/owner_group set correctly
 
         """
+
+        def finalizer():
+            pod_obj.delete()
+            pvc.delete()
+            project.delete(resource_name=project.namespace)
+
+        request.addfinalizer(finalizer)
+
+        # Create project and pvc
         project = create_project()
         pvc = create_pvc(
             sc_name=constants.CEPHFILESYSTEM_SC, namespace=project.namespace
@@ -66,6 +74,7 @@ class TestToVerifyfsgroupSetForDirectoriesInCephfsPVC(ManageTest):
         ]
         # Create pod with all the above security context and user/group permissions
         pod_obj = create_pod(
+            namespace=project.namespace,
             pvc_name=pvc.name,
             interface_type=constants.CEPHFILESYSTEM,
             security_context=security_context,
@@ -74,7 +83,7 @@ class TestToVerifyfsgroupSetForDirectoriesInCephfsPVC(ManageTest):
             scc=scc,
             mountpath=mountpath,
         )
-        assert (OCP(kind="pod", namespace="openshift-storage")).wait_for_resource(
+        assert (OCP(kind=constants.POD, namespace=project.namespace)).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=pod_obj.name,
             timeout=360,
@@ -82,10 +91,10 @@ class TestToVerifyfsgroupSetForDirectoriesInCephfsPVC(ManageTest):
         )
         # Check the owner group permissions
         cmd_output = pod_obj.exec_cmd_on_pod(command="ls -l /etc/healing-controller.d/")
+        log.info(cmd_output)
         cmd_output = cmd_output.split()
         assert "root" in cmd_output[4] and cmd_output[13], "Owner is not set to root "
         assert (
             "9999" in cmd_output[5] and cmd_output[14]
         ), "Owner group is not set to 9999"
-        pod_obj.delete()
-        pvc.delete()
+        log.info("FSGroup is correctly set on subPath volume for CephFS CSI ")

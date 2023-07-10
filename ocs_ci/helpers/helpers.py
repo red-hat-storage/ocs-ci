@@ -225,7 +225,7 @@ def create_pod(
     interface_type=None,
     pvc_name=None,
     do_reload=True,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     node_name=None,
     pod_dict_path=None,
     sa_name=None,
@@ -284,6 +284,8 @@ def create_pod(
 
     """
 
+    if namespace:
+        namespace = namespace if namespace else config.ENV_DATA["cluster_namespace"]
     if (
         interface_type == constants.CEPHBLOCKPOOL
         or interface_type == constants.CEPHBLOCKPOOL_THICK
