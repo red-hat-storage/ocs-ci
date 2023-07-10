@@ -3,7 +3,12 @@ import logging
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id, bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    polarion_id,
+    bugzilla,
+    skipif_external_mode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +55,13 @@ class TestDisableMCGExternalService:
 
     @tier2
     @bugzilla("2186171")
-    @polarion_id("")
+    @polarion_id("OCS-4932")
+    @skipif_external_mode
     def test_disable_mcg_external_service(self, patch_noobaa_object):
-
+        """
+        Test KCS https://access.redhat.com/articles/6970745
+        Make sure disableLoadBalancerService is not reconciled and verify it works as expected
+        """
         # verify disableLoadBalancerService is reconciled
         assert (
             str(patch_noobaa_object.get()["spec"]["disableLoadBalancerService"])
