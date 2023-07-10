@@ -197,22 +197,26 @@ class TestBucketCreation(MCGTest):
     @pytest.mark.parametrize(
         argnames="amount,interface",
         argvalues=[
-            pytest.param(*[1, "OC"], marks=[tier1]),
+            pytest.param(
+                *[10, "OC"], marks=[tier1, pytest.mark.polarion_id("OCS-4930")]
+            ),
         ],
     )
-    def test_check_for_error_in_rook_op_logs(self, bucket_factory, amount, interface):
+    def test_check_for_bucket_notification_error_in_rook_op_logs(
+        self, bucket_factory, amount, interface
+    ):
         """
-        Test to check for error 'malformed BucketHost "s3.openshift-storage.svc"
+        Test to check for bucket notification error 'malformed BucketHost "s3.openshift-storage.svc"
         in rook operator logs post creation of noobaa obc
 
         """
 
         bucket_factory(amount, interface)
 
-        # Check rook-operator pod logs for the error msg
+        # Check rook-operator pod logs for the bucket notification error
         unexpected_log = 'malformed BucketHost "s3.openshift-storage.svc": malformed subdomain name "s3"'
         rook_op_pod = get_operator_pods()
         pod_log = get_pod_logs(pod_name=rook_op_pod[0].name)
         assert not (
             unexpected_log in pod_log
-        ), "No malformed BucketHost, subdomain found"
+        ), f"Bucket notification errors found {unexpected_log}"
