@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
-from ocs_ci.utility import version
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
@@ -244,11 +243,9 @@ class TestNodeReplacementWithIO(ManageTest):
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
-        ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-        if ocs_version_semantic >= version.VERSION_4_13:
-            assert (
-                verify_storagecluster_nodetopology
-            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+        assert (
+            verify_storagecluster_nodetopology
+        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
 
 @tier4a
@@ -291,11 +288,9 @@ class TestNodeReplacement(ManageTest):
             timeout=1800
         ), "Data re-balance failed to complete"
 
-        ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-        if ocs_version_semantic >= version.VERSION_4_13:
-            assert (
-                verify_storagecluster_nodetopology
-            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+        assert (
+            verify_storagecluster_nodetopology
+        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
 
 @tier4a
@@ -333,9 +328,6 @@ class TestNodeReplacementTwice(ManageTest):
                 node_name_to_delete in str(tree_output)
             ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"
 
-            ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-
-            if ocs_version_semantic >= version.VERSION_4_13:
-                assert (
-                    verify_storagecluster_nodetopology
-                ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+            assert (
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"

@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import machine, constants, ocp
 from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
-from ocs_ci.utility import version
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -48,11 +47,9 @@ class TestNodeReplacement(ManageTest):
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
 
-            ocs_version_semantic = version.get_semantic_ocs_version_from_config()
-            if ocs_version_semantic >= version.VERSION_4_13:
-                assert (
-                    verify_storagecluster_nodetopology
-                ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+            assert (
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
         request.addfinalizer(finalizer)
 
