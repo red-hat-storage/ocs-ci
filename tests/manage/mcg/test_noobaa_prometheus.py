@@ -41,20 +41,23 @@ class TestNoobaaaPrometheus:
         reflects the number of bytes in the bucket
 
         """
+        amount_of_objs = 10
+        bytes_size_in_mb = 2
+        bytes_in_mb = 1024 * 1024
         bucket_name = bucket_factory()[0].name
         write_random_test_objects_to_bucket(
             awscli_pod_session,
             bucket_name,
             test_directory_setup.origin_dir,
-            amount=10,
-            bs="2M",
+            amount=amount_of_objs,
+            bs=f"{bytes_size_in_mb}M",
             mcg_obj=mcg_obj_session,
         )
 
         try:
             value = get_bucket_used_bytes_metric(bucket_name)
             assert value == (
-                2 * 1024 * 1024 * 10
+                bytes_size_in_mb * bytes_in_mb * amount_of_objs
             ), f"Byte size didnt match with actuall bytes were uploaded to the bucket {bucket_name}"
             logger.info(
                 f"Prometheus metric Noobaa_bucket_used_bytes value "
