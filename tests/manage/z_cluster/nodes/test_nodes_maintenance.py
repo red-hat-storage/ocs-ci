@@ -23,7 +23,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     get_osd_running_nodes,
     get_node_objs,
-    add_new_node_and_label_it,
+    generate_new_nodes_and_osd_running_nodes_ipi,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework.testlib import (
@@ -389,31 +389,11 @@ class TestNodesMaintenance(ManageTest):
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
-        # Get the machine name using the node name
-        machine_names = [
-            machine.get_machine_from_node_name(osd_running_worker_node)
-            for osd_running_worker_node in osd_running_worker_nodes[:2]
-        ]
-        log.info(
-            f"{osd_running_worker_nodes} associated " f"machine are {machine_names}"
+        osd_running_worker_nodes = generate_new_nodes_and_osd_running_nodes_ipi(
+            num_of_nodes=2
         )
-
-        # Get the machineset name using machine name
-        machineset_names = [
-            machine.get_machineset_from_machine_name(machine_name)
-            for machine_name in machine_names
-        ]
-        log.info(
-            f"{osd_running_worker_nodes} associated machineset "
-            f"is {machineset_names}"
-        )
-
-        # Add a new node and label it
-        add_new_node_and_label_it(machineset_names[0])
-        add_new_node_and_label_it(machineset_names[1])
-
         # Drain 2 nodes
-        drain_nodes(osd_running_worker_nodes[:2])
+        drain_nodes(osd_running_worker_nodes, timeout=2100)
 
         # Check the pods should be in running state
         all_pod_obj = pod.get_all_pods(wait=True)
@@ -442,13 +422,24 @@ class TestNodesMaintenance(ManageTest):
         pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=1200)
         log.info("All the dc pods reached running state")
 
+        # Save the machine count of the worker nodes and the machine names of the osd nodes
+        machine_count = len(machine.get_machines())
+        machine_names_of_osd_nodes = [
+            machine.get_machine_from_node_name(n) for n in osd_running_worker_nodes
+        ]
         # Remove unscheduled nodes
         # In scenarios where the drain is attempted on >3 worker setup,
         # post completion of drain we are removing the unscheduled nodes so
         # that we maintain 3 worker nodes.
-        log.info(f"Removing scheduled nodes {osd_running_worker_nodes[:2]}")
-        remove_node_objs = get_node_objs(osd_running_worker_nodes[:2])
+        log.info(f"Removing scheduled nodes {osd_running_worker_nodes}")
+        remove_node_objs = get_node_objs(osd_running_worker_nodes)
         remove_nodes(remove_node_objs)
+
+        log.info(
+            f"Deleting the machines associated with the osd nodes: {machine_names_of_osd_nodes}"
+        )
+        machine.delete_machines(machine_names_of_osd_nodes)
+        machine.wait_for_machines_count_to_reach_status(machine_count)
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
