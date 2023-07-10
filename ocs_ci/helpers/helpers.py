@@ -242,6 +242,8 @@ def create_pod(
     deploy_pod_status=constants.STATUS_COMPLETED,
     subpath=None,
     deployment=False,
+    scc=None,
+    mountpath=None,
 ):
     """
     Create a pod
@@ -270,6 +272,9 @@ def create_pod(
             only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
         deployment (bool): True for Deployment creation, False otherwise
+        subpath (list): Value of subPath parameter in pod yaml
+        scc (dict): Security context for fsGroup, runAsUer, runAsGroup
+        mountpath (list): Value of mountPath parameter in pod yaml
 
     Returns:
         Pod: A Pod instance
@@ -378,7 +383,11 @@ def create_pod(
             pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = command_args
         else:
             pod_data["spec"]["containers"][0]["args"] = command_args
-
+    if scc:
+        if dc_deployment:
+            pod_data["spec"]["template"]["securityContext"] = scc
+        else:
+            pod_data["spec"]["securityContext"] = scc
     if node_name:
         if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["nodeName"] = node_name
@@ -393,6 +402,14 @@ def create_pod(
 
     if sa_name and (dc_deployment or deployment):
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
+
+    if mountpath:
+        if dc_deployment:
+            pod_data["spec"]["template"]["spec"]["containers"][0][
+                "volumeMounts"
+            ] = mountpath
+        else:
+            pod_data["spec"]["containers"][0]["volumeMounts"] = mountpath
 
     if subpath:
         if dc_deployment or deployment:
