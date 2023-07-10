@@ -1581,6 +1581,7 @@ def validate_pg_balancer():
         logger.info("pg_balancer is not active")
 
 
+@retry((ZeroDivisionError, CommandFailed))
 def get_percent_used_capacity():
     """
     Function to calculate the percentage of used capacity in a cluster
