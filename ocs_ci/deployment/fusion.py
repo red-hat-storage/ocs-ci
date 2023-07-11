@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def deploy_fusion():
     """
-    Installs cert-manager
+    Installs IBM Fusion
     """
     logger.info("Installing IBM Fusion")
     # create subscription
