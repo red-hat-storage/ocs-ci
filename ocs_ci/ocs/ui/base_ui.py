@@ -816,6 +816,40 @@ class PageNavigator(BaseUI):
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
 
+    def navigate_to_odf_operator_page(self):
+        """
+        Function to navigate and select ODF operator under Installed Operators page
+
+        """
+        if (
+            self.ocp_version_semantic >= version.VERSION_4_9
+            and self.ocs_version_semantic >= version.VERSION_4_9
+        ):
+            self.navigate_installed_operators_page()
+            logger.info("Click on project dropdown")
+            self.do_click(self.validation_loc["project-dropdown"])
+            default_projects_is_checked = self.driver.find_element_by_xpath(
+                "//input[@type='checkbox']"
+            )
+            if (
+                default_projects_is_checked.get_attribute("data-checked-state")
+                == "false"
+            ):
+                logger.info("Show default projects")
+                self.do_click(self.validation_loc["show-default-projects"])
+            logger.info("Search for 'openshift-storage' project")
+            self.do_send_keys(
+                self.validation_loc["project-search-bar"], text="openshift-storage"
+            )
+            logger.info("Select 'openshift-storage' project")
+            time.sleep(2)
+            self.do_click(
+                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+            )
+        else:
+            logger.error("ODF version isn't supported")
+            raise NotImplementedError
+
     def navigate_persistentvolumes_page(self):
         """
         Navigate to Persistent Volumes Page
@@ -1423,17 +1457,18 @@ class CreateResourceForm(PageNavigator):
 
     def _check_max_length_backing_store_rule(self, rule_exp):
         """
-        Check if the length of the backing store name is less than or equal to the maximum allowed length.
+            Check if the length of the backing store name is less than or equal to the maximum allowed length.
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.validation_loc = locators[self.ocp_version]["validation"]
-        self.dep_loc = locators[self.ocp_version]["deployment"]
-        Args:
-            rule_exp (str): the rule requested to be checked. rule_exp text should match the text from validation popup
+        def __init__(self, driver):
+            super().__init__(driver)
+            self.validation_loc = locators[self.ocp_version]["validation"]
+            self.dep_loc = locators[self.ocp_version]["deployment"]
+            Args:
+                rule_exp (str): the rule requested to be checked. rule_exp text should match the text from
+                validation popup
 
-        Returns:
-            bool: True if the rule was not violated, False otherwise.
+            Returns:
+                bool: True if the rule was not violated, False otherwise.
         """
 
         logger.info(f"checking the input rule '{rule_exp}'")
@@ -2974,40 +3009,6 @@ class BlockPools(StorageSystemDetails, CreateResourceForm):
                 f"cephblockpool status error | expected status:Ready \n "
                 f"actual status:{cephblockpool_status}"
             )
-
-    def navigate_to_odf_operator_page(self):
-        """
-        Function to select ODF operator under Installed Operators page
-
-        """
-        if (
-            self.ocp_version_semantic >= version.VERSION_4_9
-            and self.ocs_version_semantic >= version.VERSION_4_9
-        ):
-            self.navigate_installed_operators_page()
-            logger.info("Click on project dropdown")
-            self.do_click(self.validation_loc["project-dropdown"])
-            default_projects_is_checked = self.driver.find_element_by_xpath(
-                "//input[@type='checkbox']"
-            )
-            if (
-                default_projects_is_checked.get_attribute("data-checked-state")
-                == "false"
-            ):
-                logger.info("Show default projects")
-                self.do_click(self.validation_loc["show-default-projects"])
-            logger.info("Search for 'openshift-storage' project")
-            self.do_send_keys(
-                self.validation_loc["project-search-bar"], text="openshift-storage"
-            )
-            logger.info("Select 'openshift-storage' project")
-            time.sleep(2)
-            self.do_click(
-                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
-            )
-        else:
-            logger.error("ODF version isn't supported")
-            raise NotImplementedError
 
 
 class BackingStoreTab(DataFoundationDefaultTab, CreateResourceForm):

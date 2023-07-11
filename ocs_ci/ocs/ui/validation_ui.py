@@ -640,7 +640,7 @@ class ValidationUI(PageNavigator):
 
     def check_odf_upgrade_status_and_odf_catalog_source_health(self):
         """
-        Check the ODF upgrade status is up to date and the ODF Catalog Source is Healthy on UI
+        Check the ODF upgrade status is up-to-date and the ODF Catalog Source is Healthy on UI
 
         """
         self.navigate_to_odf_operator_page()
