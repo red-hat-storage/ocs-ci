@@ -1,6 +1,5 @@
 import pytest
 import logging
-from time import sleep
 
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.bucket_utils import (
@@ -26,6 +25,9 @@ from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_AWS_REGION = "us-east-2"
+DEFAULT_TIMEOUT = 20 * 60
+
 
 @pytest.fixture()
 def log_based_replication_setup(awscli_pod_session, mcg_obj_session, bucket_factory):
@@ -49,7 +51,7 @@ def log_based_replication_setup(awscli_pod_session, mcg_obj_session, bucket_fact
         "interface": "OC",
         "namespace_policy_dict": {
             "type": "Single",
-            "namespacestore_dict": {constants.AWS_PLATFORM: [(1, "us-east-2")]},
+            "namespacestore_dict": {constants.AWS_PLATFORM: [(1, DEFAULT_AWS_REGION)]},
         },
     }
     target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
@@ -59,7 +61,7 @@ def log_based_replication_setup(awscli_pod_session, mcg_obj_session, bucket_fact
         mcg_obj=mcg_obj_session,
         bucket_factory=bucket_factory,
         platform=constants.AWS_PLATFORM,
-        region="us-east-2",
+        region=DEFAULT_AWS_REGION,
     )
     replication_policy = LogBasedReplicationPolicy(
         destination_bucket=target_bucket.name,
@@ -88,9 +90,6 @@ class TestLogBasedBucketReplication(MCGTest):
 
     """
 
-    DEFAULT_AWS_REGION = "us-east-2"
-    TIMEOUT = 20 * 60
-
     @tier1
     def test_deletion_sync(self, mcg_obj_session, log_based_replication_setup):
         """
@@ -104,23 +103,21 @@ class TestLogBasedBucketReplication(MCGTest):
         """
         mockup_logger, source_bucket, target_bucket = log_based_replication_setup
 
-        logger.info("Testing log-based replication with deletion sync")
-
-        mockup_logger.upload_test_objs_and_log(source_bucket.name)
-        assert compare_bucket_object_list(
+        upload_test_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Standard replication failed to complete in {self.TIMEOUT} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
 
-        mockup_logger.delete_all_objects_and_log(source_bucket.name)
-        assert compare_bucket_object_list(
+        delete_objects_from_source_and_wait_for_deletion_sync(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Deletion sync failed to complete in {self.TIMEOUT} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
 
     @tier1
     def test_deletion_sync_opt_out(self, mcg_obj_session, log_based_replication_setup):
@@ -136,14 +133,13 @@ class TestLogBasedBucketReplication(MCGTest):
         """
         mockup_logger, source_bucket, target_bucket = log_based_replication_setup
 
-        logger.info("Uploading test objects and waiting for replication to complete")
-        mockup_logger.upload_test_objs_and_log(source_bucket.name)
-        assert compare_bucket_object_list(
+        upload_test_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Standard replication failed to complete in {self.TIMEOUT} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
 
         logger.info("Disabling the deletion sync")
         disabled_del_sync_policy = source_bucket.replication_policy
@@ -156,7 +152,7 @@ class TestLogBasedBucketReplication(MCGTest):
             mcg_obj_session,
             source_bucket.name,
             target_bucket.name,
-            timeout=self.TIMEOUT,
+            timeout=DEFAULT_TIMEOUT,
         ), "Deletion sync completed even though the policy was disabled!"
 
     @tier2
@@ -181,7 +177,9 @@ class TestLogBasedBucketReplication(MCGTest):
             "interface": "OC",
             "namespace_policy_dict": {
                 "type": "Single",
-                "namespacestore_dict": {constants.AWS_PLATFORM: [(1, "us-east-2")]},
+                "namespacestore_dict": {
+                    constants.AWS_PLATFORM: [(1, DEFAULT_AWS_REGION)]
+                },
             },
         }
         target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
@@ -193,7 +191,7 @@ class TestLogBasedBucketReplication(MCGTest):
             mcg_obj=mcg_obj_session,
             bucket_factory=bucket_factory,
             platform=constants.AWS_PLATFORM,
-            region="us-east-2",
+            region=DEFAULT_AWS_REGION,
         )
         replication_policy = LogBasedReplicationPolicy(
             destination_bucket=target_bucket.name,
@@ -202,23 +200,22 @@ class TestLogBasedBucketReplication(MCGTest):
         )
         update_replication_policy(source_bucket.name, replication_policy.to_dict())
 
-        logger.info("Testing log-based replication with deletion sync")
-
-        mockup_logger.upload_test_objs_and_log(source_bucket.name)
-        assert compare_bucket_object_list(
+        upload_test_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Standard replication failed to complete in {self.TIMEOUT} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
 
-        mockup_logger.delete_all_objects_and_log(source_bucket.name)
-        assert compare_bucket_object_list(
+        # Deletion sync has shown to take longer in this scenario, so we double the timeout
+        delete_objects_from_source_and_wait_for_deletion_sync(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Deletion sync failed to complete in {self.TIMEOUT * 2} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT * 2,
+        )
 
     @tier3
     def test_deletion_sync_after_instant_deletion(
@@ -229,31 +226,35 @@ class TestLogBasedBucketReplication(MCGTest):
 
         1. Upload an object to the source bucket
         2. Delete the object from the source bucket
-        3. Wait for potential replications and deletions
-        4. Verify that the source and target buckets are in sync
+        3. Upload a set of objects to the source bucket
+        4. Wait for the objects to be replicated to the target bucket
+        5. Delete all objects from the source bucket
+        6. Wait for the objects to be deleted from the target bucket
 
         """
         mockup_logger, source_bucket, target_bucket = log_based_replication_setup
 
+        logger.info(
+            "Uploading an object to the source bucket then immediately deleting it"
+        )
         mockup_logger.upload_arbitrary_object_and_log(source_bucket.name)
         mockup_logger.delete_all_objects_and_log(source_bucket.name)
 
-        # Comparing the buckets immediately will almost always pass because
-        # both buckets should be empty at this point. The source bucket has
-        # just been emptied, and potential replication to the target bucket
-        # probably didn't start yet.
-        # The waiting time also has to account for potential deletion sync.
-        logger.info(
-            "Waiting for potential replications and deletions before comparing the contents of the buckets"
-        )
-        sleep(self.TIMEOUT)
-
-        assert compare_bucket_object_list(
+        upload_test_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Target and source buckets do not match after {self.TIMEOUT} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
+
+        delete_objects_from_source_and_wait_for_deletion_sync(
+            mcg_obj_session,
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
 
     _nodes_tested = []
 
@@ -291,29 +292,53 @@ class TestLogBasedBucketReplication(MCGTest):
                 f"Skipping the rest of the test because {target_pod_name}'s node has already passed this test"
             )
             return
+        else:
+            logger.info(f"{target_pod_name}'s node has not passed this test yet")
 
-        logger.info(f"{target_pod_name}'s node has not passed this test yet")
-
-        logger.info("Uploading test objects and waiting for replication to complete")
-        mockup_logger.upload_test_objs_and_log(source_bucket.name)
-        assert compare_bucket_object_list(
+        upload_test_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Standard replication failed to complete in {self.TIMEOUT} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
 
         logger.info(f"Restarting {target_pod_name}'s node")
         noobaa_running_node_restart(pod_name=target_pod_name)
 
-        logger.info("Deleting source objects and checking deletion sync with target")
-        mockup_logger.delete_all_objects_and_log(source_bucket.name)
-        assert compare_bucket_object_list(
+        delete_objects_from_source_and_wait_for_deletion_sync(
             mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=self.TIMEOUT,
-        ), f"Deletion sync failed to complete in {self.TIMEOUT} seconds"
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            DEFAULT_TIMEOUT,
+        )
 
-        # Keep tack of the target node to prevent its redundant testing in this scenario
+        # Keep track of the target node to prevent its redundant testing in this scenario
         self._nodes_tested.append(target_node_name)
+
+
+def upload_test_objects_to_source_and_wait_for_replication(
+    mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
+):
+    logger.info("Uploading test objects and waiting for replication to complete")
+    mockup_logger.upload_test_objs_and_log(source_bucket.name)
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Standard replication failed to complete in {timeout} seconds"
+
+
+def delete_objects_from_source_and_wait_for_deletion_sync(
+    mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
+):
+    logger.info("Deleting source objects and waiting for deletion sync with target")
+    mockup_logger.delete_all_objects_and_log(source_bucket.name)
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Deletion sync failed to complete in {timeout} seconds"
