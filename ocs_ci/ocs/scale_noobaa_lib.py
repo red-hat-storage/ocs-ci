@@ -3,7 +3,6 @@ import time
 import re
 import datetime
 
-from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, ocp, platform_nodes
@@ -194,7 +193,7 @@ def measure_obc_creation_time(obc_name_list, timeout=60):
     # Get obc creation logs
     nb_pod_name = get_pod_name_by_pattern("noobaa-operator-")
     nb_pod_log = pod.get_pod_logs(
-        pod_name=nb_pod_name[0], namespace=config.ENV_DATA["cluster_namespace"]
+        pod_name=nb_pod_name[0], namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
     nb_pod_log = nb_pod_log.split("\n")
 
@@ -218,7 +217,7 @@ def measure_obc_creation_time(obc_name_list, timeout=60):
             time.sleep(timeout)
             nb_pod_name = get_pod_name_by_pattern("noobaa-operator-")
             nb_pod_log = pod.get_pod_logs(
-                pod_name=nb_pod_name[0], namespace=config.ENV_DATA["cluster_namespace"]
+                pod_name=nb_pod_name[0], namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
             )
             nb_pod_log = nb_pod_log.split("\n")
             loop_cnt += 1
@@ -269,7 +268,7 @@ def measure_obc_deletion_time(obc_name_list, timeout=60):
     # Get obc deletion logs
     nb_pod_name = get_pod_name_by_pattern("noobaa-operator-")
     nb_pod_log = pod.get_pod_logs(
-        pod_name=nb_pod_name[0], namespace=config.ENV_DATA["cluster_namespace"]
+        pod_name=nb_pod_name[0], namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
     nb_pod_log = nb_pod_log.split("\n")
 
@@ -293,7 +292,7 @@ def measure_obc_deletion_time(obc_name_list, timeout=60):
             time.sleep(timeout)
             nb_pod_name = get_pod_name_by_pattern("noobaa-operator-")
             nb_pod_log = pod.get_pod_logs(
-                pod_name=nb_pod_name[0], namespace=config.ENV_DATA["cluster_namespace"]
+                pod_name=nb_pod_name[0], namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
             )
             nb_pod_log = nb_pod_log.split("\n")
             loop_cnt += 1
@@ -331,6 +330,27 @@ def measure_obc_deletion_time(obc_name_list, timeout=60):
     return obc_dict
 
 
+def get_pod_obj(pod_name):
+    """
+    Function to get pod object using pod name
+
+    Args:
+        pod_name (str):  Name of a pod
+    Return:
+        pod object (obj): Object of a pod
+    """
+
+    pod_obj = pod.get_pod_obj(
+        (
+            get_pod_name_by_pattern(
+                pattern=pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+        )[0],
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    return pod_obj
+
+
 def noobaa_running_node_restart(pod_name):
     """
     Function to restart node which has noobaa pod's running
@@ -340,14 +360,7 @@ def noobaa_running_node_restart(pod_name):
 
     """
 
-    nb_pod_obj = pod.get_pod_obj(
-        (
-            get_pod_name_by_pattern(
-                pattern=pod_name, namespace=config.ENV_DATA["cluster_namespace"]
-            )
-        )[0],
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+    nb_pod_obj = get_pod_obj(pod_name)
     nb_node_name = pod.get_pod_node(nb_pod_obj).name
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
@@ -397,7 +410,7 @@ def get_noobaa_pods_status():
 
     """
     ret_val = True
-    ocp_pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_pod = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
     pod_items = ocp_pod.get(selector=constants.NOOBAA_APP_LABEL).get("items")
 
     # Check if noobaa pods are in running state
