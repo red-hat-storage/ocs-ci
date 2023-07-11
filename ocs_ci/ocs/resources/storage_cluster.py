@@ -835,6 +835,18 @@ def verify_storage_cluster():
         timeout = 600
     storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
+    # verify storage cluster version
+    if config.RUN["cli_params"].get("deploy") and not config.UPGRADE.get(
+        "upgrade_ocs_version"
+    ):
+        log.info("Verifying storage cluster version")
+        storage_cluster_version = storage_cluster.get()["status"]["version"]
+        ocs_csv = get_ocs_csv()
+        csv_version = ocs_csv.data["spec"]["version"]
+        assert (
+            storage_cluster_version in csv_version
+        ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
+
 
 def verify_noobaa_endpoint_count():
     """
