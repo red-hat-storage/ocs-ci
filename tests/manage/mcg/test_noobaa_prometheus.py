@@ -55,7 +55,7 @@ class TestNoobaaaPrometheus:
         )
 
         try:
-            value = get_bucket_used_bytes_metric(bucket_name)
+            value = int(get_bucket_used_bytes_metric(bucket_name))
             assert value == (
                 bytes_size_in_mb * bytes_in_mb * amount_of_objs
             ), f"Byte size didnt match with actuall bytes were uploaded to the bucket {bucket_name}"
