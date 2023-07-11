@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
@@ -73,8 +74,18 @@ class TestDisableMCGExternalService:
             kind="service", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         services = ["s3", "sts"]
-        for svc in services:
-            assert (
-                str(service_obj.get(resource_name=svc)["spec"]["type"]) == "ClusterIP"
-            ), f"Service {svc} isn't switched to ClusterIP service"
+
+        def check_svc_type():
+            for svc in services:
+                if (
+                    str(service_obj.get(resource_name=svc)["spec"]["type"])
+                    != "ClusterIP"
+                ):
+                    return False
+            return True
+
+        sample = TimeoutSampler(timeout=60, sleep=10, func=check_svc_type)
+        assert sample.wait_for_func_status(
+            result=True
+        ), f"Services {services} isn't switched to ClusterIP service"
         logger.info(f"Services {services} switched to ClusterIP")
