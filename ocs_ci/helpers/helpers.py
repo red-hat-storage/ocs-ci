@@ -4309,3 +4309,17 @@ def verify_storagecluster_nodetopology():
     for node_obj in ocs_node_objs:
         ocs_node_names.append(node_obj.name)
     return ocs_node_names.sort() == nodes_storage_cluster.sort()
+
+
+def get_s3_credentials_from_secret(secret_name):
+    ocp_secret_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
+
+    secret = ocp_secret_obj.get(resource_name=secret_name)
+
+    base64_access_key = secret["data"]["AWS_ACCESS_KEY_ID"]
+    base64_secret_key = secret["data"]["AWS_SECRET_ACCESS_KEY"]
+
+    access_key = base64.b64decode(base64_access_key).decode("utf-8")
+    secret_key = base64.b64decode(base64_secret_key).decode("utf-8")
+
+    return access_key, secret_key

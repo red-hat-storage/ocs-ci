@@ -1,13 +1,13 @@
 import logging
 import random
+import uuid
 import pytest
 import boto3
 
 from ocs_ci.framework.pytest_customization.marks import tier2
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import get_s3_credentials_from_secret
 
-from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class TestCredentialsReset(MCGTest):
         """
 
         # Change the noobaa-admin password
-        new_password = "new_nb_admin_password"
+        new_password = f"new_nb_admin_password-{(uuid.uuid4().hex)[:16]}"
         mcg_obj_session.reset_admin_pw(new_password=new_password)
 
         # Verify the password changed in the noobaa-admin secret
@@ -62,17 +62,17 @@ class TestCredentialsReset(MCGTest):
 
         # Verify the original password fails when attempting to generate an RPC token
         # TODO - define a more specific exception to catch
-        mcg_obj_session.password = original_noobaa_admin_password
+        mcg_obj_session.noobaa_password = original_noobaa_admin_password
         with pytest.raises(Exception):
-            mcg_obj_session.retrieve_nb_token()
+            mcg_obj_session.retrieve_nb_token(timeout=0)
             logger.error(
                 "Unexpectedly succeeded in retrieving RPC token with the original password"
             )
 
         # Verify the new password succeeds when attempting to generate an RPC token
-        mcg_obj_session.password = new_password
+        mcg_obj_session.noobaa_password = new_password
         try:
-            mcg_obj_session.retrieve_nb_token()
+            mcg_obj_session.retrieve_nb_token(timeout=60)
             logger.info("Successfully retrieved RPC token with new password")
         except Exception as e:
             logger.error(f"Failed to retrieve RPC token with new password: {e}")
@@ -91,26 +91,22 @@ class TestCredentialsReset(MCGTest):
         4. Verify that creating an S3 bucket fails with the old credentials and succeeds with the new credentials
 
         """
-        acc_name = f"nsfs-integrity-test-{random.randrange(100)}"
+        acc_name = f"credentials-reset-acc-{random.randrange(100)}"
         original_acc_credentials = mcg_account_factory(name=acc_name)
         endpoint = original_acc_credentials["endpoint"]
 
         # Fetch the account's S3 credentials
-        ocp_secret_obj = OCP(
-            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
+        original_access_key, original_secret_key = get_s3_credentials_from_secret(
+            f"noobaa-account-{acc_name}"
         )
-
-        mcg_acc_secret = ocp_secret_obj.get(resource_name=f"noobaa-account-{acc_name}")
-        original_access_key = mcg_acc_secret["data"]["AWS_ACCESS_KEY_ID"]
-        original_secret_key = mcg_acc_secret["data"]["AWS_SECRET_ACCESS_KEY"]
 
         # Regenerate the account's S3 credentials
         mcg_obj_session.exec_mcg_cmd(f"account regenerate {acc_name}", use_yes=True)
 
         # Verify the account's S3 credentials have changed at the secret
-        mcg_acc_secret = ocp_secret_obj.get(resource_name=f"noobaa-account-{acc_name}")
-        new_access_key = mcg_acc_secret["data"]["AWS_ACCESS_KEY_ID"]
-        new_secret_key = mcg_acc_secret["data"]["AWS_SECRET_ACCESS_KEY"]
+        new_access_key, new_secret_key = get_s3_credentials_from_secret(
+            f"noobaa-account-{acc_name}"
+        )
 
         assert (
             original_access_key != new_access_key
@@ -167,21 +163,16 @@ class TestCredentialsReset(MCGTest):
 
         obc_name = bucket_factory(amount=1, interface="OC", timeout=120)[0].name
 
-        # Fetch the account's S3 credentials
-        ocp_secret_obj = OCP(
-            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
+        # Fetch the OBC's S3 credentials
+        original_access_key, original_secret_key = get_s3_credentials_from_secret(
+            obc_name
         )
 
-        obc_secret = ocp_secret_obj.get(resource_name=obc_name)
-        original_access_key = obc_secret["data"]["AWS_ACCESS_KEY_ID"]
-        original_secret_key = obc_secret["data"]["AWS_SECRET_ACCESS_KEY"]
-
-        # Regenerate the account's S3 credentials
+        # Regenerate the OBC's S3 credentials
         mcg_obj_session.exec_mcg_cmd(f"obc regenerate {obc_name}", use_yes=True)
 
-        obc_secret = ocp_secret_obj.get(resource_name=obc_name)
-        new_access_key = obc_secret["data"]["AWS_ACCESS_KEY_ID"]
-        new_secret_key = obc_secret["data"]["AWS_SECRET_ACCESS_KEY"]
+        # Verify the OBC's S3 credentials have changed at the secret
+        new_access_key, new_secret_key = get_s3_credentials_from_secret(obc_name)
 
         assert (
             original_access_key != new_access_key
@@ -195,7 +186,7 @@ class TestCredentialsReset(MCGTest):
         original_credentials_s3_resource = boto3.resource(
             "s3",
             verify=False,
-            endpoint_url=mcg_obj_session.s3_internal_endpoint,
+            endpoint_url=mcg_obj_session.s3_endpoint,
             aws_access_key_id=original_access_key,
             aws_secret_access_key=original_secret_key,
         )
@@ -211,7 +202,7 @@ class TestCredentialsReset(MCGTest):
         new_credentials_s3_resource = boto3.resource(
             "s3",
             verify=False,
-            endpoint_url=mcg_obj_session.s3_internal_endpoint,
+            endpoint_url=mcg_obj_session.s3_endpoint,
             aws_access_key_id=new_access_key,
             aws_secret_access_key=new_secret_key,
         )

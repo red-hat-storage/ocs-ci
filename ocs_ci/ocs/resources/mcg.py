@@ -161,7 +161,7 @@ class MCG:
                 aws_secret_access_key=self.aws_access_key,
             )
 
-    def retrieve_nb_token(self):
+    def retrieve_nb_token(self, timeout=300):
         """
         Try to retrieve a NB RPC token and decode its JSON
 
@@ -191,7 +191,7 @@ class MCG:
                 return None
 
         try:
-            for token in TimeoutSampler(300, 30, internal_retrieval_logic):
+            for token in TimeoutSampler(timeout, 30, internal_retrieval_logic):
                 if token:
                     return token
         except TimeoutExpiredError:
@@ -1082,10 +1082,11 @@ class MCG:
         cmd = "".join(
             (
                 f"account passwd {self.noobaa_user}",
-                f" --old-password {self.noobaa_passwordd}",
+                f" --old-password {self.noobaa_password}",
                 f" --new-password {new_password}",
                 f" --retype-new-password {new_password}",
             )
         )
 
         self.exec_mcg_cmd(cmd)
+        self.noobaa_password = new_password
