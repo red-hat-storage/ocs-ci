@@ -124,7 +124,7 @@ class TestScaleOBCStartTime(E2ETest):
             namespace=self.namespace
         )
         log.info(
-            f"Number of OBCs in Bound state after node reset: "
+            "Number of OBCs in Bound state after node reset: "
             f"{len(obc_status_list[0])}"
         )
         assert (
