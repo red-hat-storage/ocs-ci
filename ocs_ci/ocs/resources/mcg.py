@@ -1070,3 +1070,22 @@ class MCG:
         ).decode("utf-8")
 
         return credentials_dict
+
+    def reset_admin_pw(self, new_password):
+        """
+        Reset the NooBaa admin password
+
+        Args:
+            new_password (str): New password to set for the NooBaa admin user
+
+        """
+        cmd = "".join(
+            (
+                f"account passwd {self.noobaa_user}",
+                f" --old-password {self.noobaa_passwordd}",
+                f" --new-password {new_password}",
+                f" --retype-new-password {new_password}",
+            )
+        )
+
+        self.exec_mcg_cmd(cmd)
