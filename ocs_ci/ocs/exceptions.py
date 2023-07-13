@@ -621,3 +621,7 @@ class IncorrectUiOptionRequested(Exception):
         super().__init__(text)
         if func is not None:
             func()
+
+
+class ReturnedEmptyResponseException(Exception):
+    pass
