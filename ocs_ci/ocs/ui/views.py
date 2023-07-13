@@ -324,6 +324,22 @@ obc = {
         'li[id="Delete"] a[role="menuitem"]',
         By.CSS_SELECTOR,
     ),
+    "namespace_store_create": (
+        "button[data-test='item-create']",
+        By.CSS_SELECTOR,
+    ),
+    "namespace_store_name": ('input[id="ns-name"]', By.CSS_SELECTOR),
+    "namespace_store_provider": (
+        "//div[@data-test='namespacestore-provider']//button",
+        By.XPATH,
+    ),
+    "namespace_store_filesystem": ("//li[@id='Filesystem']", By.XPATH),
+    "namespace_store_pvc_expand": ("//div[@id='pvc-name']//button", By.XPATH),
+    "namespace_store_folder": ('input[id="folder-name"]', By.CSS_SELECTOR),
+    "namespace_store_create_item": (
+        'button[data-test="namespacestore-create-button"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 pvc = {

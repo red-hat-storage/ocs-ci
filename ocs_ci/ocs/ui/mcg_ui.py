@@ -2,6 +2,7 @@ import logging
 from time import sleep
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.helpers_ui import get_element_by_text
 
 logger = logging.getLogger(__name__)
 
@@ -232,3 +233,43 @@ class BucketClassUI(PageNavigator):
 
         logger.info("Confirm BC Deletion")
         self.do_click(self.generic_locators["confirm_action"])
+
+class NamespaceStoreUI(ObcUI):
+    def __init__(self):
+        super().__init__()
+        self.sc_loc = self.obc_loc
+
+    def create_namespace_store(
+        self,
+        namespace_store_name,
+        namespace_store_provider,
+        namespace_store_pvc_name,
+        namespace_store_folder,
+    ):
+        """
+
+        Args:
+            namespace_store_name (str): the namespace store
+            namespace_store_provider (str):  the provider [aws, filesystem, azure]
+            namespace_store_pvc_name (str): pvc name for file system mode
+            namespace_store_folder (str): the folder name for mount point to fs.
+
+        """
+
+        self.nav_odf_default_page().nav_namespace_store_tab()
+
+        self.do_click(self.sc_loc["namespace_store_create"])
+
+        self.do_send_keys(self.sc_loc["namespace_store_name"], namespace_store_name)
+
+        if namespace_store_provider == "fs":
+            self.do_click(self.sc_loc["namespace_store_provider"])
+            self.do_click(self.sc_loc["namespace_store_filesystem"])
+            sleep(2)
+            self.do_click(self.sc_loc["namespace_store_pvc_expand"])
+            self.do_click(get_element_by_text(namespace_store_pvc_name))
+
+        self.do_send_keys(self.sc_loc["namespace_store_folder"], namespace_store_folder)
+        self.take_screenshot()
+
+        self.do_click(self.sc_loc["namespace_store_create_item"])
