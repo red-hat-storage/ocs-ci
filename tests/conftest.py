@@ -6,6 +6,7 @@ import random
 import time
 import tempfile
 import threading
+import json
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
@@ -6506,3 +6507,113 @@ def change_the_noobaa_log_level(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="class")
+def modify_mcg_replication_delay_class(request, mcg_obj_session):
+    """
+    Class-scoped fixture to change MCG's default replication delay
+
+    """
+    return modify_mcg_replication_delay_fixture(request, mcg_obj_session)
+
+
+def modify_mcg_replication_delay_fixture(request, mcg_obj_session):
+    """
+    Change MCG's default replication delay
+
+    """
+    sts_obj = OCP(kind="StatefulSet", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
+    op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
+
+    def modify_delay_implementation(new_delay_in_seconds):
+        """
+        Implementation of modify_mcg_replication_delay()
+
+        Args:
+            new_delay_in_seconds (int): The new delay in seconds
+
+        """
+
+        log.info(f"Modifying MCG's replication delay to {new_delay_in_seconds} seconds")
+
+        # Copy and modify the template to create the required dict for the first addition
+        add_replicator_op = copy.deepcopy(op_template_dict)
+        add_replicator_op["op"] = "add"
+        add_replicator_op["path"] = f"{yaml_path_to_env_variables}/-"
+        add_replicator_op["value"] = {
+            "name": constants.BUCKET_REPLICATOR_DELAY_PARAM,
+            "value": str(
+                new_delay_in_seconds * 1000
+            ),  # delay in conf is in milliseconds
+        }
+
+        # Copy and modify the above for the second addition
+        add_log_replicator_op = copy.deepcopy(add_replicator_op)
+        add_log_replicator_op["value"][
+            "name"
+        ] = constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM
+
+        # Patch the noobaa-core sts to add the new env vars
+        sts_obj.patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=json.dumps([add_replicator_op, add_log_replicator_op]),
+            format_type="json",
+        )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    def finalizer():
+        """
+        Restore MCG's original replication delay
+
+        """
+        log.info("Restoring MCG's original replication delay")
+
+        # Fetch the sts object to get the index of the bucket replicator env var
+        nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+        env_vars = nb_core_sts["spec"]["template"]["spec"]["containers"][0]["env"]
+        env_vars_names = [env_var["name"] for env_var in env_vars]
+        env_var_index = env_vars_names.index(constants.BUCKET_REPLICATOR_DELAY_PARAM)
+
+        # Copy and modify the template to create the required dict for the first removal
+        remove_replicator_op = copy.deepcopy(op_template_dict)
+        remove_replicator_op["op"] = "remove"
+        remove_replicator_op["path"] = f"{yaml_path_to_env_variables}/{env_var_index}"
+        del remove_replicator_op["value"]
+
+        # Patch the noobaa-core sts to remove the first env var
+        sts_obj.patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=json.dumps([remove_replicator_op]),
+            format_type="json",
+        )
+
+        # Fetch the updated sts object and get the new index of the log replicator env var
+        nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+        env_vars = nb_core_sts["spec"]["template"]["spec"]["containers"][0]["env"]
+        env_vars_names = [env_var["name"] for env_var in env_vars]
+        env_var_index = env_vars_names.index(
+            constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM
+        )
+
+        # Copy and modify the above dict for the second removal
+        remove_log_replicator_op = copy.deepcopy(remove_replicator_op)
+        remove_log_replicator_op[
+            "path"
+        ] = f"{yaml_path_to_env_variables}/{env_var_index}"
+
+        # Patch the noobaa-core sts to remove the second env var
+        sts_obj.patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=json.dumps([remove_log_replicator_op]),
+            format_type="json",
+        )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    request.addfinalizer(finalizer)
+    return modify_delay_implementation

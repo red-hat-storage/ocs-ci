@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     skipif_aws_creds_are_missing,
     skipif_vsphere_ipi,
     ignore_leftover_label,
+    polarion_id,
     tier1,
     tier2,
     tier3,
@@ -24,58 +25,6 @@ from ocs_ci.ocs.resources.mcg_replication_policy import LogBasedReplicationPolic
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_AWS_REGION = "us-east-2"
-DEFAULT_TIMEOUT = 20 * 60
-
-
-@pytest.fixture()
-def log_based_replication_setup(awscli_pod_session, mcg_obj_session, bucket_factory):
-    """
-    A fixture to set up standard log-based replication with deletion sync.
-
-    Args:
-        awscli_pod_session(Pod): A pod running the AWS CLI
-        mcg_obj_session(MCG): An MCG object
-        bucket_factory: A bucket factory fixture
-
-    Returns:
-        MockupBucketLogger: A MockupBucketLogger object
-        Bucket: The source bucket
-        Bucket: The target bucket
-    """
-
-    logger.info("Starting log-based replication setup")
-
-    bucketclass_dict = {
-        "interface": "OC",
-        "namespace_policy_dict": {
-            "type": "Single",
-            "namespacestore_dict": {constants.AWS_PLATFORM: [(1, DEFAULT_AWS_REGION)]},
-        },
-    }
-    target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
-
-    mockup_logger = MockupBucketLogger(
-        awscli_pod=awscli_pod_session,
-        mcg_obj=mcg_obj_session,
-        bucket_factory=bucket_factory,
-        platform=constants.AWS_PLATFORM,
-        region=DEFAULT_AWS_REGION,
-    )
-    replication_policy = LogBasedReplicationPolicy(
-        destination_bucket=target_bucket.name,
-        sync_deletions=True,
-        logs_bucket=mockup_logger.logs_bucket_uls_name,
-    )
-
-    source_bucket = bucket_factory(
-        1, bucketclass=bucketclass_dict, replication_policy=replication_policy
-    )[0]
-
-    logger.info("log-based replication setup complete")
-
-    return mockup_logger, source_bucket, target_bucket
 
 
 @ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
@@ -90,7 +39,74 @@ class TestLogBasedBucketReplication(MCGTest):
 
     """
 
+    DEFAULT_AWS_REGION = "us-east-2"
+    DEFAULT_TIMEOUT = 20 * 60
+
+    @pytest.fixture(scope="class", autouse=True)
+    def reduce_replication_delay_setup(self, modify_mcg_replication_delay_class):
+        """
+        A fixture to reduce the replication delay to one minute.
+
+        Args:
+            modify_mcg_replication_delay (function): A function to modify the replication delay
+
+        """
+        modify_mcg_replication_delay_class(new_delay_in_seconds=60)
+
+    @pytest.fixture()
+    def log_based_replication_setup(
+        self, awscli_pod_session, mcg_obj_session, bucket_factory
+    ):
+        """
+        A fixture to set up standard log-based replication with deletion sync.
+
+        Args:
+            awscli_pod_session(Pod): A pod running the AWS CLI
+            mcg_obj_session(MCG): An MCG object
+            bucket_factory: A bucket factory fixture
+
+        Returns:
+            MockupBucketLogger: A MockupBucketLogger object
+            Bucket: The source bucket
+            Bucket: The target bucket
+        """
+
+        logger.info("Starting log-based replication setup")
+
+        bucketclass_dict = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Single",
+                "namespacestore_dict": {
+                    constants.AWS_PLATFORM: [(1, self.DEFAULT_AWS_REGION)]
+                },
+            },
+        }
+        target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
+
+        mockup_logger = MockupBucketLogger(
+            awscli_pod=awscli_pod_session,
+            mcg_obj=mcg_obj_session,
+            bucket_factory=bucket_factory,
+            platform=constants.AWS_PLATFORM,
+            region=self.DEFAULT_AWS_REGION,
+        )
+        replication_policy = LogBasedReplicationPolicy(
+            destination_bucket=target_bucket.name,
+            sync_deletions=True,
+            logs_bucket=mockup_logger.logs_bucket_uls_name,
+        )
+
+        source_bucket = bucket_factory(
+            1, bucketclass=bucketclass_dict, replication_policy=replication_policy
+        )[0]
+
+        logger.info("log-based replication setup complete")
+
+        return mockup_logger, source_bucket, target_bucket
+
     @tier1
+    @polarion_id("OCS-4936")
     def test_deletion_sync(self, mcg_obj_session, log_based_replication_setup):
         """
         Test log-based replication with deletion sync.
@@ -108,7 +124,7 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
         delete_objects_from_source_and_wait_for_deletion_sync(
@@ -116,10 +132,11 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
     @tier1
+    @polarion_id("OCS-4937")
     def test_deletion_sync_opt_out(self, mcg_obj_session, log_based_replication_setup):
         """
         Test that deletion sync can be disabled.
@@ -138,7 +155,7 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
         logger.info("Disabling the deletion sync")
@@ -152,10 +169,11 @@ class TestLogBasedBucketReplication(MCGTest):
             mcg_obj_session,
             source_bucket.name,
             target_bucket.name,
-            timeout=DEFAULT_TIMEOUT,
+            timeout=self.DEFAULT_TIMEOUT,
         ), "Deletion sync completed even though the policy was disabled!"
 
     @tier2
+    @polarion_id("OCS-4941")
     def test_patch_deletion_sync_to_existing_bucket(
         self, awscli_pod_session, mcg_obj_session, bucket_factory
     ):
@@ -178,7 +196,7 @@ class TestLogBasedBucketReplication(MCGTest):
             "namespace_policy_dict": {
                 "type": "Single",
                 "namespacestore_dict": {
-                    constants.AWS_PLATFORM: [(1, DEFAULT_AWS_REGION)]
+                    constants.AWS_PLATFORM: [(1, self.DEFAULT_AWS_REGION)]
                 },
             },
         }
@@ -191,7 +209,7 @@ class TestLogBasedBucketReplication(MCGTest):
             mcg_obj=mcg_obj_session,
             bucket_factory=bucket_factory,
             platform=constants.AWS_PLATFORM,
-            region=DEFAULT_AWS_REGION,
+            region=self.DEFAULT_AWS_REGION,
         )
         replication_policy = LogBasedReplicationPolicy(
             destination_bucket=target_bucket.name,
@@ -205,7 +223,7 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
         # Deletion sync has shown to take longer in this scenario, so we double the timeout
@@ -214,10 +232,11 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT * 2,
+            self.DEFAULT_TIMEOUT * 2,
         )
 
     @tier3
+    @polarion_id("OCS-4940")
     def test_deletion_sync_after_instant_deletion(
         self, mcg_obj_session, log_based_replication_setup
     ):
@@ -245,7 +264,7 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
         delete_objects_from_source_and_wait_for_deletion_sync(
@@ -253,7 +272,7 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
     _nodes_tested = []
@@ -261,13 +280,26 @@ class TestLogBasedBucketReplication(MCGTest):
     @tier4b
     @skipif_vsphere_ipi
     @pytest.mark.parametrize("target_pod_name", ["noobaa-db", "noobaa-core"])
+    @pytest.mark.parametrize(
+        argnames=["target_pod_name"],
+        argvalues=[
+            pytest.param(
+                "noobaa-db",
+                marks=pytest.mark.polarion_id("OCS-4938"),
+            ),
+            pytest.param(
+                "noobaa-core",
+                marks=pytest.mark.polarion_id("OCS-4939"),
+            ),
+        ],
+    )
     def test_deletion_sync_after_node_restart(
         self, mcg_obj_session, log_based_replication_setup, target_pod_name
     ):
         """
         Test deletion sync behavior after a node restart.
 
-        1. Check if the node that the target pode is located on has already passed this test with a previous param
+        1. Check if the node that the target pod is located on has already passed this test with a previous param
             1.1 If it has, skip the rest of the test and pass
         2. Upload a set of objects to the source bucket
         3. Wait for the objects to be replicated to the target bucket
@@ -300,7 +332,7 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
         logger.info(f"Restarting {target_pod_name}'s node")
@@ -311,7 +343,7 @@ class TestLogBasedBucketReplication(MCGTest):
             source_bucket,
             target_bucket,
             mockup_logger,
-            DEFAULT_TIMEOUT,
+            self.DEFAULT_TIMEOUT,
         )
 
         # Keep track of the target node to prevent its redundant testing in this scenario
