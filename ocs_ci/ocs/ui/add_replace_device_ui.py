@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import ODF_OPERATOR
 
 

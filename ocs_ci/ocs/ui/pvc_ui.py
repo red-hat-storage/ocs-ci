@@ -1,7 +1,7 @@
 import logging
 import time
 
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import generic_locators
 from ocs_ci.utility.utils import get_running_ocp_version

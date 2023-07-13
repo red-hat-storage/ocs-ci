@@ -4,7 +4,7 @@ import time
 
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
