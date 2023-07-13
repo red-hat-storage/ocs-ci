@@ -17,7 +17,8 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_worker_nodes, get_node_names
-from ocs_ci.ocs.ui.base_ui import PageNavigator, take_screenshot
+from ocs_ci.ocs.ui.base_ui import take_screenshot
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.odf_topology import (
     OdfTopologyHelper,
     get_deployment_details_cli,
