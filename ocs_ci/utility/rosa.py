@@ -9,7 +9,7 @@ import os
 import re
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     ManagedServiceAddonDeploymentError,
     UnsupportedPlatformVersionError,
@@ -76,7 +76,7 @@ def create_cluster(cluster_name, version, region):
     )
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--machine-cidr {machine_cidr} --compute-nodes {compute_nodes} "
+        f"--machine-cidr {machine_cidr} --replicas {compute_nodes} "
         f"--compute-machine-type {compute_machine_type} "
         f"--version {rosa_ocp_version} {multi_az}--sts --yes"
     )
@@ -635,7 +635,7 @@ def post_onboarding_verification():
         config.switch_ctx(cluster_index)
         clusterversion_yaml = ocp.OCP(
             kind="ClusterVersion",
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="version",
         )
         current_consumer = clusterversion_yaml.get()["spec"]["clusterID"]
@@ -646,7 +646,7 @@ def post_onboarding_verification():
     for consumer in consumer_ids:
         consumer_yaml = ocp.OCP(
             kind="StorageConsumer",
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=consumer,
         )
         ceph_resources = consumer_yaml.get().get("status")["cephResources"]
@@ -662,7 +662,7 @@ def post_onboarding_verification():
             resource_name = resource + "-" + consumer
             resource_yaml = ocp.OCP(
                 kind=resource,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=resource_name,
             )
             if resource_yaml.get()["status"]["phase"] != constants.STATUS_READY:

@@ -60,7 +60,8 @@ class TestOBCUi(ManageTest):
         )
 
         """Login using created user"""
-        obc_ui_obj = ObcUi(login_factory(user[0], user[1]))
+        login_factory(user[0], user[1])
+        obc_ui_obj = ObcUi()
         obc_ui_obj.check_obc_option()
 
 
@@ -80,7 +81,8 @@ class TestUnprivilegedUserODFAccess(E2ETest):
         logger.info(f"user created: {user[0]} password: {user[1]}")
 
         # login with the user created
-        validation_ui_obj = ValidationUI(login_factory(user[0], user[1]))
+        login_factory(user[0], user[1])
+        validation_ui_obj = ValidationUI()
         try:
             validation_ui_obj.validate_unprivileged_access()
         except UnexpectedODFAccessException:

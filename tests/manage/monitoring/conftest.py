@@ -19,7 +19,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
-from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
@@ -341,10 +341,13 @@ def measure_corrupt_pg(request, measurement_dir):
     logger.info(f"Put object into {pool_name}")
     pool_object = "test_object"
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
+    logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
+    rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
 
-    def corrupt_pg():
+    def wait_with_corrupted_pg():
         """
-        Corrupt PG on one OSD in Ceph pool for 14 minutes and measure it.
+        PG on one OSD in Ceph pool should be corrupted at the time of execution
+        of this function. Measure it for 14 minutes.
         There should be only CephPGRepairTakingTooLong Pending alert as
         it takes 2 hours for it to become Firing.
         This configuration of alert can be observed in ceph-mixins which
@@ -356,14 +359,9 @@ def measure_corrupt_pg(request, measurement_dir):
         Returns:
             str: Name of corrupted pod
         """
+        nonlocal osd_deployment
         # run_time of operation
         run_time = 60 * 14
-        nonlocal pool_name
-        nonlocal pool_object
-        nonlocal osd_deployment
-
-        logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
-        rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return osd_deployment.name
@@ -374,13 +372,13 @@ def measure_corrupt_pg(request, measurement_dir):
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
         measured_op = measure_operation(
-            corrupt_pg,
+            wait_with_corrupted_pg,
             test_file,
             minimal_time=60 * 17,
             pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
         )
     else:
-        measured_op = measure_operation(corrupt_pg, test_file)
+        measured_op = measure_operation(wait_with_corrupted_pg, test_file)
 
     teardown()
 
@@ -484,7 +482,7 @@ def workload_storageutilization_85p_rbd(
 
 
 @pytest.fixture
-def workload_storageutilization_95p_rbd(
+def workload_storageutilization_97p_rbd(
     project,
     fio_pvc_dict,
     fio_job_dict,
@@ -493,7 +491,7 @@ def workload_storageutilization_95p_rbd(
     tmp_path,
     supported_configuration,
 ):
-    fixture_name = "workload_storageutilization_95p_rbd"
+    fixture_name = "workload_storageutilization_97p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -502,7 +500,7 @@ def workload_storageutilization_95p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95,
+        target_percentage=0.97,
     )
     return measured_op
 
@@ -574,7 +572,7 @@ def workload_storageutilization_85p_cephfs(
 
 
 @pytest.fixture
-def workload_storageutilization_95p_cephfs(
+def workload_storageutilization_97p_cephfs(
     project,
     fio_pvc_dict,
     fio_job_dict,
@@ -583,7 +581,7 @@ def workload_storageutilization_95p_cephfs(
     tmp_path,
     supported_configuration,
 ):
-    fixture_name = "workload_storageutilization_95p_cephfs"
+    fixture_name = "workload_storageutilization_97p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -592,7 +590,7 @@ def workload_storageutilization_95p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95,
+        target_percentage=0.97,
     )
     return measured_op
 
@@ -648,12 +646,8 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     bucket_name = create_unique_resource_name(
         resource_description="bucket", resource_type="s3"
     )
-    bucket = MCGS3Bucket(bucket_name, mcg=mcg_obj)
-    mcg_obj.send_rpc_query(
-        "bucket_api",
-        "update_bucket",
-        {"name": bucket_name, "quota": {"unit": "GIGABYTE", "size": 2}},
-    )
+    quota = "2Gi"
+    bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota=quota)
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
     logger.info(f"Bucket {bucket.name} data: {bucket_info['data']}")
@@ -736,6 +730,7 @@ def workload_idle(measurement_dir):
     the workload in such case.
     """
 
+    @retry(CommandFailed, text_in_exception="failed to get OSD and MON pods")
     def count_ceph_components():
         ceph_osd_ls_list = get_osd_pods()
         osd_num = len(ceph_osd_ls_list)

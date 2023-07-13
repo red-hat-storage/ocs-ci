@@ -25,7 +25,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.utility import version
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 
 
@@ -52,6 +52,7 @@ class OCP(object):
         cluster_kubeconfig="",
         threading_lock=None,
         silent=False,
+        skip_tls_verify=False,
     ):
         """
         Initializer function. Avoid shallow request, func is resource consuming
@@ -69,6 +70,8 @@ class OCP(object):
             threading_lock (threading.Lock): threading.Lock object that is used
                 for handling concurrent oc commands
             silent (bool): If True will silent errors from the server, default false
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command for
+                exec_oc_cmd
         """
         self._api_version = api_version
         self._kind = kind
@@ -80,6 +83,7 @@ class OCP(object):
         self.cluster_kubeconfig = cluster_kubeconfig
         self.threading_lock = threading_lock
         self.silent = silent
+        self.skip_tls_verify = skip_tls_verify
 
     @property
     def api_version(self):
@@ -120,6 +124,8 @@ class OCP(object):
         timeout=600,
         ignore_error=False,
         silent=False,
+        cluster_config=None,
+        skip_tls_verify=False,
         **kwargs,
     ):
         """
@@ -137,6 +143,9 @@ class OCP(object):
             ignore_error (bool): True if ignore non zero return code and do not
                 raise the exception.
             silent (bool): If True will silent errors from the server, default false
+            cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
+                executions
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -144,20 +153,26 @@ class OCP(object):
 
         """
         oc_cmd = "oc "
-        env_kubeconfig = os.getenv("KUBECONFIG")
+        env_kubeconfig = None
+        if not cluster_config:
+            cluster_config = config
+            env_kubeconfig = os.getenv("KUBECONFIG")
         kubeconfig_path = (
             self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
         )
 
         if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
             cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+                cluster_config.ENV_DATA["cluster_path"],
+                cluster_config.RUN.get("kubeconfig_location"),
             )
             if os.path.exists(cluster_dir_kubeconfig):
                 oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
 
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "
+        if skip_tls_verify or self.skip_tls_verify:
+            command += " --insecure-skip-tls-verify"
 
         oc_cmd += command
         out = run_cmd(
@@ -167,6 +182,7 @@ class OCP(object):
             ignore_error=ignore_error,
             threading_lock=self.threading_lock,
             silent=silent,
+            cluster_config=cluster_config,
             **kwargs,
         )
 
@@ -201,7 +217,7 @@ class OCP(object):
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
         debug_cmd = (
             f"debug nodes/{node} --to-namespace={namespace} "
             f' -- chroot /host /bin/bash -c "{cmd}"'
@@ -225,6 +241,8 @@ class OCP(object):
         dont_raise=False,
         silent=False,
         field_selector=None,
+        cluster_config=None,
+        skip_tls_verify=False,
     ):
         """
         Get command - 'oc get <resource>'
@@ -239,6 +257,7 @@ class OCP(object):
             dont_raise (bool): If True will raise when get is not found
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
 
         Example:
             get('my-pv1')
@@ -248,6 +267,8 @@ class OCP(object):
             None: Incase dont_raise is True and get is not found
 
         """
+        if not cluster_config:
+            cluster_config = config
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
         field_selector = field_selector if field_selector else self.field_selector
@@ -267,7 +288,12 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                return self.exec_oc_cmd(command, silent=silent)
+                return self.exec_oc_cmd(
+                    command,
+                    silent=silent,
+                    cluster_config=cluster_config,
+                    skip_tls_verify=skip_tls_verify,
+                )
             except CommandFailed as ex:
                 if not silent:
                     log.warning(
@@ -1221,7 +1247,7 @@ def switch_to_default_rook_cluster_project():
     Returns:
         bool: True on success, False otherwise
     """
-    return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+    return switch_to_project(config.ENV_DATA["cluster_namespace"])
 
 
 def rsync(src, dst, node, dst_node=True, extra_params=""):
@@ -1622,7 +1648,7 @@ def clear_overprovision_spec(ignore_errors=False):
     log.info("Removing overprovisionControl from storage cluster.")
     storagecluster_obj = OCP(
         resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
 
@@ -1665,7 +1691,7 @@ def set_overprovision_policy(capacity, quota_name, sc_name, label):
 
     storagecluster_obj = OCP(
         resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
 

@@ -56,7 +56,7 @@ class TestS3MultipartUpload(ManageTest):
     @tier1
     @pytest.mark.polarion_id("OCS-2245")
     def test_multipart_upload_operations(
-        self, rgw_endpoint, awscli_pod_session, rgw_bucket_factory, test_directory_setup
+        self, awscli_pod_session, rgw_bucket_factory, test_directory_setup
     ):
         """
         Test Multipart upload operations on bucket and verifies the integrity of the downloaded object

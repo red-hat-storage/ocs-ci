@@ -5,7 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.utils import get_ocp_version, get_testrun_name
 from ocs_ci.utility.version import (
     get_semantic_ocs_version_from_config,
-    VERSION_4_9,
+    VERSION_4_13,
 )
 
 log = logging.getLogger(__name__)
@@ -111,9 +111,13 @@ def update_live_must_gather_image():
     """
     Update live must gather image in the config.
     """
-    odf_ocs = "odf" if get_semantic_ocs_version_from_config() >= VERSION_4_9 else "ocs"
     must_gather_tag = f"v{config.ENV_DATA['ocs_version']}"
-    must_gather_image = config.REPORTING[f"{odf_ocs}_live_must_gather_image"]
+    if (
+        get_semantic_ocs_version_from_config() < VERSION_4_13
+    ):  # Support upgrade scenario where we are installing 4.12
+        must_gather_image = config.REPORTING["odf_live_must_gather_image_pre_4_13"]
+    else:
+        must_gather_image = config.REPORTING["odf_live_must_gather_image"]
     live_must_gather_image = f"{must_gather_image}:{must_gather_tag}"
     log.info(f"Setting live must gather image to: {live_must_gather_image}")
     config.REPORTING["default_ocs_must_gather_latest_tag"] = must_gather_tag

@@ -2,6 +2,7 @@ import logging
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     bugzilla,
     ignore_leftovers,
@@ -93,7 +94,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         """
         executor = ThreadPoolExecutor(max_workers=1)
         pod_obj = OCP(
-            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
         # Get noobaa statefulset pod and node where it is hosted

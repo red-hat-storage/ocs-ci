@@ -217,9 +217,15 @@ def get_ocs_csv():
 
     ver = get_semantic_ocs_version_from_config()
     operator_base = (
-        defaults.OCS_OPERATOR_NAME if ver < VERSION_4_9 else defaults.ODF_OPERATOR_NAME
+        defaults.OCS_OPERATOR_NAME
+        if (
+            ver < VERSION_4_9
+            or config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM
+        )
+        else defaults.ODF_OPERATOR_NAME
     )
-    operator_name = f"{operator_base}.openshift-storage"
+    namespace = config.ENV_DATA["cluster_namespace"]
+    operator_name = f"{operator_base}.{namespace}"
     operator = OCP(kind="operator", resource_name=operator_name)
 
     if "Error" in operator.data:
@@ -239,6 +245,7 @@ def get_ocs_csv():
     if (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM
     ):
         ocp_cluster = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="csv")
         for item in ocp_cluster.get()["items"]:

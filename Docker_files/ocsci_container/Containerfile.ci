@@ -1,0 +1,43 @@
+FROM registry.access.redhat.com/ubi8/ubi:latest as BUILDER
+
+ENV OCS_CI_DIR=/opt/ocs-ci
+WORKDIR "${OCS_CI_DIR}"
+
+RUN dnf install --nodocs -y python38 python38-devel git libcurl-devel gcc openssl-devel libxml2-devel
+
+# Copy the entire source tree to the image
+# TODO: Check to see if there are any more files we can drop from the image
+# TODO: The azure package is very big (see issue: https://github.com/Azure/azure-sdk-for-python/issues/17801)
+
+COPY / "${OCS_CI_DIR}"
+
+RUN pushd "${OCS_CI_DIR}" \
+    && mkdir -p "${OCS_CI_DIR}/data" \
+    && python3 -m venv venv \
+    && source venv/bin/activate \
+    && pip3 install --upgrade pip \
+    && pip3 install setuptools==65.5.0 \
+    && pip3 install -r requirements.txt \
+    && rm -rf .git
+
+### Runner stage
+
+FROM registry.access.redhat.com/ubi8/ubi:latest as RUNNER
+
+ENV OCS_CI_DIR="/opt/ocs-ci" \
+    VIRTUAL_ENV="/opt/ocs-ci/venv" \
+    PATH="/opt/ocs-ci/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+WORKDIR "${OCS_CI_DIR}"
+
+RUN curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar -C /usr/local/bin -zxvf - oc
+
+RUN dnf install -y --nodocs python38 git jq rsync \
+    && dnf clean all \
+    && rm -rf /var/cache/yum /var/cache/dnf /var/lib/dnf/repos /var/log/dnf.librepo.log /var/log/dnf.log /var/log/dnf.rpm.log /var/log/hawkey.log /var/cache/ldconfig \
+    && curl -sL https://github.com/mikefarah/yq/releases/download/v4.32.2/yq_linux_amd64.tar.gz | tar -C /usr/local/bin -zxvf - ./yq_linux_amd64 \
+    && mv -v /usr/local/bin/yq_linux_amd64 /usr/local/bin/yq
+
+COPY --from=BUILDER "${OCS_CI_DIR}" "${OCS_CI_DIR}"
+
+CMD [ "run-ci", "--help" ]

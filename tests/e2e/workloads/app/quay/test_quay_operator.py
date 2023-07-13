@@ -3,9 +3,10 @@ from time import sleep
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
 from ocs_ci.framework.testlib import E2ETest, workloads
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.quay_operator import (
     QuayOperator,
@@ -139,7 +140,7 @@ class TestQuayWorkload(E2ETest):
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=constants.NOOBAA_CORE_POD_LABEL,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
         pod_obj.delete(force=True)

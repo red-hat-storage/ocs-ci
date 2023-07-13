@@ -2,6 +2,7 @@ import logging
 import pytest
 import random
 
+from ocs_ci.framework import config
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -34,7 +35,7 @@ class TestPvcAssignPodNode(ManageTest):
         shouldn't contain api access token
         """
         odf_operator_pod_objs = res_pod.get_all_pods(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             selector_label="app.kubernetes.io/name",
             selector=[constants.ODF_SUBSCRIPTION],
         )
@@ -101,7 +102,9 @@ class TestPvcAssignPodNode(ManageTest):
         pod.get_fio_rw_iops(pod_obj)
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_12:
+        if (ocs_version >= version.VERSION_4_12) and (
+            config.ENV_DATA.get("platform") != constants.FUSIONAAS_PLATFORM
+        ):
             self.verify_access_token_notin_odf_pod_logs()
 
     @acceptance
@@ -190,5 +193,7 @@ class TestPvcAssignPodNode(ManageTest):
             pod.get_fio_rw_iops(pod_obj)
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_12:
+        if (ocs_version >= version.VERSION_4_12) and (
+            config.ENV_DATA.get("platform") != constants.FUSIONAAS_PLATFORM
+        ):
             self.verify_access_token_notin_odf_pod_logs()

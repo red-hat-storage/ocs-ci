@@ -7,9 +7,10 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
     ignore_leftovers,
     skipif_external_mode,
+    skipif_ibm_cloud,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import machine, constants, defaults
+from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
 from ocs_ci.utility.utils import ceph_health_check
@@ -214,6 +215,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ignore_leftovers
 @tier4a
 @ipi_deployment_required
+@skipif_ibm_cloud
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
@@ -320,7 +322,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         temp_osd = get_node_pods(self.osd_worker_node.name, pods_to_search=osd_pods)[0]
         osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
 
-        nodes.stop_nodes([self.osd_worker_node], wait=True)
+        nodes.stop_nodes([self.osd_worker_node])
         log.info(f"Successfully powered off node: {self.osd_worker_node.name}")
 
         timeout = 420
@@ -332,7 +334,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         )
 
         # Validate that the OSD in terminate state has a new OSD in Pending
-        all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        all_pod_obj = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         new_osd = None
         for pod_obj in all_pod_obj:
             if osd_real_name == "-".join(pod_obj.name.split("-")[:-1]) and (

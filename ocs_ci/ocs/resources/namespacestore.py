@@ -338,7 +338,7 @@ def template_pvc(
     namespace=config.ENV_DATA["cluster_namespace"],
     storageclass=constants.CEPHFILESYSTEM_SC,
     access_mode=constants.ACCESS_MODE_RWX,
-    size="20Gi",
+    size=20,
 ):
     """
     Create a PVC using the MCG CLI
@@ -354,7 +354,7 @@ def template_pvc(
     pvc_data["metadata"]["name"] = name
     pvc_data["metadata"]["namespace"] = namespace
     pvc_data["spec"]["accessModes"] = [access_mode]
-    pvc_data["spec"]["resources"]["requests"]["storage"] = size
+    pvc_data["spec"]["resources"]["requests"]["storage"] = f"{size}Gi"
     pvc_data["spec"]["storageClassName"] = (
         constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
         if storagecluster_independent_check()

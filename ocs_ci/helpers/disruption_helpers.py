@@ -106,6 +106,12 @@ class Disruptions:
         if self.resource == "ocs_operator":
             self.resource_obj = [pod.get_ocs_operator_pod()]
             self.selector = constants.OCS_OPERATOR_LABEL
+        if self.resource == "noobaa_operator":
+            self.resource_obj = [pod.get_noobaa_operator_pod()]
+            self.selector = constants.NOOBAA_OPERATOR_POD_LABEL
+        if self.resource == "odf_operator":
+            self.resource_obj = [pod.get_odf_operator_controller_manager()]
+            self.selector = constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL
         if self.resource == "alertmanager_managed_ocs_alertmanager":
             self.resource_obj = pod.get_alertmanager_managed_ocs_alertmanager_pods()
             self.selector = constants.MANAGED_ALERTMANAGER_LABEL
@@ -165,7 +171,7 @@ class Disruptions:
         awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name}"
-            f" --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- chroot /host ps ax | grep"
+            f" --to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         pid_proc = run_async(pid_cmd)
@@ -207,7 +213,7 @@ class Disruptions:
         # Command to kill the daemon
         kill_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
-            f"--to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- chroot /host  "
+            f"--to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
@@ -236,7 +242,7 @@ class Disruptions:
         awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
-            f"--to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- chroot /host ps ax | grep"
+            f"--to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host ps ax | grep"
             f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
         )
         try:

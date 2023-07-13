@@ -14,6 +14,9 @@ from pathlib import Path
 import base64
 import yaml
 
+from botocore.exceptions import EndpointConnectionError, BotoCoreError
+import boto3
+
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -45,7 +48,10 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
     UnsupportedFeatureError,
+    UnexpectedDeploymentConfiguration,
+    MDRDeploymentException,
 )
+from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
@@ -53,7 +59,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
-from ocs_ci.ocs.node import verify_all_nodes_created
+from ocs_ci.ocs.node import get_worker_nodes, verify_all_nodes_created
 from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
@@ -75,7 +81,6 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
-    in_transit_encryption_verification,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -84,6 +89,8 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     collect_ocs_logs,
     enable_console_plugin,
+    get_all_acm_indexes,
+    get_active_acm_index,
 )
 from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
@@ -93,12 +100,17 @@ from ocs_ci.utility import (
     kms as KMS,
     version,
 )
+from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
-from ocs_ci.utility.ssl_certs import configure_custom_ingress_cert
+from ocs_ci.utility.ssl_certs import (
+    configure_custom_ingress_cert,
+    configure_custom_api_cert,
+)
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
+    create_directory_path,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -112,6 +124,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     load_auth_config,
     TimeoutSampler,
+    get_latest_acm_tag_unreleased,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -199,6 +212,103 @@ class Deployment(object):
             submariner = Submariner()
             submariner.deploy()
 
+    def do_gitops_deploy(self):
+        """
+        Deploy GitOps operator
+
+        Returns:
+
+        """
+        if not config.ENV_DATA.get("deploy_gitops_operator"):
+            return
+
+        # Multicluster operations
+        if config.multicluster:
+            config.switch_acm_ctx()
+            logger.info("Creating GitOps Operator Subscription")
+            gitops_subscription_yaml_data = templating.load_yaml(
+                constants.GITOPS_SUBSCRIPTION_YAML
+            )
+            package_manifest = PackageManifest(
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+            )
+            gitops_subscription_yaml_data["spec"][
+                "startingCSV"
+            ] = package_manifest.get_current_csv(
+                channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
+            )
+
+            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="gitops_subscription_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                gitops_subscription_yaml_data, gitops_subscription_manifest.name
+            )
+            run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
+
+            self.wait_for_subscription(
+                constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
+            )
+            logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
+            time.sleep(90)
+            subscriptions = ocp.OCP(
+                kind=constants.SUBSCRIPTION_WITH_ACM,
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+                namespace=constants.OPENSHIFT_OPERATORS,
+            ).get()
+            gitops_csv_name = subscriptions["status"]["currentCSV"]
+            csv = CSV(
+                resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE
+            )
+            csv.wait_for_phase("Succeeded", timeout=720)
+            logger.info("GitOps Operator Deployment Succeeded")
+
+            logger.info("Creating GitOps CLuster Resource")
+            run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")
+
+            logger.info("Creating GitOps CLuster Placement Resource")
+            run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
+
+            logger.info("Creating ManagedClusterSetBinding")
+
+            cluster_set = []
+            managed_clusters = (
+                ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+            )
+            # ignore local-cluster here
+            for i in managed_clusters:
+                if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+                    cluster_set.append(
+                        i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL]
+                    )
+            if all(x == cluster_set[0] for x in cluster_set):
+                logger.info(f"Found the uniq clusterset {cluster_set[0]}")
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    "There are more then one clusterset added to multiple managedcluters"
+                )
+
+            managedclustersetbinding_obj = templating.load_yaml(
+                constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
+            )
+            managedclustersetbinding_obj["metadata"]["name"] = cluster_set[0]
+            managedclustersetbinding_obj["spec"]["clusterSet"] = cluster_set[0]
+            managedclustersetbinding = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="managedcluster_setbinding", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                managedclustersetbinding_obj, managedclustersetbinding.name
+            )
+            run_cmd(f"oc create -f {managedclustersetbinding.name}")
+
+            gitops_obj = ocp.OCP(
+                resource_name=constants.GITOPS_CLUSTER_NAME,
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                kind=constants.GITOPS_CLUSTER,
+            )
+            gitops_obj._has_phase = True
+            gitops_obj.wait_for_phase("successful", timeout=720)
+
     def do_deploy_ocs(self):
         """
         Deploy OCS/ODF and run verification as well
@@ -206,7 +316,7 @@ class Deployment(object):
         """
         if not config.ENV_DATA["skip_ocs_deployment"]:
             for i in range(config.nclusters):
-                if config.multicluster and config.get_acm_index() == i:
+                if config.multicluster and (i in get_all_acm_indexes()):
                     continue
                 config.switch_ctx(i)
                 try:
@@ -227,7 +337,7 @@ class Deployment(object):
             # For single cluster, test_deployment will take care.
             if config.multicluster:
                 for i in range(config.multicluster):
-                    if config.get_acm_index() == i:
+                    if i in get_all_acm_indexes():
                         continue
                     else:
                         config.switch_ctx(i)
@@ -249,7 +359,7 @@ class Deployment(object):
             return
         if config.multicluster:
             dr_conf = self.get_rdr_conf()
-            deploy_dr = MultiClusterDROperatorsDeploy(dr_conf)
+            deploy_dr = get_multicluster_dr_deployment()(dr_conf)
             deploy_dr.deploy()
 
     def do_deploy_lvmo(self):
@@ -258,6 +368,77 @@ class Deployment(object):
 
         """
         self.deploy_lvmo()
+
+    def do_deploy_cert_manager(self):
+        """
+        Installs cert-manager operator
+
+        """
+        if not config.ENV_DATA["skip_ocp_deployment"]:
+            cert_manager_operator = defaults.CERT_MANAGER_OPERATOR_NAME
+            cert_manager_namespace = defaults.CERT_MANAGER_NAMESPACE
+            cert_manager_operator_csv = f"openshift-{cert_manager_operator}"
+
+            # creating Namespace and operator group for cert-manager
+            logger.info("Creating namespace and operator group for cert-manager")
+            run_cmd(f"oc create -f {constants.CERT_MANAGER_NS_YAML}")
+
+            deploy_cert_manager()
+            self.wait_for_subscription(cert_manager_operator, cert_manager_namespace)
+            self.wait_for_csv(cert_manager_operator, cert_manager_namespace)
+            logger.info(
+                f"Sleeping for 30 seconds after {cert_manager_operator} created"
+            )
+            time.sleep(30)
+            package_manifest = PackageManifest(resource_name=cert_manager_operator_csv)
+            package_manifest.wait_for_resource(timeout=120)
+            csv_name = package_manifest.get_current_csv()
+            csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
+            csv.wait_for_phase("Succeeded", timeout=300)
+
+    def do_deploy_fusion(self):
+        """
+        Install IBM Fusion operator
+        """
+        if (
+            config.DEPLOYMENT.get("fusion_deployment")
+            and not config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            # create catalog source
+            create_fusion_catalog_source()
+
+            # create namespace and operator group
+            logger.info("Creating namespace for IBM Fusion.")
+            run_cmd(f"oc create -f {constants.FUSION_NS_YAML}")
+
+            # deploy fusion
+            from ocs_ci.deployment.fusion import deploy_fusion
+
+            deploy_fusion()
+
+            # wait for subscription and csv to found
+            fusion_operator = defaults.FUSION_OPERATOR_NAME
+            fusion_namespace = defaults.FUSION_NAMESPACE
+            self.wait_for_subscription(fusion_operator, fusion_namespace)
+            self.wait_for_csv(fusion_operator, fusion_namespace)
+            logger.info(f"Sleeping for 30 seconds after {fusion_operator} created")
+            time.sleep(30)
+
+            # wait for package manifest to found and csv in Succeeded state
+            package_manifest = PackageManifest(resource_name=fusion_operator)
+            package_manifest.wait_for_resource(timeout=120)
+            csv_name = package_manifest.get_current_csv()
+            csv = CSV(resource_name=csv_name, namespace=fusion_namespace)
+            csv.wait_for_phase("Succeeded", timeout=300)
+
+            # delete catalog source of IBM
+            run_cmd(
+                f"oc delete catalogsource {defaults.FUSION_CATALOG_NAME} -n {constants.MARKETPLACE_NAMESPACE}"
+            )
+            logger.info(
+                f"Sleeping for 30 seconds after deleting catalogsource {defaults.FUSION_CATALOG_NAME}"
+            )
+            time.sleep(30)
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
@@ -272,6 +453,9 @@ class Deployment(object):
         # ocs-deployment, not just here in this particular case
         tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
         logger.debug("created temporary directory %s", tmp_path)
+
+        if config.DEPLOYMENT.get("install_cert_manager"):
+            self.do_deploy_cert_manager()
 
         # Deployment of network split and or extra latency scripts via
         # machineconfig API happens after OCP but before OCS deployment.
@@ -313,8 +497,10 @@ class Deployment(object):
             self.deploy_acm_hub()
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
+        self.do_gitops_deploy()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
+        self.do_deploy_fusion()
 
     def get_rdr_conf(self):
         """
@@ -350,8 +536,17 @@ class Deployment(object):
         """
         Function does post OCP deployment stuff we need to do.
         """
-        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
-            configure_custom_ingress_cert()
+        managed_azure = (
+            config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        # In the case of ARO deployment we are handling it much earlier in deployment
+        # itself as it's needed sooner.
+        if not managed_azure:
+            if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+                configure_custom_ingress_cert()
+            if config.DEPLOYMENT.get("use_custom_api_ssl_cert"):
+                configure_custom_api_cert()
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
@@ -440,7 +635,6 @@ class Deployment(object):
         _ocp = ocp.OCP(kind="node")
         workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
-
             logger.info(
                 f"Label nodes: {workers_to_label} with label: "
                 f"{constants.OPERATOR_NODE_LABEL}"
@@ -543,21 +737,25 @@ class Deployment(object):
         logger.info("Sleeping for 30 seconds after CSV created")
         time.sleep(30)
 
-    def wait_for_subscription(self, subscription_name):
+    def wait_for_subscription(self, subscription_name, namespace=None):
         """
         Wait for the subscription to appear
 
         Args:
             subscription_name (str): Subscription name pattern
+            namespace (str): Namespace name for checking subscription if None then default from ENV_data
 
         """
+        if not namespace:
+            namespace = self.namespace
+
         if config.multicluster:
             resource_kind = constants.SUBSCRIPTION_WITH_ACM
         else:
             resource_kind = constants.SUBSCRIPTION
-        ocp.OCP(kind=resource_kind, namespace=self.namespace)
+        ocp.OCP(kind=resource_kind, namespace=namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind=resource_kind, namespace=self.namespace
+            300, 10, ocp.OCP, kind=resource_kind, namespace=namespace
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
@@ -569,18 +767,18 @@ class Deployment(object):
                     return
                 logger.debug(f"Still waiting for the subscription: {subscription_name}")
 
-    def wait_for_csv(self, csv_name):
+    def wait_for_csv(self, csv_name, namespace=None):
         """
         Wait for the CSV to appear
 
         Args:
             csv_name (str): CSV name pattern
+            namespace (str): Namespace where CSV exists
 
         """
-        ocp.OCP(kind="subscription", namespace=self.namespace)
-        for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind="csv", namespace=self.namespace
-        ):
+        namespace = namespace or self.namespace
+        ocp.OCP(kind="subscription", namespace=namespace)
+        for sample in TimeoutSampler(300, 10, ocp.OCP, kind="csv", namespace=namespace):
             csvs = sample.get().get("items", [])
             for csv in csvs:
                 found_csv_name = csv.get("metadata", {}).get("name", "")
@@ -652,22 +850,87 @@ class Deployment(object):
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
 
-        # create multus network
+        # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
-            logger.info("Creating multus network")
-            multus_data = templating.load_yaml(constants.MULTUS_YAML)
-            multus_config_str = multus_data["spec"]["config"]
-            multus_config_dct = json.loads(multus_config_str)
-            if config.ENV_DATA.get("multus_public_network_interface"):
-                multus_config_dct["master"] = config.ENV_DATA.get(
-                    "multus_public_network_interface"
+            create_public_net = config.ENV_DATA["multus_create_public_net"]
+            create_cluster_net = config.ENV_DATA["multus_create_cluster_net"]
+            interfaces = set()
+            if create_public_net:
+                interfaces.add(config.ENV_DATA["multus_public_net_interface"])
+            if create_cluster_net:
+                interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
+            worker_nodes = get_worker_nodes()
+            node_obj = ocp.OCP(kind="node")
+            platform = config.ENV_DATA.get("platform").lower()
+            if platform != constants.BAREMETAL_PLATFORM:
+                for node in worker_nodes:
+                    for interface in interfaces:
+                        ip_link_cmd = f"ip link set promisc on {interface}"
+                        node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
+
+            if create_public_net:
+                logger.info("Creating Multus public network")
+                public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
+                public_net_data["metadata"]["name"] = config.ENV_DATA.get(
+                    "multus_public_net_name"
                 )
-            multus_data["spec"]["config"] = json.dumps(multus_config_dct)
-            multus_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="multus", delete=False
-            )
-            templating.dump_data_to_temp_yaml(multus_data, multus_data_yaml.name)
-            run_cmd(f"oc create -f {multus_data_yaml.name}")
+                public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+                    "multus_public_net_namespace"
+                )
+                public_net_config_str = public_net_data["spec"]["config"]
+                public_net_config_dict = json.loads(public_net_config_str)
+                public_net_config_dict["master"] = config.ENV_DATA.get(
+                    "multus_public_net_interface"
+                )
+                public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                    "multus_public_net_range"
+                )
+                public_net_config_dict["type"] = config.ENV_DATA.get(
+                    "multus_public_net_type"
+                )
+                public_net_config_dict["mode"] = config.ENV_DATA.get(
+                    "multus_public_net_mode"
+                )
+                public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
+                public_net_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="multus_public", delete=False
+                )
+                templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
+                run_cmd(f"oc create -f {public_net_yaml.name}")
+
+            if create_cluster_net:
+                logger.info("Creating Multus cluster network")
+                cluster_net_data = templating.load_yaml(
+                    constants.MULTUS_CLUSTER_NET_YAML
+                )
+                cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
+                    "multus_cluster_net_name"
+                )
+                cluster_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+                    "multus_cluster_net_namespace"
+                )
+                cluster_net_config_str = cluster_net_data["spec"]["config"]
+                cluster_net_config_dict = json.loads(cluster_net_config_str)
+                cluster_net_config_dict["master"] = config.ENV_DATA.get(
+                    "multus_cluster_net_interface"
+                )
+                cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                    "multus_cluster_net_range"
+                )
+                cluster_net_config_dict["type"] = config.ENV_DATA.get(
+                    "multus_cluster_net_type"
+                )
+                cluster_net_config_dict["mode"] = config.ENV_DATA.get(
+                    "multus_cluster_net_mode"
+                )
+                cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
+                cluster_net_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="multus_public", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    cluster_net_data, cluster_net_yaml.name
+                )
+                run_cmd(f"oc create -f {cluster_net_yaml.name}")
 
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
         managed_ibmcloud = (
@@ -1005,11 +1268,24 @@ class Deployment(object):
                 "cephConfig": {"reconcileStrategy": "ignore"}
             }
         if config.ENV_DATA.get("is_multus_enabled"):
+            public_net_name = config.ENV_DATA["multus_public_net_name"]
+            public_net_namespace = config.ENV_DATA["multus_public_net_namespace"]
+            cluster_net_name = config.ENV_DATA["multus_cluster_net_name"]
+            cluster_net_namespace = config.ENV_DATA["multus_cluster_net_namespace"]
+            selector_data = {}
+            if create_public_net:
+                public_selector_data = {
+                    "public": f"{public_net_namespace}/{public_net_name}"
+                }
+                selector_data.update(public_selector_data)
+            if create_cluster_net:
+                cluster_selector_data = {
+                    "cluster": f"{cluster_net_namespace}/{cluster_net_name}"
+                }
+                selector_data.update(cluster_selector_data)
             cluster_data["spec"]["network"] = {
                 "provider": "multus",
-                "selectors": {
-                    "public": f"{defaults.ROOK_CLUSTER_NAMESPACE}/ocs-public"
-                },
+                "selectors": selector_data,
             }
 
         # Enable in-transit encryption.
@@ -1032,7 +1308,7 @@ class Deployment(object):
         if config.DEPLOYMENT["infra_nodes"]:
             _ocp = ocp.OCP(kind="node")
             _ocp.exec_oc_cmd(
-                command=f"annotate namespace {defaults.ROOK_CLUSTER_NAMESPACE} "
+                command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
 
@@ -1063,10 +1339,10 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
             create_catalog_source()
-        setup_ui = login_ui()
-        deployment_obj = DeploymentUI(setup_ui)
+        login_ui()
+        deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()
-        close_browser(setup_ui)
+        close_browser()
 
     def deploy_with_external_mode(self):
         """
@@ -1121,12 +1397,23 @@ class Deployment(object):
 
         cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+
+        # Enable in-transit encryption.
+        if config.ENV_DATA.get("in_transit_encryption"):
+            cluster_data["spec"]["network"] = {
+                "connections": {"encryption": {"enabled": True}},
+            }
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
         self.external_post_deploy_validation()
+
+        # enable secure connection mode for in-transit encryption
+        if config.ENV_DATA.get("in_transit_encryption"):
+            external_cluster.enable_secure_connection_mode()
+
         setup_ceph_toolbox()
 
     def set_rook_log_level(self):
@@ -1263,10 +1550,6 @@ class Deployment(object):
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
-
-        # Verify in-transit encryption is enabled.
-        if config.ENV_DATA.get("in_transit_encryption"):
-            in_transit_encryption_verification()
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
@@ -1475,9 +1758,10 @@ class Deployment(object):
         run_cmd(f"oc create -f {constants.ACM_HUB_UNRELEASED_ICSP_YAML}")
 
         logger.info("Writing tag data to snapshot.ver")
-        image_tag = config.ENV_DATA.get(
-            "acm_unreleased_image", config.ENV_DATA.get("default_acm_unreleased_image")
-        )
+        acm_version = config.ENV_DATA.get("acm_version")
+
+        image_tag = get_latest_acm_tag_unreleased(version=acm_version)
+
         with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
 
@@ -1635,7 +1919,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         image_tag = get_latest_ds_olm_tag(
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
-
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
@@ -1656,6 +1939,12 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         catalog_source_data["spec"][
             "image"
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
+    # apply icsp if present in the catalog image
+    image = f"{image}:{image_tag if image_tag else 'latest'}"
+    insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
+
+    get_and_apply_icsp_from_catalog(image=image, insecure=insecure_mode)
+
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
     )
@@ -1667,6 +1956,30 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
+
+
+def create_fusion_catalog_source():
+    """
+    Create catalog source for fusion operator
+    """
+    logger.info("Adding CatalogSource for IBM Fusion")
+    fusion_catalog_source_data = templating.load_yaml(
+        constants.FUSION_CATALOG_SOURCE_YAML
+    )
+    fusion_catalog_source_manifest = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="fusion_catalog_source_manifest", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        fusion_catalog_source_data, fusion_catalog_source_manifest.name
+    )
+    run_cmd(f"oc apply -f {fusion_catalog_source_manifest.name}")
+    ibm_catalog_source = CatalogSource(
+        resource_name=constants.IBM_OPERATOR_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+
+    # Wait for catalog source is ready
+    ibm_catalog_source.wait_for_state("READY")
 
 
 @retry(CommandFailed, tries=8, delay=3)
@@ -1709,6 +2022,48 @@ def setup_persistent_monitoring():
     )(pods_list)
 
 
+def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
+    """
+    Get ICSP from catalog image (if exists) and apply it on the cluster (if
+    requested).
+
+    Args:
+        image (str): catalog image of ocs registry.
+        apply (bool): controls if the ICSP should be applied or not
+            (default: true)
+        insecure (bool): If True, it allows push and pull operations to registries to be made over HTTP
+
+    Returns:
+        str: path to the icsp.yaml file or empty string, if icsp not available
+            in the catalog image
+
+    """
+
+    icsp_file_location = "/icsp.yaml"
+    icsp_file_dest_dir = os.path.join(
+        config.ENV_DATA["cluster_path"], f"icsp-{config.RUN['run_id']}"
+    )
+    icsp_file_dest_location = os.path.join(icsp_file_dest_dir, "icsp.yaml")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    create_directory_path(icsp_file_dest_dir)
+    cmd = (
+        f"oc image extract --filter-by-os linux/amd64 --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {icsp_file_location}:{icsp_file_dest_dir}"
+    )
+    if insecure:
+        cmd = f"{cmd} --insecure"
+    exec_cmd(cmd)
+    if not os.path.exists(icsp_file_dest_location):
+        return ""
+
+    if apply:
+        exec_cmd(f"oc apply -f {icsp_file_dest_location}")
+        wait_for_machineconfigpool_status("all")
+
+    return icsp_file_dest_location
+
+
 class RBDDRDeployOps(object):
     """
     All RBD specific DR deployment operations
@@ -1716,46 +2071,16 @@ class RBDDRDeployOps(object):
     """
 
     def deploy(self):
-        self.configure_mirror_peer()
+        self.configure_rbd()
 
-    def configure_mirror_peer(self):
-        # Current CTX: ACM
-        # Create mirror peer
-        mirror_peer_data = templating.load_yaml(constants.MIRROR_PEER)
-        mirror_peer_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="mirror_peer", delete=False
-        )
-        # Update all the participating clusters in mirror_peer_yaml
-        non_acm_clusters = get_non_acm_cluster_config()
-        primary = get_primary_cluster_config()
-        non_acm_clusters.remove(primary)
-        for cluster in non_acm_clusters:
-            logger.info(f"{cluster.ENV_DATA['cluster_name']}")
-        index = -1
-        # First entry should be the primary cluster
-        # in the mirror peer
-        for cluster_entry in mirror_peer_data["spec"]["items"]:
-            if index == -1:
-                cluster_entry["clusterName"] = primary.ENV_DATA["cluster_name"]
-            else:
-                cluster_entry["clusterName"] = non_acm_clusters[index].ENV_DATA[
-                    "cluster_name"
-                ]
-            index += 1
-        templating.dump_data_to_temp_yaml(mirror_peer_data, mirror_peer_yaml.name)
-        # Current CTX: ACM
-        # Just being explicit here to make code more readable
-        config.switch_acm_ctx()
-        run_cmd(f"oc create -f {mirror_peer_yaml.name}")
-        self.validate_mirror_peer(mirror_peer_data["metadata"]["name"])
-
+    def configure_rbd(self):
         st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
         query_mirroring = (
-            f"oc get CephBlockPool -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f"oc get CephBlockPool -n {config.ENV_DATA['cluster_namespace']}"
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=config.get_acm_index()
+            query_mirroring, skip_index=config.get_active_acm_index()
         )
         index = 0
         for out in out_list:
@@ -1797,7 +2122,7 @@ class RBDDRDeployOps(object):
         """
         # Number of containers should be 8/8 from 2 pods now which makes total 16 containers
         rbd_pods = (
-            f"oc get pods -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"oc get pods -n {config.ENV_DATA['cluster_namespace']} "
             f"-l app=csi-rbdplugin-provisioner -o jsonpath={{.items[*].spec.containers[*].name}}"
         )
         timeout = 10
@@ -1849,13 +2174,16 @@ class RBDDRDeployOps(object):
         # on all participating clusters except HUB
         # We will switch config ctx to Participating clusters
         for cluster in config.clusters:
-            if cluster.MULTICLUSTER["multicluster_index"] == config.get_acm_index():
+            if (
+                cluster.MULTICLUSTER["multicluster_index"]
+                == config.get_active_acm_index()
+            ):
                 continue
             else:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 token_xchange_agent = get_pods_having_label(
                     constants.TOKEN_EXCHANGE_AGENT_LABEL,
-                    constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    config.ENV_DATA["cluster_namespace"],
                 )
                 pod_status = token_xchange_agent[0]["status"]["phase"]
                 pod_name = token_xchange_agent[0]["metadata"]["name"]
@@ -1866,6 +2194,10 @@ class RBDDRDeployOps(object):
                     )
         # Switching back CTX to ACM
         config.switch_acm_ctx()
+
+
+def get_multicluster_dr_deployment():
+    return MULTICLUSTER_DR_MAP[config.MULTICLUSTER["multicluster_mode"]]
 
 
 class MultiClusterDROperatorsDeploy(object):
@@ -1879,10 +2211,6 @@ class MultiClusterDROperatorsDeploy(object):
     """
 
     def __init__(self, dr_conf):
-        # DR use case could be RBD or CephFS or Both
-        self.rbd = dr_conf.get("rbd_dr_scenario", False)
-        # CephFS For future usecase
-        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
         self.meta_map = {
             "awss3": self.s3_meta_obj_store,
             "mcg": self.mcg_meta_obj_store,
@@ -1897,8 +2225,7 @@ class MultiClusterDROperatorsDeploy(object):
         deploy ODF multicluster orchestrator operator
 
         """
-        # current CTX: ACM
-        config.switch_acm_ctx()
+
         # Create openshift-dr-system namespace
         run_cmd_multicluster(
             f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
@@ -1910,13 +2237,6 @@ class MultiClusterDROperatorsDeploy(object):
         )
         # HUB operator will be deployed by multicluster orechestrator
         self.verify_dr_hub_operator()
-
-        # RBD specific dr deployment
-        if self.rbd:
-            rbddops = RBDDRDeployOps()
-            rbddops.deploy()
-
-        self.deploy_dr_policy()
 
     def deploy_dr_multicluster_orchestrator(self):
         """
@@ -1934,9 +2254,13 @@ class MultiClusterDROperatorsDeploy(object):
             resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
         )
 
-        retry((ResourceNameNotSpecifiedException, ChannelNotFound), tries=5, delay=10)(
-            package_manifest.get_current_csv
-        )(self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE)
+        retry(
+            (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
+            tries=50,
+            delay=20,
+        )(package_manifest.get_current_csv)(
+            self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+        )
 
         current_csv = package_manifest.get_current_csv(
             channel=self.channel,
@@ -1961,6 +2285,97 @@ class MultiClusterDROperatorsDeploy(object):
         orchestrator_controller.wait_for_resource(
             condition="1", column="AVAILABLE", resource_count=1, timeout=600
         )
+
+    def configure_mirror_peer(self):
+        # Current CTX: ACM
+        # Create mirror peer
+        if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            mirror_peer = constants.MIRROR_PEER_MDR
+        else:
+            mirror_peer = constants.MIRROR_PEER_RDR
+        mirror_peer_data = templating.load_yaml(mirror_peer)
+        mirror_peer_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="mirror_peer", delete=False
+        )
+        # Update all the participating clusters in mirror_peer_yaml
+        non_acm_clusters = get_non_acm_cluster_config()
+        primary = get_primary_cluster_config()
+        non_acm_clusters.remove(primary)
+        for cluster in non_acm_clusters:
+            logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+        index = -1
+        # First entry should be the primary cluster
+        # in the mirror peer
+        for cluster_entry in mirror_peer_data["spec"]["items"]:
+            if index == -1:
+                cluster_entry["clusterName"] = primary.ENV_DATA["cluster_name"]
+            else:
+                cluster_entry["clusterName"] = non_acm_clusters[index].ENV_DATA[
+                    "cluster_name"
+                ]
+            index += 1
+        templating.dump_data_to_temp_yaml(mirror_peer_data, mirror_peer_yaml.name)
+        # Current CTX: ACM
+        # Just being explicit here to make code more readable
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -f {mirror_peer_yaml.name}")
+        self.validate_mirror_peer(mirror_peer_data["metadata"]["name"])
+
+    def validate_mirror_peer(self, resource_name):
+        """
+        Validate mirror peer,
+        Begins with CTX: ACM
+
+        1. Check phase: if RDR then state =  'ExchangedSecret'
+                        if MDR then state = 'S3ProfileSynced'
+        2. Check token-exchange-agent pod in 'Running' phase
+
+        Raises:
+            ResourceWrongStatusException: If pod is not in expected state
+
+        """
+        # Check mirror peer status only on HUB
+        mirror_peer = ocp.OCP(
+            kind="MirrorPeer",
+            namespace=constants.DR_DEFAULT_NAMESPACE,
+            resource_name=resource_name,
+        )
+        mirror_peer._has_phase = True
+        mirror_peer.get()
+        if config.MULTICLUSTER["multicluster_mode"] == "regional-dr":
+            expected_phase = "ExchangedSecret"
+        elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            expected_phase = "S3ProfileSynced"
+
+        try:
+            # Need high timeout in case of MDR
+            mirror_peer.wait_for_phase(phase=expected_phase, timeout=2400)
+            logger.info(f"Mirror peer is in expected phase {expected_phase}")
+        except ResourceWrongStatusException:
+            logger.exception("Mirror peer couldn't attain expected phase")
+            raise
+
+        # Check for token-exchange-agent pod and its status has to be running
+        # on all participating clusters except HUB
+        # We will switch config ctx to Participating clusters
+        for cluster in config.clusters:
+            if cluster.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes():
+                continue
+            else:
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                token_xchange_agent = get_pods_having_label(
+                    constants.TOKEN_EXCHANGE_AGENT_LABEL,
+                    config.ENV_DATA["cluster_namespace"],
+                )
+                pod_status = token_xchange_agent[0]["status"]["phase"]
+                pod_name = token_xchange_agent[0]["metadata"]["name"]
+                if pod_status != "Running":
+                    logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
+                    ResourceWrongStatusException(
+                        pod_name, expected="Running", got=pod_status
+                    )
+        # Switching back CTX to ACM
+        config.switch_acm_ctx()
 
     def update_ramen_config_misc(self):
         config_map_data = self.meta_obj.get_ramen_resource()
@@ -2046,6 +2461,9 @@ class MultiClusterDROperatorsDeploy(object):
                 "cluster_name"
             ]
 
+        if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
+
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="dr_policy_hub_", delete=False
         )
@@ -2077,6 +2495,9 @@ class MultiClusterDROperatorsDeploy(object):
         def __init__(self, conf=None):
             self.dr_regions = self.get_participating_regions()
             self.conf = conf if conf else dict()
+            self.access_key = None
+            self.secret_key = None
+            self.bucket_name = None
 
         def deploy_and_configure(self):
             self.s3_configure()
@@ -2105,7 +2526,7 @@ class MultiClusterDROperatorsDeploy(object):
             # Create s3 secret on all clusters except ACM
             for secret_yaml in secret_yaml_files:
                 cmd = f"oc create -f {secret_yaml}"
-                run_cmd_multicluster(cmd, skip_index=config.get_acm_index())
+                run_cmd_multicluster(cmd, skip_index=config.get_active_acm_index())
 
         def get_participating_regions(self):
             """
@@ -2163,6 +2584,312 @@ class MultiClusterDROperatorsDeploy(object):
                 return True
             return False
 
+        def get_meta_access_secret_keys(self):
+            """
+            Get aws_access_key_id and aws_secret_access_key
+            by default we go with AWS, in case of noobaa it should be
+            implemented in mcg_meta_obj_store class
+
+            """
+            try:
+                logger.info("Trying to load AWS credentials")
+                secret_dict = update_config_from_s3().get("AUTH")
+            except (AttributeError, EndpointConnectionError):
+                logger.warning(
+                    "Failed to load credentials from ocs-ci-data.\n"
+                    "Your local AWS credentials might be misconfigured.\n"
+                    "Trying to load credentials from local auth.yaml instead"
+                )
+                secret_dict = load_auth_config().get("AUTH", {})
+            self.access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
+            self.secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+
     class mcg_meta_obj_store:
         def __init__(self):
             raise NotImplementedError("MCG metadata store support not implemented")
+
+
+class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
+    """
+    A class for Regiona-DR deployments
+    """
+
+    def __init__(self, dr_conf):
+        super().__init__(dr_conf)
+        # DR use case could be RBD or CephFS or Both
+        self.rbd = dr_conf.get("rbd_dr_scenario", False)
+        # CephFS For future usecase
+        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
+
+    def deploy(self):
+        """
+        RDR specific steps for deploy
+        """
+        # current CTX: ACM
+        config.switch_acm_ctx()
+        super.deploy()
+        # RBD specific dr deployment
+        if self.rbd:
+            rbddops = RBDDRDeployOps()
+            self.configure_mirror_peer()
+            rbddops.deploy()
+        self.deploy_dr_policy()
+
+
+class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
+    """
+    A class for Metro-DR deployments
+    """
+
+    def __init__(self, dr_conf):
+        super().__init__(dr_conf)
+
+    def deploy(self):
+        # We need multicluster orchestrator on both the active/passive ACM clusters
+        acm_indexes = get_all_acm_indexes()
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            self.deploy_dr_multicluster_orchestrator()
+        # Configure mirror peer
+        self.configure_mirror_peer()
+        # Deploy dr policy
+        self.deploy_dr_policy()
+
+        # Enable cluster backup on both ACMs
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            self.enable_cluster_backup()
+        # Configuring s3 bucket
+        self.meta_obj.get_meta_access_secret_keys()
+        # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
+        self.meta_obj.bucket_name = self.build_bucket_name()
+        # create s3 bucket
+        self.create_s3_bucket()
+        self.create_generic_credentials()
+        # Reconfigure OADP on all ACM clusters
+        old_ctx = config.cur_index
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            self.create_dpa()
+        config.switch_ctx(old_ctx)
+        # Only on the active hub enable managedserviceaccount-preview
+        self.enable_managed_serviceaccount()
+        # Create backupschedule resource
+        self.create_backup_schedule()
+
+    def create_backup_schedule(self):
+        """
+        Create backupschedule resource only on active hub
+
+        """
+        old_ctx = config.cur_index
+        config.switch_ctx(get_active_acm_index())
+        backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
+        backup_schedule_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="bkp", delete=False
+        )
+        templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
+        run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+        config.switch_ctx(old_ctx)
+
+    def enable_managed_serviceaccount(self):
+        """
+        update MultiClusterEngine
+
+        - enabled: true
+          name: managedserviceaccount-preview
+
+        """
+        old_ctx = config.cur_index
+        config.switch_ctx(get_active_acm_index())
+
+        multicluster_engine = ocp.OCP(
+            kind="MultiClusterEngine",
+            resource_name=constants.MDR_MULTICLUSTER_ENGINE,
+        )
+        multicluster_engine._has_phase = True
+        resource = multicluster_engine.get()
+        for item in resource["spec"]["overrides"]["components"]:
+            if item["name"] == "managedserviceaccount-preview":
+                item["enabled"] = True
+        multicluster_engine_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multiengine", delete=False
+        )
+        yaml_serialized = yaml.dump(resource)
+        multicluster_engine_yaml.write(yaml_serialized)
+        multicluster_engine_yaml.flush()
+        run_cmd(f"oc apply -f {multicluster_engine_yaml.name}")
+        multicluster_engine.wait_for_phase("Available")
+        config.switch_ctx(old_ctx)
+
+    def create_dpa(self):
+        """
+        create DPA
+        OADP will be already installed when we enable backup flag
+        Here we will create dataprotection application and
+        update bucket name and s3 storage link
+
+        """
+        oadp_data = templating.load_yaml(constants.ACM_DPA)
+        oadp_data["spec"]["backupLocations"][0]["velero"]["objectStorage"][
+            "bucket"
+        ] = self.meta_obj.bucket_name
+        oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
+        templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
+        run_cmd(f"oc create -f {oadp_yaml.name}")
+        # Validation
+        self.validate_dpa()
+
+    @retry((CommandFailed, MDRDeploymentException), tries=10, delay=10)
+    def validate_dpa(self):
+        """
+        Validate
+        1. 3 restic pods
+        2. 1 velero pod
+        3. backupstoragelocation resource in "Available" phase
+
+        """
+        # Check restic pods
+        restic_list = get_pods_having_label(
+            "name=restic", constants.ACM_HUB_BACKUP_NAMESPACE
+        )
+        if len(restic_list) != constants.MDR_RESTIC_POD_COUNT:
+            raise MDRDeploymentException("restic pod count mismatch")
+        for pod in restic_list:
+            if pod["status"]["phase"] != "Running":
+                raise MDRDeploymentException("restic pod not in 'Running' phase")
+
+        # Check velero pod
+        veleropod = get_pods_having_label(
+            "app.kubernetes.io/name=velero", constants.ACM_HUB_BACKUP_NAMESPACE
+        )
+        if len(veleropod) != constants.MDR_VELERO_POD_COUNT:
+            raise MDRDeploymentException("Velero pod count mismatch")
+        if veleropod[0]["status"]["phase"] != "Running":
+            raise MDRDeploymentException("Velero pod not in 'Running' phase")
+
+        # Check backupstoragelocation resource in "Available" phase
+        backupstorage = ocp.OCP(
+            kind="BackupStorageLocation",
+            resource_name=constants.MDR_DPA,
+            namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
+        )
+        resource = backupstorage.get()
+        if resource["status"].get("phase") != "Available":
+            raise MDRDeploymentException(
+                "Backupstoragelocation resource is no in 'Avaialble' phase"
+            )
+        logger.info("Dataprotection application successful")
+
+    def create_generic_credentials(self):
+        s3_cred_str = (
+            "[default]\n"
+            f"aws_access_key_id={self.meta_obj.access_key}\n"
+            f"aws_secret_access_key={self.meta_obj.secret_key}\n"
+        )
+        cred_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="s3_creds", delete=False
+        )
+        cred_file.write(s3_cred_str)
+        cred_file.flush()
+
+        cmd = (
+            f"oc create secret generic cloud-credentials --namespace {constants.ACM_HUB_BACKUP_NAMESPACE} "
+            f"--from-file cloud={cred_file.name}"
+        )
+        old_index = config.cur_index
+        # Create on all ACM clusters
+        for index in get_all_acm_indexes():
+            config.switch_ctx(index)
+            try:
+                run_cmd(f"oc create namespace {constants.ACM_HUB_BACKUP_NAMESPACE}")
+            except CommandFailed as ex:
+                if "already exists" in str(ex):
+                    logger.warning("Namespace already exists!")
+                else:
+                    raise
+            try:
+                run_cmd(cmd)
+            except CommandFailed:
+                logger.error("Failed to create generic secrets cloud-credentials")
+        config.switch_ctx(old_index)
+
+    def create_s3_bucket(self):
+        client = boto3.resource(
+            "s3",
+            verify=True,
+            endpoint_url="https://s3.amazonaws.com",
+            aws_access_key_id=self.meta_obj.access_key,
+            aws_secret_access_key=self.meta_obj.secret_key,
+        )
+        try:
+            client.create_bucket(
+                Bucket=self.meta_obj.bucket_name,
+                CreateBucketConfiguration={"LocationConstraint": constants.AWS_REGION},
+            )
+            logger.info(
+                f"Successfully created backup bucket: {self.meta_obj.bucket_name}"
+            )
+        except BotoCoreError as e:
+            logger.error(f"Failed to create s3 bucket {e}")
+            raise
+
+    def build_bucket_name(self):
+        bucket_name = ""
+        for index in get_all_acm_indexes():
+            bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
+        return bucket_name
+
+    def deploy_multicluster_orchestrator(self):
+        super().deploy()
+
+    def deploy_dr_policy(self):
+        """
+        Deploy dr policy with MDR perspective, only on active ACM
+        """
+        old_ctx = config.cur_index
+        active_acm_index = get_active_acm_index()
+        config.switch_ctx(active_acm_index)
+        super().deploy_dr_policy()
+        config.switch_ctx(old_ctx)
+
+    def enable_cluster_backup(self):
+        """
+        set cluster-backup to True in mch resource
+        Note: changing this flag automatically installs OADP operator
+        """
+        mch_resource = ocp.OCP(
+            kind="MultiClusterHub",
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            namespace=constants.ACM_HUB_NAMESPACE,
+        )
+        mch_resource._has_phase = True
+        resource_dict = mch_resource.get()
+        for components in resource_dict["spec"]["overrides"]["components"]:
+            if components["name"] == "cluster-backup":
+                components["enabled"] = True
+        mch_resource_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="mch", delete=False
+        )
+        yaml_serialized = yaml.dump(resource_dict)
+        mch_resource_yaml.write(yaml_serialized)
+        mch_resource_yaml.flush()
+        run_cmd(f"oc apply -f {mch_resource_yaml.name}")
+        mch_resource.wait_for_phase("Running")
+        self.backup_pod_status_check()
+
+    @retry((TimeoutExpiredError, MDRDeploymentException), tries=20, delay=10)
+    def backup_pod_status_check(self):
+        pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+        if len(pods_list) != 3:
+            raise MDRDeploymentException("backup pod count mismatch ")
+        for pod in pods_list:
+            # check pod status Running
+            if not pod.data["status"]["phase"] == "Running":
+                raise MDRDeploymentException("backup pods not in Running state")
+
+
+MULTICLUSTER_DR_MAP = {
+    "regional-dr": RDRMultiClusterDROperatorsDeploy,
+    "metro-dr": MDRMultiClusterDROperatorsDeploy,
+}

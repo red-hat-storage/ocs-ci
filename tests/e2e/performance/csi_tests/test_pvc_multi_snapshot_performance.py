@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 # Local modules
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -273,9 +274,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         snapshotclass_data = templating.load_yaml(yaml_files[interface])
 
         snapshotclass_data["metadata"]["name"] = snapclass_name
-        snapshotclass_data["metadata"][
-            "namespace"
-        ] = constants.OPENSHIFT_STORAGE_NAMESPACE
+        snapshotclass_data["metadata"]["namespace"] = config.ENV_DATA[
+            "cluster_namespace"
+        ]
         ocs_obj = ocs.OCS(**snapshotclass_data)
         log.info(f"Creating new snapshot class : {snapclass_name}")
         try:

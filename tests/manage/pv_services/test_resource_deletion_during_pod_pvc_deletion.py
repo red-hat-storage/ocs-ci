@@ -140,7 +140,7 @@ class DisruptionBase(ManageTest):
 
         # Verify that the mount point is removed from nodes after deleting pod
         for node, pvs in node_pv_dict.items():
-            cmd = f"oc debug nodes/{node} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} -- df"
+            cmd = f"oc debug nodes/{node} --to-namespace={config.ENV_DATA['cluster_namespace']} -- df"
             df_on_node = run_cmd(cmd)
             for pv in pvs:
                 assert pv not in df_on_node, (

@@ -140,7 +140,7 @@ class TestMonitorRecovery(E2ETest):
         )
         mon_recovery.prepare_monstore_script()
         mon_recovery.patch_sleep_on_osds()
-        switch_to_project(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        switch_to_project(config.ENV_DATA["cluster_namespace"])
 
         logger.info("Getting mon-store from OSDs")
         mon_recovery.run_mon_store()
@@ -248,9 +248,9 @@ class MonitorRecovery(object):
         self.keyring_dir = tempfile.mkdtemp(dir=self.backup_dir, prefix="keyring-")
         self.keyring_files = []
         self.dep_ocp = OCP(
-            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        self.ocp_obj = ocp.OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        self.ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
 
     def scale_rook_ocs_operators(self, replica=1):
         """
@@ -279,7 +279,7 @@ class MonitorRecovery(object):
         """
         osd_dep = get_deployments_having_label(
             label=constants.OSD_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         osd_deployments = [OCS(**osd) for osd in osd_dep]
         for osd in osd_deployments:
@@ -367,7 +367,7 @@ class MonitorRecovery(object):
         """
         mon_dep = get_deployments_having_label(
             label=constants.MON_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         mon_deployments = [OCS(**mon) for mon in mon_dep]
         for mon in mon_deployments:
@@ -390,9 +390,9 @@ class MonitorRecovery(object):
 
         """
         logger.info("Re-spinning the mon pods")
-        for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+        for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
             mon.delete()
-        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for mon in mon_pods:
             wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
         mon_a = mon_pods[0]
@@ -417,7 +417,7 @@ class MonitorRecovery(object):
         )
 
         logger.info("Copying store.db to rest of the monitors")
-        for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+        for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
             cmd = (
                 f"cp {self.backup_dir}/store.db {mon.name}:/var/lib/ceph/mon/ceph-"
                 f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/ "
@@ -499,20 +499,20 @@ class MonitorRecovery(object):
         to_revert_patches = (
             get_deployments_having_label(
                 label=constants.OSD_APP_LABEL,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             + get_deployments_having_label(
                 label=constants.MON_APP_LABEL,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             + get_deployments_having_label(
                 label=constants.MGR_APP_LABEL,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
         )
         to_revert_mds = get_deployments_having_label(
             label=constants.MDS_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         to_revert_patches_path = []
         to_revert_mds_path = []
@@ -577,7 +577,7 @@ class MonitorRecovery(object):
         """
         mds_dep = get_deployments_having_label(
             label=constants.MDS_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         mds_deployments = [OCS(**mds) for mds in mds_dep]
         for mds in mds_deployments:
@@ -600,7 +600,7 @@ class MonitorRecovery(object):
             )
         logger.info("Sleeping for 60s and waiting for MDS pods to reach running state")
         time.sleep(60)
-        for mds in get_mds_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+        for mds in get_mds_pods(namespace=config.ENV_DATA["cluster_namespace"]):
             wait_for_resource_state(resource=mds, state=constants.STATUS_RUNNING)
 
     @retry(CommandFailed, tries=10, delay=10, backoff=1)
@@ -652,7 +652,7 @@ def update_mon_initial_delay():
     """
     mon_dep = get_deployments_having_label(
         label=constants.MON_APP_LABEL,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     mon_deployments = [OCS(**mon) for mon in mon_dep]
     for mon in mon_deployments:
@@ -673,7 +673,7 @@ def validate_mon_pods():
     Checks mon pods are running with retries
 
     """
-    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
     for mon in mon_pods:
         wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
 
@@ -683,7 +683,7 @@ def corrupt_ceph_monitors():
     Corrupts ceph monitors by deleting store.db file
 
     """
-    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
     for mon in mon_pods:
         logger.info(f"Corrupting monitor: {mon.name}")
         mon_id = mon.get().get("metadata").get("labels").get("ceph_daemon_id")
@@ -702,7 +702,7 @@ def corrupt_ceph_monitors():
                 )
                 mon.delete()
     logger.info("Validating all the monitors are in CLBO state")
-    for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
         wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
 
@@ -750,9 +750,9 @@ def remove_global_id_reclaim():
         mds_pod.delete()
     for mds_pod in get_mds_pods():
         wait_for_resource_state(resource=mds_pod, state=constants.STATUS_RUNNING)
-    for mon in get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
         mon.delete()
-    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
     for mon in mon_pods:
         wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
 
@@ -842,7 +842,7 @@ def get_ceph_caps(secret_resource):
         resource_obj = ocp.OCP(
             resource_name=resource,
             kind=constants.SECRET,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         if constants.CEPHFS_NODE_SECRET in resource:
             keyring = (
@@ -920,7 +920,7 @@ def generate_monmap_cmd():
     mon_ips = []
 
     logger.info("Getting monitor pods public IP")
-    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
     for mon in mon_pods:
         mon_ids.append(mon.get().get("metadata").get("labels").get("ceph_daemon_id"))
         logger.info(f"getting public ip of {mon.name}")

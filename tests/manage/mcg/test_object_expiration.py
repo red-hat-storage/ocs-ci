@@ -23,7 +23,7 @@ class TestObjectExpiration(MCGTest):
     @bugzilla("2029298")
     @pytest.mark.polarion_id("OCS-3929")
     @tier1
-    def test_object_expiration(self, mcg_obj, bucket_factory):
+    def test_object_expiration_in_minutes(self, mcg_obj, bucket_factory):
         """
         Test object is not deleted in minutes when object is set to expire in a day
 

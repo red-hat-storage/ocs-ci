@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 @tier4c
 @managed_service_required
-@ignore_leftover_label("rook-ceph-tools")
+@ignore_leftover_label(constants.TOOL_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3924")
 class TestPodDisruptions(ManageTest):
     """
@@ -173,7 +173,7 @@ class TestPodDisruptions(ManageTest):
             managedocs_obj = OCP(
                 kind="managedocs",
                 resource_name="managedocs",
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             for component in {"alertmanager", "prometheus", "storageCluster"}:
                 assert (
@@ -192,7 +192,7 @@ class TestPodDisruptions(ManageTest):
                 constants.OSE_PROMETHEUS_OPERATOR,
             }:
                 csvs = csv.get_csvs_start_with_prefix(
-                    managed_csv, constants.OPENSHIFT_STORAGE_NAMESPACE
+                    managed_csv, config.ENV_DATA["cluster_namespace"]
                 )
                 assert (
                     len(csvs) == 1
@@ -200,7 +200,7 @@ class TestPodDisruptions(ManageTest):
                 csv_name = csvs[0]["metadata"]["name"]
                 csv_obj = csv.CSV(
                     resource_name=csv_name,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
                 log.info(f"Check if {csv_name} is in Succeeded phase.")
                 csv_obj.wait_for_phase(phase="Succeeded", timeout=600)
@@ -208,7 +208,7 @@ class TestPodDisruptions(ManageTest):
             # Verify the phase of ceph cluster
             log.info("Verify the phase of ceph cluster")
             cephcluster = OCP(
-                kind="CephCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
             )
             cephcluster_yaml = cephcluster.get().get("items")[0]
             expected_phase = "Connected"

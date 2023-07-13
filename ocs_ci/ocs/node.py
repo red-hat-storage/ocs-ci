@@ -145,9 +145,13 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
         log.info(f"Waiting for nodes {node_names} to reach status {status}")
         for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
             for node in sample:
-                if node.ocp.get_resource_status(node.name) == status:
-                    log.info(f"Node {node.name} reached status {status}")
-                    nodes_not_in_state.remove(node.name)
+                try:
+                    if node.ocp.get_resource_status(node.name) == status:
+                        log.info(f"Node {node.name} reached status {status}")
+                        nodes_not_in_state.remove(node.name)
+                except CommandFailed as ex:
+                    log.info(f"failed to get the node status by error {ex}")
+                    continue
             if not nodes_not_in_state:
                 break
         log.info(f"The following nodes reached status {status}: {node_names}")
@@ -1200,7 +1204,10 @@ def node_replacement_verification_steps_user_side(
     if new_node_name not in ocs_node_names:
         log.warning("The new node not found in ocs nodes")
         return False
-    if old_node_name in ocs_node_names:
+    if (
+        old_node_name in ocs_node_names
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("The old node name found in ocs nodes")
         return False
 
@@ -1268,7 +1275,10 @@ def node_replacement_verification_steps_ceph_side(
         bool: True if all the verification steps passed. False otherwise
 
     """
-    if old_node_name == new_node_name:
+    if (
+        old_node_name == new_node_name
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("Hostname didn't change")
         return False
 
@@ -1298,11 +1308,17 @@ def node_replacement_verification_steps_ceph_side(
             "New osd node name is not provided. Continue with the other verification steps..."
         )
 
-    if old_node_name in ceph_osd_status:
+    if (
+        old_node_name in ceph_osd_status
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    if old_node_name in osd_node_names:
+    if (
+        old_node_name in osd_node_names
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("the old hostname found in osd node names")
         return False
 
@@ -1468,7 +1484,7 @@ def scale_down_deployments(node_name):
         node_name (str): The node name
 
     """
-    ocp = OCP(kind="node", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp = OCP(kind="node", namespace=config.ENV_DATA["cluster_namespace"])
     pods_to_scale_down = get_node_pods_to_scale_down(node_name)
     for p in pods_to_scale_down:
         deployment_name = pod.get_deployment_name(p.name)
@@ -1629,25 +1645,39 @@ def verify_all_nodes_created():
         expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
 
     existing_num_nodes = len(get_all_nodes())
+
+    # Some nodes will take time to create due to the issue https://issues.redhat.com/browse/SDA-6346
+    # Increasing the wait time for FaaS where the presence of all nodes are important
+    # when DEPLOYMENT["pullsecret_workaround"] is True
+    if config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM:
+        wait_time = 2400
+    else:
+        wait_time = 1200
+
     if expected_num_nodes != existing_num_nodes:
         platforms_to_wait = [
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
             constants.AZURE_PLATFORM,
         ]
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        platforms_to_wait.extend(constants.MANAGED_SERVICE_PLATFORMS)
+        if config.ENV_DATA[
+            "platform"
+        ].lower() in constants.MANAGED_SERVICE_PLATFORMS and not config.DEPLOYMENT.get(
+            "pullsecret_workaround"
+        ):
             log.warning(
                 f"Expected number of nodes is {expected_num_nodes} but "
                 f"created during deployment is {existing_num_nodes}"
             )
-        elif (
-            config.ENV_DATA["platform"].lower() in platforms_to_wait
-            and config.ENV_DATA["deployment_type"] == "ipi"
+        elif config.ENV_DATA["platform"].lower() in platforms_to_wait and (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            or config.ENV_DATA["deployment_type"] == "managed"
         ):
             try:
 
                 for node_list in TimeoutSampler(
-                    timeout=1200, sleep=60, func=get_all_nodes
+                    timeout=wait_time, sleep=60, func=get_all_nodes
                 ):
                     if len(node_list) == expected_num_nodes:
                         log.info(
@@ -1824,7 +1854,7 @@ def get_nodes_where_ocs_pods_running():
 
     """
     pods_openshift_storage = pod.get_all_pods(
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     ocs_nodes = list()
     for pod_obj in pods_openshift_storage:
@@ -2477,7 +2507,7 @@ def check_for_zombie_process_on_node(node_name=None):
     node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
     for node_obj in node_obj_list:
         debug_cmd = (
-            f"debug nodes/{node_obj.name} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
             '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
         )
         out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
@@ -2644,7 +2674,7 @@ def generate_nodes_for_provider_worker_node_tests():
         ceph_node_set = {mgr_node_name, random.choice(mon_node_names)}
     else:
         # Set of one mgr node, and two mon nodes
-        ceph_node_set = set([mgr_node_name] + random.choices(mon_node_names, k=2))
+        ceph_node_set = set([mgr_node_name] + random.sample(mon_node_names, k=2))
 
     osd_node_set = set(get_osd_running_nodes())
     ceph_include_osd_node_set = ceph_node_set.intersection(osd_node_set)
@@ -2663,3 +2693,26 @@ def generate_nodes_for_provider_worker_node_tests():
     generated_nodes = get_node_objs(node_choice_names)
     log.info(f"Generated nodes for provider node tests: {node_choice_names}")
     return generated_nodes
+
+
+def gracefully_reboot_nodes():
+    """
+
+    Gracefully reboot OpenShift Container Platform nodes
+
+    """
+    from ocs_ci.ocs import platform_nodes
+
+    node_objs = get_node_objs()
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    waiting_time = 30
+    for node in node_objs:
+        node_name = node.name
+        unschedule_nodes([node_name])
+        drain_nodes([node_name])
+        nodes.restart_nodes([node], wait=False)
+        log.info(f"Waiting for {waiting_time} seconds")
+        time.sleep(waiting_time)
+        schedule_nodes([node_name])
+    wait_for_nodes_status(status=constants.NODE_READY, timeout=180)

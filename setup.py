@@ -9,7 +9,7 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.13.0",
+    version="4.14.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
@@ -87,6 +87,8 @@ setup(
         "protobuf==4.21.7",
         "ping3>=4.0.3",
         "psutil==5.9.0",
+        "azure-identity==1.12.0",
+        "azure-mgmt-storage==21.0.0",
     ],
     entry_points={
         "console_scripts": [

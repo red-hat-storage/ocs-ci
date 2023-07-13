@@ -1,7 +1,8 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -50,7 +51,7 @@ def create_storageclass(sc_name, expect_fail=False):
     # Create a storage class
     sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
     sc_data["metadata"]["name"] = sc_name
-    sc_data["parameters"]["clusterID"] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
 
     global SC_OBJ
     SC_OBJ = OCS(**sc_data)

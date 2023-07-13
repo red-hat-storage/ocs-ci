@@ -520,6 +520,10 @@ class RDRDeploymentException(Exception):
     pass
 
 
+class MDRDeploymentException(Exception):
+    pass
+
+
 class ACMClusterDestroyException(Exception):
     pass
 
@@ -596,5 +600,24 @@ class VolumesExistError(Exception):
     pass
 
 
+class ExternalClusterNodeRoleNotFound(Exception):
+    pass
+
+
 class UnexpectedODFAccessException(Exception):
     pass
+
+
+class UnknownOperationForTerraformVariableUpdate(Exception):
+    pass
+
+
+class TerrafromFileNotFoundException(Exception):
+    pass
+
+
+class IncorrectUiOptionRequested(Exception):
+    def __init__(self, text, func=None):
+        super().__init__(text)
+        if func is not None:
+            func()

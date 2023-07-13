@@ -331,18 +331,37 @@ class MCG:
             The server's response
 
         """
+
         logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
-        payload = {
-            "api": api,
-            "method": method,
-            "params": params,
-            "auth_token": self.noobaa_token,
-        }
-        return requests.post(
-            url=self.mgmt_endpoint,
-            data=json.dumps(payload),
-            verify=retrieve_verification_mode(),
-        )
+
+        # This version comparison is a workaround to make sure we still cover
+        # the usage of the noobaa mgmt-endpoint via RPC calls
+        # Once the release-4.13 branch is created we should remove the unused logic per version
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_10:
+            payload = {
+                "api": api,
+                "method": method,
+                "params": params,
+                "auth_token": self.noobaa_token,
+            }
+            return requests.post(
+                url=self.mgmt_endpoint,
+                data=json.dumps(payload),
+                verify=retrieve_verification_mode(),
+            )
+
+        else:
+            cli_output = self.exec_mcg_cmd(
+                f"api {api} {method} '{json.dumps(params)}' -ojson"
+            )
+
+            # This class is needed to add a json method to the response dict
+            # which is needed to support existing usage
+            class CLIResponseDict(dict):
+                def json(self):
+                    return self
+
+            return CLIResponseDict({"reply": json.loads(cli_output.stdout)})
 
     def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
@@ -932,7 +951,7 @@ class MCG:
                 constants.NOOBAA_OPERATOR_POD_CLI_PATH
             )
             # The MCG CLI retrieval process is known to be flaky
-            # and there's an active BZ regardaing it -
+            # and there's an active BZ regarding it -
             # https://bugzilla.redhat.com/show_bug.cgi?id=2011845
             # rsync should be more reliable than cp, thus the use of oc rsync.
             if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:

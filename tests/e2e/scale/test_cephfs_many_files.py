@@ -10,8 +10,9 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import scale
 from ocs_ci.framework.testlib import E2ETest, ignore_leftovers
 from ocs_ci.ocs import ocp, constants
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, ceph_health_check
 from ocs_ci.helpers import helpers, disruption_helpers
+from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 
 TARFILE = "cephfs.tar.gz"
 SIZE = "20Gi"
@@ -172,3 +173,9 @@ class TestMillionCephfsFiles(E2ETest):
                 f"exec {million_file_cephfs.pod_name} -- mv {fullnew} {sample}"
             )
         log.info("Tests complete")
+
+        # Validate storage pods are running
+        wait_for_storage_pods()
+
+        # Validate cluster health ok and all pods are running
+        assert ceph_health_check(delay=180), "Ceph health in bad state"

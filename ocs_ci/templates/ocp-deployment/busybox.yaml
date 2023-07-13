@@ -1,0 +1,22 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  name: test-deployment-topology-test
+  namespace: {}
+spec:
+  selector:
+    matchLabels:
+      app: test-deployment-busybox
+  template:
+    metadata:
+      labels:
+        app: test-deployment-busybox
+    spec:
+      nodeName: {}
+      containers:
+        - name: busybox
+          image: busybox
+          command: ["sleep", "360000"]

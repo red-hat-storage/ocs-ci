@@ -22,6 +22,7 @@ import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.exceptions import UnexpectedVolumeType
 from ocs_ci.ocs.resources import pod
@@ -311,7 +312,9 @@ def get_pool_name(fixture_name):
     """
     Return ceph pool name based on fixture name suffix.
     """
-    if fixture_name.endswith("rbd"):
+    if config.DEPLOYMENT["external_mode"]:
+        ceph_pool_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+    elif fixture_name.endswith("rbd"):
         ceph_pool_name = "ocs-storagecluster-cephblockpool"
     elif fixture_name.endswith("cephfs"):
         ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
@@ -333,6 +336,7 @@ def workload_fio_storageutilization(
     with_checksum=False,
     keep_fio_data=False,
     minimal_time=480,
+    throw_skip=True,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -377,6 +381,8 @@ def workload_fio_storageutilization(
             storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
             (See more details in the function 'measure_operation')
+        throw_skip (bool): if True function will raise pytest.skip.Exception and test will be skipped,
+            otherwise return None
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -445,7 +451,10 @@ def workload_fio_storageutilization(
             f"the target utilization {target_percentage*100}% is already met"
         )
         logger.warning(skip_msg)
-        pytest.skip(skip_msg)
+        if throw_skip:
+            pytest.skip(skip_msg)
+        else:
+            return
 
     fio_conf = textwrap.dedent(
         """

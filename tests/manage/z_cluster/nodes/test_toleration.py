@@ -1,7 +1,7 @@
 import logging
 import pytest
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier4c, E2ETest, ignore_leftovers
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     check_toleration_on_pods,
@@ -55,10 +55,10 @@ class TestTaintAndTolerations(E2ETest):
         check_toleration_on_pods()
 
         # Respin all pods and check it if is still running
-        pod_list = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_list = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for pod in pod_list:
             if "s3cli" in pod.name:
                 continue
             else:
                 pod.delete(wait=False)
-        assert wait_for_pods_to_be_running(timeout=300)
+        assert wait_for_pods_to_be_running(timeout=360)

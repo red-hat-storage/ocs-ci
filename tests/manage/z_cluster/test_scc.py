@@ -2,6 +2,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from datetime import datetime
@@ -69,7 +70,7 @@ class TestSCC:
         for label in labels:
             pods.extend(
                 get_pods_having_label(
-                    label=label, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                    label=label, namespace=config.ENV_DATA["cluster_namespace"]
                 )
             )
         pods = [Pod(**pod) for pod in pods]

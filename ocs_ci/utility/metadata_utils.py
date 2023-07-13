@@ -4,6 +4,7 @@ Module that contains all operations related to add metadata feature in a cluster
 """
 
 import logging
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
@@ -24,7 +25,7 @@ def check_setmetadata_availability(pod_obj):
 
     """
     plugin_provisioner_pod_objs = pod.get_all_pods(
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"],
     )
     log.info(f"list of provisioner pods---- {plugin_provisioner_pod_objs}")

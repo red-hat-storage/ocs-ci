@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import MS_PROVIDER_TYPE, MS_CONSUMER_TYPE
 from ocs_ci.ocs.node import (
     get_node_objs,
     recover_node_to_ready_state,
@@ -38,6 +39,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +52,13 @@ class TestNodesRestartMS(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
+    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
         """
         Initialize Sanity instance, and create pods and PVCs factory
 
         """
         self.orig_index = config.cur_index
+        switch_to_correct_cluster_at_setup(request)
         self.sanity_helpers = SanityManagedService(
             create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
         )
@@ -80,7 +83,11 @@ class TestNodesRestartMS(ManageTest):
 
     @tier4a
     @pytest.mark.polarion_id("OCS-3980")
-    def test_osd_node_restart_and_check_osd_pods_status(self, nodes):
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [MS_PROVIDER_TYPE],
+    )
+    def test_osd_node_restart_and_check_osd_pods_status(self, cluster_type, nodes):
         """
         1) Restart one of the osd nodes.
         2) Check that the osd pods associated with the node should change to a Terminating state.
@@ -88,14 +95,6 @@ class TestNodesRestartMS(ManageTest):
         4) Check that the new osd pods with the same ids start on the same node.
         5) Check the worker nodes security groups.
         """
-        # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/6162
-        if is_ms_consumer_cluster():
-            logger.info(
-                "The test is applicable only for an MS provider cluster. "
-                "Switching to the provider cluster..."
-            )
-            config.switch_to_provider()
-
         self.sanity_helpers.create_resources_on_ms_consumers()
 
         osd_node_name = random.choice(get_osd_running_nodes())
@@ -142,17 +141,27 @@ class TestNodesRestartMS(ManageTest):
 
     @tier4a
     @pytest.mark.parametrize(
-        argnames=["node_type"],
+        argnames=["cluster_type", "node_type"],
         argvalues=[
             pytest.param(
-                *[constants.WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-3982")
+                *[MS_PROVIDER_TYPE, constants.WORKER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-3982"),
             ),
             pytest.param(
-                *[constants.MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-3981")
+                *[MS_CONSUMER_TYPE, constants.WORKER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-3982"),
+            ),
+            pytest.param(
+                *[MS_PROVIDER_TYPE, constants.MASTER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-3981"),
+            ),
+            pytest.param(
+                *[MS_CONSUMER_TYPE, constants.MASTER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-3981"),
             ),
         ],
     )
-    def test_nodes_restart(self, nodes, node_type):
+    def test_nodes_restart(self, cluster_type, nodes, node_type):
         """
         Test nodes restart (from the platform layer)
 
@@ -165,19 +174,22 @@ class TestNodesRestartMS(ManageTest):
         nodes.restart_nodes(nodes=ocp_nodes, wait=False)
         wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources_on_ms_consumers()
+        tries = 4 if is_ms_consumer_cluster() else 1
+        self.sanity_helpers.create_resources_on_ms_consumers(tries=tries)
 
     @tier4b
     @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
     @pytest.mark.parametrize(
-        argnames=["node_type"],
+        argnames=["cluster_type", "node_type"],
         argvalues=[
-            pytest.param(constants.WORKER_MACHINE),
-            pytest.param(constants.MASTER_MACHINE),
+            pytest.param(*[MS_PROVIDER_TYPE, constants.WORKER_MACHINE]),
+            pytest.param(*[MS_PROVIDER_TYPE, constants.MASTER_MACHINE]),
+            pytest.param(*[MS_CONSUMER_TYPE, constants.WORKER_MACHINE]),
+            pytest.param(*[MS_CONSUMER_TYPE, constants.MASTER_MACHINE]),
         ],
     )
-    def test_rolling_nodes_restart(self, nodes, node_type):
+    def test_rolling_nodes_restart(self, cluster_type, nodes, node_type):
         """
         Test restart nodes one after the other and check health status in between
 
@@ -205,7 +217,13 @@ class TestNodesRestartMS(ManageTest):
 
     @tier4a
     @polarion_id("OCS-4482")
-    def test_node_maintenance_restart(self, nodes, pvc_factory, pod_factory):
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [MS_PROVIDER_TYPE],
+    )
+    def test_node_maintenance_restart(
+        self, cluster_type, nodes, pvc_factory, pod_factory
+    ):
         """
         - Mark as unschedulable and drain 1 worker node in the provider cluster
         - Check cluster functionality by creating resources from the consumer cluster
@@ -217,14 +235,6 @@ class TestNodesRestartMS(ManageTest):
           (PVCs, pods - both CephFS and RBD)
 
         """
-        # Switch to provider cluster for the test
-        if is_ms_consumer_cluster():
-            logger.info(
-                "The test is applicable only for an MS provider cluster. "
-                "Switching to the provider cluster..."
-            )
-            config.switch_to_provider()
-
         self.sanity_helpers.create_resources_on_ms_consumers()
 
         # Get 1 worker node
@@ -291,7 +301,7 @@ class TestNodesRestartMS(ManageTest):
             managedocs_obj = OCP(
                 kind="managedocs",
                 resource_name="managedocs",
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             for component in {"alertmanager", "prometheus", "storageCluster"}:
                 assert (
@@ -302,7 +312,7 @@ class TestNodesRestartMS(ManageTest):
             # Verify the phase of ceph cluster
             logger.info("Verify the phase of ceph cluster")
             cephcluster = OCP(
-                kind="CephCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
             )
             cephcluster_yaml = cephcluster.get().get("items")[0]
             expected_phase = (

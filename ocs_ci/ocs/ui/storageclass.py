@@ -2,8 +2,6 @@ import logging
 import time
 import os
 from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
-from ocs_ci.utility.utils import get_ocp_version
 from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
@@ -18,10 +16,8 @@ class StorageClassUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        ocp_version = get_ocp_version()
-        self.sc_loc = locators[ocp_version]["storageclass"]
+    def __init__(self):
+        super().__init__()
 
     def create_storageclass(self, pool_name):
         """
@@ -34,12 +30,13 @@ class StorageClassUI(PageNavigator):
             sc_name (str): the name of the storageclass created, otherwise return None.
 
         """
-        self.navigate_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         sc_name = create_unique_resource_name("test", "storageclass")
         self.do_click(self.sc_loc["create_storageclass_button"])
         self.do_send_keys(self.sc_loc["input_storageclass_name"], sc_name)
+        self.do_click(self.sc_loc["volume_binding_mode"])
+        self.do_click(self.sc_loc["immediate"])
         self.do_click(self.sc_loc["provisioner_dropdown"])
         self.do_click(self.sc_loc["rbd_provisioner"])
         self.do_click(self.sc_loc["pool_dropdown"])
@@ -62,7 +59,6 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         sc_existence = self.wait_until_expected_text_is_found(
@@ -82,7 +78,6 @@ class StorageClassUI(PageNavigator):
 
         """
 
-        self.navigate_overview_page()
         self.navigate_storageclasses_page()
         self.page_has_loaded()
         logger.info(f"sc_name is {sc_name}")

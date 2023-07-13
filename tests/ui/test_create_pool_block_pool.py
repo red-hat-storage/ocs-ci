@@ -50,7 +50,10 @@ class TestPoolUserInterface(ManageTest):
     @pytest.fixture()
     def storage(self, storageclass_factory_ui, replica, compression):
         self.sc_obj = storageclass_factory_ui(
-            create_new_pool=True, replica=replica, compression=compression
+            create_new_pool=True,
+            replica=replica,
+            compression=compression,
+            vol_binding_mode="Immediate",
         )
         self.pool_name = self.sc_obj.get()["parameters"]["pool"]
 

@@ -25,12 +25,16 @@ from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
 )
+from ocs_ci.framework.pytest_customization.marks import (
+    purple_squad,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
 @ocp_upgrade
+@purple_squad
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health
@@ -141,7 +145,7 @@ class TestUpgradeOCP(ManageTest):
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
                 for sampler in TimeoutSampler(
-                    timeout=2700,
+                    timeout=4000,
                     sleep=60,
                     func=ocp.confirm_cluster_operator_version,
                     target_version=target_image,

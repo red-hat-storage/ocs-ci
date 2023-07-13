@@ -101,7 +101,6 @@ class TestAddNode(E2ETest):
             )
             logger.error(f"Cluster not in expected state. {ex}")
 
-    @pytest.mark.skipif("TestAddNode.skip_all")
     @pytest.mark.polarion_id("OCS-609")
     def test_scale_pvcs_pods(self):
         """
@@ -139,7 +138,6 @@ class TestAddNode(E2ETest):
             raise
 
     @ignore_leftovers
-    @pytest.mark.skipif("TestAddNode.skip_all")
     @pytest.mark.parametrize(
         argnames="resource_to_delete",
         argvalues=[
@@ -255,7 +253,6 @@ class TestAddNode(E2ETest):
         )
 
     @ignore_leftovers
-    @pytest.mark.skipif("TestAddNode.skip_all")
     def test_add_node_cleanup(self):
         """
         Test to cleanup possible resources created in TestAddNode class

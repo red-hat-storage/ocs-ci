@@ -1,0 +1,14 @@
+---
+# Config file for nightly OCP 4.14
+RUN:
+  client_version: "4.14.0-0.nightly"
+DEPLOYMENT:
+  installer_version: "4.14.0-0.nightly"
+  terraform_version: "1.0.11"
+  # ignition_version can be found here
+  # https://docs.openshift.com/container-platform/4.7/post_installation_configuration/machine-configuration-tasks.html#machine-config-overview-post-install-machine-configuration-tasks
+  ignition_version: "3.2.0"
+ENV_DATA:
+  vm_template: "rhcos-414.92.202303281555-0-vmware.x86_64"
+  acm_hub_channel: release-2.8 # To be changed when acm 2.9 get's released
+  acm_version: "2.8"

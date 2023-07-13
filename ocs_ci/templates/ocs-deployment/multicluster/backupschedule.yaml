@@ -1,0 +1,9 @@
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: BackupSchedule
+metadata:
+  name: schedule-acm
+  namespace: open-cluster-management-backup
+spec:
+  veleroSchedule: 0 */1 * * *  >>> setting to take backup in each hour
+  veleroTtl: 2h   >>> delete old backups after 2hrs
+  useManagedServiceAccount: true

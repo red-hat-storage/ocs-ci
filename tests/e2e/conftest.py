@@ -3,7 +3,8 @@ import time
 import logging
 import pytest
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
     compare_directory,
@@ -77,13 +78,13 @@ def noobaa_db_backup_and_recovery_locally(
     """
     # OCS storagecluster object
     ocs_storagecluster_obj = OCP(
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
 
     # OCP object for kind deployment
     ocp_deployment_obj = OCP(
-        kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
 
     # Noobaa operator & noobaa endpoint deployments objects
@@ -115,7 +116,7 @@ def noobaa_db_backup_and_recovery_locally(
 
         # Backup secrets
         ocp_secret_obj = OCP(
-            kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
         )
         secrets = [
             "noobaa-root-master-key",
@@ -135,13 +136,13 @@ def noobaa_db_backup_and_recovery_locally(
         noobaa_db_pod = Pod(
             **get_pods_having_label(
                 label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
         noobaa_db_pod.exec_cmd_on_pod(
             command="pg_dump nbcore -f /tmp/test.db -F custom"
         )
-        OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).exec_oc_cmd(
+        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
             command=f"cp --retries=-1 {noobaa_db_pod.name}:/tmp/test.db ./mcg.bck",
             out_yaml_format=False,
         )
@@ -184,7 +185,7 @@ def noobaa_db_backup_and_recovery_locally(
         logger.info("Cleaned up potential database clients to nbcore!")
 
         # Restore DB from a local folder
-        OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).exec_oc_cmd(
+        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
             command=f"cp ./mcg.bck {noobaa_db_pod.name}:/tmp/test.db"
         )
         noobaa_db_pod.exec_cmd_on_pod(command="pg_restore -d nbcore /tmp/test.db -c")
@@ -256,7 +257,7 @@ def noobaa_db_backup_and_recovery_locally(
 
         # start noobaa services if its down
         ocp_deployment_obj = OCP(
-            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
         nb_operator_dc = Deployment(
             **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
@@ -341,7 +342,7 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
 
         # Get the noobaa-db PVC
         pvc_obj = OCP(
-            kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
         )
         noobaa_pvc_yaml = pvc_obj.get(resource_name=noobaa_pvc_obj[0].name)
 
@@ -353,7 +354,7 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
         restored_noobaa_pv_name = (
             restored_noobaa_pvc_obj[0].get("spec").get("spec").get("volumeName")
         )
-        pv_obj = OCP(kind=constants.PV, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        pv_obj = OCP(kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"])
         params = '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
         assert pv_obj.patch(resource_name=restored_noobaa_pv_name, params=params), (
             "Failed to change the parameter persistentVolumeReclaimPolicy"
@@ -407,7 +408,9 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
         ), f"Failed to scale up the statefulset {constants.NOOBAA_DB_STATEFULSET}"
 
         # Validate noobaa pod is up and running
-        pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_count=len(noobaa_pods),
@@ -428,7 +431,7 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
         # Get the statefulset replica count
         sst_obj = OCP(
             kind=constants.STATEFULSET,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         noobaa_db_sst_obj = sst_obj.get(resource_name=constants.NOOBAA_DB_STATEFULSET)
         if noobaa_db_sst_obj["spec"]["replicas"] != 1:
@@ -698,3 +701,28 @@ def benchmark_fio_factory_fixture(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to
+
+    Args:
+        items: list of collected tests
+
+    """
+    skip_list = [
+        "test_create_scale_pods_and_pvcs_using_kube_job_ms",
+        "test_create_scale_pods_and_pvcs_with_ms_consumer",
+        "test_create_scale_pods_and_pvcs_with_ms_consumers",
+        "test_create_and_delete_scale_pods_and_pvcs_with_ms_consumers",
+    ]
+    if not config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        for item in items.copy():
+            for testname in skip_list:
+                if testname in str(item.fspath):
+                    logger.debug(
+                        f"Test {item} is removed from the collected items"
+                        f" since it requires Managed service platform"
+                    )
+                    items.remove(item)

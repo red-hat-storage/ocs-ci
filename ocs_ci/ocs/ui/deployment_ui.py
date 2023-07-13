@@ -2,7 +2,7 @@ import logging
 import time
 
 
-from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
+from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR
 from ocs_ci.ocs.ui.base_ui import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
@@ -26,9 +26,8 @@ class DeploymentUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.dep_loc = locators[self.ocp_version]["deployment"]
+    def __init__(self):
+        super().__init__()
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -53,8 +52,7 @@ class DeploymentUI(PageNavigator):
             expected_text=capacity_str,
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error(f" after {timeout} seconds")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError(f"Disks are not attached after {timeout} seconds")
 
     def install_ocs_operator(self):
         """
@@ -183,6 +181,17 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
         self.create_storage_cluster()
 
+    def configure_in_transit_encryption(self):
+        """
+        Configure in_transit_encryption
+
+        """
+        if config.ENV_DATA.get("in_transit_encryption"):
+            logger.info("Enable in-transit encryption")
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["enable_in_transit_encryption"]
+            )
+
     def install_lso_cluster(self):
         """
         Install LSO cluster via UI
@@ -230,8 +239,7 @@ class DeploymentUI(PageNavigator):
             expected_text="Memory",
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error("Nodes not found after 600 seconds")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError("Nodes not found after 600 seconds")
 
         if self.operator_name == OCS_OPERATOR:
             logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
@@ -293,6 +301,7 @@ class DeploymentUI(PageNavigator):
         if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+            self.configure_in_transit_encryption()
             self.configure_encryption()
 
         self.create_storage_cluster()

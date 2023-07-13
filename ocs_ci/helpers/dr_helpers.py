@@ -6,13 +6,14 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.resources.deployment import get_deployments_having_label
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.node import gracefully_reboot_nodes
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -110,18 +111,6 @@ def failover(failover_cluster, namespace):
 
     """
     restore_index = config.cur_index
-
-    # WA for Bug 2007376, Scale down the RBD mirror daemon deployment on failover_cluster to 0
-    config.switch_to_cluster_by_name(failover_cluster)
-    rbd_mirror_deployment = get_deployments_having_label(
-        constants.RBD_MIRROR_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
-    )[0]
-    logger.info(
-        f"Scaling down RBD mirror daemon deployment {rbd_mirror_deployment.name} to 0"
-    )
-    rbd_mirror_deployment.scale(replicas=0)
-    rbd_mirror_deployment.wait_for_available_replicas()
-
     config.switch_acm_ctx()
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
     drpc_obj = DRPC(namespace=namespace)
@@ -178,7 +167,7 @@ def check_mirroring_status_ok(replaying_images=None):
     cbp_obj = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
         resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
@@ -230,9 +219,6 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
 
     """
     restore_index = config.cur_index
-    if not replaying_images:
-        replaying_images = config.ENV_DATA["dr_workload_pvc_count"]
-
     for cluster in get_non_acm_cluster_config():
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(
@@ -254,6 +240,26 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
 
     config.switch_ctx(restore_index)
     return True
+
+
+def get_pv_count(namespace):
+    """
+    Gets PV resource count in the given namespace
+
+    Args:
+        namespace (str): the namespace of the workload
+
+    Returns:
+         int: PV resource count
+
+    """
+    all_pvs = get_all_pvs()["items"]
+    workload_pvs = [
+        pv
+        for pv in all_pvs
+        if pv.get("spec").get("claimRef").get("namespace") == namespace
+    ]
+    return len(workload_pvs)
 
 
 def get_vr_count(namespace):
@@ -381,7 +387,6 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
         namespace (str): the namespace of the VR resources
         timeout (int): time in seconds to wait for VR resources to be created
             or reach expected state
-
     Raises:
         TimeoutExpiredError: In case replication resources not created
 
@@ -395,27 +400,28 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
         logger.error(error_msg)
         raise TimeoutExpiredError(error_msg)
 
-    logger.info(f"Waiting for {vr_count} VRs to be created")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=get_vr_count,
-        namespace=namespace,
-    )
-    sample.wait_for_func_value(vr_count)
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        logger.info(f"Waiting for {vr_count} VRs to be created")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_vr_count,
+            namespace=namespace,
+        )
+        sample.wait_for_func_value(vr_count)
 
-    logger.info(f"Waiting for {vr_count} VRs to reach primary state")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=check_vr_state,
-        state="primary",
-        namespace=namespace,
-    )
-    if not sample.wait_for_func_status(result=True):
-        error_msg = "One or more VR haven't reached expected state primary within the time limit."
-        logger.error(error_msg)
-        raise TimeoutExpiredError(error_msg)
+        logger.info(f"Waiting for {vr_count} VRs to reach primary state")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=check_vr_state,
+            state="primary",
+            namespace=namespace,
+        )
+        if not sample.wait_for_func_status(result=True):
+            error_msg = "One or more VR haven't reached expected state primary within the time limit."
+            logger.error(error_msg)
+            raise TimeoutExpiredError(error_msg)
 
     logger.info("Waiting for VRG to reach primary state")
     sample = TimeoutSampler(
@@ -483,14 +489,15 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         logger.info(error_msg)
         raise TimeoutExpiredError(error_msg)
 
-    logger.info("Waiting for all VRs to be deleted")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=get_vr_count,
-        namespace=namespace,
-    )
-    sample.wait_for_func_value(0)
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        logger.info("Waiting for all VRs to be deleted")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_vr_count,
+            namespace=namespace,
+        )
+        sample.wait_for_func_value(0)
 
 
 def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900):
@@ -521,22 +528,11 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
         sleep=5,
     )
 
-    # WA for Bug 2007376, Scale RBD mirror daemon deployment back to 1
-    rbd_mirror_deployment = get_deployments_having_label(
-        constants.RBD_MIRROR_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
-    )[0]
-    if rbd_mirror_deployment.replicas == 0:
-        logger.info(
-            f"Scaling up RBD mirror daemon deployment {rbd_mirror_deployment.name} back to 1"
-        )
-        rbd_mirror_deployment.scale(replicas=1)
-        rbd_mirror_deployment.wait_for_available_replicas()
-
     wait_for_replication_resources_creation(pvc_count, namespace, timeout)
 
 
 def wait_for_all_resources_deletion(
-    namespace, check_replication_resources_state=True, timeout=900
+    namespace, check_replication_resources_state=True, timeout=1000
 ):
     """
     Wait for workload and replication resources to be deleted
@@ -565,6 +561,41 @@ def wait_for_all_resources_deletion(
             resource_name=pvc_obj.name, timeout=timeout, sleep=5
         )
 
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        logger.info("Waiting for all PVs to be deleted")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_pv_count,
+            namespace=namespace,
+        )
+        sample.wait_for_func_value(0)
+
+
+def get_image_uuids(namespace):
+    """
+    Gets all image UUIDs associated with the PVCs in the given namespace
+
+    Args:
+        namespace (str): the namespace of the VR resources
+
+    Returns:
+        list: List of all image UUIDs
+
+    """
+    image_uuids = []
+    for cluster in get_non_acm_cluster_config():
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        logger.info(
+            f"Fetching image UUIDs from cluster: {cluster.ENV_DATA['cluster_name']}"
+        )
+        all_pvcs = get_all_pvc_objs(namespace=namespace)
+        for pvc_obj in all_pvcs:
+            image_uuids.append(pvc_obj.image_uuid)
+    image_uuids = list(set(image_uuids))
+    logger.info(f"All image UUIDs from managed clusters: {image_uuids}")
+    return image_uuids
+
 
 def get_all_drpolicy():
     """
@@ -578,3 +609,112 @@ def get_all_drpolicy():
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     return drpolicy_list
+
+
+def enable_fence(drcluster_name):
+    """
+    Once the managed cluster is fenced, all communication
+    from applications to the ODF external storage cluster will fail
+
+    Args:
+        drcluster_name (str): Name of the DRcluster which needs to be fenced
+
+    """
+
+    logger.info(
+        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
+    )
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    if not drcluster_obj.patch(params=fence_params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
+    logger.info(f"Successfully fenced {constants.DRCLUSTER}: {drcluster_name}")
+    config.switch_ctx(restore_index)
+
+
+def enable_unfence(drcluster_name):
+    """
+    The OpenShift cluster to be Unfenced is the one where applications
+    are not currently running and the cluster that was Fenced earlier.
+
+    Args:
+        drcluster_name (str): Name of the DRcluster which needs to be fenced
+
+    """
+
+    logger.info(
+        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
+    )
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    unfence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_UNFENCE}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    if not drcluster_obj.patch(params=unfence_params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
+    logger.info(f"Successfully unfenced {constants.DRCLUSTER}: {drcluster_name}")
+    config.switch_ctx(restore_index)
+
+
+def fence_state(drcluster_name, fence_state):
+    """
+    Sets the specified clusterFence state
+
+    Args:
+       drcluster_name (str): Name of the DRcluster which needs to be fenced
+       fence_state (str): Specify the clusterfence state either constants.ACTION_UNFENCE and ACTION_FENCE
+
+    """
+
+    logger.info(
+        f"Edit the DRCluster {drcluster_name} cluster clusterfence state {fence_state}  "
+    )
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    params = f'{{"spec":{{"clusterFence":"{fence_state}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    if not drcluster_obj.patch(params=params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
+    logger.info(
+        f"Successfully changed clusterfence state to {fence_state} {constants.DRCLUSTER}: {drcluster_name}"
+    )
+    config.switch_ctx(restore_index)
+
+
+def get_fence_state(drcluster_name):
+    """
+    Returns the clusterfence state of given drcluster
+
+    Args:
+        drcluster_name (str): Name of the DRcluster
+
+    Returns:
+        state (str): If drcluster are fenced: Fenced or Unfenced, else None if not defined
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    state = drcluster_obj.get().get("spec").get("clusterFence")
+    config.switch_ctx(restore_index)
+    return state
+
+
+def gracefully_reboot_ocp_nodes(namespace, drcluster_name):
+    """
+    Gracefully reboot OpenShift Container Platform
+    nodes which was fenced before
+
+    Args:
+        namespace (str): Name of the namespace
+        drcluster_name (str): Name of the drcluster which need to be reboot
+
+    """
+
+    primary_cluster_name = get_current_primary_cluster_name(namespace=namespace)
+    if primary_cluster_name == drcluster_name:
+        set_current_primary_cluster_context(namespace)
+    else:
+        set_current_secondary_cluster_context(namespace)
+    gracefully_reboot_nodes()

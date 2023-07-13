@@ -24,6 +24,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     tier_marks,
     ignore_leftover_label,
+    upgrade_marks,
 )
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
@@ -39,6 +40,7 @@ from ocs_ci.ocs.exceptions import (
     StorageclassNotCreated,
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
+    ResourceNotDeleted,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -120,7 +122,7 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
     run_cmd,
 )
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
@@ -520,7 +522,10 @@ def pagerduty_integration(request, pagerduty_service):
         assert integration_response.ok, msg
         integration = integration_response.json().get("integration")
         integration_key = integration["integration_key"]
-    pagerduty.set_pagerduty_integration_secret(integration_key)
+        if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+            pagerduty.set_pagerduty_faas_secret(integration_key)
+        else:
+            pagerduty.set_pagerduty_integration_secret(integration_key)
 
     def update_pagerduty_integration_secret():
         """
@@ -533,7 +538,10 @@ def pagerduty_integration(request, pagerduty_service):
         """
         while config.RUN["thread_pagerduty_secret_update"] != "finished":
             if config.RUN["thread_pagerduty_secret_update"] == "required":
-                pagerduty.set_pagerduty_integration_secret(integration_key)
+                if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+                    pagerduty.set_pagerduty_faas_secret(integration_key)
+                else:
+                    pagerduty.set_pagerduty_integration_secret(integration_key)
             time.sleep(60)
 
     config.RUN["thread_pagerduty_secret_update"] = "not required"
@@ -721,6 +729,7 @@ def storageclass_factory_fixture(
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
+            sc_obj.interface_name = interface_name
 
         instances.append(sc_obj)
         return sc_obj
@@ -1081,7 +1090,6 @@ def pod_factory_fixture(request, pvc_factory):
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
-                deploy_pod_status=status,
             )
             assert pod_obj, "Failed to create pod"
         if deployment_config:
@@ -1371,6 +1379,13 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     # add run_id
     record_testsuite_property("run_id", config.RUN["run_id"])
 
+    # add cluster dir full path (on NFS share, if configured, it should contain
+    # full path to cluster dir on NFS share, starting with `/mnt/`)
+    if config.RUN.get("cluster_dir_full_path"):
+        record_testsuite_property(
+            "cluster_dir_full_path", config.RUN.get("cluster_dir_full_path")
+        )
+
     # Report Portal
     launch_name = reporting.get_rp_launch_name()
     record_testsuite_property("rp_launch_name", launch_name)
@@ -1406,8 +1421,26 @@ def tier_marks_name():
     return tier_marks_name
 
 
+@pytest.fixture(scope="session")
+def upgrade_marks_name():
+    """
+    Gets the upgrade mark names
+
+    Returns:
+        list: list of upgrade mark names
+
+    """
+    upgrade_marks_name = []
+    for upgrade_mark in upgrade_marks:
+        try:
+            upgrade_marks_name.append(upgrade_mark().args[0].name)
+        except AttributeError:
+            log.error("upgrade mark does not exist")
+    return upgrade_marks_name
+
+
 @pytest.fixture(scope="function", autouse=True)
-def health_checker(request, tier_marks_name):
+def health_checker(request, tier_marks_name, upgrade_marks_name):
     skipped = False
     dev_mode = config.RUN["cli_params"].get("dev_mode")
     mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
@@ -1421,7 +1454,7 @@ def health_checker(request, tier_marks_name):
     if config.multicluster:
         if (
             config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-            == config.get_acm_index()
+            == config.get_active_acm_index()
         ):
             return
 
@@ -1439,13 +1472,17 @@ def health_checker(request, tier_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    if "test_add_capacity" in node.name:
+                    ceph_health_retry = False
+                    for mark in node.iter_markers():
+                        if "ceph_health_retry" == mark.name:
+                            ceph_health_retry = True
+                    if ceph_health_retry:
                         ceph_health_check(
                             namespace=config.ENV_DATA["cluster_namespace"]
                         )
                         log.info(
-                            "Ceph health check passed at teardown. (After Add capacity "
-                            "TC we allow more re-tries)"
+                            "Ceph health check passed at teardown. (After test "
+                            "marked with @ceph_health_retry. For such TC we allow more re-tries)"
                         )
                     else:
                         ceph_health_check_base()
@@ -1459,7 +1496,9 @@ def health_checker(request, tier_marks_name):
 
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
-        if mark.name in tier_marks_name and config.RUN.get("cephcluster"):
+        if mark.name in tier_marks_name + upgrade_marks_name and config.RUN.get(
+            "cephcluster"
+        ):
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
@@ -1541,16 +1580,25 @@ def environment_checker(request):
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
     # app labels of resources to be excluded for leftover check
-    exclude_labels = [constants.must_gather_pod_label, constants.S3CLI_APP_LABEL]
+    exclude_labels = [
+        constants.must_gather_pod_label,
+        constants.S3CLI_APP_LABEL,
+        constants.MUST_GATHER_HELPER_LABEL,
+    ]
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
-    request.addfinalizer(
-        partial(get_status_after_execution, exclude_labels=exclude_labels)
-    )
-    get_status_before_execution(exclude_labels=exclude_labels)
+    if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+        log.error(
+            "Environment checker is NOT IMPLEMENTED for Fusion service. This needds to be updated"
+        )
+    else:
+        request.addfinalizer(
+            partial(get_status_after_execution, exclude_labels=exclude_labels)
+        )
+        get_status_before_execution(exclude_labels=exclude_labels)
 
 
 @pytest.fixture(scope="session")
@@ -1998,7 +2046,7 @@ def memory_leak_function(request):
                 filename = f"/tmp/{worker}-top-output.txt"
                 top_cmd = (
                     "debug"
-                    f" nodes/{worker} --to-namespaces={constants.OPENSHIFT_STORAGE_NAMESPACE} --"
+                    f" nodes/{worker} --to-namespaces={config.ENV_DATA['cluster_namespace']} --"
                     " chroot /host top -n 2 b"
                 )
                 with open("/tmp/file.txt", "w+") as temp:
@@ -2083,7 +2131,7 @@ def ec2_instances(request, aws_obj):
 
 
 @pytest.fixture(scope="session")
-def cld_mgr(request, rgw_endpoint):
+def cld_mgr(request):
     """
     Returns a cloud manager instance that'll be used throughout the session
 
@@ -2162,50 +2210,6 @@ def rgw_deployments(request):
         pytest.skip("There is no RGW deployment available for this test.")
 
 
-@pytest.fixture(scope="session")
-def rgw_endpoint(request):
-    """
-    Expose RGW service and return external RGW endpoint address if available.
-
-    Returns:
-        string: external RGW endpoint
-
-    """
-    log.info("Looking for RGW service to expose")
-    oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
-    rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
-    if rgw_service:
-        if config.DEPLOYMENT["external_mode"]:
-            rgw_service = constants.RGW_SERVICE_EXTERNAL_MODE
-        else:
-            rgw_service = constants.RGW_SERVICE_INTERNAL_MODE
-        log.info(f"Service {rgw_service} found and will be exposed")
-        # custom hostname is provided because default hostname from rgw service
-        # is too long and OCP rejects it
-        oc = ocp.OCP(
-            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        route = oc.get(resource_name="noobaa-mgmt")
-        router_hostname = route["status"]["ingress"][0]["routerCanonicalHostname"]
-        rgw_hostname = f"rgw.{router_hostname}"
-        try:
-            oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
-        except CommandFailed as cmdfailed:
-            if "AlreadyExists" in str(cmdfailed):
-                log.warning("RGW route already exists.")
-        # new route is named after service
-        rgw_endpoint = oc.get(resource_name=rgw_service)
-        endpoint_obj = OCS(**rgw_endpoint)
-
-        def _finalizer():
-            endpoint_obj.delete()
-
-        request.addfinalizer(_finalizer)
-        return f"http://{rgw_hostname}"
-    else:
-        log.info("RGW service is not available")
-
-
 @pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
@@ -2241,7 +2245,11 @@ def mcg_obj_fixture(request, *args, **kwargs):
 
 @pytest.fixture(scope="session")
 def awscli_pod_session(request):
-    return awscli_pod_fixture(request, scope_name="session")
+    awscli_pods = get_pods_having_label(
+        constants.S3CLI_LABEL, config.ENV_DATA["cluster_namespace"]
+    )
+    existing_pod = Pod(**awscli_pods[0]) if len(awscli_pods) > 0 else None
+    return existing_pod or awscli_pod_fixture(request, scope_name="session")
 
 
 @pytest.fixture(scope="session")
@@ -2282,11 +2290,13 @@ def awscli_pod_fixture(request, scope_name):
     s3cli_sts_obj = helpers.create_resource(**awscli_sts_dict)
     assert s3cli_sts_obj, "Failed to create S3CLI STS"
 
-    awscli_pod_obj = Pod(
-        **get_pods_having_label(
-            constants.S3CLI_LABEL, config.ENV_DATA["cluster_namespace"]
-        )[0]
-    )
+    awscli_pod_obj = retry(IndexError, tries=3, delay=15)(
+        lambda: Pod(
+            **get_pods_having_label(
+                constants.S3CLI_LABEL, config.ENV_DATA["cluster_namespace"]
+            )[0]
+        )
+    )()
 
     OCP(
         namespace=config.ENV_DATA["cluster_namespace"], kind="ConfigMap"
@@ -3545,6 +3555,7 @@ def ceph_toolbox(request):
     managed_platform = (
         config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        or config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM
     )
     if not (deploy_teardown or not no_ocs) or (
         managed_platform and not deploy_teardown
@@ -4111,6 +4122,9 @@ def nb_ensure_endpoint_count(request):
     """
     Validate and ensure the number of running noobaa endpoints
     """
+    # TODO: remove return once bug https://bugzilla.redhat.com/show_bug.cgi?id=2217904 is verified
+    # return since test cases are not dependant on endpoint count
+    return
     cls = request.cls
     min_ep_count = cls.MIN_ENDPOINT_COUNT
     max_ep_count = cls.MAX_ENDPOINT_COUNT
@@ -4334,7 +4348,7 @@ def login_factory_fixture(request):
 
     def finalizer():
         for driver in drivers:
-            close_browser(driver)
+            close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4568,7 +4582,7 @@ def setup_ui_fixture(request):
     driver = login_ui()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4584,7 +4598,7 @@ def setup_acm_ui_fixture(request):
     driver = login_to_acm()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4649,7 +4663,7 @@ def pv_encryption_vault_setup_factory(request):
         vault.update_vault_env_vars()
 
         # Check if cert secrets already exist, if not create cert resources
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
         except CommandFailed as cfe:
@@ -4668,7 +4682,7 @@ def pv_encryption_vault_setup_factory(request):
         vault.vault_create_policy(policy_name=vault_resource_name)
 
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
 
         try:
             ocp_obj.get_resource(
@@ -4740,7 +4754,7 @@ def pv_encryption_kmip_setup_factory(request):
         kmip.kmip_secret_name = kmip.create_kmip_secret(type="csi")
 
         # If csi-kms-connection-details exists, edit the configmap to add new kmip config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
 
         try:
             ocp_obj.get_resource(
@@ -4778,7 +4792,7 @@ def pv_encryption_kmip_setup_factory(request):
         if kmip.kmip_secret_name:
             run_cmd(
                 f"oc delete secret {kmip.kmip_secret_name} -n"
-                f" {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+                f" {config.ENV_DATA['cluster_namespace']}"
             )
         if kmip.kmip_key_identifier:
             kmip.delete_ciphertrust_key(key_id=kmip.kmip_key_identifier)
@@ -4810,7 +4824,7 @@ def pv_encryption_hpcs_setup_factory(request):
 
         # Create or update hpcs related confimap.
         hpcs_resource_name = create_unique_resource_name("test", "hpcs")
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
         # If csi-kms-connection-details exists, edit the configmap to add new hpcs config
         try:
             ocp_obj.get_resource(
@@ -4851,7 +4865,7 @@ def pv_encryption_hpcs_setup_factory(request):
         hpcs.delete_resource(
             hpcs.ibm_kp_secret_name,
             "secret",
-            constants.OPENSHIFT_STORAGE_NAMESPACE,
+            config.ENV_DATA["cluster_namespace"],
         )
 
     request.addfinalizer(finalizer)
@@ -4891,7 +4905,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             (ocs_ci.ocs.resource.ocs) ocs object of the CephBlockPool.
 
         """
-        blockpool_ui_object = BlockPoolUI(setup_ui)
+        blockpool_ui_object = BlockPoolUI()
         pool_name, pool_status = blockpool_ui_object.create_pool(
             replica=replica, compression=compression
         )
@@ -4930,7 +4944,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             except CommandFailed:
                 log.warning("Pool is already deleted")
                 continue
-            blockpool_ui_obj = BlockPoolUI(setup_ui)
+            blockpool_ui_obj = BlockPoolUI()
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
@@ -5002,7 +5016,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
 
         """
         global sc_name
-        storageclass_ui_object = StorageClassUI(setup_ui)
+        storageclass_ui_object = StorageClassUI()
         if encryption:
             sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
                 backend_path=backend_path,
@@ -5045,7 +5059,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             except CommandFailed:
                 log.warning("Storageclass is already deleted")
                 continue
-            storageclass_ui_obj = StorageClassUI(setup_ui)
+            storageclass_ui_obj = StorageClassUI()
             if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
                 instance.delete()
                 raise StorageClassNotDeletedFromUI(
@@ -5087,7 +5101,7 @@ def vault_tenant_sa_setup_factory(request):
         vault.update_vault_env_vars()
 
         # Check if cert secrets already exist, if not create cert resources
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
         except CommandFailed as cfe:
@@ -5121,7 +5135,7 @@ def vault_tenant_sa_setup_factory(request):
             vault.vault_kube_auth_setup()
 
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(kind="configmap", namespace=config.ENV_DATA["cluster_namespace"])
         try:
             ocp_obj.get_resource(
                 resource_name="csi-kms-connection-details", column="NAME"
@@ -5243,6 +5257,10 @@ def nsfs_interface_fixture(request):
         volumes = nsfs_deployment_data["spec"]["template"]["spec"]["volumes"][0]
         volumes["name"] = pvc_name
         volumes["persistentVolumeClaim"]["claimName"] = pvc_name
+
+        if config.DEPLOYMENT.get("disconnected"):
+            update_container_with_mirrored_image(nsfs_deployment_data)
+
         deployment_obj = helpers.create_resource(**nsfs_deployment_data)
         created_deployments.append(deployment_obj)
         return deployment_obj
@@ -5535,6 +5553,7 @@ def patch_consumer_toolbox_with_secret():
         and config.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
         and not config.RUN["cli_params"].get("deploy")
+        and config.ENV_DATA.get("platform").lower() != constants.FUSIONAAS_PLATFORM
     ):
         return
 
@@ -5617,6 +5636,30 @@ def patch_consumer_toolbox_with_secret():
 
     log.info("Switching back to the initial cluster context")
     config.switch_ctx(restore_ctx_index)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def toolbox_on_faas_consumer():
+    """
+    Create tools pod on FaaS consumer cluster at the start of a test run while using multicluster configuration
+
+    """
+    from ocs_ci.helpers.managed_services import create_toolbox_on_faas_consumer
+
+    if not (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+        and config.ENV_DATA["cluster_type"].lower() == constants.MS_CONSUMER_TYPE
+        and not config.RUN["cli_params"].get("deploy")
+    ):
+        return
+
+    tools_pod = get_pods_having_label(
+        label=constants.TOOL_APP_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not tools_pod:
+        create_toolbox_on_faas_consumer()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -5868,10 +5911,8 @@ def set_live_must_gather_images(pytestconfig):
     if (
         managed_ibmcloud_platform
         and not live_deployment
-        and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11)
+        and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_13)
     ):
-        # There is a promise that in 4.10 or 4.11 there will be possible to change
-        # global pull secret. If that's the case, we can remove those workarounds.
         config.REPORTING[
             "default_ocs_must_gather_image"
         ] = defaults.MUST_GATHER_UPSTREAM_IMAGE
@@ -5957,37 +5998,6 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
 
     request.addfinalizer(finalizer)
     return factory
-
-
-@pytest.fixture(scope="function")
-def edit_mcg_subnets(request):
-    """
-    Patch the NooBaa CR to allow access to MCG's load balancers from particular subnets
-    """
-    noobaa = OCP(kind="noobaa", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    lb_cfg = (
-        '{"spec":\
-    {"loadBalancerSourceSubnets":{"s3":["%s","%s"],"sts":["%s", "%s"]}}}'
-        % (
-            constants.TEST_NET_1_BLOCK,
-            constants.TEST_NET_2_BLOCK,
-            constants.TEST_NET_3_BLOCK,
-            constants.TEST_NET_MCAST_BLOCK,
-        )
-    )
-
-    log.info("Patching the NooBaa CR with a load balancer source subnet config")
-    noobaa.patch(resource_name="noobaa", params=lb_cfg, format_type="merge")
-    log.info(f"NooBaa CR: {noobaa.get()['items'][0]}")
-
-    def cleanup():
-        log.info("Clearing out NooBaa CR load balancer source subnet config")
-        clean_lb_config = '{"spec":{"loadBalancerSourceSubnets":null}}'
-        noobaa.patch(
-            resource_name="noobaa", params=clean_lb_config, format_type="merge"
-        )
-
-    request.addfinalizer(cleanup)
 
 
 @pytest.fixture(scope="function")
@@ -6077,18 +6087,58 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
 
 
 @pytest.fixture()
-def rdr_workload(request):
+def dr_workload(request):
     """
     Setup Busybox workload for RDR setup
+
     """
-    workload = BusyBox()
+    instances = []
+
+    def factory(num_of_subscription=1, num_of_appset=0):
+        """
+        Args:
+            num_of_subscription (int): Number of Subscription type workload to be created
+            num_of_appset (int): Number of ApplicationSet type workload to be created
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class.
+
+        """
+        total_pvc_count = 0
+        for index in range(num_of_subscription):
+            workload_details = config.ENV_DATA["dr_workload_subscription"][index]
+            workload = BusyBox(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        # TODO: Deploy Appset workload
+        if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        return instances
 
     def teardown():
-        workload.delete_workload(force=True)
+        failed_to_delete = False
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                failed_to_delete = True
+
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
+            )
 
     request.addfinalizer(teardown)
-    workload.deploy_workload()
-    return workload
+    return factory
 
 
 @pytest.fixture(scope="class")

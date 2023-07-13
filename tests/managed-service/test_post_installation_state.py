@@ -1,7 +1,8 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants, defaults, managedservice, ocp
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.framework.testlib import (
     acceptance,
@@ -38,7 +39,7 @@ class TestPostInstallationState(ManageTest):
         for consumer_name in consumer_names:
             consumer_yaml = ocp.OCP(
                 kind="StorageConsumer",
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=consumer_name,
             )
             ceph_resources = consumer_yaml.get().get("status")["cephResources"]
@@ -63,7 +64,7 @@ class TestPostInstallationState(ManageTest):
         for consumer_name in consumer_names:
             consumer_yaml = ocp.OCP(
                 kind="StorageConsumer",
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=consumer_name,
             ).get()
             log.info(f"Verifying capacity of {consumer_name}")
@@ -82,7 +83,7 @@ class TestPostInstallationState(ManageTest):
         Test that the logs of ocs-provider-server pod have entries for each consumer
         """
         provider_pod = pod.get_pods_having_label(
-            constants.PROVIDER_SERVER_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+            constants.PROVIDER_SERVER_LABEL, config.ENV_DATA["cluster_namespace"]
         )[0]
         provider_logs = pod.get_pod_logs(pod_name=provider_pod["metadata"]["name"])
         log_lines = provider_logs.split("\n")
@@ -144,7 +145,7 @@ class TestPostInstallationState(ManageTest):
         Test that the logs of manager container of ocs-osd-controller-manager pod are not empty
         """
         deployer_pod = pod.get_pods_having_label(
-            constants.MANAGED_CONTROLLER_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+            constants.MANAGED_CONTROLLER_LABEL, config.ENV_DATA["cluster_namespace"]
         )[0]
         deployer_logs = pod.get_pod_logs(
             pod_name=deployer_pod["metadata"]["name"], container="manager"

@@ -1,11 +1,13 @@
+import base64
 import logging
 import os
 import requests
 import tempfile
 import time
+import yaml
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import managedservice
+from ocs_ci.ocs import constants, managedservice
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import exec_cmd
 
@@ -23,9 +25,10 @@ def set_pagerduty_integration_secret(integration_key):
     """
     logger.info("Setting up PagerDuty integration")
     kubeconfig = os.getenv("KUBECONFIG")
+    ns_name = config.ENV_DATA["service_namespace"]
     cmd = (
         f"oc create secret generic {managedservice.get_pagerduty_secret_name()} "
-        f"--from-literal=PAGERDUTY_KEY={integration_key} -n openshift-storage "
+        f"--from-literal=PAGERDUTY_KEY={integration_key} -n {ns_name} "
         f"--kubeconfig {kubeconfig} --dry-run=client -o yaml"
     )
     secret_data = exec_cmd(
@@ -42,6 +45,44 @@ def set_pagerduty_integration_secret(integration_key):
         secret_file.flush()
         exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
     logger.info("New integration key was set.")
+
+
+def set_pagerduty_faas_secret(integration_key):
+    """
+    Update managed-fusion-agent-config secret. This is valid only on Fusion aaS platform.
+    managed-fusion-agent-config secret is expected to be present prior to the update.
+
+    Args:
+        integration_key (str): Integration key taken from PagerDuty Prometheus integration
+
+    """
+    logger.info("Setting up PagerDuty")
+    kubeconfig = os.getenv("KUBECONFIG")
+    ns_name = config.ENV_DATA["service_namespace"]
+    pd_configuration = (
+        f"    sopEndpoint: <pager duty service endpoint>\n"
+        f"    serviceKey: {integration_key}"
+    )
+    pd_configuration = pd_configuration.encode("utf-8")
+    pd_configuration = base64.b64encode(pd_configuration)
+    pd_configuration = pd_configuration.decode("utf-8")
+    cmd = f"oc get secret {constants.FUSION_AGENT_CONFIG_SECRET} -n {ns_name} -o yaml"
+    secret_data = exec_cmd(cmd).stdout
+    secret_data = yaml.safe_load(secret_data)
+    secret_data["data"]["pager_duty_config"] = pd_configuration
+    secret_data["metadata"].pop("resourceVersion", None)
+    secret_data["metadata"].pop("uid", None)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w+", prefix=f"{constants.FUSION_AGENT_CONFIG_SECRET}_"
+    ) as secret_file:
+        yaml.dump(secret_data, secret_file)
+        secret_file.flush()
+        exec_cmd(f"oc apply --kubeconfig {kubeconfig} -f {secret_file.name}")
+    logger.info(
+        f"Secret {constants.FUSION_AGENT_CONFIG_SECRET} in namespace "
+        f"{ns_name} was updated with a new integration key"
+    )
 
 
 def check_incident_list(summary, urgency, incidents, status="triggered"):
@@ -188,22 +229,25 @@ class PagerDutyAPI(object):
         )
         return response
 
-    def get_default_escalation_policy_id(self):
+    def get_escalation_policy_id(self, name):
         """
-        Get default account escalation policy from PagerDuty API.
+        Get account escalation policy from PagerDuty API by name.
 
         Returns:
             str: Escalation policy id
 
         """
-        default = None
-        policies = self.get("escalation_policies").json()
+        policy_id = None
+        payload = {"query": name}
+        policies = self.get("escalation_policies", payload=payload)
+        policies = policies.json()
         for policy in policies["escalation_policies"]:
-            if policy["name"] == "Default":
-                default = policy["id"]
-        if not default:
-            logger.warning("PagerDuty default escalation policy was not found")
-        return default
+            if policy["name"] == name:
+                policy_id = policy["id"]
+                break
+        if not policy_id:
+            logger.warning(f"PagerDuty escalation policy {name} was not found")
+        return policy_id
 
     def get_vendor_id(self, name):
         """
@@ -226,7 +270,7 @@ class PagerDutyAPI(object):
                 if vendor["name"] == name:
                     vendor_id = vendor["id"]
                     break
-            if vendors["more"]:
+            if vendors["more"] and not vendor_id:
                 offset = int(vendors["offset"]) + 100
             else:
                 more = False
@@ -246,7 +290,12 @@ class PagerDutyAPI(object):
         cluster_name = config.ENV_DATA["cluster_name"]
         # timestamp is added to service name to ensure unique name of service
         timestamp = time.time()
-        default_policy = self.get_default_escalation_policy_id()
+        policy = None
+        policy_name = config.AUTH["pagerduty"].get("escalation_policy")
+        if policy_name:
+            policy = self.get_escalation_policy_id(policy_name)
+        if not policy:
+            raise ValueError(f"Policy {policy_name} not found")
         return {
             "service": {
                 "type": "service",
@@ -254,7 +303,7 @@ class PagerDutyAPI(object):
                 "description": f"Service for cluster {cluster_name}",
                 "status": "active",
                 "escalation_policy": {
-                    "id": default_policy,
+                    "id": policy,
                     "type": "escalation_policy_reference",
                 },
                 "alert_creation": "create_alerts_and_incidents",

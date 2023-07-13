@@ -11,11 +11,10 @@ from selenium.webdriver.common.action_chains import ActionChains
 from ocs_ci.deployment import vmware
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
-from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.base_ui import BaseUI, SeleniumDriver
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators, acm_ui_specific
+from ocs_ci.ocs.ui.views import acm_ui_specific
 from ocs_ci.utility.utils import (
-    get_ocp_version,
     expose_ocp_version,
     run_cmd,
     get_running_acm_version,
@@ -46,10 +45,8 @@ class AcmPageNavigator(BaseUI):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.ocp_version = get_ocp_version()
-        self.acm_page_nav = locators[self.ocp_version]["acm_page"]
+    def __init__(self):
+        super().__init__()
 
     def navigate_welcome_page(self):
         """
@@ -69,12 +66,19 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Home"])
         self.do_click(locator=self.acm_page_nav["Overview_page"])
 
-    def navigate_clusters_page(self, timeout=30):
+    def navigate_clusters_page(self, timeout=120):
         """
         Navigate to ACM Clusters Page
 
         """
         log.info("Navigate into Clusters Page")
+        self.check_element_presence(
+            (
+                self.acm_page_nav["Infrastructure"][1],
+                self.acm_page_nav["Infrastructure"][0],
+            ),
+            timeout=timeout,
+        )
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
@@ -111,7 +115,10 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Infrastructure_environments_page"])
+        self.do_click(
+            locator=self.acm_page_nav["Infrastructure_environments_page"],
+            enable_screenshot=True,
+        )
 
     def navigate_applications_page(self):
         """
@@ -119,7 +126,9 @@ class AcmPageNavigator(BaseUI):
 
         """
         log.info("Navigate into Applications Page")
-        self.do_click(locator=self.acm_page_nav["Applications"])
+        self.do_click(
+            locator=self.acm_page_nav["Applications"], timeout=120, avoid_stale=True
+        )
 
     def navigate_governance_page(self):
         """
@@ -136,6 +145,36 @@ class AcmPageNavigator(BaseUI):
         """
         log.info("Navigate into Governance Page")
         self.do_click(locator=self.acm_page_nav["Credentials"])
+
+    def navigate_data_services(self):
+        """
+        Navigate to Data Services page on ACM UI, supported for ACM version 2.7 and above
+
+        """
+        log.info("Navigate to Data Policies page on ACM console")
+        find_element = self.wait_until_expected_text_is_found(
+            locator=self.acm_page_nav["data-services"],
+            expected_text="Data Services",
+            timeout=240,
+        )
+        if find_element:
+            element = self.driver.find_element_by_xpath(
+                "//button[normalize-space()='Data Services']"
+            )
+            if element.get_attribute("aria-expanded") == "false":
+                self.do_click(locator=self.acm_page_nav["data-services"])
+            data_policies = self.wait_until_expected_text_is_found(
+                locator=self.acm_page_nav["data-policies"],
+                expected_text="Data policies",
+                timeout=240,
+            )
+            if data_policies:
+                self.do_click(
+                    locator=self.acm_page_nav["data-policies"], enable_screenshot=True
+                )
+        else:
+            log.error("Couldn't navigate to data Services page on ACM UI")
+            raise NoSuchElementException
 
     def navigate_from_ocp_to_acm_cluster_page(self):
         """
@@ -165,7 +204,7 @@ class AcmPageNavigator(BaseUI):
             self.take_screenshot()
             raise NoSuchElementException
         self.do_click(self.acm_page_nav["click-local-cluster"])
-        self.page_has_loaded()
+        log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 
 
@@ -175,8 +214,8 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver, platform, cluster_conf):
-        super().__init__(driver)
+    def __init__(self, platform, cluster_conf):
+        super().__init__()
         self.platform = platform
         self.cluster_conf = cluster_conf
         self.cluster_name = self.cluster_conf.ENV_DATA["cluster_name"]
@@ -467,8 +506,8 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
 
     """
 
-    def __init__(self, driver, cluster_conf=None):
-        super().__init__(driver=driver, platform="vsphere", cluster_conf=cluster_conf)
+    def __init__(self, cluster_conf=None):
+        super().__init__(platform="vsphere", cluster_conf=cluster_conf)
         self.platform_credential_name = cluster_conf.ENV_DATA.get(
             "platform_credential_name",
             f"{ACM_PLATOFRM_VSPHERE_CRED_PREFIX}{self.cluster_name}",
@@ -833,14 +872,13 @@ class ACMOCPDeploymentFactory(object):
             "vsphereupi": ACMOCPPlatformVsphereIPI,
         }
 
-    def get_platform_instance(self, driver, cluster_config):
+    def get_platform_instance(self, cluster_config):
         """
         Args:
-            driver: selenium UI driver object
             cluster_config (dict): Cluster Config object
         """
         platform_deployment = (
             f"{cluster_config.ENV_DATA['platform']}"
             f"{cluster_config.ENV_DATA['deployment_type']}"
         )
-        return self.platform_map[platform_deployment](driver, cluster_config)
+        return self.platform_map[platform_deployment](SeleniumDriver(), cluster_config)

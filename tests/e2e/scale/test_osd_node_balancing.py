@@ -4,6 +4,7 @@ Test osd node balancing by adding nodes and osds and checking their distribution
 import logging
 import pytest
 from uuid import uuid4
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
     skipif_bm,
@@ -75,7 +76,7 @@ def collect_stats(action_text, elastic_info):
     """
     output_info = {"title": action_text}
     pod_obj = ocp.OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
     )
     osd_list = pod_obj.get(selector=constants.OSD_APP_LABEL)["items"]
     node_stats = {}

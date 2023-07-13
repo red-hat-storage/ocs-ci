@@ -277,11 +277,17 @@ def get_clusters(
             )
             continue
         cluster_name = cluster_io_tag[0].replace("kubernetes.io/cluster/", "")
-        if determine_cluster_deletion(ec2_instances, cluster_name):
-            cf_clusters_to_delete.append(cluster_name)
+        logger.info(f"cluster_name={cluster_name}")
+        if cluster_pattern is not None:
+            if cluster_pattern in cluster_name:
+                cf_clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
         else:
-            remaining_clusters.append(cluster_name)
-
+            if determine_cluster_deletion(ec2_instances, cluster_name):
+                cf_clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
     return clusters_to_delete, cf_clusters_to_delete, remaining_clusters
 
 

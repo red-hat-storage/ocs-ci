@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -10,8 +11,8 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
+from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
@@ -52,7 +53,7 @@ class TestNoobaaRebuild(E2ETest):
             # Get the deployment replica count
             deploy_obj = OCP(
                 kind=constants.DEPLOYMENT,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             noobaa_deploy_obj = deploy_obj.get(
                 resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT
@@ -83,10 +84,10 @@ class TestNoobaaRebuild(E2ETest):
         """
 
         dep_ocp = OCP(
-            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
         state_ocp = OCP(
-            kind=constants.STATEFULSET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"]
         )
         noobaa_pvc_obj = get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
 
@@ -106,7 +107,7 @@ class TestNoobaaRebuild(E2ETest):
 
         # Delete noobaa-db pvc
         pvc_obj = OCP(
-            kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
         )
         logger.info("Deleting noobaa-db pvc")
         pvc_obj.delete(resource_name=noobaa_pvc_obj[0].name, wait=True)
@@ -115,7 +116,7 @@ class TestNoobaaRebuild(E2ETest):
         # Patch and delete existing backingstores
         params = '{"metadata": {"finalizers":null}}'
         bs_obj = OCP(
-            kind=constants.BACKINGSTORE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
         )
         for bs in bs_obj.get()["items"]:
             assert bs_obj.patch(
@@ -128,7 +129,7 @@ class TestNoobaaRebuild(E2ETest):
 
         # Patch and delete existing bucketclass
         bc_obj = OCP(
-            kind=constants.BUCKETCLASS, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
         )
         for bc in bc_obj.get()["items"]:
             assert bc_obj.patch(
@@ -141,9 +142,14 @@ class TestNoobaaRebuild(E2ETest):
 
         # Delete noobaa secrets
         logger.info("Deleting noobaa related secrets")
-        dep_ocp.exec_oc_cmd(
-            "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server noobaa-root-master-key"
-        )
+        if is_kms_enabled():
+            dep_ocp.exec_oc_cmd(
+                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server"
+            )
+        else:
+            dep_ocp.exec_oc_cmd(
+                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server noobaa-root-master-key"
+            )
 
         # Scale back noobaa-operator deployment
         logger.info(
@@ -162,7 +168,9 @@ class TestNoobaaRebuild(E2ETest):
         )
 
         # Validate noobaa pods are up and running
-        pod_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         noobaa_pods = get_noobaa_pods()
         pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
@@ -177,10 +185,10 @@ class TestNoobaaRebuild(E2ETest):
 
         # Verify default backingstore/bucketclass
         default_bs = OCP(
-            kind=constants.BACKINGSTORE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
         ).get(resource_name=DEFAULT_NOOBAA_BACKINGSTORE)
         default_bc = OCP(
-            kind=constants.BUCKETCLASS, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
         ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
         assert (
             default_bs["status"]["phase"]

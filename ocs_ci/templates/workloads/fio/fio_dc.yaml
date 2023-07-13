@@ -20,6 +20,11 @@ spec:
           volumeDevices:
             - devicePath: /dev/rbdblock
               name: my-volume
+          env:
+            - name: DEBIAN_FRONTEND
+              value: noninteractive
+            - name: DEBCONF_NOWARNINGS
+              value: yes
           command: ["/usr/bin/fio"]
           args: ["--name=fio-rand-readwrite",
                  "--filename=/dev/rbdblock",

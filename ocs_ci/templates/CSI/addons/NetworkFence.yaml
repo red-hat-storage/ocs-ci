@@ -1,0 +1,15 @@
+apiVersion: csiaddons.openshift.io/v1alpha1
+kind: NetworkFence
+metadata:
+  name: network-fence-sample
+spec:
+  driver: example.drivero
+  cidrs:
+    - 10.90.89.66/32
+    - 11.67.12.42/24
+  secret:
+    name: fence-secret
+    namespace: default
+  parameters:
+    key: value
+

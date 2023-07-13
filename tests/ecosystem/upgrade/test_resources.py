@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.utility import version
 from ocs_ci.ocs.resources.pod import get_pod_logs
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     pre_upgrade,
@@ -13,7 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs import ocp, defaults
+from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
     get_osd_pods,
@@ -148,7 +149,7 @@ def test_noobaa_service_mon_after_ocs_upgrade():
     if ocs_version <= version.get_semantic_version("4.7.4"):
         pytest.skip("The test is not supported on version less than 4.7.4")
     ocp_obj = ocp.OCP(
-        kind=constants.SERVICE_MONITORS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.SERVICE_MONITORS, namespace=config.ENV_DATA["cluster_namespace"]
     )
     servicemon = ocp_obj.get()
     servicemonitors = servicemon["items"]

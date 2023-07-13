@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import ui, ignore_leftovers, skipif_lso
+from ocs_ci.framework.testlib import ui, ignore_leftovers, skipif_lso, ceph_health_retry
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.cluster import CephCluster
@@ -44,6 +44,7 @@ class TestAddCapacityUI(object):
     @skipif_external_mode
     @skipif_ui_not_support("add_capacity")
     @brown_squad
+    @ceph_health_retry
     def test_add_capacity_internal(self, setup_ui_class):
         """
         Test Add Capacity on Internal cluster via UI
@@ -54,7 +55,7 @@ class TestAddCapacityUI(object):
         osd_count = len(osd_pods_before_add_capacity)
 
         logger.info("Add capacity via UI")
-        infra_ui_obj = AddReplaceDeviceUI(setup_ui_class)
+        infra_ui_obj = AddReplaceDeviceUI()
         infra_ui_obj.add_capacity_ui()
 
         logger.info("Wait for osd pods to be in Running state")

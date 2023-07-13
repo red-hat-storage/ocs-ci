@@ -336,7 +336,7 @@ def _get_disk_by_id(worker):
 
     """
     cmd = (
-        f"oc debug nodes/{worker} --to-namespace={constants.OPENSHIFT_STORAGE_NAMESPACE} "
+        f"oc debug nodes/{worker} --to-namespace={config.ENV_DATA['cluster_namespace']} "
         f"-- chroot /host ls -la /dev/disk/by-id/"
     )
     return run_cmd(cmd)

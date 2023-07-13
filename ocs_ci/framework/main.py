@@ -111,9 +111,11 @@ def process_ocsci_conf(arguments):
             "4.11",
             "4.12",
             "4.13",
+            "4.14",
         ],
     )
     parser.add_argument("--ocs-registry-image")
+    parser.add_argument("--ocp-version")
     parser.add_argument("--flexy-env-file", default="", help="Path to flexy env file")
     parser.add_argument(
         "--disable-components",
@@ -130,6 +132,7 @@ def process_ocsci_conf(arguments):
     args, unknown = parser.parse_known_args(args=arguments)
     load_config(args.ocsci_conf)
     ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
+    ocp_version = args.ocp_version or framework.config.ENV_DATA.get("ocp_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")
     if args.ocs_registry_image:
         ocs_registry_image = args.ocs_registry_image
@@ -138,19 +141,26 @@ def process_ocsci_conf(arguments):
         if ocs_version and ocs_version != ocs_version_from_image:
             framework.config.DEPLOYMENT["ignore_csv_mismatch"] = True
         ocs_version = ocs_version_from_image
+
+    if ocp_version:
+        ocp_version_config_file = f"ocp-{ocp_version}-config.yaml"
+        ocp_version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, ocp_version_config_file
+        )
+        load_config([ocp_version_config_file_path])
+
     if ocs_version:
         version_config_file = os.path.join(
             OCS_VERSION_CONF_DIR, f"ocs-{ocs_version}.yaml"
         )
         load_config([version_config_file])
 
-        ocp_version = framework.config.DEPLOYMENT["default_ocp_version"]
-        if "ocp_version" in framework.config.DEPLOYMENT:
-            ocp_version = framework.config.DEPLOYMENT["ocp_version"]
-        ocp_version_config = os.path.join(
-            OCP_VERSION_CONF_DIR, f"ocp-{ocp_version}-config.yaml"
-        )
-        load_config([ocp_version_config])
+        if not ocp_version:
+            ocp_version = framework.config.DEPLOYMENT["default_ocp_version"]
+            ocp_version_config = os.path.join(
+                OCP_VERSION_CONF_DIR, f"ocp-{ocp_version}-config.yaml"
+            )
+            load_config([ocp_version_config])
         # As we may have overridden values specified in the original config,
         # reload it to get them back
         load_config(args.ocsci_conf)
@@ -222,6 +232,11 @@ def init_multicluster_ocsci_conf(args, nclusters):
     framework.config.multicluster_common_args.append(common_argv)
     # Set context to default_cluster_context_index
     framework.config.switch_default_cluster_ctx()
+    # Set same run_id across all clusters
+    # there is a race condition in which multiple run id's could be generated
+    universal_run_id = framework.config.RUN["run_id"]
+    for cluster in framework.config.clusters:
+        cluster.RUN["run_id"] = universal_run_id
 
 
 def tokenize_per_cluster_args(args, nclusters):

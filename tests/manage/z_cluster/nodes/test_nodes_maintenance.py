@@ -13,7 +13,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
 
-from ocs_ci.ocs import constants, machine, ocp, defaults
+from ocs_ci.ocs import constants, machine, ocp
 from ocs_ci.ocs.resources.pod import get_pods_having_label, wait_for_pods_to_be_running
 from ocs_ci.ocs.node import (
     drain_nodes,
@@ -26,6 +26,7 @@ from ocs_ci.ocs.node import (
     add_new_node_and_label_it,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -38,6 +39,7 @@ from ocs_ci.framework.testlib import (
     skipif_bm,
     bugzilla,
     skipif_managed_service,
+    skipif_more_than_three_workers,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.resources import pod
@@ -152,11 +154,11 @@ class TestNodesMaintenance(ManageTest):
         # are ready, see BZ #2162504
         provis_pods = get_pods_having_label(
             constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            defaults.ROOK_CLUSTER_NAMESPACE,
+            config.ENV_DATA["cluster_namespace"],
         )
         provis_pods += get_pods_having_label(
             constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-            defaults.ROOK_CLUSTER_NAMESPACE,
+            config.ENV_DATA["cluster_namespace"],
         )
         provis_pod_names = [p["metadata"]["name"] for p in provis_pods]
 
@@ -430,7 +432,9 @@ class TestNodesMaintenance(ManageTest):
                     # WA and deleting its deployment so that the pod
                     # disappears. Will revert this WA once the BZ is fixed
                     if "rook-ceph-crashcollector" in pod_obj.name:
-                        ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+                        ocp_obj = ocp.OCP(
+                            namespace=config.ENV_DATA["cluster_namespace"]
+                        )
                         pod_name = pod_obj.name
                         deployment_name = "-".join(pod_name.split("-")[:-2])
                         command = f"delete deployment {deployment_name}"
@@ -464,6 +468,7 @@ class TestNodesMaintenance(ManageTest):
     @bugzilla("1861104")
     @bugzilla("1946573")
     @skipif_managed_service
+    @skipif_more_than_three_workers
     @pytest.mark.polarion_id("OCS-2524")
     @tier4a
     def test_pdb_check_simultaneous_node_drains(

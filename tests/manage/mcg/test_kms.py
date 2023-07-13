@@ -2,9 +2,10 @@ import logging
 import pytest
 import re
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1, skipif_no_kms
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 
 
@@ -28,7 +29,7 @@ class TestNoobaaKMS(MCGTest):
 
         operator_pod = pod.get_pods_having_label(
             label=constants.NOOBAA_OPERATOR_POD_LABEL,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )[0]
         operator_pod_name = operator_pod["metadata"]["name"]
         restart_count = operator_pod["status"]["containerStatuses"][0]["restartCount"]

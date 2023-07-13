@@ -13,6 +13,8 @@ from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 from ocs_ci.utility.rosa import post_onboarding_verification
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 
+from ocs_ci.utility.azure_utils import azure_storageaccount_check
+
 log = logging.getLogger(__name__)
 
 
@@ -32,7 +34,13 @@ def test_deployment(pvc_factory, pod_factory):
                     log.info(
                         f"Sanity check for cluster: {cluster.ENV_DATA['cluster_name']}"
                     )
-                    sanity_helpers = Sanity()
+                    if config.DEPLOYMENT.get("external_mode") and (
+                        config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
+                    ):
+                        log.info("Sanity check for external mode")
+                        sanity_helpers = SanityExternalCluster()
+                    else:
+                        sanity_helpers = Sanity()
                     sanity_helpers.health_check()
                     sanity_helpers.delete_resources()
                 config.switch_ctx(restore_ctx_index)
@@ -48,6 +56,12 @@ def test_deployment(pvc_factory, pod_factory):
                     return
                 else:
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)
+
+                if (
+                    config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
+                    and config.ENV_DATA["deployment_type"] != "managed"
+                ):
+                    azure_storageaccount_check()
 
                 # Check basic cluster functionality by creating resources
                 # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
@@ -69,7 +83,12 @@ def test_deployment(pvc_factory, pod_factory):
                 sanity_helpers.delete_resources()
                 # Verify ceph health
                 log.info("Verifying ceph health after deployment")
-                assert ceph_health_check(tries=10, delay=30)
+                # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
+                if not (
+                    config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+                    and config.ENV_DATA["cluster_type"].lower() == "consumer"
+                ):
+                    assert ceph_health_check(tries=10, delay=30)
 
     if teardown:
         log.info("Cluster will be destroyed during teardown part of this test.")

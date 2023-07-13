@@ -6,7 +6,7 @@ import random
 import traceback
 import re
 
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_infra_id
@@ -377,12 +377,13 @@ class AWS(object):
         )
         self.attach_volume(volume, instance_id, device)
 
-    def get_volumes_by_name_pattern(self, pattern):
+    def get_volumes_by_tag_pattern(self, tag, pattern):
         """
-        Get volumes by pattern
+        Get volumes by tag pattern
 
         Args:
-            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+            tag (str): Tag name
+            pattern (str): Pattern of tag value (e.g. '*cl-vol-*')
 
         Returns:
             list: Volume information like id and attachments
@@ -390,7 +391,7 @@ class AWS(object):
         volumes_response = self.ec2_client.describe_volumes(
             Filters=[
                 {
-                    "Name": "tag:Name",
+                    "Name": f"tag:{tag}",
                     "Values": [pattern],
                 },
             ],
@@ -404,6 +405,121 @@ class AWS(object):
                 )
             )
         return volumes
+
+    def get_volume_data(self, volume_id):
+        """
+        Get volume information
+
+        Args:
+            volume_id(str): ID of the volume
+
+        Returns:
+            dict: complete volume information
+        """
+        volumes_response = self.ec2_client.describe_volumes(
+            VolumeIds=[
+                volume_id,
+            ],
+        )
+        return volumes_response["Volumes"][0]
+
+    def get_volume_tag_value(self, volume_data, tag_name):
+        """
+        Get the value of the volume's tag
+
+        Args:
+            volume_data(dict): complete volume information
+            tag_name(str): name of the tag
+        Returns:
+            str: value of the tag or None if there's no such tag
+        """
+        tags = volume_data["Tags"]
+        for tag in tags:
+            if tag["Key"] == tag_name:
+                return tag["Value"]
+        return None
+
+    def get_volumes_by_name_pattern(self, pattern):
+        """
+        Get volumes by pattern
+
+        Args:
+            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+
+        Returns:
+            list: Volume information like id and attachments
+        """
+        return self.get_volumes_by_tag_pattern("Name", pattern)
+
+    def check_volume_attributes(
+        self,
+        volume_id,
+        name_end=None,
+        size=None,
+        iops=None,
+        throughput=None,
+        namespace=None,
+    ):
+        """
+        Verify aws volume attributes
+        Primarily used for faas
+
+        Args:
+            volume_id(str): id of the volume to be checked
+            name_end(str): expected ending of Name tag
+            size(int): expected value of volume's size
+            iops(int): expected value of IOPS
+            throughput(int): expected value of Throughput
+            namespace(str): expected value of kubernetes.io/created-for/pvc/namespace tag
+
+        Raises:
+            ValueError if the actual value differs from the expected one
+        """
+        volume_data = self.get_volume_data(volume_id)
+        volume_name = self.get_volume_tag_value(
+            volume_data,
+            "Name",
+        )
+        logger.info(
+            f"Verifying that volume name {volume_name} starts with cluster name"
+        )
+        if not volume_name.startswith(config.ENV_DATA["cluster_name"]):
+            raise ValueError(
+                f"Volume name should start with cluster name {config.ENV_DATA['cluster_name']}"
+            )
+        if name_end:
+            logger.info(f"Verifying that volume name ends with {name_end}")
+            if not volume_name.endswith(name_end):
+                raise ValueError(f"Volume name should end with {name_end}")
+        if size:
+            logger.info(f"Verifying that volume size is {size}")
+            if volume_data["Size"] != size:
+                raise ValueError(
+                    f"Volume size should be {size} but it's {volume_data['Size']}"
+                )
+        if iops:
+            logger.info(f"Verifying that volume IOPS is {iops}")
+            if volume_data["Iops"] != iops:
+                raise ValueError(
+                    f"Volume IOPS should be {iops} but it's {volume_data['Iops']}"
+                )
+        if throughput:
+            logger.info(f"Verifying that volume throughput is {throughput}")
+            if volume_data["Throughput"] != throughput:
+                raise ValueError(
+                    f"Volume size should be {throughput} but it's {volume_data['Throughput']}"
+                )
+        if namespace:
+            logger.info(f"Verifying that namespace is {namespace}")
+            volume_namespace = self.get_volume_tag_value(
+                volume_data,
+                constants.AWS_VOL_PVC_NAMESPACE,
+            )
+            if volume_namespace != namespace:
+                raise ValueError(
+                    "Namespace in kubernetes.io/created-for/pvc/namespace tag "
+                    f"should be {namespace} but it's {volume_namespace}"
+                )
 
     def detach_volume(self, volume, timeout=120):
         """
@@ -1692,6 +1808,67 @@ class AWS(object):
 
         """
         return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
+
+    def wait_for_instances_to_stop(self, instances):
+        """
+        Wait for the instances to reach status stopped
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status stopped
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(f"Waiting for instance {instance_name} to reach status stopped")
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_stopped()
+
+    def wait_for_instances_to_terminate(self, instances):
+        """
+        Wait for the instances to reach status terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_terminated()
+
+    def wait_for_instances_to_stop_or_terminate(self, instances):
+        """
+        Wait for the instances to reach statuses stopped or terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected statuses stopped or terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status stopped or terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            try:
+                instance.wait_until_stopped()
+            except WaiterError as e:
+                logger.warning(
+                    f"Failed to reach the status stopped due to the error {str(e)}"
+                )
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status terminated"
+                )
+                instance.wait_until_terminated()
 
 
 def get_instances_ids_and_names(instances):

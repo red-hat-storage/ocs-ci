@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import exec_cmd
@@ -23,8 +24,8 @@ class RookCephPlugin(object):
 
     def __init__(
         self,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        operator_namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        operator_namespace=config.ENV_DATA["cluster_namespace"],
         alternate_image=None,
         *args,
         **kwargs,

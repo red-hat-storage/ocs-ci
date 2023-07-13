@@ -780,6 +780,8 @@ GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE = [
 
 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11 = ["odf-csi-addons-operator.yaml"]
 
+GATHER_COMMANDS_OTHERS_EXCLUDE_4_13 = ["noobaa-db-pg-0-init.log"]
+
 if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
     GATHER_COMMANDS_OTHERS = list(
         set(GATHER_COMMANDS_OTHERS) - set(GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE)
@@ -911,7 +913,37 @@ GATHER_COMMANDS_VERSION = {
                 + GATHER_COMMANDS_OTHERS_4_7
                 + GATHER_COMMANDS_OTHERS_4_10
             )
-            - set(GATHER_COMMANDS_OTHERS_EXCLUDE_4_11)
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    4.14: {
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
         ),
         "OTHERS_MANAGED_SERVICES": list(
             set(

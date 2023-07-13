@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from shutil import rmtree, copyfile
+from subprocess import TimeoutExpired
 import time
 import requests
 import base64
@@ -42,7 +43,18 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.ocs.resources.pod import (
+    get_mon_pods,
+    get_deployment_name,
+    get_osd_pods,
+    get_osd_prepare_pods,
+    delete_pods,
+)
 from ocs_ci.ocs.resources.pv import get_all_pvs
+from ocs_ci.ocs.resources.pvc import (
+    delete_pvcs,
+    get_all_pvc_objs,
+)
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -214,14 +226,17 @@ class VSPHEREBASE(Deployment):
             rhel_module = "RHEL_WORKER_LIST"
 
         # Add nodes using terraform
-        scaleup_terraform = Terraform(vsphere_dir)
+        scaleup_terraform_tfstate = os.path.join(
+            scaleup_terraform_data_dir, "terraform.tfstate"
+        )
+        scaleup_terraform = Terraform(
+            vsphere_dir, state_file_path=scaleup_terraform_tfstate
+        )
         previous_dir = os.getcwd()
         os.chdir(scaleup_terraform_data_dir)
         scaleup_terraform.initialize()
         scaleup_terraform.apply(self.scale_up_terraform_var)
-        scaleup_terraform_tfstate = os.path.join(
-            scaleup_terraform_data_dir, "terraform.tfstate"
-        )
+
         out = scaleup_terraform.output(scaleup_terraform_tfstate, rhel_module)
         if config.ENV_DATA["folder_structure"]:
             rhel_worker_nodes = out.strip().replace('"', "").split(",")
@@ -552,7 +567,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 "coreos-installer",
             )
             clone_repo(
-                constants.COREOS_INSTALLER_REPO, coreos_installer_repo_path, "main"
+                url=constants.COREOS_INSTALLER_REPO,
+                location=coreos_installer_repo_path,
+                branch="main",
             )
             if os.path.isdir(f"{constants.EXTERNAL_DIR}/coreos-install"):
                 shutil.rmtree(f"{constants.EXTERNAL_DIR}/coreos-install")
@@ -978,7 +995,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         f"--log-level {log_cli_level}",
                         timeout=3600,
                     )
-                except CommandFailed as e:
+                except (CommandFailed, TimeoutExpired) as e:
                     if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                         try:
                             gather_bootstrap()
@@ -1085,9 +1102,16 @@ class VSPHEREUPI(VSPHEREBASE):
             remove_nodes(rhcos_nodes)
 
             # remove ingress-router for RHCOS compute nodes on load balancer
+            # set the tfstate file
+            config.ENV_DATA["terraform_state_file"] = os.path.join(
+                config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
+            )
             lb = LoadBalancer()
             lb.remove_compute_node_in_proxy()
             lb.restart_haproxy()
+
+            # sleep for few seconds after restarting haproxy
+            time.sleep(self.wait_time)
 
         if config.DEPLOYMENT.get("thick_sc"):
             sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
@@ -1128,6 +1152,14 @@ class VSPHEREUPI(VSPHEREBASE):
             set_aws_region()
             self.folder_structure = True
             config.ENV_DATA["folder_structure"] = self.folder_structure
+
+        # removing mon and osd pods and also removing PVC's to avoid stale CNS volumes
+        try:
+            self.scale_down_pods_and_remove_pvcs()
+        except Exception as err:
+            logger.warning(
+                f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
+            )
 
         # delete the extra disks
         self.delete_disks()
@@ -1206,6 +1238,11 @@ class VSPHEREUPI(VSPHEREBASE):
                 logger.warning(
                     "Failed to setup the Ceph toolbox pod. Probably due to installation was not successful"
                 )
+            except CommandFailed:
+                logger.warning(
+                    "Failed to remove CSI users. Probably ceph toolbox is not in running state due to "
+                    "installation was not successful or it is not configured correctly"
+                )
 
         # terraform initialization and destroy cluster
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
@@ -1242,9 +1279,9 @@ class VSPHEREUPI(VSPHEREBASE):
                         f"release-{original_installed_ocp_version_major_minor}"
                     )
                     clone_repo(
-                        constants.VSPHERE_INSTALLER_REPO,
-                        upi_repo_path,
-                        installer_release_branch,
+                        url=constants.VSPHERE_INSTALLER_REPO,
+                        location=upi_repo_path,
+                        branch=installer_release_branch,
                         force_checkout=True,
                     )
 
@@ -1287,11 +1324,16 @@ class VSPHEREUPI(VSPHEREBASE):
         os.chdir(previous_dir)
 
         if config.DEPLOYMENT["external_mode"]:
-            rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
-            # get external cluster details
-            host, user, password, ssh_key = get_external_cluster_client()
-            external_cluster = ExternalCluster(host, user, password, ssh_key)
-            external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
+            try:
+                rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+                # get external cluster details
+                host, user, password, ssh_key = get_external_cluster_client()
+                external_cluster = ExternalCluster(host, user, password, ssh_key)
+                external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
+            except Exception as ex:
+                logger.warning(
+                    f"Failed to remove rbd images, probably due to installation was not successful. Error: {ex}"
+                )
 
         # release IPAM ip from sno
         if config.ENV_DATA["sno"]:
@@ -1301,6 +1343,53 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # post destroy checks
         self.post_destroy_checks()
+
+    def scale_down_pods_and_remove_pvcs(self):
+        """
+        Removes the mon and osd pods and also removes PVC's
+        """
+        # scale down mon pods
+        namespace = config.ENV_DATA["cluster_namespace"]
+        mon_pod_obj_list = get_mon_pods()
+        for mon_pod_obj in mon_pod_obj_list:
+            mon_deployment_name = get_deployment_name(mon_pod_obj.name)
+            run_cmd(
+                f"oc scale deployment {mon_deployment_name} --replicas=0 -n {namespace}"
+            )
+
+        # scale down osd pods
+        osd_pod_obj_list = get_osd_pods()
+        for osd_pod_obj in osd_pod_obj_list:
+            osd_deployment_name = get_deployment_name(osd_pod_obj.name)
+            run_cmd(
+                f"oc scale deployment {osd_deployment_name} --replicas=0 -n {namespace}"
+            )
+
+        # delete osd-prepare pods
+        osd_prepare_pod_obj_list = get_osd_prepare_pods()
+        delete_pods(osd_prepare_pod_obj_list)
+
+        # delete PVC's
+        pvcs_objs = get_all_pvc_objs(namespace=namespace)
+        for pvc_obj in pvcs_objs:
+            if pvc_obj.backed_sc == "thin-csi":
+                pvc_name = pvc_obj.name
+                pv_name = pvc_obj.backed_pv
+
+                # set finalizers to null for both pvc and pv
+                pvc_patch_cmd = (
+                    f"oc patch pvc {pvc_name} -n {namespace} -p "
+                    '\'{"metadata":{"finalizers":null}}\''
+                )
+                run_cmd(pvc_patch_cmd)
+                pv_patch_cmd = (
+                    f"oc patch pv {pv_name} -n {namespace} -p "
+                    '\'{"metadata":{"finalizers":null}}\''
+                )
+                run_cmd(pv_patch_cmd)
+
+                time.sleep(10)
+                delete_pvcs([pvc_obj])
 
     def destroy_scaleup_nodes(
         self, scale_up_terraform_data_dir, scale_up_terraform_var
@@ -1331,7 +1420,12 @@ class VSPHEREUPI(VSPHEREBASE):
                 "vsphere",
             )
 
-        terraform_scale_up = Terraform(vsphere_dir)
+        scaleup_terraform_tfstate = os.path.join(
+            scale_up_terraform_data_dir, "terraform.tfstate"
+        )
+        terraform_scale_up = Terraform(
+            vsphere_dir, state_file_path=scaleup_terraform_tfstate
+        )
         os.chdir(scale_up_terraform_data_dir)
         terraform_scale_up.initialize(upgrade=True)
         terraform_scale_up.destroy(scale_up_terraform_var)
@@ -1414,7 +1508,7 @@ class VSPHEREIPI(VSPHEREBASE):
                     f"--log-level {log_cli_level}",
                     timeout=7200,
                 )
-            except CommandFailed as e:
+            except (CommandFailed, TimeoutExpired) as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                     try:
                         gather_bootstrap()
@@ -1598,25 +1692,27 @@ def clone_openshift_installer():
                 ocp_version
             ) >= version.get_semantic_version("4.13"):
                 clone_repo(
-                    constants.VSPHERE_INSTALLER_REPO,
-                    upi_repo_path,
-                    "release-4.12",
+                    url=constants.VSPHERE_INSTALLER_REPO,
+                    location=upi_repo_path,
+                    branch="release-4.12",
                 )
             else:
                 clone_repo(
-                    constants.VSPHERE_INSTALLER_REPO,
-                    upi_repo_path,
-                    f"release-{ocp_version}",
+                    url=constants.VSPHERE_INSTALLER_REPO,
+                    location=upi_repo_path,
+                    branch=f"release-{ocp_version}",
                 )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO,
-            upi_repo_path,
-            constants.VSPHERE_INSTALLER_BRANCH,
+            url=constants.VSPHERE_INSTALLER_REPO,
+            location=upi_repo_path,
+            branch=constants.VSPHERE_INSTALLER_BRANCH,
         )
     else:
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
+            url=constants.VSPHERE_INSTALLER_REPO,
+            location=upi_repo_path,
+            branch=f"release-{ocp_version}",
         )
 
 

@@ -33,7 +33,7 @@ from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
-from tempfile import NamedTemporaryFile, mkdtemp
+from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -50,6 +50,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
     InteractivePromptException,
     NotFoundError,
+    CephToolBoxNotFoundException,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -451,6 +452,7 @@ def run_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
+    cluster_config=None,
     **kwargs,
 ):
     """
@@ -476,7 +478,14 @@ def run_cmd(
         (str) Decoded stdout of command
     """
     completed_process = exec_cmd(
-        cmd, secrets, timeout, ignore_error, threading_lock, silent=silent, **kwargs
+        cmd,
+        secrets,
+        timeout,
+        ignore_error,
+        threading_lock,
+        silent=silent,
+        cluster_config=cluster_config,
+        **kwargs,
     )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
@@ -570,6 +579,8 @@ def exec_cmd(
     ignore_error=False,
     threading_lock=None,
     silent=False,
+    use_shell=False,
+    cluster_config=None,
     **kwargs,
 ):
     """
@@ -589,6 +600,10 @@ def exec_cmd(
         threading_lock (threading.Lock): threading.Lock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
+        use_shell (bool): If True will pass the cmd without splitting
+        cluster_config (MultiClusterConfig): In case of multicluster environment this object
+                will be non-null
+
     Raises:
         CommandFailed: In case the command execution fails
 
@@ -605,6 +620,10 @@ def exec_cmd(
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
+    if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
+        kubepath = cluster_config.RUN["kubeconfig"]
+        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
+        cmd = list_insert_at_position(cmd, 2, [kubepath])
     if threading_lock and cmd[0] == "oc":
         threading_lock.acquire()
     completed_process = subprocess.run(
@@ -736,6 +755,15 @@ def get_openshift_installer(
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
+    client_binary_path = os.path.join(bin_dir, "oc")
+    client_exist = os.path.isfile(client_binary_path)
+    custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
+    if not client_exist:
+        get_openshift_client()
+        config.RUN["custom_client_downloaded_from_installer"] = True
+    if custom_ocp_image:
+        extract_ocp_binary_from_image("openshift-install", custom_ocp_image, bin_dir)
+        return installer_binary_path
     if os.path.isfile(installer_binary_path) and force_download:
         delete_file(installer_binary_path)
     if os.path.isfile(installer_binary_path):
@@ -857,6 +885,39 @@ def get_rosa_cli(
     return rosa_binary_path
 
 
+def extract_ocp_binary_from_image(binary, image, bin_dir):
+    """
+    Extract binary (oc client or openshift installer) from custom OCP image
+
+    Args:
+        binary (str): type of binary (oc or openshift-install)
+        image (str): image URL
+        bin_dir (str): path to bin folder where to extract the binary
+
+    """
+    binary_path = os.path.join(bin_dir, binary)
+    binary_path_exists = os.path.isfile(binary_path)
+    with TemporaryDirectory() as temp_dir:
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        cmd = f'oc adm release extract -a {pull_secret_path} --to {temp_dir} --command={binary} "{image}"'
+        exec_cmd(cmd)
+        temp_binary = os.path.join(temp_dir, binary)
+        if binary_path_exists:
+            backup_file = f"{binary_path}.bak"
+            os.rename(binary_path, backup_file)
+            try:
+                shutil.move(temp_binary, binary_path)
+                delete_file(backup_file)
+                log.info("Deleted backup binaries.")
+            except FileNotFoundError as ex:
+                log.error(
+                    f"Something went wrong with copying binary, reverting backup file. Exception: {ex}"
+                )
+                shutil.move(backup_file, binary_path)
+        else:
+            shutil.move(temp_binary, binary_path)
+
+
 def get_openshift_client(
     version=None, bin_dir=None, force_download=False, skip_comparison=False
 ):
@@ -890,9 +951,21 @@ def get_openshift_client(
         download_client = False
         force_download = False
 
+    client_exist = os.path.isfile(client_binary_path)
+    custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
+    skip_if_client_downloaded_from_installer = config.RUN.get(
+        "custom_client_downloaded_from_installer"
+    )
+    if (
+        client_exist
+        and custom_ocp_image
+        and not skip_if_client_downloaded_from_installer
+    ):
+        extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
+        return
     if force_download:
         log.info("Forcing client download.")
-    elif os.path.isfile(client_binary_path) and not skip_comparison:
+    elif client_exist and not skip_comparison:
         current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
@@ -928,12 +1001,12 @@ def get_openshift_client(
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball} oc kubectl")
         delete_file(tarball)
-
+        if custom_ocp_image and not skip_if_client_downloaded_from_installer:
+            extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
         try:
             client_version = run_cmd(f"{client_binary_path} version --client")
         except CommandFailed:
             log.error("Unable to get version from downloaded client.")
-
         if client_version:
             try:
                 delete_file(client_binary_backup)
@@ -1695,7 +1768,7 @@ def get_ocs_build_number():
         operator_name = defaults.OCS_OPERATOR_NAME
     ocs_csvs = get_csvs_start_with_prefix(
         operator_name,
-        defaults.ROOK_CLUSTER_NAMESPACE,
+        config.ENV_DATA["cluster_namespace"],
     )
     try:
         ocs_csv = ocs_csvs[0]
@@ -1834,10 +1907,22 @@ def get_ocp_version(seperator=None):
 
     """
     char = seperator if seperator else "."
+    raw_version = config.DEPLOYMENT["installer_version"]
     if config.ENV_DATA.get("skip_ocp_deployment"):
-        raw_version = json.loads(run_cmd("oc version -o json"))["openshiftVersion"]
-    else:
-        raw_version = config.DEPLOYMENT["installer_version"]
+        try:
+            raw_version = json.loads(run_cmd("oc version -o json"))["openshiftVersion"]
+        except KeyError:
+            if (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            ):
+                # In IBM ROKS, there is some issue that openshiftVersion is not available
+                # after fresh deployment. As W/A we are taking the version from config only if not found.
+                log.warning(
+                    "openshiftVersion key not found! Taking OCP version from config."
+                )
+            else:
+                raise
     version = Version.coerce(raw_version)
     return char.join([str(version.major), str(version.minor)])
 
@@ -2144,32 +2229,8 @@ def ceph_health_check_base(namespace=None):
         boolean: True if HEALTH_OK
 
     """
-    # Import here to avoid circular loop
-    from ocs_ci.ocs.cluster import is_ms_consumer_cluster
-    from ocs_ci.ocs.managedservice import (
-        patch_consumer_toolbox,
-        is_rados_connect_error_in_ex,
-    )
-
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    run_cmd(
-        f"oc wait --for condition=ready pod "
-        f"-l app=rook-ceph-tools "
-        f"-n {namespace} "
-        f"--timeout=300s"
-    )
-    ceph_health_cmd = create_ceph_health_cmd(namespace)
-    try:
-        health = run_cmd(ceph_health_cmd)
-    except CommandFailed as ex:
-        if is_rados_connect_error_in_ex(ex) and is_ms_consumer_cluster():
-            log.info("Patch the consumer rook-ceph-tools deployment")
-            patch_consumer_toolbox()
-            # get the new tool box pod since patching creates the new tool box pod
-            ceph_health_cmd = create_ceph_health_cmd(namespace)
-            health = run_cmd(ceph_health_cmd)
-        else:
-            raise ex
+    health = run_ceph_health_cmd(namespace)
 
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
@@ -2196,6 +2257,33 @@ def create_ceph_health_cmd(namespace):
     )
     ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
     return ceph_health_cmd
+
+
+def run_ceph_health_cmd(namespace):
+    """
+    Run the ceph health command
+
+    Args:
+        namespace: Namespace of OCS
+
+    Raises:
+        CommandFailed: In case the rook-ceph-tools pod failed to reach the Ready state.
+
+    Returns:
+        str: The output of the ceph health command
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    try:
+        ct_pod = get_ceph_tools_pod(namespace=namespace)
+    except (AssertionError, CephToolBoxNotFoundException) as ex:
+        raise CommandFailed(ex)
+
+    return ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
+    )
 
 
 def get_rook_repo(branch="master", to_checkout=None):
@@ -2229,6 +2317,7 @@ def get_rook_repo(branch="master", to_checkout=None):
 def clone_repo(
     url,
     location,
+    tmp_repo=False,
     branch="master",
     to_checkout=None,
     clone_type="shallow",
@@ -2241,6 +2330,7 @@ def clone_repo(
     Args:
         url (str): location of the repository to clone
         location (str): path where the repository will be cloned to
+        tmp_repo (bool): temporary repo, means it will be copied to temp path, to 'location'
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
         clone_type (str): type of clone (shallow, blobless, treeless and normal)
@@ -2285,7 +2375,7 @@ def clone_repo(
                 )
                 time.sleep(5)
 
-    if not os.path.isdir(location):
+    if not os.path.isdir(location) or (tmp_repo and os.path.isdir(location)):
         log.info("Cloning repository into %s", location)
         run_cmd(f"git clone {git_params} {url} {location}")
     else:
@@ -2416,7 +2506,7 @@ def load_auth_config():
 
     """
     log.info("Retrieving the authentication config dictionary")
-    auth_file = os.path.join(constants.TOP_DIR, "data", constants.AUTHYAML)
+    auth_file = os.path.join(constants.DATA_DIR, constants.AUTHYAML)
     try:
         with open(auth_file) as f:
             return yaml.safe_load(f)
@@ -3163,7 +3253,7 @@ def prepare_customized_pull_secret(images=None):
     if type(images) == str:
         images = [images]
     # load pull-secret file to pull_secret dict
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     with open(pull_secret_path) as pull_secret_fo:
         pull_secret = json.load(pull_secret_fo)
 
@@ -3195,22 +3285,28 @@ def prepare_customized_pull_secret(images=None):
     return authfile_fo
 
 
-def inspect_image(image, authfile_fo):
+def inspect_image(image, authfile_fo, cluster_config=None):
     """
     Inspect image
 
     Args:
         image (str): image to inspect
         authfile_fo (NamedTemporaryFile): pull-secret required for pulling the given image
+        cluster_config (MultiClusterConfig): Holds the context of a cluster
 
     Returns:
         dict: json object of the inspected image
 
     """
     # pull original image (to be able to inspect it)
-    exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
+    exec_cmd(
+        f"podman image pull {image} --authfile {authfile_fo.name}",
+        cluster_config=cluster_config,
+    )
     # inspect the image
-    cmd_result = exec_cmd(f"podman image inspect {image}")
+    cmd_result = exec_cmd(
+        f"podman image inspect {image}", cluster_config=cluster_config
+    )
     image_inspect = json.loads(cmd_result.stdout)
     return image_inspect
 
@@ -3246,7 +3342,7 @@ def get_image_with_digest(image):
         )
 
 
-def login_to_mirror_registry(authfile):
+def login_to_mirror_registry(authfile, cluster_config=None):
     """
     Login to mirror registry
 
@@ -3254,45 +3350,55 @@ def login_to_mirror_registry(authfile):
         authfile (str): authfile (pull-secret) path
 
     """
+    if not cluster_config:
+        cluster_config = config
     # load cluster info
-    load_cluster_info()
+    load_cluster_info(cluster_config)
 
-    mirror_registry = config.DEPLOYMENT["mirror_registry"]
-    mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
-    mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
+    mirror_registry = cluster_config.DEPLOYMENT["mirror_registry"]
+    mirror_registry_user = cluster_config.DEPLOYMENT["mirror_registry_user"]
+    mirror_registry_password = cluster_config.DEPLOYMENT["mirror_registry_password"]
     login_cmd = (
         f"podman login --authfile {authfile} "
         f"{mirror_registry} -u {mirror_registry_user} "
         f"-p {mirror_registry_password} --tls-verify=false"
     )
-    exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+    exec_cmd(
+        login_cmd,
+        (mirror_registry_user, mirror_registry_password),
+        cluster_config=cluster_config,
+    )
 
 
-def mirror_image(image):
+def mirror_image(image, cluster_config=None):
     """
     Mirror image to mirror image registry.
 
     Args:
         image (str): image to be mirrored, can be defined just with name or
             with full url, with or without tag or digest
+        cluster_config (MultiClusterConfig): Config object if single cluster, if its multicluster scenario
+            then we will have MultiClusterConfig object
 
     Returns:
         str: the mirrored image link
 
     """
+    if not cluster_config:
+        cluster_config = config
     with prepare_customized_pull_secret(image) as authfile_fo:
         # login to mirror registry
-        login_to_mirror_registry(authfile_fo.name)
+        login_to_mirror_registry(authfile_fo.name, cluster_config)
 
         # if there is any tag specified, use it in the full image url,
         # otherwise use url with digest
-        image_inspect = inspect_image(image, authfile_fo)
+        image_inspect = inspect_image(image, authfile_fo, cluster_config)
         if image_inspect[0].get("RepoTags"):
             orig_image_full = image_inspect[0]["RepoTags"][0]
         else:
             orig_image_full = image_inspect[0]["RepoDigests"][0]
         # prepare mirrored image url
-        mirror_registry = config.DEPLOYMENT["mirror_registry"]
+        mirror_registry = cluster_config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
         log.info(
@@ -3300,7 +3406,8 @@ def mirror_image(image):
         )
         exec_cmd(
             f"oc image mirror --insecure --registry-config"
-            f" {authfile_fo.name} {orig_image_full} {mirrored_image}"
+            f" {authfile_fo.name} {orig_image_full} {mirrored_image}",
+            cluster_config=cluster_config,
         )
     return mirrored_image
 
@@ -3606,7 +3713,7 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=900):
+def wait_for_machineconfigpool_status(node_type, timeout=900, skip_tls_verify=False):
     """
     Check for Machineconfigpool status
 
@@ -3615,6 +3722,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
             status is updated.
             e.g: worker, master and all if we want to check for all nodes
         timeout (int): Time in seconds to wait
+        skip_tls_verify (bool): True if allow skipping TLS verification
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -3628,7 +3736,11 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
 
     for role in node_types:
         log.info(f"Checking machineconfigpool status for {role} nodes")
-        ocp_obj = ocp.OCP(kind=constants.MACHINECONFIGPOOL, resource_name=role)
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL,
+            resource_name=role,
+            skip_tls_verify=skip_tls_verify,
+        )
         machine_count = ocp_obj.get()["status"]["machineCount"]
 
         assert ocp_obj.wait_for_resource(
@@ -4164,3 +4276,44 @@ def switch_to_correct_cluster_at_setup(request):
     # Switch to the correct cluster type
     log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
     config.switch_to_cluster_by_cluster_type(cluster_type)
+
+
+def list_insert_at_position(lst, index, element):
+    """
+    Insert an element into the list at a specific index
+    while shifting all the element one setp right to the index
+
+    """
+    return lst[:index] + element + lst[index:]
+
+
+def get_latest_acm_tag_unreleased(version):
+    """
+    Get Latest tag for acm unreleased image
+
+     Args:
+        version (str): version of acm for getting latest tag
+
+    Returns:
+        str: image tag for the specified version
+
+    Raises:
+        TagNotFoundException: When the given version is not found
+
+
+    """
+    params = {
+        "onlyActiveTags": "true",
+        "limit": "100",
+    }
+    response = requests.get(
+        "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/",
+        params=params,
+    )
+    responce_data = response.json()
+    for data in responce_data["tags"]:
+        if version in data["name"] and "v" not in data["name"]:
+            log.info(f"Found Image Tag {data['name']}")
+            return data["name"]
+
+    raise TagNotFoundException("Couldn't find given ACM tag!")

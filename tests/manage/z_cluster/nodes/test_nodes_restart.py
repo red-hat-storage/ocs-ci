@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -15,7 +14,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_node_objs, get_nodes
+from ocs_ci.ocs.node import get_node_objs, get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.helpers.helpers import (
@@ -24,13 +23,15 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.utils import retry
+from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
 
 
 logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@skipif_vsphere_ipi
 @skipif_managed_service
 class TestNodesRestart(ManageTest):
     """
@@ -79,7 +80,15 @@ class TestNodesRestart(ManageTest):
 
         """
         ocp_nodes = get_node_objs()
-        nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
+        if is_vsphere_ipi_cluster():
+            # When using vSphere IPI, we restart the nodes without stopping them.
+            # See issue https://github.com/red-hat-storage/ocs-ci/issues/7760.
+            nodes.restart_nodes(nodes=ocp_nodes, force=force, wait=False)
+            node_names = [n.name for n in ocp_nodes]
+            wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=420)
+        else:
+            nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
+
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
@@ -99,9 +108,9 @@ class TestNodesRestart(ManageTest):
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
-        self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-        )
+        retry(CommandFailed, tries=3, delay=20, backoff=1)(
+            self.sanity_helpers.create_resources
+        )(pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory)
 
     @tier4b
     @pytest.mark.parametrize(
@@ -124,6 +133,7 @@ class TestNodesRestart(ManageTest):
         ],
     )
     @skipif_ibm_cloud
+    @skipif_vsphere_ipi
     def test_pv_provisioning_under_degraded_state_stop_provisioner_pod_node(
         self,
         nodes,
@@ -269,6 +279,7 @@ class TestNodesRestart(ManageTest):
         ],
     )
     @skipif_ibm_cloud
+    @skipif_vsphere_ipi
     def test_pv_provisioning_under_degraded_state_stop_rook_operator_pod_node(
         self,
         nodes,

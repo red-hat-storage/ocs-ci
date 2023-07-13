@@ -33,7 +33,11 @@ class TestBucketCreation(MCGTest):
         argvalues=[
             pytest.param(
                 *[3, "S3", None],
-                marks=[pytest.mark.polarion_id("OCS-1298"), tier1, acceptance],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1298"),
+                    tier1,
+                    acceptance,
+                ],
             ),
             pytest.param(
                 *[100, "S3", None],
@@ -53,7 +57,11 @@ class TestBucketCreation(MCGTest):
             ),
             pytest.param(
                 *[3, "OC", None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")],
+                marks=[
+                    tier1,
+                    acceptance,
+                    pytest.mark.polarion_id("OCS-1298"),
+                ],
             ),
             pytest.param(
                 *[100, "OC", None],
@@ -73,7 +81,11 @@ class TestBucketCreation(MCGTest):
             ),
             pytest.param(
                 *[3, "CLI", None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")],
+                marks=[
+                    tier1,
+                    acceptance,
+                    pytest.mark.polarion_id("OCS-1298"),
+                ],
             ),
             pytest.param(
                 *[100, "CLI", None],

@@ -27,7 +27,7 @@ def lvmo_health_check_base():
     """
     lvm_clustername = get_lvm_cluster_name()
     oc_obj = OCP(
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         kind="lvmcluster",
         resource_name=lvm_clustername,
     )
@@ -128,7 +128,7 @@ def delete_lvm_cluster():
     """
     clean_all_test_projects()
     lvm_clustername = get_lvm_cluster_name()
-    lmvcluster = OCP(kind="LVMCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    lmvcluster = OCP(kind="LVMCluster", namespace=config.ENV_DATA["cluster_namespace"])
     try:
         lmvcluster.delete(resource_name=lvm_clustername)
     except CommandFailed as e:

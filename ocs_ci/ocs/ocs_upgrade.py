@@ -11,6 +11,7 @@ from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
     Deployment,
+    get_and_apply_icsp_from_catalog,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -538,9 +539,14 @@ class OCSUpgrade(object):
             with NamedTemporaryFile() as cs_yaml:
                 dump_data_to_temp_yaml(cs_data, cs_yaml.name)
                 ocs_catalog.apply(cs_yaml.name)
+                get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
 
 
-def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
+def run_ocs_upgrade(
+    operation=None,
+    *operation_args,
+    **operation_kwargs,
+):
     """
     Run upgrade procedure of OCS cluster
 
@@ -568,6 +574,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
         host, user, password, ssh_key = get_external_cluster_client()
@@ -700,6 +707,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
         old_image = upgrade_ocs.get_images_post_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
+
     verify_image_versions(
         old_image,
         upgrade_ocs.get_parsed_versions()[1],
@@ -728,7 +736,7 @@ def run_ocs_upgrade(operation=None, *operation_args, **operation_kwargs):
             )
             fd.write(decoded_external_cluster_details)
         cmd = (
-            f"oc set data secret/rook-ceph-external-cluster-details -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"oc set data secret/rook-ceph-external-cluster-details -n {config.ENV_DATA['cluster_namespace']} "
             f"--from-file=external_cluster_details={external_cluster_details.name}"
         )
         exec_cmd(cmd)
@@ -752,10 +760,10 @@ def ocs_odf_upgrade_ui():
 
     """
 
-    setup_ui = login_ui()
-    val_obj = ValidationUI(setup_ui)
-    pagenav_obj = ValidationUI(setup_ui)
-    dep_obj = DeploymentUI(setup_ui)
+    login_ui()
+    val_obj = ValidationUI()
+    pagenav_obj = ValidationUI()
+    dep_obj = DeploymentUI()
     dep_obj.operator = ODF_OPERATOR
     dep_obj.install_ocs_operator()
     original_ocs_version = config.ENV_DATA.get("ocs_version")

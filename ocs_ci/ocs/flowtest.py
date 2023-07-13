@@ -1,6 +1,7 @@
 import logging
 
-from ocs_ci.ocs import node, defaults, exceptions, constants
+from ocs_ci.framework import config
+from ocs_ci.ocs import node, exceptions, constants
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods
@@ -41,7 +42,7 @@ class FlowOperations:
         """
         logger.info(f"{operation_name}: Verifying cluster health")
         assert ceph_health_check(
-            defaults.ROOK_CLUSTER_NAMESPACE, tries=100
+            config.ENV_DATA["cluster_namespace"], tries=100
         ), "Entry criteria FAILED: Cluster is Unhealthy"
         if cluster_check:
             self.sanity_helpers.health_check(tries=100)
@@ -97,7 +98,7 @@ class FlowOperations:
             "Add capacity: Getting restart count of pods before adding capacity"
         )
         restart_count_before = pod_helpers.get_pod_restarts_count(
-            defaults.ROOK_CLUSTER_NAMESPACE
+            config.ENV_DATA["cluster_namespace"]
         )
 
         logger.info("Add capacity entry: Getting OSD pod count before adding capacity")
@@ -118,7 +119,7 @@ class FlowOperations:
 
         logger.info("Add capacity: Getting restart count of pods after adding capacity")
         restart_count_after = pod_helpers.get_pod_restarts_count(
-            defaults.ROOK_CLUSTER_NAMESPACE
+            config.ENV_DATA["cluster_namespace"]
         )
         logger.info(
             f"Sum of restart count before = {sum(restart_count_before.values())}"

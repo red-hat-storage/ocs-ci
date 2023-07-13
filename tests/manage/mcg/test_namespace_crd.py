@@ -843,7 +843,7 @@ class TestNamespace(MCGTest):
         # Check deletion in the cloud provider
         aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
         aws_obj_list = list(
-            cld_mgr.aws_client.s3_resource.Bucket(aws_target_bucket).objects.all()
+            cld_mgr.aws_client.client.Bucket(aws_target_bucket).objects.all()
         )
         if writen_objs_names[0] in aws_obj_list:
             raise UnexpectedBehaviour("Object was not deleted from cache properly")
