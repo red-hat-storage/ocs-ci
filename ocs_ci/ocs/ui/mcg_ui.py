@@ -234,7 +234,8 @@ class BucketClassUI(PageNavigator):
         logger.info("Confirm BC Deletion")
         self.do_click(self.generic_locators["confirm_action"])
 
-class NamespaceStoreUI(ObcUI):
+
+class NamespaceStoreUI(PageNavigator):
     def __init__(self):
         super().__init__()
         self.sc_loc = self.obc_loc
@@ -255,11 +256,10 @@ class NamespaceStoreUI(ObcUI):
             namespace_store_folder (str): the folder name for mount point to fs.
 
         """
+        logger.info("Create namespace-store via UI")
 
         self.nav_odf_default_page().nav_namespace_store_tab()
-
         self.do_click(self.sc_loc["namespace_store_create"])
-
         self.do_send_keys(self.sc_loc["namespace_store_name"], namespace_store_name)
 
         if namespace_store_provider == "fs":
@@ -271,5 +271,4 @@ class NamespaceStoreUI(ObcUI):
 
         self.do_send_keys(self.sc_loc["namespace_store_folder"], namespace_store_folder)
         self.take_screenshot()
-
         self.do_click(self.sc_loc["namespace_store_create_item"])
