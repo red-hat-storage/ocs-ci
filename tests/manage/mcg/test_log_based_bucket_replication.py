@@ -40,7 +40,7 @@ class TestLogBasedBucketReplication(MCGTest):
     """
 
     DEFAULT_AWS_REGION = "us-east-2"
-    DEFAULT_TIMEOUT = 20 * 60
+    DEFAULT_TIMEOUT = 10 * 60
 
     @pytest.fixture(scope="class", autouse=True)
     def reduce_replication_delay_setup(self, modify_mcg_replication_delay_class):
