@@ -90,12 +90,10 @@ class TestScaleOBCStartTime(E2ETest):
             time.sleep(timeout)
 
         # Check all the OBCs reached Bound state
-        obc_bound_list = (
-            scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
-                kube_job_obj=job_file,
-                namespace=self.namespace,
-                no_of_obc=self.num_obc_batch,
-            )
+        obc_bound_list = scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
+            kube_job_obj=job_file,
+            namespace=self.namespace,
+            no_of_obc=self.num_obc_batch,
         )
         log.info(f"Number of OBCs in Bound state: {len(obc_bound_list)}")
 
