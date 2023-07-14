@@ -3048,22 +3048,3 @@ def get_mds_standby_replay_info():
         "mds_daemon": ceph_daemon_name,
         "standby_replay_pod": standby_replay_pod.name,
     }
-
-
-def scale_ceph_mon(replica_count, mon_name, ignore_error=False):
-    """
-    Scaling up/down mon deployment.
-
-    Args:
-        replica_count (int): number of replicas to scale
-        mon_name (str): mon deployment name
-        ignore_errors (bool, optional): Ignore errors. Defaults to False.
-
-    Returns:
-        None
-    """
-    logger.info(f"Scaling mon {mon_name} to replica count {replica_count}")
-    run_cmd(
-        f"oc scale --replicas={replica_count} deploy/{mon_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE}",
-        ignore_error=ignore_error,
-    )

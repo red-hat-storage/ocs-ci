@@ -14,7 +14,8 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
-from ocs_ci.ocs.cluster import CephCluster, scale_ceph_mon
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.helpers.helpers import modify_deployment_replica_count
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class TestMonFailuresWithIntransitEncryption:
             Restoring the mon replicasets
             """
             for mon in self.mons:
-                scale_ceph_mon(1, mon, ignore_error=True)
+                modify_deployment_replica_count(mon, 1)
 
         request.addfinalizer(scale_up_mons_at_teardown)
 
@@ -72,10 +73,11 @@ class TestMonFailuresWithIntransitEncryption:
 
         # Select Two mons
         self.mons = ceph_obj.get_mons_from_cluster()[:2]
+        # self.mons = get_mon_deployments()[:2]
 
         # Scale Down Mon Count to replica=0
         for mon in self.mons:
-            scale_ceph_mon(0, mon)
+            modify_deployment_replica_count(mon, 0)
 
         # Sleeping for 10 seconds to emulate a condition where the 2 mons is inaccessibe  for 10 seconds.
         time.sleep(10)
@@ -89,7 +91,7 @@ class TestMonFailuresWithIntransitEncryption:
 
         log.info(f"Scaling up mons {','.join(self.mons)}")
         for mon in self.mons:
-            scale_ceph_mon(1, mon)
+            modify_deployment_replica_count(mon, 1)
 
         log.info("Waiting for mgr pod move to Running state")
         ceph_obj.scan_cluster()
