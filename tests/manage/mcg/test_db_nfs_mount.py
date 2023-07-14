@@ -63,7 +63,7 @@ class TestNoobaaDbNFSMount:
         params = (
             '{"spec": {"template": {"spec": {"containers": [{"name": "db", "volumeMounts": '
             '[{"mountPath": "/var/nfs", "name": "nfs-vol"}]}], "volumes":[{"name": "nfs-vol", '
-            '"nfs": {"server": "reesi004.ceph.redhat.com", "path": "/ocsci-jenkins"}}]}}}}'
+            '"nfs": {"server": "", "path": "/ocsci-jenkins"}}]}}}}'
         )
         ocp_obj.patch(params=params, format_type="strategic")
         logger.info("Patched noobaa sts to mount nfs")
