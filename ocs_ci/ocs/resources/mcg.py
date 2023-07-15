@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import platform
 import stat
 import tempfile
 from time import sleep
@@ -24,18 +25,23 @@ from ocs_ci.ocs.exceptions import (
     CredReqSecretNotFound,
     NoobaaCliChecksumFailedException,
     TimeoutExpiredError,
+    UnsupportedOSType,
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
+from ocs_ci.utility.utils import (
+    create_directory_path,
+    get_ocs_build_number,
+    TimeoutSampler,
+    exec_cmd,
+    get_attr_chain,
+)
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
-    calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
     wait_for_resource_state,
 )
@@ -907,91 +913,57 @@ class MCG:
     )
     def retrieve_noobaa_cli_binary(self):
         """
-        Copy the NooBaa CLI binary from the operator pod
-        if it wasn't found locally, or if the hashes between
-        the two don't match.
+        Download the MCG CLI from quay based on OS type
 
         Raises:
-            NoobaaCliChecksumFailedException: If checksum doesn't match.
-            AssertionError: In the case CLI binary doesn't exist.
+            UnsupportedOSType: OS type is not supported.
 
         """
+        ocs_version = get_ocs_build_number()
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        mcg_cli_image_location = os.path.join(
+            config.ENV_DATA["cluster_path"], f"mcg-cli-images-{config.RUN['run_id']}"
+        )
+        create_directory_path(mcg_cli_image_location)
 
-        def _compare_cli_hashes():
-            """
-            Verify that the remote and local CLI binaries are the same
-            in order to make sure the local bin is up to date
+        # extract MCG CLI from quay
+        cmd = (
+            f"oc image extract --registry-config {pull_secret_path} quay.io/rhceph-dev/mcg-cli:{ocs_version} "
+            f"--confirm --path /:{mcg_cli_image_location}"
+        )
+        exec_cmd(cmd)
 
-            Returns:
-                bool: Whether the local and remote hashes are identical
+        # copy the MCG CLI binary based on operating system
+        system = platform.system()
+        if system == "Darwin":
+            os_type = "macosx"
+            binary_name = "noobaa"
+        elif system == "Linux":
+            os_type = "linux"
+            binary_name = "noobaa-amd64"
+        elif system == "Windows":
+            os_type = "windows"
+            binary_name = "noobaa.exe"
+        else:
+            raise UnsupportedOSType
+        exec_cmd(
+            f"cp {mcg_cli_image_location}/usr/share/mcg/{os_type}/{binary_name} "
+            f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+        )
 
-            """
-            remote_cli_bin_md5 = cal_md5sum(
-                self.operator_pod, constants.NOOBAA_OPERATOR_POD_CLI_PATH
-            )
-            logger.info(f"Remote noobaa cli md5 hash: {remote_cli_bin_md5}")
-            local_cli_bin_md5 = calc_local_file_md5_sum(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            )
-            logger.info(f"Local noobaa cli md5 hash: {local_cli_bin_md5}")
-            return remote_cli_bin_md5 == local_cli_bin_md5
-
-        if (
-            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            or not _compare_cli_hashes()
-        ):
-            logger.info(
-                f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
-                " attempting to copy it from the MCG operator pod"
-            )
-            local_mcg_cli_dir = os.path.dirname(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            )
-            remote_mcg_cli_basename = os.path.basename(
-                constants.NOOBAA_OPERATOR_POD_CLI_PATH
-            )
-            # The MCG CLI retrieval process is known to be flaky
-            # and there's an active BZ regarding it -
-            # https://bugzilla.redhat.com/show_bug.cgi?id=2011845
-            # rsync should be more reliable than cp, thus the use of oc rsync.
-            if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
-                cmd = (
-                    f"oc rsync -n {self.namespace} {self.operator_pod.name}:"
-                    f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                    f" {local_mcg_cli_dir}"
-                )
-                exec_cmd(cmd)
-                os.rename(
-                    os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
-                    constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                )
-            else:
-                cmd = (
-                    f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                    f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                    f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-                )
-                proc = subprocess.run(cmd, shell=True, capture_output=True)
-                logger.info(
-                    f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
-                )
-            # Add an executable bit in order to allow usage of the binary
-            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            os.chmod(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                current_file_permissions.st_mode | stat.S_IEXEC,
-            )
-            # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            assert os.access(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
-            ), "The MCG CLI binary does not have execution permissions"
-            if not _compare_cli_hashes():
-                raise NoobaaCliChecksumFailedException(
-                    "Binary hash doesn't match the one on the operator pod"
-                )
+        # Add an executable bit in order to allow usage of the binary
+        current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+        os.chmod(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+            current_file_permissions.st_mode | stat.S_IEXEC,
+        )
+        # Make sure the binary was copied properly and has the correct permissions
+        assert os.path.isfile(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+        ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+        assert os.access(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
+        ), "The MCG CLI binary does not have execution permissions"
 
     @property
     @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
