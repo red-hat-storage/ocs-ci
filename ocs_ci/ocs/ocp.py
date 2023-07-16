@@ -1379,19 +1379,20 @@ def confirm_cluster_operator_version(target_version, cluster_operator):
     return False
 
 
-def upgrade_ocp(image_path, image):
+def upgrade_ocp(image_path, image, force=False):
     """
     upgrade OCP version
 
     Args:
         image (str): image to be installed
         image_path (str): path to image
+        force (bool): Allow upgrade with force to disable checks
 
     """
     ocp = OCP()
     ocp.exec_oc_cmd(
         f"adm upgrade --to-image={image_path}:{image} "
-        f"--allow-explicit-upgrade --force "
+        f"--allow-explicit-upgrade --force={force} "
     )
     log.info(f"Upgrading OCP to version: {image} ")
 
