@@ -108,9 +108,9 @@ class ClusterLoad:
 
         # Set new arguments with the updated file size to be used for
         # DeploymentConfig of FIO pod creation
-        fio_dc_data = templating.load_yaml(constants.FIO_DC_YAML)
+        fio_deployment_data = templating.load_yaml(constants.FIO_DEPLOYMENT_YAML)
         args = (
-            fio_dc_data.get("spec")
+            fio_deployment_data.get("spec")
             .get("template")
             .get("spec")
             .get("containers")[0]
@@ -126,11 +126,12 @@ class ClusterLoad:
         new_args.append(f"--rate={rate}")
         dc_obj = self.pod_factory(
             pvc=pvc_obj,
-            pod_dict_path=constants.FIO_DC_YAML,
+            pod_dict_path=constants.FIO_DEPLOYMENT_YAML,
             raw_block_pv=True,
-            deployment_config=True,
             service_account=service_account,
             command_args=new_args,
+            status=None,
+            deployment=True,
         )
         self.dc_objs.append(dc_obj)
         if wait:
