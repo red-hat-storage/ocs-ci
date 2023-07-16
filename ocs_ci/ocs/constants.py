@@ -711,6 +711,7 @@ FIO_IO_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io.yaml")
 FIO_IO_RW_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io_rw.yaml")
 FIO_IO_FILLUP_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io_fillup.yaml")
 FIO_DC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fio_dc.yaml")
+FIO_DEPLOYMENT_YAML = os.path.join(TEMPLATE_FIO_DIR, "fedora_deployment.yaml")
 
 # fio configuration files
 FIO_S3 = os.path.join(TEMPLATE_FIO_DIR, "config_s3.fio")

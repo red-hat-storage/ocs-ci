@@ -1037,6 +1037,7 @@ def pod_factory_fixture(request, pvc_factory):
         command=None,
         command_args=None,
         subpath=None,
+        deployment=False,
     ):
         """
         Args:
@@ -1064,6 +1065,7 @@ def pod_factory_fixture(request, pvc_factory):
             command_args (list): The arguments to be sent to the command running
                 on the pod
             subpath (str): Value of subPath parameter in pod yaml
+            deployment (bool): True for Deployment creation, False otherwise
 
         Returns:
             object: helpers.create_pod instance
@@ -1089,15 +1091,20 @@ def pod_factory_fixture(request, pvc_factory):
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
+                deployment=deployment,
             )
             assert pod_obj, "Failed to create pod"
-        if deployment_config:
-            dc_name = pod_obj.get_labels().get("name")
-            dc_ocp_dict = ocp.OCP(
-                kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace
-            ).get(resource_name=dc_name)
-            dc_obj = OCS(**dc_ocp_dict)
-            instances.append(dc_obj)
+
+        if deployment_config or deployment:
+            d_name = pod_obj.get_labels().get("name")
+            d_ocp_dict = ocp.OCP(
+                kind=constants.DEPLOYMENTCONFIG
+                if deployment_config
+                else constants.DEPLOYMENT,
+                namespace=pod_obj.namespace,
+            ).get(resource_name=d_name)
+            d_obj = OCS(**d_ocp_dict)
+            instances.append(d_obj)
 
         else:
             instances.append(pod_obj)
@@ -1105,8 +1112,8 @@ def pod_factory_fixture(request, pvc_factory):
             helpers.wait_for_resource_state(pod_obj, status, timeout=300)
             pod_obj.reload()
         pod_obj.pvc = pvc
-        if deployment_config:
-            return dc_obj
+        if deployment_config or deployment:
+            return d_obj
         return pod_obj
 
     def finalizer():
