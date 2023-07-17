@@ -1569,6 +1569,15 @@ def get_active_acm_index():
             return cluster.MULTICLUSTER["multicluster_index"]
 
 
+def get_passive_acm_index():
+    """
+    Get index of active acm cluster
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["passive_acm_cluster"]:
+            return cluster.MULTICLUSTER["multicluster_index"]
+
+
 def get_primary_cluster_config():
     """
     Get the primary cluster config object in a DR scenario

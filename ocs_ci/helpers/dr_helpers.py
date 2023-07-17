@@ -17,8 +17,8 @@ from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
     get_primary_cluster_config,
+    get_passive_acm_index
 )
-from ocs_ci.utility import version, templating
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
 
 logger = logging.getLogger(__name__)
@@ -860,3 +860,40 @@ def gracefully_reboot_ocp_nodes(
     else:
         set_current_secondary_cluster_context(namespace, workload_type)
     gracefully_reboot_nodes()
+
+
+def restore_backup():
+    """
+    Restores the backup in new hub and make it as active
+
+    """
+
+    restore_index = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    backup_schedule = templating.load_yaml(constants.MDR_RESTORE_YAML)
+    backup_schedule_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="restore", delete=False
+    )
+    templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
+    run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+    config.switch_ctx(restore_index)
+
+
+def verify_drpolicy_cli():
+    """
+    Function to verify DRPolicy status
+
+    Returns:
+        bool: True if the status is in succeed state, else False
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+    status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
+    if status.get("reason") == "Succeeded":
+        return True
+    else:
+        logger.warning(f"DRPolicy is not in succeeded or validated state: {status}")
+        return False
+    config.switch_ctx(restore_index)
