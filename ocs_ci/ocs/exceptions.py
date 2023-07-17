@@ -594,3 +594,7 @@ class VolumesExistError(Exception):
 
 class UnexpectedODFAccessException(Exception):
     pass
+
+
+class ArchitectureNotSupported(Exception):
+    pass
