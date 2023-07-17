@@ -140,7 +140,12 @@ class BasePvcCreateRespinCephPods(E2ETest):
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[
-        pytest.param(*["mgr"], marks=[pytest.mark.polarion_id("OCS-766")]),
+        pytest.param(
+            *["mgr"], marks=[
+                pytest.mark.polarion_id("OCS-766"),
+                pytest.mark.skip(reason="Skipped due to bz 2130867")
+            ],
+        ),
         pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-764")]),
         pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-765")]),
         pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
