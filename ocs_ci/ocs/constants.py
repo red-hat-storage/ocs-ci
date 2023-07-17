@@ -893,6 +893,7 @@ MDR_MULTICLUSTER_ENGINE = "multiclusterengine"
 MDR_BACKUP_SCHEDULE_YAML = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "backupschedule.yaml"
 )
+MDR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 
 
