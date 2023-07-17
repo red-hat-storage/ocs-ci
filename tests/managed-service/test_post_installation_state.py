@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 
 
+@managed_service_required
 class TestPostInstallationState(ManageTest):
     """
     Post-installation tests for ROSA and OSD clusters
@@ -77,7 +78,7 @@ class TestPostInstallationState(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-3917")
-    @ms_provider_required
+    @runs_on_provider
     def test_provider_server_logs(self):
         """
         Test that the logs of ocs-provider-server pod have entries for each consumer
@@ -102,7 +103,7 @@ class TestPostInstallationState(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-3918")
-    @ms_provider_required
+    @runs_on_provider
     def test_ceph_clients(self):
         """
         Test that for every consumer there are  the following cephclients in
@@ -139,7 +140,6 @@ class TestPostInstallationState(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-2694")
-    @managed_service_required
     def test_deployer_logs_not_empty(self):
         """
         Test that the logs of manager container of ocs-osd-controller-manager pod are not empty
@@ -161,7 +161,6 @@ class TestPostInstallationState(ManageTest):
     @bugzilla("2117312")
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2695")
-    @managed_service_required
     def test_connection_time_out(self):
         """
         Test that connection from mon pod to external domain is blocked and gets timeout
