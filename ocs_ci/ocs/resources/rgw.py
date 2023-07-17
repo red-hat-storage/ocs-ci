@@ -48,22 +48,27 @@ class RGW(object):
 
         """
         secret_ocp_obj = OCP(kind=constants.SECRET, namespace=self.namespace)
-        route_ocp_obj = OCP(
-            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
-        )
 
         if storagecluster_independent_check():
-            endpoint = route_ocp_obj.get(
-                resource_name=constants.RGW_SERVICE_EXTERNAL_MODE
-            )
             secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
+            ceph_objstore_ocp_obj = OCP(
+                kind=constants.CEPHOBJECTSTORE,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            cephobjectstore = ceph_objstore_ocp_obj.get(
+                resource_name=constants.RGW_ROUTE_EXTERNAL_MODE
+            )
+            endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
         else:
+            route_ocp_obj = OCP(
+                kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
+            )
             endpoint = route_ocp_obj.get(
                 resource_name=constants.RGW_SERVICE_INTERNAL_MODE
             )
+            endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
 
         creds_secret_obj = secret_ocp_obj.get(secret_name)
-        endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
         access_key = base64.b64decode(
             creds_secret_obj.get("data").get("AccessKey")
         ).decode("utf-8")
