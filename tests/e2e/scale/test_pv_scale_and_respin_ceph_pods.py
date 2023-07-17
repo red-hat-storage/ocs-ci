@@ -141,9 +141,10 @@ class BasePvcCreateRespinCephPods(E2ETest):
     argnames="resource_to_delete",
     argvalues=[
         pytest.param(
-            *["mgr"], marks=[
+            *["mgr"],
+            marks=[
                 pytest.mark.polarion_id("OCS-766"),
-                pytest.mark.skip(reason="Skipped due to bz 2130867")
+                pytest.mark.skip(reason="Skipped due to bz 2130867"),
             ],
         ),
         pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-764")]),
