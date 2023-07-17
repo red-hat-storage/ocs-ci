@@ -625,3 +625,7 @@ class IncorrectUiOptionRequested(Exception):
 
 class ReturnedEmptyResponseException(Exception):
     pass
+
+
+class ArchitectureNotSupported(Exception):
+    pass
