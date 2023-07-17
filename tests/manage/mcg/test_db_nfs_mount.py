@@ -26,10 +26,12 @@ class TestNoobaaDbNFSMount:
         ] = "/var/nfs"
         nginx_pod_data["spec"]["volumes"][0]["name"] = "nfs-vol"
         nginx_pod_data["spec"]["volumes"][0]["nfs"] = dict()
-        nginx_pod_data["spec"]["volumes"][0]["nfs"][
-            "server"
-        ] = "reesi004.ceph.redhat.com"
-        nginx_pod_data["spec"]["volumes"][0]["nfs"]["path"] = "/ocsci-jenkins"
+        nginx_pod_data["spec"]["volumes"][0]["nfs"]["server"] = config.ENV_DATA.get(
+            "nb_nfs_server"
+        )
+        nginx_pod_data["spec"]["volumes"][0]["nfs"]["path"] = config.ENV_DATA.get(
+            "nb_nfs_mount"
+        )
         nginx_pod_data["spec"]["volumes"][0].pop("persistentVolumeClaim")
         nginx_pod = helpers.create_resource(**nginx_pod_data)
 
@@ -63,7 +65,8 @@ class TestNoobaaDbNFSMount:
         params = (
             '{"spec": {"template": {"spec": {"containers": [{"name": "db", "volumeMounts": '
             '[{"mountPath": "/var/nfs", "name": "nfs-vol"}]}], "volumes":[{"name": "nfs-vol", '
-            '"nfs": {"server": "", "path": "/ocsci-jenkins"}}]}}}}'
+            f'"nfs": {{"server": "{config.ENV_DATA.get("nb_nfs_server")}", '
+            f'"path": "{config.ENV_DATA.get("nb_nfs_mount")}"}}}}]}}}}}}}}'
         )
         ocp_obj.patch(params=params, format_type="strategic")
         logger.info("Patched noobaa sts to mount nfs")
