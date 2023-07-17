@@ -114,7 +114,7 @@ class TestNodesRestartMS(ManageTest):
         )
         assert res, "Not all the node osd pods are in a Terminating state"
 
-        wait_for_nodes_status(node_names=[osd_node_name])
+        wait_for_nodes_status(node_names=[osd_node_name], timeout=300)
 
         if len(get_nodes(constants.WORKER_MACHINE)) <= 3:
             assert wait_for_osd_ids_come_up_on_node(
