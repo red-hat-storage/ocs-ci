@@ -177,7 +177,7 @@ class TestSelinuxrelabel(E2ETest):
         """
         res_pod.delete_deploymentconfig_pods(self.pod_objs[0])
         self.pvc_obj.delete()
-        time.sleep(15)
+        time.sleep(30)
         self.sa_name.delete()
 
     @pytest.mark.parametrize("copies", [5])
