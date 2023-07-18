@@ -222,15 +222,16 @@ class Warp(object):
                 "Warp workload doesn't run as expected..."
             )
 
-    def cleanup(self):
+    def cleanup(self, multi_client=False):
         """
         Clear all objects in the associated bucket
         Clean up deployment config, pvc, pod and test user
 
         """
-        if self.service_obj:
-            log.info(f"Deleting the service {self.service_obj.name}")
-            self.service_obj.delete()
+        if multi_client:
+            if self.service_obj:
+                log.info(f"Deleting the service {self.service_obj.name}")
+                self.service_obj.delete()
         log.info("Deleting pods and deployment config")
         pod.delete_deploymentconfig_pods(self.pod_obj)
         self.pvc_obj.delete()
