@@ -260,10 +260,7 @@ class PvcAcceptance:
     def setup(self):
         """
         Creates storage class with specified interface and reclaim policy.
-        Fetches all worker nodes
-
-        Returns:
-            tuple: containing the storage class instance and list of worker nodes
+        Fetches all worker nodes.
 
         """
         # Create storage class if reclaim policy is not "Delete"
