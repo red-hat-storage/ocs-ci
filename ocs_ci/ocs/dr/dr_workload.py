@@ -441,7 +441,7 @@ class BusyBox_AppSet(DRWorkload):
         image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
         try:
             config.switch_acm_ctx()
-            run_cmd(f"oc delete -f {self.appset_yaml_file}")
+            run_cmd(cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900)
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
