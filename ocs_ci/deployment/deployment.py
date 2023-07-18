@@ -1813,6 +1813,11 @@ class Deployment(object):
             constants.ACM_HUB_SUBSCRIPTION_YAML
         )
         acm_hub_subscription_yaml_data["spec"]["channel"] = channel
+        retry(
+            (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
+            tries=10,
+            delay=2,
+        )(package_manifest.get_current_csv)(channel, constants.ACM_HUB_OPERATOR_NAME)
         acm_hub_subscription_yaml_data["spec"][
             "startingCSV"
         ] = package_manifest.get_current_csv(
