@@ -88,7 +88,7 @@ class TestScaleOCBCreateDelete(E2ETest):
         ]
 
         for i in range(len(new_list)):
-            scale_noobaa_lib.cleanup(self.namespace, obc_count=new_list[i])
+            scale_noobaa_lib.cleanup(self.namespace, obc_list=new_list[i])
             obc_deletion_time = scale_noobaa_lib.measure_obc_deletion_time(
                 obc_name_list=new_list[i]
             )
