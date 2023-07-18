@@ -103,7 +103,12 @@ class VSPHEREBASE(Deployment):
 
     # default storage class for StorageCluster CRD on VmWare platform
     if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_13:
-        DEFAULT_STORAGECLASS = "thin-csi"
+        if config.ENV_DATA.get("use_custom_sc_in_deployment"):
+            CUSTOM_STORAGE_CLASS_PATH = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
+            )
+        else:
+            DEFAULT_STORAGECLASS = "thin-csi"
     else:
         DEFAULT_STORAGECLASS = "thin"
 

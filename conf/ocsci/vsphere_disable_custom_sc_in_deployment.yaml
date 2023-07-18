@@ -1,0 +1,4 @@
+---
+# This configuration file is used for using default storage class ( thin-csi ) in ODF deployment.
+ENV_DATA:
+  use_custom_sc_in_deployment: false

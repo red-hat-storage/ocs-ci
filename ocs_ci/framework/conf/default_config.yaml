@@ -237,6 +237,11 @@ ENV_DATA:
   # used in heterogeneous architecture
   num_workers_additional: 0
 
+  # Below parameter is used for using custom storage class ( thin-csi-odf ) in vSphere ODF deployment.
+  # thin-csi-odf is clone of thin-csi but with storage policy as "vSAN Default Storage Policy"
+  # This is used to save the storage in vSphere environment.
+  use_custom_sc_in_deployment: true
+
   # Multus settings
   multus_create_public_net: true
   multus_public_net_name: "public-net"
