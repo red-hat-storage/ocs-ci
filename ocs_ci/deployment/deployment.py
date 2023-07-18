@@ -2611,7 +2611,7 @@ class MultiClusterDROperatorsDeploy(object):
 
 class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     """
-    A class for Regiona-DR deployments
+    A class for Regional-DR deployments
     """
 
     def __init__(self, dr_conf):
@@ -2627,7 +2627,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         """
         # current CTX: ACM
         config.switch_acm_ctx()
-        super.deploy()
+        super().deploy()
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
