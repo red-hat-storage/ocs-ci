@@ -181,7 +181,7 @@ def get_hpa_utilization(namespace):
     return hpa_cpu_utilization
 
 
-def measure_obc_creation_time(obc_name_list, timeout=60):
+def measure_obc_creation_time(obc_name_list, timeout=120):
     """
     Measure OBC creation time
     Args:
@@ -205,7 +205,7 @@ def measure_obc_creation_time(obc_name_list, timeout=60):
             start = [
                 i
                 for i in nb_pod_log
-                if re.search(f"provisioning.*{obc_name}.*bucket", i)
+                if re.search(f"provisioning.*bucket.*{obc_name}", i)
             ]
             end = [
                 i
@@ -236,7 +236,7 @@ def measure_obc_creation_time(obc_name_list, timeout=60):
     for obc_name in obc_name_list:
         # Extract obc creation start time
         start_item = [
-            i for i in nb_pod_log if re.search(f"provisioning.*{obc_name}.*bucket", i)
+            i for i in nb_pod_log if re.search(f"provisioning.*bucket.*{obc_name}", i)
         ]
         mon_day = " ".join(start_item[0].split(" ")[0:2])
         start = f"{this_year} {mon_day}"
