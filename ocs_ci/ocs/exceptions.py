@@ -618,3 +618,7 @@ class TerrafromFileNotFoundException(Exception):
 
 class IncorrectUIOptionRequested(Exception):
     pass
+
+
+class ArchitectureNotSupported(Exception):
+    pass
