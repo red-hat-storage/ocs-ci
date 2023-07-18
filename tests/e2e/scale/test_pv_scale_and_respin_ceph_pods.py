@@ -4,11 +4,14 @@ Scale TC to perform PVC Scale and Respin of Ceph pods in parallel
 import logging
 import pytest
 import threading
+import pathlib
 
-from ocs_ci.helpers import helpers, disruption_helpers
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import utils
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs import constants, scale_lib
+from ocs_ci.helpers import helpers, disruption_helpers
+from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
 
@@ -20,88 +23,150 @@ class BasePvcCreateRespinCephPods(E2ETest):
     Base Class to create POD with PVC and respin ceph Pods
     """
 
-    def create_pvc_pod(self, rbd_sc_obj, cephfs_sc_obj, number_of_pvc, size):
+    kube_job_pvc_list, kube_job_pod_list = ([], [])
+
+    def create_pvc_pod(self, obj_name, number_of_pvc, size):
         """
-        Function to create multiple PVC of different type and bind mount them to pods
+        Function to create multiple PVC of different type and create pod using kube_job
 
         Args:
-            rbd_sc_obj (obj_dict): rbd storageclass object
-            cephfs_sc_obj (obj_dict): cephfs storageclass object
-            number_of_pvc (int): pvc count to be created for each types
+            obj_name (str): Kube Job Object name prefix
+            number_of_pvc (int): pvc count to be created for each type
             size (str): size of each pvc to be created eg: '10Gi'
         """
-        log.info(f"Create {number_of_pvc} pvcs and pods")
-        cephfs_pvcs = helpers.create_multiple_pvc_parallel(
-            cephfs_sc_obj,
-            self.namespace,
-            number_of_pvc,
-            size,
-            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
+        log.info(
+            f"Start creating {number_of_pvc * 4} PVC of 4 types RBD, FS with RWO & RWX"
         )
-        rbd_pvcs = helpers.create_multiple_pvc_parallel(
-            rbd_sc_obj,
-            self.namespace,
-            number_of_pvc,
-            size,
-            access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX],
-        )
-        # Appending all the pvc obj to base case param for cleanup and evaluation
-        self.all_pvc_obj.extend(cephfs_pvcs + rbd_pvcs)
+        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
+        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
-        # Create pods with above pvc list
-        cephfs_pods = helpers.create_pods_parallel(
-            cephfs_pvcs, self.namespace, constants.CEPHFS_INTERFACE
-        )
-        rbd_rwo_pvc, rbd_rwx_pvc = ([] for i in range(2))
-        for pvc_obj in rbd_pvcs:
-            if pvc_obj is not None:
-                if type(pvc_obj) is list:
-                    for pvc_ in pvc_obj:
-                        if pvc_.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
-                            rbd_rwx_pvc.append(pvc_)
-                        else:
-                            rbd_rwo_pvc.append(pvc_)
-                else:
-                    if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
-                        rbd_rwx_pvc.append(pvc_obj)
-                    else:
-                        rbd_rwo_pvc.append(pvc_obj)
-
-        rbd_rwo_pods = helpers.create_pods_parallel(
-            rbd_rwo_pvc, self.namespace, constants.CEPHBLOCKPOOL
-        )
-        rbd_rwx_pods = helpers.create_pods_parallel(
-            rbd_rwx_pvc, self.namespace, constants.CEPHBLOCKPOOL, raw_block_pv=True
-        )
-        temp_pod_objs = list()
-        temp_pod_objs.extend(cephfs_pods + rbd_rwo_pods)
-        # Appending all the pod obj to base class param for cleanup and evaluation
-        self.all_pod_obj.extend(temp_pod_objs + rbd_rwx_pods)
-
-        # Start respective IO on all the created PODs
-        threads = list()
-        for pod_obj in temp_pod_objs:
-            process = threading.Thread(
-                target=pod_obj.run_io,
-                args=(
-                    "fs",
-                    "512M",
-                ),
+        # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
+        rbd_pvc_dict_list, rbd_rwx_pvc_dict_list, cephfs_pvc_dict_list = ([], [], [])
+        access_modes = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
+        rbd_pvc_dict_list.extend(
+            scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
+                no_of_pvc=int(number_of_pvc),
+                access_mode=constants.ACCESS_MODE_RWO,
+                sc_name=rbd_sc_obj,
+                pvc_size=size,
+                max_pvc_size=number_of_pvc,
             )
-            process.start()
-            threads.append(process)
-        for pod_obj in rbd_rwx_pods:
-            process = threading.Thread(
-                target=pod_obj.run_io,
-                args=(
-                    "block",
-                    "512M",
-                ),
+        )
+        rbd_rwx_pvc_dict_list.extend(
+            scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
+                no_of_pvc=int(number_of_pvc),
+                access_mode=constants.ACCESS_MODE_RWX,
+                sc_name=rbd_sc_obj,
+                pvc_size=size,
+                max_pvc_size=number_of_pvc,
             )
-            process.start()
-            threads.append(process)
-        for process in threads:
-            process.join()
+        )
+        for mode in access_modes:
+            cephfs_pvc_dict_list.extend(
+                scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
+                    no_of_pvc=int(number_of_pvc),
+                    access_mode=mode,
+                    sc_name=cephfs_sc_obj,
+                    pvc_size=size,
+                    max_pvc_size=number_of_pvc,
+                )
+            )
+
+        # kube_job for cephfs and rbd PVC creations
+        lcl = locals()
+        tmp_path = pathlib.Path(utils.ocsci_log_path())
+        lcl[f"rbd_pvc_kube_{obj_name}"] = ObjectConfFile(
+            name=f"rbd_pvc_kube_{obj_name}",
+            obj_dict_list=rbd_pvc_dict_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
+        )
+        lcl[f"rbd_rwx_pvc_kube_{obj_name}"] = ObjectConfFile(
+            name=f"rbd_rwx_pvc_kube_{obj_name}",
+            obj_dict_list=rbd_rwx_pvc_dict_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
+        )
+        lcl[f"cephfs_pvc_kube_{obj_name}"] = ObjectConfFile(
+            name=f"cephfs_pvc_kube_{obj_name}",
+            obj_dict_list=cephfs_pvc_dict_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
+        )
+
+        # Create kube_job for PVC creations
+        lcl[f"rbd_pvc_kube_{obj_name}"].create(namespace=self.namespace)
+        lcl[f"rbd_rwx_pvc_kube_{obj_name}"].create(namespace=self.namespace)
+        lcl[f"cephfs_pvc_kube_{obj_name}"].create(namespace=self.namespace)
+
+        # Check all the PVC reached Bound state
+        rbd_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
+            kube_job_obj=lcl[f"rbd_pvc_kube_{obj_name}"],
+            namespace=self.namespace,
+            no_of_pvc=int(number_of_pvc),
+            timeout=60,
+        )
+        rbd_rwx_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
+            kube_job_obj=lcl[f"rbd_rwx_pvc_kube_{obj_name}"],
+            namespace=self.namespace,
+            no_of_pvc=int(number_of_pvc),
+            timeout=60,
+        )
+        fs_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
+            kube_job_obj=lcl[f"cephfs_pvc_kube_{obj_name}"],
+            namespace=self.namespace,
+            no_of_pvc=int(number_of_pvc * 2),
+            timeout=60,
+        )
+
+        # Construct pod yaml file for kube_job
+        pod_data_list = list()
+        pod_data_list.extend(
+            scale_lib.attach_multiple_pvc_to_pod_dict(
+                pvc_list=rbd_pvc_name,
+                namespace=self.namespace,
+                pvcs_per_pod=1,
+            )
+        )
+        pod_data_list.extend(
+            scale_lib.attach_multiple_pvc_to_pod_dict(
+                pvc_list=rbd_rwx_pvc_name,
+                namespace=self.namespace,
+                raw_block_pv=True,
+                pvcs_per_pod=1,
+            )
+        )
+        pod_data_list.extend(
+            scale_lib.attach_multiple_pvc_to_pod_dict(
+                pvc_list=fs_pvc_name,
+                namespace=self.namespace,
+                pvcs_per_pod=1,
+            )
+        )
+
+        # Create kube_job for pod creation
+        lcl[f"pod_kube_{obj_name}"] = ObjectConfFile(
+            name=f"pod_kube_{obj_name}",
+            obj_dict_list=pod_data_list,
+            project=self.namespace,
+            tmp_path=tmp_path,
+        )
+        lcl[f"pod_kube_{obj_name}"].create(namespace=self.namespace)
+
+        # Check all the POD reached Running state
+        pod_running_list = scale_lib.check_all_pod_reached_running_state_in_kube_job(
+            kube_job_obj=lcl[f"pod_kube_{obj_name}"],
+            namespace=self.namespace,
+            no_of_pod=len(pod_data_list),
+            timeout=90,
+        )
+        self.pod_count = self.pod_count + len(pod_data_list)
+
+        # Update list with all the kube_job object created, list will be used in cleanup
+        self.kube_job_pvc_list.append(lcl[f"rbd_pvc_kube_{obj_name}"])
+        self.kube_job_pvc_list.append(lcl[f"rbd_rwx_pvc_kube_{obj_name}"])
+        self.kube_job_pvc_list.append(lcl[f"cephfs_pvc_kube_{obj_name}"])
+        self.kube_job_pod_list.append(lcl[f"pod_kube_{obj_name}"])
 
     def respin_ceph_pod(self, resource_to_delete):
         """
@@ -126,12 +191,17 @@ class BasePvcCreateRespinCephPods(E2ETest):
 
     def cleanup(self):
         """
-        Function to cleanup the SC, PVC and POD objects parallel.
+        Function to clean_up the namespace, PVC and POD kube objects.
         """
-        helpers.delete_objs_parallel(pod.get_all_pods(namespace=self.namespace))
-        helpers.delete_objs_parallel(self.all_pvc_obj)
-        self.rbd_sc_obj.delete()
-        self.cephfs_sc_obj.delete()
+        # Delete all pods, pvcs and namespaces
+        for job in self.kube_job_pod_list:
+            job.delete(namespace=self.namespace)
+
+        for job in self.kube_job_pvc_list:
+            job.delete(namespace=self.namespace)
+
+        ocp = OCP(kind=constants.NAMESPACE)
+        ocp.delete(resource_name=self.namespace)
 
 
 @scale
@@ -165,59 +235,44 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
     Class for PV scale Create Cluster with 1000 PVC, then Respin ceph pods parallel
     """
 
+    pod_count = 0
+
     @pytest.fixture()
-    def setup_fixture(self, request):
+    def setup_fixture(self, teardown_factory, request):
+        proj_obj = helpers.create_project()
+        self.namespace = proj_obj.namespace
+
         def finalizer():
             self.cleanup()
 
         request.addfinalizer(finalizer)
 
-    @pytest.fixture()
-    def namespace(self, project_factory):
-        """
-        Create a project for the test
-        """
-        proj_obj = project_factory()
-        self.namespace = proj_obj.namespace
-
-    @pytest.fixture()
-    def storageclass(self, storageclass_factory):
-        """
-        Create Storage class for rbd and cephfs
-        """
-        self.rbd_sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
-        self.cephfs_sc_obj = storageclass_factory(interface=constants.CEPHFILESYSTEM)
-
     def test_pv_scale_out_create_pvcs_and_respin_ceph_pods(
         self,
-        namespace,
-        storageclass,
         setup_fixture,
         resource_to_delete,
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
         size = "10Gi"
-        self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
+        iteration = 1
 
         # First Iteration call to create PVC and POD
-        self.create_pvc_pod(
-            self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size
-        )
+        self.create_pvc_pod(f"obj{iteration}", pvc_count_each_itr, size)
         # Re-spin the ceph pods one by one in parallel with PVC and POD creation
         while True:
-            if scale_pod_count <= len(self.all_pod_obj):
+            if scale_pod_count <= self.pod_count:
                 log.info(f"Create {scale_pod_count} pvc and pods")
                 break
             else:
+                iteration += 1
                 thread1 = threading.Thread(
                     target=self.respin_ceph_pod, args=(resource_to_delete,)
                 )
                 thread2 = threading.Thread(
                     target=self.create_pvc_pod,
                     args=(
-                        self.rbd_sc_obj,
-                        self.cephfs_sc_obj,
+                        f"obj{iteration}",
                         pvc_count_each_itr,
                         size,
                     ),
