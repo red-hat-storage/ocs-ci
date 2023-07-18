@@ -44,13 +44,13 @@ class TestFailoverAndRelocate:
                 constants.SUBSCRIPTION,
                 False,
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
-                id="primary_up",
+                id="primary_up_subscription",
             ),
             pytest.param(
                 constants.SUBSCRIPTION,
                 True,
                 marks=pytest.mark.polarion_id(polarion_id_primary_down),
-                id="primary_down",
+                id="primary_down_subscription",
             ),
             pytest.param(
                 constants.APPLICATION_SET,
@@ -58,7 +58,7 @@ class TestFailoverAndRelocate:
                 marks=pytest.mark.polarion_id(
                     polarion_id_primary_up
                 ),  # TODO change polarion id
-                id="primary_up",
+                id="primary_up_appset",
             ),
             pytest.param(
                 constants.APPLICATION_SET,
@@ -66,7 +66,7 @@ class TestFailoverAndRelocate:
                 marks=pytest.mark.polarion_id(
                     polarion_id_primary_down
                 ),  # TODO change polarion id
-                id="primary_down",
+                id="primary_down_appset",
             ),
         ],
     )
@@ -159,7 +159,7 @@ class TestFailoverAndRelocate:
                 rdr_workload.workload_namespace,
                 workload_type,
                 rdr_workload.appset_placement_name
-                if workload_type == constants.SUBSCRIPTION
+                if workload_type != constants.SUBSCRIPTION
                 else None,
             )
 
@@ -223,7 +223,7 @@ class TestFailoverAndRelocate:
                 rdr_workload.workload_namespace,
                 workload_type,
                 rdr_workload.appset_placement_name
-                if workload_type == constants.SUBSCRIPTION
+                if workload_type != constants.SUBSCRIPTION
                 else None,
             )
 
