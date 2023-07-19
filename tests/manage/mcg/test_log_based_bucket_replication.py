@@ -43,15 +43,20 @@ class TestLogBasedBucketReplication(MCGTest):
     DEFAULT_TIMEOUT = 10 * 60
 
     @pytest.fixture(scope="class", autouse=True)
-    def reduce_replication_delay_setup(self, modify_mcg_replication_delay_class):
+    def reduce_replication_delay_setup(self, add_env_vars_to_noobaa_core_class):
         """
         A fixture to reduce the replication delay to one minute.
 
         Args:
-            modify_mcg_replication_delay (function): A function to modify the replication delay
+            new_delay_in_miliseconds (function): A function to add env vars to the noobaa-core pod
 
         """
-        modify_mcg_replication_delay_class(new_delay_in_seconds=60)
+        new_delay_in_miliseconds = 60 * 1000
+        new_env_var_touples = [
+            (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
+            (constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
+        ]
+        add_env_vars_to_noobaa_core_class(new_env_var_touples)
 
     @pytest.fixture()
     def log_based_replication_setup(
