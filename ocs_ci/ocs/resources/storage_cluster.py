@@ -4,6 +4,7 @@ StorageCluster related functionalities
 import copy
 import ipaddress
 import logging
+import os
 import re
 import tempfile
 import json
@@ -1302,7 +1303,23 @@ def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
         storage cluster (obj) : Storage cluster object handler
 
     """
-    sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    # In FaaS platform, the StorageCluster CR is only present in the provider cluster
+    if (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+    ):
+        provider_kubeconfig = os.path.join(
+            config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
+            config.clusters[config.get_provider_index()].RUN.get("kubeconfig_location"),
+        )
+        cluster_kubeconfig = provider_kubeconfig
+    else:
+        cluster_kubeconfig = ""
+    sc_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+        cluster_kubeconfig=cluster_kubeconfig,
+    )
     return sc_obj
 
 
