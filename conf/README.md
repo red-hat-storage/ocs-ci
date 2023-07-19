@@ -239,6 +239,8 @@ higher priority).
 * `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
 * `ms_env_type` - to choose managed service environment type staging or production, default set to staging
 * `lvmo` - set to True if it's LVMO deployment - mainly used for reporting purpose.
+* `nb_nfs_server` - NFS server used for testing noobaa db NFS mount test
+* `nb_nfs_mount` - NFS mount point used specifically for testing noobaa db NFS mount test
 #### UPGRADE
 
 Upgrade related configuration data.
