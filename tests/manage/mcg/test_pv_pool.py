@@ -233,7 +233,7 @@ class TestPvPool:
         # verify there is no dummy access_key, secret_key messages are seen in the pv pool pod
         for pod in pv_pod_obj:
             pod_logs = get_pod_logs(pod_name=pod.name)
-            assert ("access_key:" not in pod_logs) or (
+            assert ("access_key:" not in pod_logs) and (
                 "secret_key:" not in pod_logs
             ), f"access_key or secret_key are logged in the pv pool pod {pod.name} logs"
 
