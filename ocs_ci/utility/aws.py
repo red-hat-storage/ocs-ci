@@ -2086,7 +2086,8 @@ def delete_cluster_buckets(cluster_name):
     # patterns for mcg target bucket, image-registry buckets and bucket created
     # durring installation via Flexy (for installation files)
     patterns = [
-        f"nb.(\\d+).apps.{cluster_name}.{base_domain}",
+        # ?(?!\\.) ensures there are no consecutive dots after the run ID
+        f"nb.(\\d+).?(?!\\.)(\\w*).{cluster_name}.{base_domain}",
         f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)",
         f"{cluster_name}-(\\d{{4}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})",
         f"{cluster_name}-(\\w+)-oidc",
