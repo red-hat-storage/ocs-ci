@@ -24,7 +24,6 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
-from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
@@ -2934,6 +2933,7 @@ def storagecluster_independent_check():
         bool: True if storagecluster is running on external mode False otherwise
 
     """
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 
     storage_cluster = get_storage_cluster()
 
