@@ -75,45 +75,45 @@ class BasePvcCreateRespinCephPods(E2ETest):
         # kube_job for cephfs and rbd PVC creations
         lcl = locals()
         tmp_path = pathlib.Path(utils.ocsci_log_path())
-        lcl[f"rbd_pvc_kube_{obj_name}"] = ObjectConfFile(
-            name=f"rbd_pvc_kube_{obj_name}",
+        lcl[f"rbd-pvc-{obj_name}"] = ObjectConfFile(
+            name=f"rbd-pvc-{obj_name}",
             obj_dict_list=rbd_pvc_dict_list,
             project=self.namespace,
             tmp_path=tmp_path,
         )
-        lcl[f"rbd_rwx_pvc_kube_{obj_name}"] = ObjectConfFile(
-            name=f"rbd_rwx_pvc_kube_{obj_name}",
+        lcl[f"rbd-rwx-pvc-{obj_name}"] = ObjectConfFile(
+            name=f"rbd-rwx-pvc-{obj_name}",
             obj_dict_list=rbd_rwx_pvc_dict_list,
             project=self.namespace,
             tmp_path=tmp_path,
         )
-        lcl[f"cephfs_pvc_kube_{obj_name}"] = ObjectConfFile(
-            name=f"cephfs_pvc_kube_{obj_name}",
+        lcl[f"cephfs-pvc-{obj_name}"] = ObjectConfFile(
+            name=f"cephfs-pvc-{obj_name}",
             obj_dict_list=cephfs_pvc_dict_list,
             project=self.namespace,
             tmp_path=tmp_path,
         )
 
         # Create kube_job for PVC creations
-        lcl[f"rbd_pvc_kube_{obj_name}"].create(namespace=self.namespace)
-        lcl[f"rbd_rwx_pvc_kube_{obj_name}"].create(namespace=self.namespace)
-        lcl[f"cephfs_pvc_kube_{obj_name}"].create(namespace=self.namespace)
+        lcl[f"rbd-pvc-{obj_name}"].create(namespace=self.namespace)
+        lcl[f"rbd-rwx-pvc-{obj_name}"].create(namespace=self.namespace)
+        lcl[f"cephfs-pvc-{obj_name}"].create(namespace=self.namespace)
 
         # Check all the PVC reached Bound state
         rbd_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=lcl[f"rbd_pvc_kube_{obj_name}"],
+            kube_job_obj=lcl[f"rbd-pvc-{obj_name}"],
             namespace=self.namespace,
             no_of_pvc=int(number_of_pvc),
             timeout=60,
         )
         rbd_rwx_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=lcl[f"rbd_rwx_pvc_kube_{obj_name}"],
+            kube_job_obj=lcl[f"rbd-rwx-pvc-{obj_name}"],
             namespace=self.namespace,
             no_of_pvc=int(number_of_pvc),
             timeout=60,
         )
         fs_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=lcl[f"cephfs_pvc_kube_{obj_name}"],
+            kube_job_obj=lcl[f"cephfs-pvc-{obj_name}"],
             namespace=self.namespace,
             no_of_pvc=int(number_of_pvc * 2),
             timeout=60,
@@ -145,17 +145,17 @@ class BasePvcCreateRespinCephPods(E2ETest):
         )
 
         # Create kube_job for pod creation
-        lcl[f"pod_kube_{obj_name}"] = ObjectConfFile(
-            name=f"pod_kube_{obj_name}",
+        lcl[f"pod-{obj_name}"] = ObjectConfFile(
+            name=f"pod-{obj_name}",
             obj_dict_list=pod_data_list,
             project=self.namespace,
             tmp_path=tmp_path,
         )
-        lcl[f"pod_kube_{obj_name}"].create(namespace=self.namespace)
+        lcl[f"pod-{obj_name}"].create(namespace=self.namespace)
 
         # Check all the POD reached Running state
         pod_running_list = scale_lib.check_all_pod_reached_running_state_in_kube_job(
-            kube_job_obj=lcl[f"pod_kube_{obj_name}"],
+            kube_job_obj=lcl[f"pod-{obj_name}"],
             namespace=self.namespace,
             no_of_pod=len(pod_data_list),
             timeout=90,
@@ -163,10 +163,10 @@ class BasePvcCreateRespinCephPods(E2ETest):
         self.pod_count = self.pod_count + len(pod_data_list)
 
         # Update list with all the kube_job object created, list will be used in cleanup
-        self.kube_job_pvc_list.append(lcl[f"rbd_pvc_kube_{obj_name}"])
-        self.kube_job_pvc_list.append(lcl[f"rbd_rwx_pvc_kube_{obj_name}"])
-        self.kube_job_pvc_list.append(lcl[f"cephfs_pvc_kube_{obj_name}"])
-        self.kube_job_pod_list.append(lcl[f"pod_kube_{obj_name}"])
+        self.kube_job_pvc_list.append(lcl[f"rbd-pvc-{obj_name}"])
+        self.kube_job_pvc_list.append(lcl[f"rbd-rwx-pvc-{obj_name}"])
+        self.kube_job_pvc_list.append(lcl[f"cephfs-pvc-{obj_name}"])
+        self.kube_job_pod_list.append(lcl[f"pod-{obj_name}"])
 
     def respin_ceph_pod(self, resource_to_delete):
         """
@@ -202,6 +202,8 @@ class BasePvcCreateRespinCephPods(E2ETest):
 
         ocp = OCP(kind=constants.NAMESPACE)
         ocp.delete(resource_name=self.namespace)
+        self.kube_job_pod_list.clear()
+        self.kube_job_pvc_list.clear()
 
 
 @scale
@@ -256,9 +258,10 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         scale_pod_count = 120
         size = "10Gi"
         iteration = 1
+        kube_obj_name = helpers.create_unique_resource_name("obj", "kube")
 
         # First Iteration call to create PVC and POD
-        self.create_pvc_pod(f"obj{iteration}", pvc_count_each_itr, size)
+        self.create_pvc_pod(f"{kube_obj_name}-{iteration}", pvc_count_each_itr, size)
         # Re-spin the ceph pods one by one in parallel with PVC and POD creation
         while True:
             if scale_pod_count <= self.pod_count:
@@ -272,7 +275,7 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
                 thread2 = threading.Thread(
                     target=self.create_pvc_pod,
                     args=(
-                        f"obj{iteration}",
+                        f"{kube_obj_name}-{iteration}",
                         pvc_count_each_itr,
                         size,
                     ),
