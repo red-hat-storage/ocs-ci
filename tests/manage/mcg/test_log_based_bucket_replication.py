@@ -279,7 +279,6 @@ class TestLogBasedBucketReplication(MCGTest):
 
     @tier4b
     @skipif_vsphere_ipi
-    @pytest.mark.parametrize("target_pod_name", ["noobaa-db", "noobaa-core"])
     @pytest.mark.parametrize(
         argnames=["target_pod_name"],
         argvalues=[
