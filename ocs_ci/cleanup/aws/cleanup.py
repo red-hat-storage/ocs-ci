@@ -129,7 +129,9 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
     delete_cluster_buckets(cluster_name)
 
 
-def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
+def get_clusters(
+    time_to_delete, region_name, prefixes_hours_to_spare, cluster_pattern=None
+):
     """
     Get all cluster names that their EC2 instances running time is greater
     than the specified time to delete
@@ -141,6 +143,7 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
         prefixes_hours_to_spare (dict): Dictionaries of the cluster prefixes to spare
             along with the maximum time in hours that is allowed for spared
             clusters to continue running
+        cluster_pattern (str): The name of the ec2 instances
 
     Returns:
         tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
@@ -181,6 +184,26 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
                         return True
         return False
 
+    def determine_cluster_deletion_base_name(ec2_instance_objs, vpc_id):
+        """
+        Determine cluster deletion base on name
+
+        Args:
+            ec2_instance_objs (list): list of ec2 instance obj
+            vpc_id (str): vpc id
+
+        Returns:
+            bool: True if vpc_id exist and all ec2 instances on same vpc otherwise False
+
+        """
+        # Get all instances
+        vpc_ids = [
+            ec2_instance.get("Instances")[0].get("VpcId")
+            for ec2_instance in ec2_instance_objs
+        ]
+        # Verify vpc_id exist and all ec2 instances on same vpc
+        return True if vpc_id in vpc_ids and len(set(vpc_ids)) == 1 else False
+
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
     remaining_clusters = list()
@@ -188,6 +211,13 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
     vpcs = aws.ec2_client.describe_vpcs()["Vpcs"]
     vpc_ids = [vpc["VpcId"] for vpc in vpcs]
     vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
+    ec2_instance_objs = None
+    if cluster_pattern:
+        worker_filter = [{"Name": "tag:Name", "Values": [f"{cluster_pattern}*"]}]
+        ec2_instance_objs = aws.ec2_client.describe_instances(
+            Filters=worker_filter
+        ).get("Reservations")
+
     for vpc_obj in vpc_objs:
         vpc_tags = vpc_obj.tags
         if vpc_tags:
@@ -205,10 +235,16 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
                 continue
 
             # Append to clusters_to_delete if cluster should be deleted
-            if determine_cluster_deletion(vpc_instances, cluster_name):
-                clusters_to_delete.append(cluster_name)
+            if cluster_pattern is not None:
+                if determine_cluster_deletion_base_name(ec2_instance_objs, vpc_obj.id):
+                    clusters_to_delete.append(cluster_name)
+                else:
+                    remaining_clusters.append(cluster_name)
             else:
-                remaining_clusters.append(cluster_name)
+                if determine_cluster_deletion(vpc_instances, cluster_name):
+                    clusters_to_delete.append(cluster_name)
+                else:
+                    remaining_clusters.append(cluster_name)
         else:
             logger.info("No tags found for VPC")
 
@@ -278,13 +314,14 @@ def cluster_cleanup():
 
 def aws_cleanup():
     parser = argparse.ArgumentParser(
-        description="AWS overall resources cleanup according to running time"
+        description="AWS overall resources cleanup according to running time",
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
         "--hours",
         type=hour_valid,
         action="store",
-        required=True,
+        required=False,
         help="""
             Maximum running time of the cluster (in hours).
             Clusters older than this will be deleted.
@@ -322,8 +359,14 @@ def aws_cleanup():
             you know what you are doing.
             """,
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--cluster-name",
+        action="store",
+        required=False,
+        help="The name of the cluster to delete from AWS",
+    )
 
+    args = parser.parse_args()
     if not args.force:
         confirmation = input(
             "Careful! This action could be highly destructive. "
@@ -342,12 +385,13 @@ def aws_cleanup():
             )
             prefixes_hours_to_spare.update({prefix: hours})
 
-    time_to_delete = args.hours * 60 * 60
+    time_to_delete = args.hours * 60 * 60 if args.hours else None
     region = defaults.AWS_REGION if not args.region else args.region
     clusters_to_delete, cf_clusters_to_delete, remaining_clusters = get_clusters(
         time_to_delete=time_to_delete,
         region_name=region,
         prefixes_hours_to_spare=prefixes_hours_to_spare,
+        cluster_pattern=args.cluster_name,
     )
 
     if not clusters_to_delete:
