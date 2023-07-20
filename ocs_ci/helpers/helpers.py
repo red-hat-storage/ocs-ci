@@ -225,7 +225,7 @@ def create_pod(
     interface_type=None,
     pvc_name=None,
     do_reload=True,
-    namespace=None,
+    namespace=config.ENV_DATA["cluster_namespace"],
     node_name=None,
     pod_dict_path=None,
     sa_name=None,
