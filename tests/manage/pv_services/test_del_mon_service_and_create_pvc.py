@@ -52,18 +52,8 @@ class TestPvcCreationAfterDelMonService(E2ETest):
     @bugzilla("1858195")
     @runs_on_provider
     @skipif_ocs_version("<4.6")
-    @pytest.mark.parametrize(
-        argnames=["interface"],
-        argvalues=[
-            pytest.param(
-                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
-            ),
-            pytest.param(
-                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2494")
-            ),
-        ],
-    )
-    def test_pvc_creation_after_del_mon_services(self, interface, pod_factory):
+    @pytest.mark.polarion_id("OCS-2494")
+    def test_pvc_creation_after_del_mon_services(self, pod_factory):
         """
         1. Delete one mon service
         2. Edit the configmap rook-ceph-endpoints
@@ -82,8 +72,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             # Switch to consumer to create PVC, pod and start IO
             config.switch_to_consumer(self.consumer_cluster_index)
 
-        pod_obj = pod_factory(interface=interface)
-        run_io_in_bg(pod_obj)
+        for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
+            pod_obj = pod_factory(interface=interface)
+            run_io_in_bg(pod_obj)
 
         if self.consumer_cluster_index is not None:
             # Switch to provider
@@ -230,7 +221,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             wait_for_storage_pods()
 
             # Sleep for some seconds before deleting another mon
-            sleep_time = 300
+            sleep_time = 60
             log.info(f"Waiting for {sleep_time} seconds before deleting another mon")
             time.sleep(sleep_time)
 
@@ -256,9 +247,10 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             config.switch_to_consumer(self.consumer_cluster_index)
 
         # Create PVC and pods
-        log.info(f"Create {interface} PVC")
-        pod_obj = pod_factory(interface=interface)
-        pod_obj.run_io(storage_type="fs", size="500M")
+        for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
+            log.info(f"Create {interface} PVC")
+            pod_obj = pod_factory(interface=interface)
+            pod_obj.run_io(storage_type="fs", size="500M")
 
     @pytest.fixture()
     def validate_all_mon_svc_are_up_at_teardown(self, request):
