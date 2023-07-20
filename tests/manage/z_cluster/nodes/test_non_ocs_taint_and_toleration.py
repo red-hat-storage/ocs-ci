@@ -20,6 +20,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
     check_toleration_on_pods,
+    wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs.node import (
     taint_nodes,
@@ -184,7 +185,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info("After edit noticed few pod respins as expected")
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
 
-        logger.info("Check non-ocs toleration on all pods under openshift-storage")
+        logger.info("Wait for pod to reach terminating state or to be deleted")
+        assert wait_for_pods_to_be_in_statuses(
+            [constants.STATUS_TERMINATING],
+            timeout=600,
+            sleep=15,
+        )
+
+        logger.info(
+            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
+        )
         check_toleration_on_pods(toleration_key="xyz")
         if config.DEPLOYMENT["external_mode"]:
             cephcluster = CephClusterExternal()
