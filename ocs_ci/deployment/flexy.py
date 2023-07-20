@@ -10,6 +10,7 @@ import yaml
 
 import io
 import configparser
+from pathlib import Path
 from semantic_version import Version
 import subprocess
 from subprocess import CalledProcessError
@@ -594,6 +595,10 @@ class FlexyBase(object):
         # only works with 'debug' option
         if log_level:
             pass
+        # create empty metadata.json file in cluster dir, to ensure, that
+        # destroy job will be properly triggered even when the deployment fails
+        # and metadata.json file will not be created
+        Path(os.path.join(self.cluster_path, "metadata.json")).touch()
         cmd = self.build_install_cmd()
         # Ensure that flexy workdir will be copied to cluster dir even when
         # Flexy itself fails.
