@@ -161,7 +161,7 @@ class MCG:
                 aws_secret_access_key=self.aws_access_key,
             )
 
-    def retrieve_nb_token(self, timeout=300):
+    def retrieve_nb_token(self, timeout=300, sleep=30):
         """
         Try to retrieve a NB RPC token and decode its JSON
 
@@ -191,7 +191,7 @@ class MCG:
                 return None
 
         try:
-            for token in TimeoutSampler(timeout, 30, internal_retrieval_logic):
+            for token in TimeoutSampler(timeout, sleep, internal_retrieval_logic):
                 if token:
                     return token
         except TimeoutExpiredError:

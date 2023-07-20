@@ -4,6 +4,7 @@ import uuid
 import pytest
 import boto3
 from time import sleep
+import botocore
 
 from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id
 from ocs_ci.framework.testlib import MCGTest
@@ -63,13 +64,18 @@ class TestCredentialsReset(MCGTest):
         )
 
         # Verify the original password fails when attempting to generate an RPC token
-        # TODO - define a more specific exception to catch
         mcg_obj_session.noobaa_password = original_noobaa_admin_password
-        with pytest.raises(Exception):
-            mcg_obj_session.retrieve_nb_token(timeout=0)
-            logger.error(
-                "Unexpectedly succeeded in retrieving RPC token with the original password"
-            )
+        try:
+            with pytest.raises(AssertionError):
+                mcg_obj_session.retrieve_nb_token(timeout=30, sleep=10)
+                logger.error(
+                    "Unexpectedly succeeded in retrieving RPC token with the original password"
+                )
+        except Exception as e:
+            logger.error(f"An unexpected exception occurred: {e}")
+            # Set the new password to allow resetting back at teardown
+            mcg_obj_session.noobaa_password = new_password
+            raise e
 
         # Verify the new password succeeds when attempting to generate an RPC token
         mcg_obj_session.noobaa_password = new_password
@@ -133,8 +139,7 @@ class TestCredentialsReset(MCGTest):
             aws_secret_access_key=original_secret_key,
         )
 
-        # TODO - define a more specific exception to catch
-        with pytest.raises(Exception):
+        with pytest.raises(botocore.exceptions.ClientError):
             bucket_factory(
                 s3resource=original_credentials_s3_resource, verify_health=False
             )
@@ -205,8 +210,7 @@ class TestCredentialsReset(MCGTest):
             aws_secret_access_key=original_secret_key,
         )
 
-        # TODO - define a more specific exception to catch
-        with pytest.raises(Exception):
+        with pytest.raises(botocore.exceptions.ClientError):
             original_credentials_s3_resource.Bucket(obc_name).load()
             logger.error(
                 "Unexpectedly succeeded in listing the bucket with the old credentials"
