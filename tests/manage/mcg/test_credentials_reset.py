@@ -4,7 +4,7 @@ import uuid
 import pytest
 import boto3
 
-from ocs_ci.framework.pytest_customization.marks import tier2
+from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import get_s3_credentials_from_secret
 
@@ -40,6 +40,7 @@ class TestCredentialsReset(MCGTest):
         return original_password
 
     @tier2
+    @polarion_id("OCS-5118")
     def test_change_nb_admin_pw(self, mcg_obj_session, original_noobaa_admin_password):
         """
         Test changing the NooBaa admin password
@@ -79,6 +80,7 @@ class TestCredentialsReset(MCGTest):
             raise
 
     @tier2
+    @polarion_id("OCS-5119")
     def test_regenerate_account_s3_creds(
         self, mcg_obj_session, mcg_account_factory, bucket_factory
     ):
@@ -151,6 +153,7 @@ class TestCredentialsReset(MCGTest):
             raise
 
     @tier2
+    @polarion_id("OCS-5120")
     def test_regenerate_obc_s3_creds(self, mcg_obj_session, bucket_factory):
         """
         Test regenerating S3 credentials for an OBC
