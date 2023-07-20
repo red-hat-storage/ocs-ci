@@ -3,6 +3,7 @@ import random
 import uuid
 import pytest
 import boto3
+from time import sleep
 
 from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id
 from ocs_ci.framework.testlib import MCGTest
@@ -102,8 +103,13 @@ class TestCredentialsReset(MCGTest):
             f"noobaa-account-{acc_name}"
         )
 
+        logger.info("Resetting the account's S3 credentials")
+
         # Regenerate the account's S3 credentials
         mcg_obj_session.exec_mcg_cmd(f"account regenerate {acc_name}", use_yes=True)
+
+        logger.info("Waiting a bit for the change to propogate through the system...")
+        sleep(15)
 
         # Verify the account's S3 credentials have changed at the secret
         new_access_key, new_secret_key = get_s3_credentials_from_secret(
@@ -171,8 +177,13 @@ class TestCredentialsReset(MCGTest):
             obc_name
         )
 
+        logger.info("Resetting the OBC's S3 credentials")
+
         # Regenerate the OBC's S3 credentials
         mcg_obj_session.exec_mcg_cmd(f"obc regenerate {obc_name}", use_yes=True)
+
+        logger.info("Waiting a bit for the change to propogate through the system...")
+        sleep(15)
 
         # Verify the OBC's S3 credentials have changed at the secret
         new_access_key, new_secret_key = get_s3_credentials_from_secret(obc_name)

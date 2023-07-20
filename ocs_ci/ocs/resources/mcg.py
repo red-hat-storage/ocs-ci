@@ -1079,6 +1079,8 @@ class MCG:
             new_password (str): New password to set for the NooBaa admin user
 
         """
+        logger.info("Resetting the noobaa-admin password")
+
         cmd = "".join(
             (
                 f"account passwd {self.noobaa_user}",
@@ -1090,3 +1092,6 @@ class MCG:
 
         self.exec_mcg_cmd(cmd)
         self.noobaa_password = new_password
+
+        logger.info("Waiting a bit for the change to propogate through the system...")
+        sleep(15)
