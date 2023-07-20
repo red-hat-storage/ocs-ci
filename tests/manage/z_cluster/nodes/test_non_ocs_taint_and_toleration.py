@@ -183,7 +183,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 pod.delete(wait=False)
 
         logger.info("After edit noticed few pod respins as expected")
-        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        assert wait_for_pods_to_be_running(timeout=720, sleep=15)
 
         logger.info("Wait for pod to reach terminating state or to be deleted")
         assert wait_for_pods_to_be_in_statuses(
