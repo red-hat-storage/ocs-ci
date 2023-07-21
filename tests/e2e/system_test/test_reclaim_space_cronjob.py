@@ -25,8 +25,8 @@ ERRMSG = "Error in command"
 
 
 @tier3
-@skipif_ocp_version("<4.13")
-@skipif_ocs_version("<4.13")
+@skipif_ocp_version("<4.14")
+@skipif_ocs_version("<4.14")
 class TestReclaimSpaceCronJob(ManageTest):
     """
     Test that TODO
