@@ -98,7 +98,7 @@ class TestReclaimSpaceCronJob(ManageTest):
 
         # wait since it may take some time for cronjobs to be created
         time.sleep(30)
-        res = run_oc_command(cmd=f"get reclaimspacecronjob", namespace=namespace)
+        res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after PVC creation {res}")
         assert (
             len(res) > 1
@@ -120,7 +120,7 @@ class TestReclaimSpaceCronJob(ManageTest):
 
         # wait since it make take some time for cronjobs to be deleted
         time.sleep(30)
-        res = run_oc_command(cmd=f"get reclaimspacecronjob", namespace=namespace)
+        res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after PVC deletion {res}")
         assert (
             len(res) == 1
@@ -143,7 +143,7 @@ class TestReclaimSpaceCronJob(ManageTest):
 
         # wait since it make take some time for cronjobs to be deleted
         time.sleep(30)
-        res = run_oc_command(cmd=f"get reclaimspacecronjob", namespace=namespace)
+        res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after CephFS PVC creation {res}")
         assert (
             len(res) == 1
@@ -200,7 +200,7 @@ class TestReclaimSpaceCronJob(ManageTest):
 
         # wait since it may take some time for cronjobs to be created
         time.sleep(30)
-        res = run_oc_command(cmd=f"get reclaimspacecronjob", namespace=namespace)
+        res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after RBD PVC creation {res}")
         assert (
             len(res) == 1
