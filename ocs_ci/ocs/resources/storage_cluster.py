@@ -691,6 +691,9 @@ def ocs_install_verification(
     if config.ENV_DATA.get("in_transit_encryption"):
         in_transit_encryption_verification()
 
+    # Verify olm.maxOpenShiftVersion property
+    verify_max_openshift_version()
+
 
 def mcg_only_install_verification(ocs_registry_image=None):
     """
@@ -888,6 +891,36 @@ def verify_storage_cluster_images():
     if ocs_version >= version.VERSION_4_7:
         log.info("Verifying images in storage cluster")
         verify_sc_images(storage_cluster)
+
+
+def verify_max_openshift_version():
+    """
+    Verify the maximum OpenShift version supported for ODF
+    """
+    log.info("Verifying maxOpenShiftVersion")
+    odf_csv = csv.get_csvs_start_with_prefix(
+        defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
+    )
+    odf_full_version = odf_csv[0]["metadata"]["labels"]["full_version"]
+    olm_properties = odf_csv[0]["metadata"]["annotations"].get("olm.properties")
+
+    # assert if olm_properties is empty
+    assert (
+        olm_properties
+    ), f"olm.maxOpenShiftVersion is not set for {defaults.ODF_OPERATOR_NAME}"
+
+    max_openshift_version = eval(olm_properties)[0]["value"]
+    log.debug(f"olm.maxOpenShiftVersion is: {max_openshift_version}")
+    log.debug(f"ODF full version is: {odf_full_version}")
+    max_openshift_sem_version = get_semantic_version(version=max_openshift_version)
+    odf_sem_version = get_semantic_version(
+        version=odf_full_version, ignore_pre_release=True
+    )
+    expected_max_openshift_sem_version = odf_sem_version.next_minor()
+    assert max_openshift_sem_version == expected_max_openshift_sem_version, (
+        f"olm.maxOpenShiftVersion is {max_openshift_version} but expected "
+        f"version is {expected_max_openshift_sem_version}"
+    )
 
 
 def osd_encryption_verification():
