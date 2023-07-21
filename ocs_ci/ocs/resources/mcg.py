@@ -950,7 +950,7 @@ class MCG:
         if not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH):
             logger.info(
                 f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
-                " attempting to copy it from the MCG operator pod"
+                " attempting to copy it from the quay.io"
             )
             semantic_version = version.get_semantic_ocs_version_from_config()
             remote_path = self.get_architecture_path()
