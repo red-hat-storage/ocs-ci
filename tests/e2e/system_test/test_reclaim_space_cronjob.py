@@ -169,7 +169,7 @@ class TestReclaimSpaceCronJob(ManageTest):
                 namespace_yaml = yaml.safe_load(stream)
                 namespace_yaml["metadata"]["name"] = namespace
             except yaml.YAMLError as exc:
-                logging.error(f"Can not read template yaml file {exc}")
+                logger.error(f"Can not read template yaml file {exc}")
 
         temp_file = NamedTemporaryFile(
             mode="w+", prefix="namespace_skip_reclaim_space", suffix=".yaml"
