@@ -1528,9 +1528,10 @@ def verify_multus_network():
         pod_networks = _pod.data["metadata"]["annotations"][
             "k8s.v1.cni.cncf.io/networks"
         ]
-        assert (
-            public_net_full_name in pod_networks
-        ), f"{public_net_full_name} not in {pod_networks}"
+        if public_net_created:
+            assert (
+                public_net_full_name in pod_networks
+            ), f"{public_net_full_name} not in {pod_networks}"
 
         osd_id = get_osd_pod_id(_pod)
         log.info(
@@ -1556,16 +1557,20 @@ def verify_multus_network():
     osds_data = osd_dump_dict["osds"]
     for osd_data in osds_data:
         expected_addresses = osd_addresses[str(osd_data["osd"])]
-        assert expected_addresses["public_address"] in str(osd_data["public_addr"]), (
-            f"\nExpected public ip address: {expected_addresses['public_address']}"
-            f"\nActual public ip address: {osd_data['public_addr']}"
-        )
-        assert expected_addresses["internal_address"] in str(
-            osd_data["cluster_addrs"]
-        ), (
-            f"\nExpected internal ip address: {expected_addresses['cluster_addrs']}"
-            f"\nActual internal ip address: {osd_data['internal_address']}"
-        )
+        if public_net_created:
+            assert expected_addresses["public_address"] in str(
+                osd_data["public_addr"]
+            ), (
+                f"\nExpected public ip address: {expected_addresses['public_address']}"
+                f"\nActual public ip address: {osd_data['public_addr']}"
+            )
+        if cluster_net_created:
+            assert expected_addresses["internal_address"] in str(
+                osd_data["cluster_addrs"]
+            ), (
+                f"\nExpected internal ip address: {expected_addresses['cluster_addrs']}"
+                f"\nActual internal ip address: {osd_data['internal_address']}"
+            )
 
     if public_net_created:
         log.info("Verifying multus public network exists on ceph pods")
@@ -1619,12 +1624,14 @@ def verify_multus_network():
     network_data = sc_data["spec"]["network"]
     assert network_data["provider"] == "multus"
     selectors = network_data["selectors"]
-    assert selectors["public"] == (
-        f"{config.ENV_DATA['multus_public_net_namespace']}/{config.ENV_DATA['multus_public_net_name']}"
-    )
-    assert selectors["cluster"] == (
-        f"{config.ENV_DATA['multus_cluster_net_namespace']}/{config.ENV_DATA['multus_cluster_net_name']}"
-    )
+    if public_net_created:
+        assert selectors["public"] == (
+            f"{config.ENV_DATA['multus_public_net_namespace']}/{config.ENV_DATA['multus_public_net_name']}"
+        )
+    if cluster_net_created:
+        assert selectors["cluster"] == (
+            f"{config.ENV_DATA['multus_cluster_net_namespace']}/{config.ENV_DATA['multus_cluster_net_name']}"
+        )
 
 
 def verify_managed_service_resources():
