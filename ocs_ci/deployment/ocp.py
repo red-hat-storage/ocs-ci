@@ -12,6 +12,10 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import utils, templating, system
+from ocs_ci.deployment.disconnected import (
+    get_ocp_release_image,
+    mirror_ocp_release_images,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -116,6 +120,13 @@ class OCPDeployment:
                 "stored at: %s",
                 self.cluster_path,
             )
+        if not self.flexy_deployment and config.DEPLOYMENT.get("disconnected"):
+            ocp_relase_image = get_ocp_release_image()
+            if constants.SHA_SEPARATOR in ocp_relase_image:
+                ocp_image_path, ocp_version = ocp_relase_image.split("@")
+            else:
+                ocp_image_path, ocp_version = ocp_relase_image.split(":")
+            mirror_ocp_release_images(ocp_image_path, ocp_version)
         if (
             not self.flexy_deployment
             and config.ENV_DATA["deployment_type"] != "managed"

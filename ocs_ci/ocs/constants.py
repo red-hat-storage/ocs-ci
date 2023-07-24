@@ -1520,6 +1520,7 @@ FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
 REGISTRY_SVC = "registry.ci.openshift.org/ocp/release"
 FLEXY_USER_LOCAL_UID = 101000
 
+OCP_RELEASE_IMAGE_MIRROR_PATH = "ocp/release"
 FLEXY_OCP_RELEASE_IMAGE_MIRROR_PATH = "ocp/release"
 
 # domains required to be accessible through proxy on disconnected cluster
