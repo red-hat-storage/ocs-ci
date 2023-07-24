@@ -122,6 +122,8 @@ class TestCapacityBreakdownUI(ManageTest):
         4. verify the capacity breakdown
         5. delete the PVCs
         6. verify the capacity breakdown
+        7. delete all mgr pods
+        8. verify the capacity breakdown
         """
         test_results = dict()
 
