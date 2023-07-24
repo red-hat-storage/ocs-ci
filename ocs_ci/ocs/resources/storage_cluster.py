@@ -692,7 +692,9 @@ def ocs_install_verification(
         in_transit_encryption_verification()
 
     # Verify olm.maxOpenShiftVersion property
-    verify_max_openshift_version()
+    # check ODF version due to upgrades
+    if ocs_version >= version.VERSION_4_14:
+        verify_max_openshift_version()
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
