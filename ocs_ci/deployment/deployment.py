@@ -1300,6 +1300,35 @@ class Deployment(object):
                 "encryption": {"enabled": True}
             }
 
+        # Use Coustome Storageclass Names
+        if config.ENV_DATA.get("custome_default_storageclass_names"):
+            storageclassnames = config.ENV_DATA.get("storageclassnames")
+
+            keys_to_update = [
+                "cephFilesystems",
+                "cephObjectStores",
+                "cephRBDMirror",
+                "cephNonResilientPools",
+            ]
+
+            for key in keys_to_update:
+                if storageclassnames.get(key):
+                    cluster_data["spec"]["managedResources"][key][
+                        "storageClassName"
+                    ] = storageclassnames[key]
+
+            if cluster_data["spec"].get("nfs") and storageclassnames.get("nfs"):
+                cluster_data["spec"]["nfs"]["storageClassName"] = storageclassnames[
+                    "nfs"
+                ]
+
+            if cluster_data["spec"].get("encryption") and storageclassnames.get(
+                "encryption"
+            ):
+                cluster_data["spec"]["encryption"][
+                    "storageClassName"
+                ] = storageclassnames["encryption"]
+
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
         )
