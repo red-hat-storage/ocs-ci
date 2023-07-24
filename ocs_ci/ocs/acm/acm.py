@@ -198,17 +198,11 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["target-clusters"])
         log.info(f"Select 1st cluster which is {cluster_name_a}")
         self.do_click(
-            format_locator(
-                locator=self.page_nav["cluster-name-selection"],
-                string_to_insert=cluster_name_a,
-            )
+            format_locator(self.page_nav["cluster-name-selection"], cluster_name_a)
         )
         log.info(f"Select 2nd cluster which is {cluster_name_b}")
         self.do_click(
-            format_locator(
-                locator=self.page_nav["cluster-name-selection"],
-                string_to_insert=cluster_name_b,
-            ),
+            format_locator(self.page_nav["cluster-name-selection"], cluster_name_b),
             enable_screenshot=True,
         )
         if ocs_version >= version.VERSION_4_13 and globalnet:
@@ -270,10 +264,7 @@ class AcmAddClusters(AcmPageNavigator):
             raise NoSuchElementException
         log.info("Click on the cluster set created")
         self.do_click(
-            format_locator(
-                locator=self.page_nav["cluster-set-selection"],
-                string_to_insert=cluster_set_name,
-            )
+            format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
         )
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"], enable_screenshot=True)
