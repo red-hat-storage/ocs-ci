@@ -691,6 +691,10 @@ def ocs_install_verification(
     if config.ENV_DATA.get("in_transit_encryption"):
         in_transit_encryption_verification()
 
+    # Verify Custome Storageclass Names
+    if config.ENV_DATA.get("custome_default_storageclass_names"):
+        check_custom_storageclass_presence()
+
     # Verify olm.maxOpenShiftVersion property
     verify_max_openshift_version()
 
@@ -2136,3 +2140,66 @@ def wait_for_consumer_storage_provider_endpoint_in_provider_wnodes(
         func=check_consumer_storage_provider_endpoint_in_provider_wnodes,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def get_storageclass_names_from_storagecluster_spec():
+    """Retrieve storage class names from the storage cluster's spec.
+
+    This function queries the storage cluster's specification and returns a dictionary containing
+    the storage class names for various resources, such as cephFilesystems, cephObjectStores,
+    cephRBDMirror, cephNonResilientPools, nfs, and encryption.
+
+    Returns:
+        dict: A dictionary containing the storage class names for various resources.
+              The keys are the names of the resources, and the values are the respective storage
+              class names. If a resource does not have a storage class name, it will be set to None.
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    data = {}
+
+    keys_to_search = [
+        "cephFilesystems",
+        "cephObjectStores",
+        "cephRBDMirror",
+        "cephNonResilientPools",
+        "nfs",
+        "encryption",
+    ]
+
+    spec_data = sc_obj.get("spec")  # Get the "spec" data once
+
+    for key in keys_to_search:
+        data[key] = (
+            spec_data.get("managedResources", {}).get(key, {}).get("storageClassName")
+        )
+
+    return data
+
+
+def check_custom_storageclass_presence():
+    """
+    Verify if the custom-defined storage class names are present in the `oc get sc` output.
+
+    Raises:
+        ValueError: If any of the custom-defined storage class names is not found in the output.
+
+    Returns:
+        bool: Returns True if all custom-defined storage class names are present in the `oc get sc` output.
+    """
+    sc_from_spec = get_storageclass_names_from_storagecluster_spec()
+    sc_list = run_cmd("oc get sc -o jsonpath='{.items[*].metadata.name}'").split()
+
+    missing_sc = [value for value in sc_from_spec.values() if value not in sc_list]
+
+    if missing_sc:
+        missing_sc_str = ",".join(missing_sc)
+        raise ValueError(
+            f"StorageClasses {missing_sc_str}' mentioned in the spec is not exist in the `oc get sc` output"
+        )
+
+    log.info("Custom-defined storage classes are correctly present.")
+    return True

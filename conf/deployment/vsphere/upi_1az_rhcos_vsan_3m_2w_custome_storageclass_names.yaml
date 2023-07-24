@@ -1,0 +1,14 @@
+---
+# This config is suppose to work on most of DCs we have.
+ENV_DATA:
+  custome_default_storageclass_names: true
+  storageclassnames:
+    cephFilesystems: "storageclass-cephfs"
+    cephObjectStores: "storageclass-ceph-rgw"
+    cephRBDMirror: "storageclass-mirror-rbd"
+    cephNonResilientPools: "cephNonResilientPools"
+    nfs: "storageclass-nfs"
+    encryption: "storageclass-encryption"  
+  
+
+
