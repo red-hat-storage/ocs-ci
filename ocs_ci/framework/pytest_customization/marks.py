@@ -132,6 +132,11 @@ skip_inconsistent = pytest.mark.skip(
     reason="Currently the reduction is too inconsistent leading to inconsistent test results"
 )
 
+skipif_more_than_three_workers = pytest.mark.skipif(
+    config.ENV_DATA["worker_replicas"] > 3,
+    reason="This test cannot run on setup having more than three worker nodes",
+)
+
 # Skipif marks
 skipif_aws_creds_are_missing = pytest.mark.skipif(
     (
