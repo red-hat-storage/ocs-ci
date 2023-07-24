@@ -2029,3 +2029,32 @@ def sample_if_objects_expired(mcg_obj, bucket_name, prefix="", timeout=600, slee
 
     assert sampler.wait_for_func_status(result=True), f"{message} are not expired"
     logger.info(f"{message} are expired")
+
+
+def delete_all_noobaa_buckets(mcg_obj, request):
+    """
+    Deletes all the buckets in noobaa and restores the first.bucket after the current test
+
+    Args:
+        mcg_obj: MCG object
+        request: pytest request object
+    """
+
+    logger.info("Listing all buckets in the cluster")
+    buckets = mcg_obj.s3_client.list_buckets()
+
+    logger.info("Deleting all buckets and its objects")
+    for bucket in buckets["Buckets"]:
+        logger.info(f"Deleting {bucket} and its objects")
+        s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
+        s3_bucket.objects.all().delete()
+        s3_bucket.delete()
+
+    def finalizer():
+        if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
+            logger.info("Creating the default bucket: first.bucket")
+            mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
+        else:
+            logger.info("Skipping creation of first.bucket as it already exists")
+
+    request.addfinalizer(finalizer)

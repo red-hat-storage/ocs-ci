@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import (
+    delete_all_noobaa_buckets,
     sync_object_directory,
     rm_object_recursive,
 )
@@ -202,40 +203,17 @@ class TestBucketDeletion(MCGTest):
                 rm_object_recursive(awscli_pod_session, bucketname, mcg_obj)
                 mcg_obj.s3_resource.Bucket(bucketname).delete()
 
-    @pytest.fixture(scope="function")
-    def default_bucket_teardown(self, request, mcg_obj):
-        """
-        Recreates first.bucket
-        """
-
-        def finalizer():
-            if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
-                logger.info("Creating the default bucket: first.bucket")
-                mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
-            else:
-                logger.info("Skipping creation of first.bucket as it already exists")
-
-        request.addfinalizer(finalizer)
-
     @tier3
     @skipif_managed_service
     @bugzilla("1980299")
     @pytest.mark.polarion_id("OCS-2704")
     @skipif_ocs_version("<4.9")
-    def test_delete_all_buckets(self, mcg_obj, bucket_factory, default_bucket_teardown):
+    def test_delete_all_buckets(self, request, mcg_obj, bucket_factory):
         """
         Test with deletion of all buckets including the default first.bucket.
         """
 
-        logger.info("Listing all buckets in the cluster")
-        buckets = mcg_obj.s3_client.list_buckets()
-
-        logger.info("Deleting all buckets and its objects")
-        for bucket in buckets["Buckets"]:
-            logger.info(f"Deleting {bucket} and its objects")
-            s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
-            s3_bucket.objects.all().delete()
-            s3_bucket.delete()
+        delete_all_noobaa_buckets(mcg_obj, request)
 
         logger.info("Verifying no bucket exists")
         assert not mcg_obj.s3_get_all_bucket_names(), "Failed: Buckets exists"
