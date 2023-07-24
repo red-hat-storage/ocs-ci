@@ -379,15 +379,24 @@ def check_vrg_state(state, namespace):
         return False
 
 
-def wait_for_replication_resources_creation(vr_count, namespace, timeout):
+def wait_for_replication_resources_creation(
+    vr_count,
+    namespace,
+    timeout,
+    pvc_interface=constants.RBD_INTERFACE,
+    vr_vrg_state=constants.VR_VRG_STATE_PRIMARY,
+):
     """
     Wait for replication resources to be created
 
     Args:
+
         vr_count (int): Expected number of VR resources
         namespace (str): the namespace of the VR resources
         timeout (int): time in seconds to wait for VR resources to be created
             or reach expected state
+        pvc_interface (str): PVC Interface name ie rbd or cephfs
+        vr_vrg_state (str): State of the resources(primary or secondary)
     Raises:
         TimeoutExpiredError: In case replication resources not created
 
@@ -401,7 +410,10 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
         logger.error(error_msg)
         raise TimeoutExpiredError(error_msg)
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if (
+        config.MULTICLUSTER["multicluster_mode"] != "metro-dr"
+        or pvc_interface != constants.CEPHFS_INTERFACE
+    ):
         logger.info(f"Waiting for {vr_count} VRs to be created")
         sample = TimeoutSampler(
             timeout=timeout,
@@ -411,29 +423,31 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
         )
         sample.wait_for_func_value(vr_count)
 
-        logger.info(f"Waiting for {vr_count} VRs to reach primary state")
+        logger.info(f"Waiting for {vr_count} VRs to reach {vr_vrg_state} state")
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=5,
             func=check_vr_state,
-            state="primary",
+            state=vr_vrg_state,
             namespace=namespace,
         )
         if not sample.wait_for_func_status(result=True):
-            error_msg = "One or more VR haven't reached expected state primary within the time limit."
+            error_msg = f"One or more VR haven't reached expected state {vr_vrg_state} within the time limit."
             logger.error(error_msg)
             raise TimeoutExpiredError(error_msg)
 
-    logger.info("Waiting for VRG to reach primary state")
+    logger.info(f"Waiting for VRG to reach {vr_vrg_state} state")
     sample = TimeoutSampler(
         timeout=timeout,
         sleep=5,
         func=check_vrg_state,
-        state="primary",
+        state=vr_vrg_state,
         namespace=namespace,
     )
     if not sample.wait_for_func_status(result=True):
-        error_msg = "VRG hasn't reached expected state primary within the time limit."
+        error_msg = (
+            f"VRG hasn't reached expected state {vr_vrg_state} within the time limit."
+        )
         logger.error(error_msg)
         raise TimeoutExpiredError(error_msg)
 
@@ -735,3 +749,27 @@ def gracefully_reboot_ocp_nodes(namespace, drcluster_name):
     else:
         set_current_secondary_cluster_context(namespace)
     gracefully_reboot_nodes()
+
+
+def check_volsync_replication_status(namespace):
+    """
+    Check For
+    Args:
+        namespace:
+
+    Returns:
+
+    """
+    volsync_reps_obj = ocp.OCP(
+        kind=constants.VOLSYNC_REPLICATION_RESOURCE,
+        # resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+        namespace=namespace,
+    )
+    volsync_reps_data = volsync_reps_obj.get()["items"]
+    for volsync_reps in volsync_reps_data:
+        volsync_reps.ocp.wait_for_resource(
+            condition="true",
+            resource_name=volsync_reps,
+            column=constants.STATUS_READYTOUSE,
+            timeout=600,
+        )

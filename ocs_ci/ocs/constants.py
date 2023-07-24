@@ -824,6 +824,8 @@ DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 RDR_MODE = "regional-dr"
 MDR_MODE = "metro-dr"
+VR_VRG_STATE_PRIMARY = "primary"
+VR_VRG_STATE_SECONDARY = "secondary"
 MDR_RESTIC_POD_COUNT = 3
 MDR_VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
@@ -858,6 +860,8 @@ DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 DRPOLICY_STATUS = "Validated"
 RDR_REPLICATION_POLICY = "async"
 RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
+VOLSYNC_REPLICATION_RESOURCE = "replicationsources.volsync.backube"
+VOLSYNC_DESTINATION_RESOURCE = "replicationdestinations.volsync.backube"
 
 # constants
 RBD_INTERFACE = "rbd"
