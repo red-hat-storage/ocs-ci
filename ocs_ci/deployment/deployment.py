@@ -2679,23 +2679,6 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
         self.enable_managed_serviceaccount()
-        # Create backupschedule resource
-        self.create_backup_schedule()
-
-    def create_backup_schedule(self):
-        """
-        Create backupschedule resource only on active hub
-
-        """
-        old_ctx = config.cur_index
-        config.switch_ctx(get_active_acm_index())
-        backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
-        backup_schedule_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="bkp", delete=False
-        )
-        templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
-        run_cmd(f"oc create -f {backup_schedule_yaml.name}")
-        config.switch_ctx(old_ctx)
 
     def enable_managed_serviceaccount(self):
         """

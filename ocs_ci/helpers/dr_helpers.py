@@ -2,6 +2,7 @@
 Helper functions specific for DR
 """
 import logging
+import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -11,9 +12,9 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
-from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler, CommandFailed
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_active_acm_index
+from ocs_ci.utility import version, templating
+from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -699,6 +700,22 @@ def get_fence_state(drcluster_name):
     state = drcluster_obj.get().get("spec").get("clusterFence")
     config.switch_ctx(restore_index)
     return state
+
+
+def create_backup_schedule():
+    """
+    Create backupschedule resource only on active hub
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_active_acm_index())
+    backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
+    backup_schedule_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="bkp", delete=False
+    )
+    templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
+    run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+    config.switch_ctx(old_ctx)
 
 
 def gracefully_reboot_ocp_nodes(namespace, drcluster_name):
