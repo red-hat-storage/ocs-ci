@@ -620,8 +620,10 @@ def get_all_drpolicy():
 def get_managed_cluster_node_ips():
     """
     Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
+
     Returns:
         cluster (list): Returns list of managed cluster, indexes and their node IPs
+
     """
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
     secondary_index = [
@@ -676,6 +678,7 @@ def enable_fence(drcluster_name):
 def configure_drcluster_for_fencing():
     """
     Configures DRClusters for enabling fencing
+
     """
     old_ctx = config.cur_index
     cluster_ip_list = get_managed_cluster_node_ips()
