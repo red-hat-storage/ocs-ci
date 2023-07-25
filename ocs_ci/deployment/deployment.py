@@ -49,7 +49,6 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
     UnsupportedFeatureError,
-    UnexpectedDeploymentConfiguration,
     MDRDeploymentException,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
@@ -141,6 +140,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
+from ocs_ci.utility.utils import get_clusterset_name
 from ocs_ci.deployment.cnv import CNVInstaller
 
 logger = logging.getLogger(__name__)
@@ -279,7 +279,7 @@ class Deployment(object):
 
             logger.info("Creating ManagedClusterSetBinding")
 
-            cluster_set = self.get_clusterset_name()
+            cluster_set = get_clusterset_name()
 
             managedclustersetbinding_obj = templating.load_yaml(
                 constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
@@ -301,32 +301,6 @@ class Deployment(object):
             )
             gitops_obj._has_phase = True
             gitops_obj.wait_for_phase("successful", timeout=720)
-
-    def get_clusterset_name(self):
-        """
-        Function to fetch unique cluster set name used by managed clusters
-
-        Returns: list of cluster set
-
-        """
-
-        cluster_set = []
-        managed_clusters = (
-            ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
-        )
-        # ignore local-cluster here
-        for i in managed_clusters:
-            if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
-                cluster_set.append(
-                    i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL]
-                )
-        if all(x == cluster_set[0] for x in cluster_set):
-            logger.info(f"Found the uniq clusterset {cluster_set[0]}")
-        else:
-            raise UnexpectedDeploymentConfiguration(
-                "There are more then one clusterset added to multiple managedcluters"
-            )
-        return cluster_set
 
     def do_deploy_ocs(self):
         """

@@ -40,7 +40,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
-from ocs_ci.deployment.deployment import Deployment
+from ocs_ci.utility.utils import get_clusterset_name
 
 log = logging.getLogger(__name__)
 
@@ -321,7 +321,7 @@ class AcmAddClusters(AcmPageNavigator):
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
 
-        cluster_set = Deployment().get_clusterset_name()
+        cluster_set = get_clusterset_name()
         cluster_set_name = cluster_set[0]
 
         log.info("Click on the cluster set created")
