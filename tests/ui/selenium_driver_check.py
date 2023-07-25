@@ -2,9 +2,12 @@ import logging
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import tier1
+
 logger = logging.getLogger(__name__)
 
 
+@tier1
 @pytest.mark.order1
 @pytest.mark.parametrize("execution_number", range(2))
 def test_check_driver_creation_login_factory(login_factory, execution_number):
@@ -17,6 +20,7 @@ def test_check_driver_creation_login_factory(login_factory, execution_number):
     assert driver is not None
 
 
+@tier1
 @pytest.mark.order2
 @pytest.mark.parametrize("execution_number", range(2))
 def test_check_driver_creation_login_factory_fail(login_factory, execution_number):
@@ -29,6 +33,7 @@ def test_check_driver_creation_login_factory_fail(login_factory, execution_numbe
     pytest.fail("Fail test_check_driver_creation_login_factory_fail intentionally")
 
 
+@tier1
 @pytest.mark.order3
 @pytest.mark.parametrize("execution_number", range(2))
 def test_check_driver_creation_a(setup_ui_class, execution_number):
@@ -40,6 +45,7 @@ def test_check_driver_creation_a(setup_ui_class, execution_number):
     assert driver is not None
 
 
+@tier1
 @pytest.mark.order3
 @pytest.mark.parametrize("execution_number", range(2))
 def test_check_driver_creation_b(setup_ui_class, execution_number):
@@ -51,6 +57,7 @@ def test_check_driver_creation_b(setup_ui_class, execution_number):
     assert driver is not None
 
 
+@tier1
 @pytest.mark.order4
 @pytest.mark.parametrize("execution_number", range(2))
 def test_check_driver_creation_c(setup_ui_class, execution_number):
@@ -63,6 +70,7 @@ def test_check_driver_creation_c(setup_ui_class, execution_number):
     pytest.fail("Fail test_check_driver_creation_login_factory_fail intentionally")
 
 
+@tier1
 @pytest.mark.order5
 @pytest.mark.parametrize("execution_number", range(50))
 def test_check_driver_creation_d(setup_ui_class, execution_number):
