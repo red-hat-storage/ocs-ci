@@ -29,7 +29,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.dr.dr_workload import BusyBox
+from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -6113,7 +6113,20 @@ def dr_workload(request):
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
 
-        # TODO: Deploy Appset workload
+        for index in range(num_of_appset):
+            workload_details = config.ENV_DATA["dr_workload_appset"][index]
+            workload = BusyBox_AppSet(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
         if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances

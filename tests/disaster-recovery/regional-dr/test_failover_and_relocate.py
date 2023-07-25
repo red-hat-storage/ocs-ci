@@ -38,17 +38,35 @@ class TestFailoverAndRelocate:
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["workload_type", "primary_cluster_down"],
         argvalues=[
             pytest.param(
+                constants.SUBSCRIPTION,
                 False,
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
-                id="primary_up",
+                id="primary_up_subscription",
             ),
             pytest.param(
+                constants.SUBSCRIPTION,
                 True,
                 marks=pytest.mark.polarion_id(polarion_id_primary_down),
-                id="primary_down",
+                id="primary_down_subscription",
+            ),
+            pytest.param(
+                constants.APPLICATION_SET,
+                False,
+                marks=pytest.mark.polarion_id(
+                    polarion_id_primary_up
+                ),  # TODO change polarion id
+                id="primary_up_appset",
+            ),
+            pytest.param(
+                constants.APPLICATION_SET,
+                True,
+                marks=pytest.mark.polarion_id(
+                    polarion_id_primary_down
+                ),  # TODO change polarion id
+                id="primary_down_appset",
             ),
         ],
     )
@@ -57,6 +75,7 @@ class TestFailoverAndRelocate:
         primary_cluster_down,
         setup_acm_ui,
         dr_workload,
+        workload_type,
         nodes_multicluster,
         node_restart_teardown,
     ):
@@ -81,20 +100,23 @@ class TestFailoverAndRelocate:
                 raise NotImplementedError
 
         acm_obj = AcmAddClusters()
-        rdr_workload = dr_workload(num_of_subscription=1)[0]
+        if workload_type == constants.SUBSCRIPTION:
+            rdr_workload = dr_workload(num_of_subscription=1)[0]
+        else:
+            rdr_workload = dr_workload(num_of_subscription=0, num_of_appset=1)[0]
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
         primary_cluster_index = config.cur_index
         primary_cluster_nodes = get_node_objs()
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -132,7 +154,14 @@ class TestFailoverAndRelocate:
             )
         else:
             # Failover action via CLI
-            dr_helpers.failover(secondary_cluster_name, rdr_workload.workload_namespace)
+            dr_helpers.failover(
+                secondary_cluster_name,
+                rdr_workload.workload_namespace,
+                workload_type,
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None,
+            )
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -189,7 +218,14 @@ class TestFailoverAndRelocate:
             )
         else:
             # Relocate action via CLI
-            dr_helpers.relocate(primary_cluster_name, rdr_workload.workload_namespace)
+            dr_helpers.relocate(
+                primary_cluster_name,
+                rdr_workload.workload_namespace,
+                workload_type,
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None,
+            )
 
         # Verify resources deletion from secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
