@@ -18,18 +18,21 @@ from ocs_ci.utility.utils import TimeoutSampler, CommandFailed
 logger = logging.getLogger(__name__)
 
 
-def get_current_primary_cluster_name(namespace):
+def get_current_primary_cluster_name(namespace, workload_type=constants.SUBSCRIPTION):
     """
     Get current primary cluster name based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         str: Current primary cluster name
 
     """
     restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     drpc_data = DRPC(namespace=namespace).get()
     if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_data["spec"]["failoverCluster"]
@@ -39,18 +42,21 @@ def get_current_primary_cluster_name(namespace):
     return cluster_name
 
 
-def get_current_secondary_cluster_name(namespace):
+def get_current_secondary_cluster_name(namespace, workload_type=constants.SUBSCRIPTION):
     """
     Get current secondary cluster name based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         str: Current secondary cluster name
 
     """
     restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     primary_cluster_name = get_current_primary_cluster_name(namespace)
     drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
     config.switch_ctx(restore_index)
@@ -59,61 +65,88 @@ def get_current_secondary_cluster_name(namespace):
             return cluster_name
 
 
-def set_current_primary_cluster_context(namespace):
+def set_current_primary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
     """
     Set current primary cluster context based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     cluster_name = get_current_primary_cluster_name(namespace)
     config.switch_to_cluster_by_name(cluster_name)
 
 
-def set_current_secondary_cluster_context(namespace):
+def set_current_secondary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
     """
     Set secondary cluster context based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     cluster_name = get_current_secondary_cluster_name(namespace)
     config.switch_to_cluster_by_name(cluster_name)
 
 
-def get_scheduling_interval(namespace):
+def get_scheduling_interval(namespace, workload_type=constants.SUBSCRIPTION):
     """
     Get scheduling interval for the workload in the given namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         int: scheduling interval value from DRPolicy
 
     """
     restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     drpolicy_obj = DRPC(namespace=namespace).drpolicy_obj
     interval_value = int(drpolicy_obj.get()["spec"]["schedulingInterval"][:-1])
     config.switch_ctx(restore_index)
     return interval_value
 
 
-def failover(failover_cluster, namespace):
+def failover(
+    failover_cluster,
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    workload_placement_name=None,
+):
     """
     Initiates Failover action to the specified cluster
 
     Args:
         failover_cluster (str): Cluster name to which the workload should be failed over
         namespace (str): Namespace where workload is running
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
 
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
-    drpc_obj = DRPC(namespace=namespace)
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Failover action with failoverCluster:{failover_cluster}")
     assert drpc_obj.patch(
@@ -127,19 +160,32 @@ def failover(failover_cluster, namespace):
     config.switch_ctx(restore_index)
 
 
-def relocate(preferred_cluster, namespace):
+def relocate(
+    preferred_cluster,
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    workload_placement_name=None,
+):
     """
     Initiates Relocate action to the specified cluster
 
     Args:
         preferred_cluster (str): Cluster name to which the workload should be relocated
         namespace (str): Namespace where workload is running
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
 
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
     relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","preferredCluster":"{preferred_cluster}"}}}}'
-    drpc_obj = DRPC(namespace=namespace)
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Relocate action with preferredCluster:{preferred_cluster}")
     assert drpc_obj.patch(
@@ -500,7 +546,9 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         sample.wait_for_func_value(0)
 
 
-def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900):
+def wait_for_all_resources_creation(
+    pvc_count, pod_count, namespace, timeout=900, skip_replication_resources=False
+):
     """
     Wait for workload and replication resources to be created
 
@@ -509,6 +557,7 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
         pod_count (int): Expected number of Pods
         namespace (str): the namespace of the workload
         timeout (int): time in seconds to wait for resource creation
+        skip_replication_resources (bool): if true vr status wont't be check
 
     """
     logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
@@ -528,7 +577,8 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
         sleep=5,
     )
 
-    wait_for_replication_resources_creation(pvc_count, namespace, timeout)
+    if not skip_replication_resources:
+        wait_for_replication_resources_creation(pvc_count, namespace, timeout)
 
 
 def wait_for_all_resources_deletion(

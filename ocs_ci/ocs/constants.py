@@ -2196,3 +2196,11 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
     "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }
+
+# DR
+DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+APPLICATION_SET = "ApplicationSet"
+PLACEMENT = "Placement"
+GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
+APPLICATION_ARGOCD = "applications.argoproj.io"
+PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
