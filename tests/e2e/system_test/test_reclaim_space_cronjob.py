@@ -1,5 +1,4 @@
 import logging
-
 import pytest
 import yaml
 from uuid import uuid4
@@ -29,7 +28,8 @@ ERRMSG = "Error in command"
 @skipif_ocs_version("<4.14")
 class TestReclaimSpaceCronJob(ManageTest):
     """
-    Test that TODO
+    Test that verifies creation of Reclaim Space Cron Jobs for RBD PCSs in openshift-* namespaces
+    The test also verifies that no Reclaim Space Cron Job is created for CephFS PVC in this namespace
     """
 
     def setup(self):
@@ -61,6 +61,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         """
         Test case to check reclaim space cronjobs are created correctly for rbd pvcs in openshift-* namespace
         """
+        timeout = 30
         num_of_samples = 10
         namespace = f"openshift-{uuid4().hex}"
         self.namespace = namespace
@@ -119,7 +120,7 @@ class TestReclaimSpaceCronJob(ManageTest):
             pvc_obj.delete()
 
         # wait since it make take some time for cronjobs to be deleted
-        time.sleep(30)
+        time.sleep(timeout)
         res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after PVC deletion {res}")
         assert (
@@ -142,7 +143,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         self.pvc_objs_created.append(pvc_obj)
 
         # wait since it make take some time for cronjobs to be deleted
-        time.sleep(30)
+        time.sleep(timeout)
         res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after CephFS PVC creation {res}")
         assert (
@@ -156,7 +157,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         Test case to check that no reclaim space job is created for rbd pvc
         in the openshift-* namespace if skipReclaimspaceSchedule value is True
         """
-
+        timeout = 30
         namespace = f"openshift-{uuid4().hex}"
         self.namespace = namespace
         with open(
@@ -199,7 +200,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         self.pvc_objs_created.append(pvc_obj)
 
         # wait since it may take some time for cronjobs to be created
-        time.sleep(30)
+        time.sleep(timeout)
         res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after RBD PVC creation {res}")
         assert (
