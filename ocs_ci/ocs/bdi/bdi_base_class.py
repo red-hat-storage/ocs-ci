@@ -3,7 +3,7 @@ from datetime import datetime
 import logging
 import tempfile
 import ocs_ci.ocs.bdi.config as bdi_config
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import ocp
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
@@ -20,7 +20,6 @@ from ocs_ci.helpers.bdi_helpers import (
 log = logging.getLogger(__name__)
 
 
-@workloads
 class TestBdiWorkloadBaseClass(E2ETest):
     temp_helm_options = tempfile.NamedTemporaryFile(
         mode="w", prefix="helm_options_temp_", delete=False
