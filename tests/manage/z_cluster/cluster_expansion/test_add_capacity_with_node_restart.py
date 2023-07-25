@@ -12,11 +12,12 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.node import get_ocs_nodes
+from ocs_ci.ocs.node import get_ocs_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs.cluster import (
     check_ceph_health_after_add_capacity,
     is_flexible_scaling_enabled,
+    is_vsphere_ipi_cluster,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,9 +78,14 @@ class TestAddCapacityNodeRestart(ManageTest):
             logger.info("add capacity failed")
 
         # Restart nodes while additional storage is being added
-        logger.info("Restart nodes:")
-        logger.info([n.name for n in node_list])
-        nodes.restart_nodes(nodes=node_list, wait=True)
+        node_names = [n.name for n in node_list]
+        logger.info(f"Restart nodes: {node_names}")
+        if is_vsphere_ipi_cluster():
+            nodes.restart_nodes(nodes=node_list, wait=False)
+            wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=300)
+        else:
+            nodes.restart_nodes(nodes=node_list, wait=True)
+
         logger.info("Finished restarting the node list")
 
         # The exit criteria verification conditions here are not complete. When the branch
