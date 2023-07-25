@@ -544,10 +544,22 @@ def upgrade_buckets(bucket_factory_session, awscli_pod_session, mcg_obj_session)
     buckets = bucket_factory_session(amount=3)
 
     # add quota to the first bucket
+
+    update_quota_payload = {
+        "name": buckets[0].name,
+        "quota": {
+            "size": {
+                "unit": "P",
+                "value": 1,
+            },
+            "quantity": {"value": 1},
+        },
+    }
+
     mcg_obj_session.send_rpc_query(
         "bucket_api",
         "update_bucket",
-        {"name": buckets[0].name, "quota": {"unit": "PETABYTE", "size": 1}},
+        update_quota_payload,
     )
 
     # add some data to the first pod
