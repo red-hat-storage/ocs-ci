@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.framework import config
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
     compare_directory,
@@ -453,3 +454,25 @@ def benchmark_fio_factory_fixture(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to
+    Args:
+        items: list of collected tests
+    """
+    skip_list = [
+        "test_create_scale_pods_and_pvcs_using_kube_job_ms",
+        "test_create_scale_pods_and_pvcs_with_ms_consumer",
+        "test_create_scale_pods_and_pvcs_with_ms_consumers",
+        "test_create_and_delete_scale_pods_and_pvcs_with_ms_consumers",
+    ]
+    if not config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        for item in items.copy():
+            if str(item.name) in skip_list:
+                logger.debug(
+                    f"Test {item} is removed from the collected items"
+                    f" since it requires Managed service platform"
+                )
+                items.remove(item)
