@@ -1,10 +1,9 @@
 import logging
 import pytest
 
-
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import tier2, ui
+from ocs_ci.framework.testlib import tier1, ui, polarion_id
 from ocs_ci.ocs.ui.mcg_ui import NamespaceStoreUI
 from ocs_ci.ocs.resources.namespacestore import NamespaceStore
 
@@ -27,8 +26,9 @@ class TestNamespaceStoreUI(object):
             self.namespace_store_obj.delete()
 
     @ui
-    @tier2
+    @tier1
     @pytest.mark.bugzilla("2158922")
+    @polarion_id("OCS-5125")
     def test_create_namespace_store_ui(self, setup_ui_class, pvc_factory):
         """
         1. Create a new PVC on openshift-storage namespce.
