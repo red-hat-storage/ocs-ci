@@ -1,6 +1,5 @@
 import time
 
-from ocs_ci.ocs.ui.base_ui import logger
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
@@ -120,7 +119,8 @@ class BlockAndFile(StorageSystemDetails):
             self.take_screenshot()
             self.copy_dom()
             return {
-                check_name: f"pvc's from UI: {PvcCapacityDeploymentList().get_pvc_names_list()} are not the same as expected pvc's: {pvc_to_size_dict}"
+                check_name: f"pvc's from UI: {PvcCapacityDeploymentList().get_pvc_names_list()} "
+                f"are not the same as expected pvc's: {pvc_to_size_dict}"
             }
 
         for data_struct in PvcCapacityDeploymentList():
