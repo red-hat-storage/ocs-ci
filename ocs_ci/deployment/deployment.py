@@ -30,6 +30,7 @@ from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
+from ocs_ci.helpers.dr_helpers import configure_drcluster_for_fencing
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -91,6 +92,7 @@ from ocs_ci.ocs.utils import (
     enable_console_plugin,
     get_all_acm_indexes,
     get_active_acm_index,
+    enable_mco_console_plugin,
 )
 from ocs_ci.utility.deployment import create_external_secret
 from ocs_ci.utility.flexy import load_cluster_info
@@ -2661,6 +2663,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         self.configure_mirror_peer()
         # Deploy dr policy
         self.deploy_dr_policy()
+        # Configure DRClusters for fencing automation
+        configure_drcluster_for_fencing()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:

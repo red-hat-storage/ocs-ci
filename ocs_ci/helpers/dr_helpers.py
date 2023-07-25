@@ -1,6 +1,7 @@
 """
 Helper functions specific for DR
 """
+import json
 import logging
 import tempfile
 
@@ -12,7 +13,11 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
-from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_active_acm_index
+from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config,
+    get_active_acm_index,
+    get_primary_cluster_config,
+)
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
 
@@ -612,6 +617,39 @@ def get_all_drpolicy():
     return drpolicy_list
 
 
+def get_managed_cluster_node_ips():
+    """
+    Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
+    Returns:
+        cluster (list): Returns list of managed cluster, indexes and their node IPs
+    """
+    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+    secondary_index = [
+        s.MULTICLUSTER["multicluster_index"]
+        for s in get_non_acm_cluster_config()
+        if s.MULTICLUSTER["multicluster_index"] != primary_index
+    ][0]
+    cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
+    cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
+    cluster_data = [
+        [cluster_name_primary, primary_index],
+        [cluster_name_secondary, secondary_index],
+    ]
+    for cluster in cluster_data:
+        config.switch_ctx(cluster[1])
+        logger.info(f"Getting node IPs on managed cluster: {cluster[0]}")
+        node_obj = ocp.OCP(kind=constants.NODE).get()
+        external_ips = []
+        for node in node_obj.get("items"):
+            addresses = node.get("status").get("addresses")
+            for address in addresses:
+                if address.get("type") == "ExternalIP":
+                    external_ips.append(address.get("address"))
+        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
+        cluster.append(external_ips_with_cidr)
+    return cluster_data
+
+
 def enable_fence(drcluster_name):
     """
     Once the managed cluster is fenced, all communication
@@ -633,6 +671,35 @@ def enable_fence(drcluster_name):
         raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
     logger.info(f"Successfully fenced {constants.DRCLUSTER}: {drcluster_name}")
     config.switch_ctx(restore_index)
+
+
+def configure_drcluster_for_fencing():
+    """
+    Configures DRClusters for enabling fencing
+    """
+    old_ctx = config.cur_index
+    cluster_ip_list = get_managed_cluster_node_ips()
+    config.switch_acm_ctx()
+    for cluster in cluster_ip_list:
+        fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
+        fence_ip_cmd = (
+            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_ip_data}'"
+        )
+        logger.info(f"Patching DRCluster: {cluster[0]} to add node IP addresses")
+        run_cmd(fence_ip_cmd)
+
+        fence_annotation_data = """{"metadata": {"annotations": {
+        "drcluster.ramendr.openshift.io/storage-clusterid": "openshift-storage",
+        "drcluster.ramendr.openshift.io/storage-driver": "openshift-storage.rbd.csi.ceph.com",
+        "drcluster.ramendr.openshift.io/storage-secret-name": "rook-csi-rbd-provisioner",
+        "drcluster.ramendr.openshift.io/storage-secret-namespace": "openshift-storage" } } }"""
+        fencing_annotation_cmd = (
+            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_annotation_data}'"
+        )
+        logger.info(f"Patching DRCluster: {cluster[0]} to add fencing annotations")
+        run_cmd(fencing_annotation_cmd)
+
+    config.switch_ctx(old_ctx)
 
 
 def enable_unfence(drcluster_name):
