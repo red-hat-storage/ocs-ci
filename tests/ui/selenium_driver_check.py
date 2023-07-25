@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.ocs.ui.base_ui import SeleniumDriver
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ def test_check_driver_creation_a(setup_ui_class, execution_number):
     Test that the driver is created correctly
     """
     logger.info(f"Execution number: {execution_number}")
-    driver = setup_ui_class
+    driver = SeleniumDriver()
     assert driver is not None
 
 
@@ -53,7 +54,7 @@ def test_check_driver_creation_b(setup_ui_class, execution_number):
     Test that the driver is created correctly
     """
     logger.info(f"Execution number: {execution_number}")
-    driver = setup_ui_class
+    driver = SeleniumDriver()
     assert driver is not None
 
 
@@ -65,7 +66,7 @@ def test_check_driver_creation_c(setup_ui_class, execution_number):
     Test that the driver is created correctly
     """
     logger.info(f"Execution number: {execution_number}")
-    driver = setup_ui_class
+    driver = SeleniumDriver()
     driver.get("https://github.com")
     pytest.fail("Fail test_check_driver_creation_login_factory_fail intentionally")
 
@@ -78,5 +79,5 @@ def test_check_driver_creation_d(setup_ui_class, execution_number):
     Test that the driver is created correctly
     """
     logger.info(f"Execution number: {execution_number}")
-    driver = setup_ui_class
+    driver = SeleniumDriver()
     assert driver is not None
