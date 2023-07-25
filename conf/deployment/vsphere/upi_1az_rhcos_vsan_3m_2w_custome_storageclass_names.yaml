@@ -2,9 +2,9 @@
 ENV_DATA:
   custome_default_storageclass_names: true
   storageclassnames:
-    cephFilesystems: "storageclass-cephfs"
-    cephObjectStores: "storageclass-ceph-rgw"
-    cephRBDMirror: "storageclass-mirror-rbd"
-    cephNonResilientPools: "cephNonResilientPools"
-    nfs: "storageclass-nfs"
-    encryption: "storageclass-encryption" 
+    cephFilesystems: "custom-storageclass-cephfs"
+    cephObjectStores: "custom-storageclass-ceph-rgw"
+    cephRBDMirror: "custom-storageclass-mirror-rbd"
+    cephNonResilientPools: "custom-cephNonResilientPools"
+    nfs: "custom-storageclass-nfs"
+    encryption: "custom-storageclass-encryption" 

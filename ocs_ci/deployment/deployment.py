@@ -1317,14 +1317,12 @@ class Deployment(object):
                         "storageClassName"
                     ] = storageclassnames[key]
 
-            if cluster_data["spec"].get("nfs") and storageclassnames.get("nfs"):
+            if cluster_data["spec"].get("nfs"):
                 cluster_data["spec"]["nfs"]["storageClassName"] = storageclassnames[
                     "nfs"
                 ]
 
-            if cluster_data["spec"].get("encryption") and storageclassnames.get(
-                "encryption"
-            ):
+            if cluster_data["spec"].get("encryption"):
                 cluster_data["spec"]["encryption"][
                     "storageClassName"
                 ] = storageclassnames["encryption"]
