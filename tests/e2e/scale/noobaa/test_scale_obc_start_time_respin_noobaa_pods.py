@@ -23,11 +23,6 @@ def teardown(request):
 
 @scale
 class TestScaleOBCStartTime(E2ETest):
-    """
-    Created OBC without I/O running
-    Created OBC with I/O running using Multicloud Object Gateway
-
-    """
 
     namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
     scale_obc_count = 10
@@ -41,13 +36,13 @@ class TestScaleOBCStartTime(E2ETest):
             pytest.param(
                 *["noobaa-core", constants.NOOBAA_SC],
                 marks=[
-                    pytest.mark.polarion_id("OCS-0000"),
+                    pytest.mark.polarion_id("OCS-5127"),
                 ],
             ),
             pytest.param(
                 *["noobaa-db", constants.NOOBAA_SC],
                 marks=[
-                    pytest.mark.polarion_id("OCS-0000"),
+                    pytest.mark.polarion_id("OCS-5128"),
                 ],
             ),
         ],
@@ -109,7 +104,7 @@ class TestScaleOBCStartTime(E2ETest):
         )
 
         self.nb_pod_start_time.update(pod_start_time)
-        data_file = f"{ocsci_log_path()}/noobaa_pod_star_time.csv"
+        data_file = f"{ocsci_log_path()}/noobaa_pod_start_time.csv"
         with open(f"{data_file}", "w") as fd:
             csv_obj = csv.writer(fd)
             for k, v in self.nb_pod_start_time.items():
