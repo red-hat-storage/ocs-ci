@@ -550,9 +550,11 @@ def upgrade_buckets(bucket_factory_session, awscli_pod_session, mcg_obj_session)
         "quota": {
             "size": {
                 "unit": "P",
+                # The size value here refers to how many Petabytes are allowed
                 "value": 1,
             },
-            "quantity": {"value": 1},
+            # The quantity value here refers to max number of objects
+            "quantity": {"value": 1000},
         },
     }
 
