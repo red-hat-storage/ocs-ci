@@ -728,6 +728,9 @@ class SeleniumDriver(WebDriver):
         if not hasattr(cls, "instance") or not hasattr(cls.instance, "driver"):
             cls.instance = super(SeleniumDriver, cls).__new__(cls)
             cls.instance.driver = cls._set_driver()
+        else:
+            logger.info("SeleniumDriver instance already exists")
+            logger.info(dir(cls.instance))
         return cls.instance.driver
 
     @classmethod
@@ -854,57 +857,57 @@ def login_ui(console_url=None, username=None, password=None):
     login_loc = locators[ocp_version]["login"]
     page_nav_loc = locators[ocp_version]["page"]
     driver = SeleniumDriver()
-    # driver.maximize_window()
-    # driver.implicitly_wait(10)
-    # driver.get(console_url)
-    # # Validate proceeding to the login console before taking any action:
-    # proceed_to_login_console()
-    #
-    # try:
-    #     wait = WebDriverWait(driver, 40)
-    #     if username is not None:
-    #         element = wait.until(
-    #             ec.element_to_be_clickable(
-    #                 (
-    #                     login_loc["username_my_htpasswd"][1],
-    #                     login_loc["username_my_htpasswd"][0],
-    #                 )
-    #             ),
-    #             message="'Log in with my_htpasswd_provider' text is not present",
-    #         )
-    #     else:
-    #         element = wait.until(
-    #             ec.element_to_be_clickable(
-    #                 (
-    #                     login_loc["kubeadmin_login_approval"][1],
-    #                     login_loc["kubeadmin_login_approval"][0],
-    #                 )
-    #             ),
-    #             message="'Log in with kube:admin' text is not present",
-    #         )
-    #     element.click()
-    # except TimeoutException:
-    #     take_screenshot("login")
-    #     copy_dom("login")
-    #     logger.error(traceback.format_stack())
-    #
-    # username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
-    # if username is None:
-    #     username = constants.KUBEADMIN
-    # username_el.send_keys(username)
-    #
-    # password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
-    # password_el.send_keys(password)
-    #
-    # confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
-    # confirm_login_el.click()
-    #
-    # if default_console is True and username is constants.KUBEADMIN:
-    #     wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 60)
-    #
-    # if username is not constants.KUBEADMIN:
-    #     skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 60)
-    #     skip_tour_el.click()
+    driver.maximize_window()
+    driver.implicitly_wait(10)
+    driver.get(console_url)
+    # Validate proceeding to the login console before taking any action:
+    proceed_to_login_console()
+
+    try:
+        wait = WebDriverWait(driver, 40)
+        if username is not None:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["username_my_htpasswd"][1],
+                        login_loc["username_my_htpasswd"][0],
+                    )
+                ),
+                message="'Log in with my_htpasswd_provider' text is not present",
+            )
+        else:
+            element = wait.until(
+                ec.element_to_be_clickable(
+                    (
+                        login_loc["kubeadmin_login_approval"][1],
+                        login_loc["kubeadmin_login_approval"][0],
+                    )
+                ),
+                message="'Log in with kube:admin' text is not present",
+            )
+        element.click()
+    except TimeoutException:
+        take_screenshot("login")
+        copy_dom("login")
+        logger.error(traceback.format_stack())
+
+    username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
+    if username is None:
+        username = constants.KUBEADMIN
+    username_el.send_keys(username)
+
+    password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
+    password_el.send_keys(password)
+
+    confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
+    confirm_login_el.click()
+
+    if default_console is True and username is constants.KUBEADMIN:
+        wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 60)
+
+    if username is not constants.KUBEADMIN:
+        skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 60)
+        skip_tour_el.click()
     return driver
 
 
