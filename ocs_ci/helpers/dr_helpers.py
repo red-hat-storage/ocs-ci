@@ -751,25 +751,82 @@ def gracefully_reboot_ocp_nodes(namespace, drcluster_name):
     gracefully_reboot_nodes()
 
 
-def check_volsync_replication_status(namespace):
+def wait_for_volsync_replication_status(namespace, timeout=5):
     """
-    Check For
+    Wait for Volsync replication to start the sync
+
     Args:
-        namespace:
+        namespace (str): Namespace where workloads are running
+        timeout (int): time in seconds to wait for volsync replication
+
 
     Returns:
+        bool: True if sync start's
 
+    Raises:
+        TimeoutExpiredError: In case of sync is stopped
     """
+    sync_count = 1
+    nonsync_count = 1
     volsync_reps_obj = ocp.OCP(
         kind=constants.VOLSYNC_REPLICATION_RESOURCE,
-        # resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
         namespace=namespace,
     )
     volsync_reps_data = volsync_reps_obj.get()["items"]
     for volsync_reps in volsync_reps_data:
-        volsync_reps.ocp.wait_for_resource(
-            condition="true",
-            resource_name=volsync_reps,
-            column=constants.STATUS_READYTOUSE,
-            timeout=600,
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=3,
+            func=check_volsync_replication_status,
+            namespace=namespace,
+            resource_name=volsync_reps["metadata"]["name"],
         )
+        if not sample.wait_for_func_status(result=True):
+            error_msg = f"Sync stopped for {volsync_reps['metadata']['name']}"
+            logger.error(error_msg)
+            nonsync_count += nonsync_count
+        else:
+            sync_count += sync_count
+    logger.info(nonsync_count)
+    logger.info(sync_count)
+    if nonsync_count > 1:
+        error_msg = (
+            f"Failed to check {constants.VOLSYNC_REPLICATION_RESOURCE} within the time"
+            f" limit on cluster"
+        )
+        raise TimeoutExpiredError(error_msg)
+
+    return True
+
+
+def check_volsync_replication_status(namespace, resource_name):
+    """
+    Check if volsync replication has started on not
+
+    Args:
+        namespace (str): Namespace where workloads are running
+        resource_name (str): Resource name to validate status
+
+    Returns:
+        bool: True if contains states values, False otherwise
+
+
+    """
+    volsync_reps_obj = ocp.OCP(
+        kind=constants.VOLSYNC_REPLICATION_RESOURCE,
+        resource_name=resource_name,
+        namespace=namespace,
+    )
+    volsync_reps = volsync_reps_obj.get()
+    try:
+        logger.info(f"Checking Syncing for {volsync_reps['metadata']['name']}")
+        if (
+            volsync_reps["status"]["nextSyncTime"]
+            and volsync_reps["status"]["lastSyncDuration"]
+            and volsync_reps["status"]["lastSyncTime"]
+        ):
+            logger.info(f"Data Syncing for {volsync_reps['metadata']['name']}")
+    except KeyError:
+        logger.warning(f"Sync not working {volsync_reps['metadata']['name']}")
+        return False
+    return True
