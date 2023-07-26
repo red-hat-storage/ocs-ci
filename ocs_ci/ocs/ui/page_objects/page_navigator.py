@@ -114,6 +114,15 @@ class PageNavigator(BaseUI):
 
         return ObjectService()
 
+    def nav_object_storage_page(self):
+        """
+        Navigate to Object Storage page
+
+        """
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["object_storage_page"], timeout=90)
+        self.page_has_loaded(retries=15)
+
     def navigate_quickstarts_page(self):
         """
         Navigate to Quickstarts Page

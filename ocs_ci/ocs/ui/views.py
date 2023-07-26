@@ -325,7 +325,7 @@ obc = {
         By.CSS_SELECTOR,
     ),
     "namespace_store_create": (
-        "button[data-test='item-create']",
+        "button[id='yaml-create']",
         By.CSS_SELECTOR,
     ),
     "namespace_store_name": ('input[id="ns-name"]', By.CSS_SELECTOR),
@@ -531,6 +531,10 @@ page_nav_4_6 = {
 
 page_nav_4_10 = {
     "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
+}
+
+page_nav_4_14 = {
+    "object_storage_page": ("Object Storage", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -1517,7 +1521,7 @@ topology = {
 locators = {
     "4.14": {
         "login": {**login, **login_4_11, **login_4_14},
-        "page": {**page_nav, **page_nav_4_10},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
         "generic": generic_locators,
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "deployment": {

@@ -258,7 +258,8 @@ class NamespaceStoreUI(PageNavigator):
         """
         logger.info("Create namespace-store via UI")
 
-        self.nav_odf_default_page().nav_namespace_store_tab()
+        self.nav_object_storage_page()
+        self.do_click(locator=self.validation_loc["namespacestore_page"])
         self.do_click(self.sc_loc["namespace_store_create"])
         self.do_send_keys(self.sc_loc["namespace_store_name"], namespace_store_name)
 
