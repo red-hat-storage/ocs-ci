@@ -4,7 +4,7 @@ ENV_DATA:
   storageclassnames:
     cephFilesystems: "custom-storageclass-cephfs"
     cephObjectStores: "custom-storageclass-ceph-rgw"
-    cephRBDMirror: "custom-storageclass-mirror-rbd"
+    cephBlockPools: "custom-storageclass-blockpools"
     cephNonResilientPools: "custom-cephNonResilientPools"
     nfs: "custom-storageclass-nfs"
     encryption: "custom-storageclass-encryption" 

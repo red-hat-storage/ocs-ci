@@ -2145,16 +2145,17 @@ def wait_for_consumer_storage_provider_endpoint_in_provider_wnodes(
 
 
 def get_storageclass_names_from_storagecluster_spec():
-    """Retrieve storage class names from the storage cluster's spec.
+    """
+    Retrieve storage class names from the storage cluster's spec.
 
     This function queries the storage cluster's specification and returns a dictionary containing
     the storage class names for various resources, such as cephFilesystems, cephObjectStores,
-    cephRBDMirror, cephNonResilientPools, nfs, and encryption.
+    cephBlockPools, cephNonResilientPools, nfs, and encryption.
 
     Returns:
         dict: A dictionary containing the storage class names for various resources.
-              The keys are the names of the resources, and the values are the respective storage
-              class names. If a resource does not have a storage class name, it will be set to None.
+            The keys are the names of the resources, and the values are the respective storage
+            class names. If a resource does not have a storage class name, it will be set to None.
     """
     sc_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
@@ -2166,7 +2167,7 @@ def get_storageclass_names_from_storagecluster_spec():
     keys_to_search = [
         "cephFilesystems",
         "cephObjectStores",
-        "cephRBDMirror",
+        "cephBlockPools",
         "cephNonResilientPools",
         "nfs",
         "encryption",

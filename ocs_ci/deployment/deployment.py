@@ -1301,13 +1301,13 @@ class Deployment(object):
             }
 
         # Use Coustome Storageclass Names
-        if config.ENV_DATA.get("custome_default_storageclass_names"):
+        if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
 
             keys_to_update = [
                 "cephFilesystems",
                 "cephObjectStores",
-                "cephRBDMirror",
+                "cephBlockPools",
                 "cephNonResilientPools",
             ]
 
