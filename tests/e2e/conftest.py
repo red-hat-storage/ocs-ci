@@ -719,10 +719,9 @@ def pytest_collection_modifyitems(items):
     ]
     if not config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         for item in items.copy():
-            for testname in skip_list:
-                if testname in str(item.fspath):
-                    logger.debug(
-                        f"Test {item} is removed from the collected items"
-                        f" since it requires Managed service platform"
-                    )
-                    items.remove(item)
+            if str(item.name) in skip_list:
+                logger.debug(
+                    f"Test {item} is removed from the collected items"
+                    f" since it requires Managed service platform"
+                )
+                items.remove(item)
