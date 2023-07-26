@@ -3,4 +3,3 @@ kind: Namespace
 metadata:
   annotations:
     skipReclaimspaceSchedule: "true"
-  name:

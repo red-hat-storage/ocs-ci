@@ -8,10 +8,9 @@ from tempfile import NamedTemporaryFile
 
 
 from ocs_ci.framework.testlib import (
-    skipif_ocp_version,
     skipif_ocs_version,
     ManageTest,
-    tier3,
+    tier2,
 )
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.helpers.performance_lib import run_oc_command
@@ -23,13 +22,12 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
-@tier3
-@skipif_ocp_version("<4.14")
+@tier2
 @skipif_ocs_version("<4.14")
 class TestReclaimSpaceCronJob(ManageTest):
     """
-    Test that verifies creation of Reclaim Space Cron Jobs for RBD PCSs in openshift-* namespaces
-    The test also verifies that no Reclaim Space Cron Job is created for CephFS PVC in this namespace
+    Test that verifies automatic creation of Reclaim Space Cron Jobs for RBD PVCs in openshift-* namespaces
+    The test also verifies that no Reclaim Space Cron Job is created automatically for CephFS PVC in this namespace
     """
 
     def setup(self):
@@ -65,14 +63,14 @@ class TestReclaimSpaceCronJob(ManageTest):
         num_of_samples = 10
         namespace = f"openshift-{uuid4().hex}"
         self.namespace = namespace
-        res = run_oc_command(cmd=f"create namespace {self.namespace}")
-        assert ERRMSG not in res[0], (
-            f"Failed to create namespace with name {namespace}" f"got result: {res}"
+        result = run_oc_command(cmd=f"create namespace {self.namespace}")
+        assert ERRMSG not in result[0], (
+            f"Failed to create namespace with name {namespace}" f"got result: {result}"
         )
         logger.info(f"Namespace {namespace} created")
 
-        res = run_oc_command(cmd=f"get namespace {namespace} -o yaml")
-        namespace_dict = yaml.safe_load("\n".join(res))
+        result = run_oc_command(cmd=f"get namespace {namespace} -o yaml")
+        namespace_dict = yaml.safe_load("\n".join(result))
 
         schedule = namespace_dict["metadata"]["annotations"][
             "reclaimspace.csiaddons.openshift.io/schedule"
@@ -98,14 +96,14 @@ class TestReclaimSpaceCronJob(ManageTest):
             self.pvc_objs_created.append(pvc_obj)
 
         # wait since it may take some time for cronjobs to be created
-        time.sleep(30)
-        res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
-        logger.info(f"Reclaim space jobs after PVC creation {res}")
+        time.sleep(timeout)
+        result = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
+        logger.info(f"Reclaim space jobs after PVC creation {result}")
         assert (
-            len(res) > 1
+            len(result) > 1
         ), f"No reclaim space cron jobs exist in namespace {namespace}"
         cronjob_names = []
-        for j in res[1:]:
+        for j in result[1:]:
             cronjob_names.append(j.split()[0])
 
         for pvc_obj in self.pvc_objs_created:
@@ -114,18 +112,18 @@ class TestReclaimSpaceCronJob(ManageTest):
             ]
             assert (
                 len(cronjob_for_pvc) == 1
-            ), f"No reclaim space cron job for pvc {pvc_obj.name} created"
+            ), f"Expected exactly one reclaim space cron job for  pvc {pvc_obj.name}, {len(cronjob_for_pvc)} found."
         logger.info("Existence of reclaim space cron jobs for RBD PVCs was validated.")
         for pvc_obj in self.pvc_objs_created:
             pvc_obj.delete()
 
         # wait since it make take some time for cronjobs to be deleted
         time.sleep(timeout)
-        res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
-        logger.info(f"Reclaim space jobs after PVC deletion {res}")
+        result = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
+        logger.info(f"Reclaim space jobs after PVC deletion {result}")
         assert (
-            len(res) == 1
-        ), f"After PVCs deletion some reclaimspacecronjobs were left {res}"
+            len(result) == 1
+        ), f"After PVCs deletion some reclaimspacecronjobs were left {result}"
 
         # create CephFS PVC and test that no reclaim space job created for it
         try:
@@ -144,11 +142,11 @@ class TestReclaimSpaceCronJob(ManageTest):
 
         # wait since it make take some time for cronjobs to be deleted
         time.sleep(timeout)
-        res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
-        logger.info(f"Reclaim space jobs after CephFS PVC creation {res}")
+        result = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
+        logger.info(f"Reclaim space jobs after CephFS PVC creation {result}")
         assert (
-            len(res) == 1
-        ), f"After CephtFS PVC creation reclaim space cron job exists: {res}"
+            len(result) == 1
+        ), f"After CephtFS PVC creation reclaim space cron job exists: {result}"
         logger.info("No reclaim space cron job was created for CephFS PVCs")
         pvc_obj.delete()
 
@@ -161,9 +159,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         namespace = f"openshift-{uuid4().hex}"
         self.namespace = namespace
         with open(
-            os.path.join(
-                constants.TEMPLATE_CSI_ADDONS_DIR, "NamespaceSkipReclaim.yaml"
-            ),
+            os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "ReclaimSpace_skip.yaml"),
             "r",
         ) as stream:
             try:
@@ -192,6 +188,7 @@ class TestReclaimSpaceCronJob(ManageTest):
                 size="1Gi",
                 namespace=namespace,
             )
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
         except Exception as e:
             logger.exception(f"The PVC was not created, exception [{str(e)}]")
             raise PVCNotCreated("PVC did not reach BOUND state.")
@@ -204,7 +201,8 @@ class TestReclaimSpaceCronJob(ManageTest):
         res = run_oc_command(cmd="get reclaimspacecronjob", namespace=namespace)
         logger.info(f"Reclaim space jobs after RBD PVC creation {res}")
         assert (
-            len(res) == 1
+            len(res)
+            == 1  # column names are always returned, so len==1 means no cron jobs exist
         ), f"For RBD PVC creation reclaim space cron job exists: {res}"
         logger.info(
             "No reclaim space cron job was created for RBD PVC if skipReclaimspaceSchedule is True."
