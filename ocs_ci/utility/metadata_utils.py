@@ -176,15 +176,21 @@ def available_subvolumes(sc_name, toolbox_pod, fs):
         list: subvolumes available for rbd or cephfs
 
     """
-    if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
+    if (
+        sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS
+        or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+    ):
         cephfs_subvolumes = toolbox_pod.exec_cmd_on_pod(
             f"ceph fs subvolume ls {fs} --group_name csi"
         )
         log.info(f"available cephfs subvolumes-----{cephfs_subvolumes}")
         return cephfs_subvolumes
-
     elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
         rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod(f"rbd ls {fs} --format json")
+        log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")
+        return rbd_cephblockpool
+    elif sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
+        rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod(f"rbd ls --format json")
         log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")
         return rbd_cephblockpool
     else:
@@ -207,10 +213,16 @@ def created_subvolume(available_subvolumes, updated_subvolumes, sc_name):
     for sub_vol in updated_subvolumes:
         if sub_vol not in available_subvolumes:
             created_subvolume = sub_vol
-            if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
+            if (
+                sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS
+                or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            ):
                 log.info(f"created sub volume---- {created_subvolume['name']}")
                 return created_subvolume["name"]
-            elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
+            elif (
+                sc_name == constants.DEFAULT_STORAGECLASS_RBD
+                or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            ):
                 log.info(f"created sub volume---- {created_subvolume}")
                 return created_subvolume
             else:
@@ -244,7 +256,10 @@ def fetch_metadata(
         json: metadata details
 
     """
-    if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
+    if (
+        sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS
+        or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+    ):
         if snapshot:
             snap_subvolume = toolbox_pod.exec_cmd_on_pod(
                 f"ceph fs subvolume snapshot ls {fs} {created_subvol} --group_name=csi --format=json"
@@ -265,6 +280,14 @@ def fetch_metadata(
             )
         metadata = toolbox_pod.exec_cmd_on_pod(
             f"rbd image-meta ls {fs}/{created_subvol} --format=json"
+        )
+    elif sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
+        if snapshot:
+            created_subvol = created_subvolume(
+                available_subvolumes, updated_subvolumes, sc_name
+            )
+        metadata = toolbox_pod.exec_cmd_on_pod(
+            f"rbd image-meta ls {created_subvol} --format=json"
         )
     else:
         log.exception("Metadata feature is not supported for this storage class")
@@ -320,3 +343,33 @@ def validate_metadata(
         assert (
             namespace == metadata["csi.storage.k8s.io/volumesnapshot/namespace"]
         ), "Error: namespace is not as expected"
+
+
+def update_testdata_for_external_modes(
+    sc_name,
+    fs,
+    external_mode=False,
+):
+    """
+    Update the file sytem and storage class names for external mode clusters
+
+    Args:
+        sc_name (str): storage class
+        fs (str): file system
+        external_mode(bool): External mode or not
+
+    Returns:
+        sc_name (str): storage class
+        fs (str): file system
+
+    """
+    if external_mode:
+        if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
+            fs = "fsvol001"
+            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
+            fs = ""
+            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        else:
+            log.exception("Metadata feature is not supported for this storage class")
+    return fs, sc_name
