@@ -2097,6 +2097,24 @@ def modify_haproxyservice():
 
     replace_content_in_file(constants.TERRAFORM_HAPROXY_SERVICE, to_change, execstop)
 
+    if config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
+        "haproxy_router_image"
+    ):
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "quay.io/openshift/origin-haproxy-router",
+            config.DEPLOYMENT["haproxy_router_image"],
+        )
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "podman pull",
+            (
+                "podman pull --tls-verify=false "
+                f"--creds {config.DEPLOYMENT['mirror_registry_user']}:"
+                f"{config.DEPLOYMENT['mirror_registry_password']}"
+            ),
+        )
+
 
 def assign_ips(num_of_vips):
     """

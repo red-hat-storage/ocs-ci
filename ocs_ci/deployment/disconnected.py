@@ -530,6 +530,14 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
     ics = "\n".join(stdout_lines[ics_index : stdout_lines.index("", ics_index)])
     icsp = "\n".join(stdout_lines[icsp_index:])
 
+    # parse haproxy-router image from the oc adm release mirror command output
+    haproxy_router_line = [
+        line
+        for line in stdout_lines
+        if "haproxy-router" in line and config.DEPLOYMENT["mirror_registry"] in line
+    ][0]
+    config.DEPLOYMENT["haproxy_router_image"] = haproxy_router_line.split()[1]
+
     return (
         f"{config.DEPLOYMENT['mirror_registry']}/{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}",
         ocp_version,
