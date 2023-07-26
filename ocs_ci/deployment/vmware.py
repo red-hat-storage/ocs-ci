@@ -882,6 +882,10 @@ class VSPHEREUPI(VSPHEREBASE):
             install_config_obj["sshKey"] = self.get_ssh_key()
             # prepare configuration for disconnected deployment
             if config.DEPLOYMENT.get("disconnected"):
+                # set non-existing gateway, to make the cluster disconnected
+                config.ENV_DATA["gateway"] = "0.0.0.0"
+                # set DNS server accessible from the disconnected env
+                config.ENV_DATA["dns"] = config.DEPLOYMENT["disconnected_dns_server"]
                 ocp_relase_image = get_ocp_release_image()
                 if constants.SHA_SEPARATOR in ocp_relase_image:
                     ocp_image_path, _ = ocp_relase_image.split("@")
