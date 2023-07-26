@@ -1005,8 +1005,8 @@ def get_openshift_client(
             extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
         try:
             client_version = run_cmd(f"{client_binary_path} version --client")
-        except CommandFailed:
-            log.error("Unable to get version from downloaded client.")
+        except Exception as e:
+            log.error(f"Unable to get version from downloaded client. {e}")
         if client_version:
             try:
                 delete_file(client_binary_backup)
