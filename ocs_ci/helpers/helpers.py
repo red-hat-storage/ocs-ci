@@ -241,6 +241,7 @@ def create_pod(
     ports=None,
     deploy_pod_status=constants.STATUS_COMPLETED,
     subpath=None,
+    deployment=False,
 ):
     """
     Create a pod
@@ -268,6 +269,7 @@ def create_pod(
         deploy_pod_status (str): Expected status of deploy pod. Applicable
             only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
+        deployment (bool): True for Deployment creation, False otherwise
 
     Returns:
         Pod: A Pod instance
@@ -276,6 +278,7 @@ def create_pod(
         AssertionError: In case of any failure
 
     """
+
     if (
         interface_type == constants.CEPHBLOCKPOOL
         or interface_type == constants.CEPHBLOCKPOOL_THICK
@@ -285,20 +288,19 @@ def create_pod(
     else:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
-    if dc_deployment:
+    if dc_deployment or deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(f"test-{interface}", "pod")
     pod_data["metadata"]["name"] = pod_name
     pod_data["metadata"]["namespace"] = namespace
-    if dc_deployment:
+    if dc_deployment or deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
-
     if pvc_name:
-        if dc_deployment:
+        if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = pvc_name
@@ -313,7 +315,11 @@ def create_pod(
             pod_data["spec"]["containers"][0]["ports"][0] = ports
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
+        if pod_dict_path in [
+            constants.FEDORA_DC_YAML,
+            constants.FIO_DC_YAML,
+            constants.FIO_DEPLOYMENT_YAML,
+        ]:
             temp_dict = [
                 {
                     "devicePath": raw_block_device,
@@ -328,7 +334,6 @@ def create_pod(
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]
-
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "volumeDevices"
             ] = temp_dict
@@ -357,40 +362,40 @@ def create_pod(
                 pod_data.get("spec").get("volumes")[0].get("name")
             )
     if security_context:
-        if dc_deployment:
+        if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "securityContext"
             ] = security_context
         else:
             pod_data["spec"]["containers"][0]["securityContext"] = security_context
     if command:
-        if dc_deployment:
+        if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["command"] = command
         else:
             pod_data["spec"]["containers"][0]["command"] = command
     if command_args:
-        if dc_deployment:
+        if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = command_args
         else:
             pod_data["spec"]["containers"][0]["args"] = command_args
 
     if node_name:
-        if dc_deployment:
+        if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["nodeName"] = node_name
         else:
             pod_data["spec"]["nodeName"] = node_name
 
     if node_selector:
-        if dc_deployment:
+        if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["nodeSelector"] = node_selector
         else:
             pod_data["spec"]["nodeSelector"] = node_selector
 
-    if sa_name and dc_deployment:
+    if sa_name and (dc_deployment or deployment):
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
 
     if subpath:
-        if dc_deployment:
+        if dc_deployment or deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0][
                 "subPath"
             ] = subpath
@@ -415,9 +420,24 @@ def create_pod(
         )
         dpod_list = pod.get_all_pods(namespace=namespace)
         for dpod in dpod_list:
-            if "-1-deploy" not in dpod.name:
+            labels = dpod.get().get("metadata").get("labels")
+            if not any("deployer-pod-for" in label for label in labels):
                 if pod_name in dpod.name:
                     return dpod
+    elif deployment:
+        deployment_obj = create_resource(**pod_data)
+        logger.info(deployment_obj.name)
+        deployment_name = deployment_obj.name
+        label = f"name={deployment_name}"
+        assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=label,
+            timeout=360,
+            sleep=3,
+        )
+        pod_dict = pod.get_pods_having_label(label=label, namespace=namespace)[0]
+        return pod.Pod(**pod_dict)
+
     else:
         pod_obj = pod.Pod(**pod_data)
         pod_name = pod_data.get("metadata").get("name")
