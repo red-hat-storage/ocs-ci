@@ -151,7 +151,7 @@ class TestNfsEnable(ManageTest):
             self.namespace,
         )
 
-        if platform == "aws":
+        if platform == constants.AWS_PLATFORM:
             # Create loadbalancer service for nfs
             self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
                 self.storage_cluster_obj,
@@ -167,7 +167,7 @@ class TestNfsEnable(ManageTest):
             self.sc,
             nfs_ganesha_pod_name,
         )
-        if platform == "aws":
+        if platform == constants.AWS_PLATFORM:
             # Delete ocs nfs Service
             nfs_utils.delete_nfs_load_balancer_service(
                 self.storage_cluster_obj,
