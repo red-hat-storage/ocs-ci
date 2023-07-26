@@ -512,11 +512,29 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         # f"--release-image-signature-to-dir {config.ENV_DATA['cluster_path']} "
         # "--apply-release-image-signature"
     )
-    exec_cmd(cmd, timeout=7200)
+    result = exec_cmd(cmd, timeout=7200)
+    # parse imageContentSources and ImageContentSourcePolicy from oc adm release mirror command output
+    stdout_lines = result.stdout.decode().splitlines()
+    ics_index = (
+        stdout_lines.index(
+            "To use the new mirrored repository to install, add the following section to the install-config.yaml:"
+        )
+        + 2
+    )
+    icsp_index = (
+        stdout_lines.index(
+            "To use the new mirrored repository for upgrades, use the following to create an ImageContentSourcePolicy:"
+        )
+        + 2
+    )
+    ics = "\n".join(stdout_lines[ics_index : stdout_lines.index("", ics_index)])
+    icsp = "\n".join(stdout_lines[icsp_index:])
 
     return (
         f"{config.DEPLOYMENT['mirror_registry']}/{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}",
         ocp_version,
+        ics,
+        icsp,
     )
 
 

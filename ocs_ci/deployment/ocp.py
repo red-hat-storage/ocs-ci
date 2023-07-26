@@ -126,7 +126,8 @@ class OCPDeployment:
                 ocp_image_path, ocp_version = ocp_relase_image.split("@")
             else:
                 ocp_image_path, ocp_version = ocp_relase_image.split(":")
-            mirror_ocp_release_images(ocp_image_path, ocp_version)
+            _, _, ics, _ = mirror_ocp_release_images(ocp_image_path, ocp_version)
+            config.RUN["imageContentSources"] = ics
         if (
             not self.flexy_deployment
             and config.ENV_DATA["deployment_type"] != "managed"

@@ -892,14 +892,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 else:
                     ocp_image_path, _ = ocp_relase_image.split(":")
 
-                install_config_obj["imageContentSources"] = [
-                    {
-                        "mirrors": [
-                            f"{config.DEPLOYMENT['mirror_registry']}/{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}"
-                        ],
-                        "source": ocp_image_path,
-                    },
-                ]
+                install_config_obj.update(
+                    yaml.safe_load(config.RUN["imageContentSources"])
+                )
                 cluster_domain = (
                     f"{config.ENV_DATA.get('cluster_name')}."
                     f"{config.ENV_DATA.get('base_domain')}"
