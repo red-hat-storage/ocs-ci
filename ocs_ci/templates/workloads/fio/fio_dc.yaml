@@ -14,9 +14,6 @@ spec:
       containers:
         - name: fio
           image: datawiseio/fio:latest
-          securityContext:
-             capabilities:
-               add: ["SYS_ADMIN"]
           volumeDevices:
             - devicePath: /dev/rbdblock
               name: my-volume
