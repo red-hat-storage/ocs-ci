@@ -692,7 +692,7 @@ def ocs_install_verification(
         in_transit_encryption_verification()
 
     # Verify Custome Storageclass Names
-    if config.ENV_DATA.get("custome_default_storageclass_names"):
+    if config.ENV_DATA.get("custom_default_storageclass_names"):
         check_custom_storageclass_presence()
 
     # Verify olm.maxOpenShiftVersion property

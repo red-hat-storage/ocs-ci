@@ -1,6 +1,6 @@
 # This config is suppose to work on most of DCs we have.
 ENV_DATA:
-  custome_default_storageclass_names: true
+  custom_default_storageclass_names: true
   storageclassnames:
     cephFilesystems: "custom-storageclass-cephfs"
     cephObjectStores: "custom-storageclass-ceph-rgw"
