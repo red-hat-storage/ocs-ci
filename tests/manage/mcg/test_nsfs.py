@@ -1,5 +1,4 @@
 import logging
-
 import pytest
 
 from ocs_ci.framework.testlib import MCGTest, tier1, tier3
@@ -15,6 +14,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.utility.retry import retry
+from tests.conftest import revert_noobaa_endpoint_scc_class
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @skipif_mcg_only
 @skipif_ocs_version("<4.10")
 @ignore_leftover_label(constants.NOOBAA_ENDPOINT_POD_LABEL)
+@pytest.mark.usefixtures(revert_noobaa_endpoint_scc_class.__name__)
 class TestNSFSObjectIntegrity(MCGTest):
     """
     Test the integrity of IO operations on NSFS buckets
