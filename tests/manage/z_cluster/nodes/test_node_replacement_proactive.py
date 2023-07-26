@@ -22,7 +22,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ms_consumer,
     brown_squad,
 )
-
+from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -243,6 +243,10 @@ class TestNodeReplacementWithIO(ManageTest):
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
+        assert (
+            verify_storagecluster_nodetopology
+        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+
 
 @tier4a
 @ignore_leftovers
@@ -284,6 +288,10 @@ class TestNodeReplacement(ManageTest):
             timeout=1800
         ), "Data re-balance failed to complete"
 
+        assert (
+            verify_storagecluster_nodetopology
+        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+
 
 @tier4a
 @brown_squad
@@ -319,3 +327,7 @@ class TestNodeReplacementTwice(ManageTest):
             assert not (
                 node_name_to_delete in str(tree_output)
             ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"
+
+            assert (
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
