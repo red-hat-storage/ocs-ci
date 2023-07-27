@@ -224,6 +224,7 @@ class FlexyBase(object):
                                 "CIDR": config.ENV_DATA["machine_cidr"],
                                 "internal_CIDR": config.ENV_DATA["machine_cidr"],
                                 "network": config.ENV_DATA["vm_network"],
+                                "internal_network": config.ENV_DATA["vm_network"],
                             },
                             "create_opts": {
                                 "type": ":clone",
