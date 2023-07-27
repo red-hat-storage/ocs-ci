@@ -1377,7 +1377,7 @@ class VSPHEREUPI(VSPHEREBASE):
         # delete PVC's
         pvcs_objs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in pvcs_objs:
-            if pvc_obj.backed_sc == "thin-csi":
+            if pvc_obj.backed_sc == "thin-csi" or pvc_obj.backed_sc == "thin-csi-odf":
                 pvc_name = pvc_obj.name
                 pv_name = pvc_obj.backed_pv
 
