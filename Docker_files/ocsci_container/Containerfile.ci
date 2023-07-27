@@ -30,9 +30,14 @@ ENV OCS_CI_DIR="/opt/ocs-ci" \
 
 WORKDIR "${OCS_CI_DIR}"
 
+# Download and install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/
+
 RUN curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar -C /usr/local/bin -zxvf - oc
 
-RUN dnf install -y --nodocs python38 git jq rsync \
+RUN dnf install -y --nodocs python38 git jq rsync make \
     && dnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf /var/lib/dnf/repos /var/log/dnf.librepo.log /var/log/dnf.log /var/log/dnf.rpm.log /var/log/hawkey.log /var/cache/ldconfig \
     && curl -sL https://github.com/mikefarah/yq/releases/download/v4.32.2/yq_linux_amd64.tar.gz | tar -C /usr/local/bin -zxvf - ./yq_linux_amd64 \
