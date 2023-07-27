@@ -94,7 +94,10 @@ from ocs_ci.ocs.utils import (
     get_active_acm_index,
     enable_mco_console_plugin,
 )
-from ocs_ci.utility.deployment import create_external_secret
+from ocs_ci.utility.deployment import (
+    create_external_secret,
+    get_and_apply_icsp_from_catalog,
+)
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
     templating,
@@ -112,7 +115,6 @@ from ocs_ci.utility.ssl_certs import (
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
-    create_directory_path,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -2027,48 +2029,6 @@ def setup_persistent_monitoring():
     retry((CommandFailed, AssertionError), tries=3, delay=15)(
         validate_pvc_are_mounted_on_monitoring_pods
     )(pods_list)
-
-
-def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
-    """
-    Get ICSP from catalog image (if exists) and apply it on the cluster (if
-    requested).
-
-    Args:
-        image (str): catalog image of ocs registry.
-        apply (bool): controls if the ICSP should be applied or not
-            (default: true)
-        insecure (bool): If True, it allows push and pull operations to registries to be made over HTTP
-
-    Returns:
-        str: path to the icsp.yaml file or empty string, if icsp not available
-            in the catalog image
-
-    """
-
-    icsp_file_location = "/icsp.yaml"
-    icsp_file_dest_dir = os.path.join(
-        config.ENV_DATA["cluster_path"], f"icsp-{config.RUN['run_id']}"
-    )
-    icsp_file_dest_location = os.path.join(icsp_file_dest_dir, "icsp.yaml")
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-    create_directory_path(icsp_file_dest_dir)
-    cmd = (
-        f"oc image extract --filter-by-os linux/amd64 --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {icsp_file_location}:{icsp_file_dest_dir}"
-    )
-    if insecure:
-        cmd = f"{cmd} --insecure"
-    exec_cmd(cmd)
-    if not os.path.exists(icsp_file_dest_location):
-        return ""
-
-    if apply:
-        exec_cmd(f"oc apply -f {icsp_file_dest_location}")
-        wait_for_machineconfigpool_status("all")
-
-    return icsp_file_dest_location
 
 
 class RBDDRDeployOps(object):
