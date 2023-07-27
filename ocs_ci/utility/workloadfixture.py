@@ -142,6 +142,15 @@ def measure_operation(
         try:
             result = operation()
         except Exception as ex:
+            # tmp solution
+            # Error is raised when the login command fails due to a race condition.
+            race_condition_error = (
+                "Error from server (Forbidden): pods is forbidden: "
+                'User "system:anonymous" cannot list resource "pods"'
+            )
+            if race_condition_error in str(ex):
+                result = operation()
+
             # When the operation (which is being measured) fails, we need to
             # make sure that alert harvesting thread ends and (at least)
             # alerting data are saved into measurement dump file.
