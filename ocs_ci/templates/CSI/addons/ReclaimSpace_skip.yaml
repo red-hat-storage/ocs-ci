@@ -3,3 +3,4 @@ kind: Namespace
 metadata:
   annotations:
     skipReclaimspaceSchedule: "true"
+  name: openshift-test
