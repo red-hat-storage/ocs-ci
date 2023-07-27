@@ -15,7 +15,9 @@ import threading
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import refresh_oc_login_connection
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.pagerduty import PagerDutyAPI
 from ocs_ci.utility.prometheus import PrometheusAPI
 
@@ -139,77 +141,94 @@ def measure_operation(
         )
         logging_thread_prometheus.start()
 
-        try:
-            result = operation()
-        except Exception as ex:
-            # tmp solution
-            # Error is raised when the login command fails due to a race condition.
-            race_condition_error = (
-                "Error from server (Forbidden): pods is forbidden: "
-                'User "system:anonymous" cannot list resource "pods"'
-            )
-            if race_condition_error in str(ex):
+        def do_operation():
+            try:
                 result = operation()
-
-            # When the operation (which is being measured) fails, we need to
-            # make sure that alert harvesting thread ends and (at least)
-            # alerting data are saved into measurement dump file.
-            result = None
-            logger.error("exception raised during measured operation: %s", ex)
-            # Additional waiting for the measurement purposes is no longer
-            # necessary, and would only confuse anyone observing the failure.
-            minimal_time = 0
-            # And make sure the exception is properly processed by pytest (it
-            # would make the fixture fail).
-            raise (ex)
-        finally:
-            if measure_after:
-                start_time = time.time()
-            passed_time = time.time() - start_time
-            if minimal_time:
-                additional_time = minimal_time - passed_time
-                if additional_time > 0:
-                    logger.info(
-                        f"Starting {additional_time}s sleep for the purposes of measurement."
+            except Exception as ex:
+                # When the operation (which is being measured) fails, we need to
+                # make sure that alert harvesting thread ends and (at least)
+                # alerting data are saved into measurement dump file.
+                result = None
+                logger.error("exception raised during measured operation: %s", ex)
+                # Additional waiting for the measurement purposes is no longer
+                # necessary, and would only confuse anyone observing the failure.
+                minimal_time = 0
+                # And make sure the exception is properly processed by pytest (it
+                # would make the fixture fail).
+                raise (ex)
+            finally:
+                if measure_after:
+                    nonlocal start_time
+                    start_time = time.time()
+                passed_time = time.time() - start_time
+                if minimal_time:
+                    additional_time = minimal_time - passed_time
+                    if additional_time > 0:
+                        logger.info(
+                            f"Starting {additional_time}s sleep for the purposes of measurement."
+                        )
+                        time.sleep(additional_time)
+                # Dumping measurement results into result file.
+                stop_time = time.time()
+                info["run"] = False
+                logging_thread_prometheus.join()
+                nonlocal results
+                results = {
+                    "start": start_time,
+                    "stop": stop_time,
+                    "result": result,
+                    "metadata": metadata,
+                    "prometheus_alerts": prometheus_alert_list,
+                    "first_run": True,
+                }
+                if (
+                    config.ENV_DATA["platform"].lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                ):
+                    # During testing of ODF Managed Service are also collected alerts
+                    # in PagerDuty, Sendgrid and Dead Man's Snith systems
+                    pagerduty = PagerDutyAPI()
+                    logger.info("Logging all PagerDuty incidents")
+                    incidents_response = pagerduty.get(
+                        "incidents",
+                        payload={
+                            "service_ids[]": pagerduty_service_ids,
+                            "since": time.strftime(
+                                "%Y-%m-%d %H:%M:%S", time.gmtime(start_time)
+                            ),
+                            "time_zone": "UTC",
+                        },
                     )
-                    time.sleep(additional_time)
-            # Dumping measurement results into result file.
-            stop_time = time.time()
-            info["run"] = False
-            logging_thread_prometheus.join()
-            results = {
-                "start": start_time,
-                "stop": stop_time,
-                "result": result,
-                "metadata": metadata,
-                "prometheus_alerts": prometheus_alert_list,
-                "first_run": True,
-            }
-            if (
-                config.ENV_DATA["platform"].lower()
-                in constants.MANAGED_SERVICE_PLATFORMS
-            ):
-                # During testing of ODF Managed Service are also collected alerts
-                # in PagerDuty, Sendgrid and Dead Man's Snith systems
-                pagerduty = PagerDutyAPI()
-                logger.info("Logging all PagerDuty incidents")
-                incidents_response = pagerduty.get(
-                    "incidents",
-                    payload={
-                        "service_ids[]": pagerduty_service_ids,
-                        "since": time.strftime(
-                            "%Y-%m-%d %H:%M:%S", time.gmtime(start_time)
-                        ),
-                        "time_zone": "UTC",
-                    },
+                    incidents_response.raise_for_status()
+                    pagerduty_incidents = incidents_response.json().get("incidents")
+                    results["pagerduty_incidents"] = pagerduty_incidents
+                    logger.info(
+                        "Stopping PagerDuty periodical update of pagerduty secret"
+                    )
+                    config.RUN["thread_pagerduty_secret_update"] = "required"
+                logger.info(f"Results of measurement: {results}")
+                with open(result_file, "w") as outfile:
+                    logger.info(f"Dumping results of measurement into {result_file}")
+                    json.dump(results, outfile)
+
+        for i in range(1, 3):
+            try:
+                do_operation()
+            except CommandFailed as ex:
+                # tmp solution
+                # Error is raised when the login command fails due to a race condition.
+                race_condition_error = (
+                    "Error from server (Forbidden): pods is forbidden: "
+                    'User "system:anonymous" cannot list resource "pods"'
                 )
-                incidents_response.raise_for_status()
-                pagerduty_incidents = incidents_response.json().get("incidents")
-                results["pagerduty_incidents"] = pagerduty_incidents
-                logger.info("Stopping PagerDuty periodical update of pagerduty secret")
-                config.RUN["thread_pagerduty_secret_update"] = "required"
-            logger.info(f"Results of measurement: {results}")
-            with open(result_file, "w") as outfile:
-                logger.info(f"Dumping results of measurement into {result_file}")
-                json.dump(results, outfile)
+                if race_condition_error in str(ex):
+                    logger.warning(
+                        "race condition error, retrying operation again. attempt %s", i
+                    )
+                    refresh_oc_login_connection()
+                    do_operation()
+                    break
+                else:
+                    raise ex
+
     return results
