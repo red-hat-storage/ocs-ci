@@ -14,6 +14,7 @@ from ocs_ci.helpers.disconnected import get_oc_mirror_tool, get_opm_tool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import NotFoundError
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
+from ocs_ci.utility.deployment import get_and_apply_icsp_from_catalog
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     create_directory_path,
@@ -273,6 +274,8 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
         f"docker://{config.DEPLOYMENT['mirror_registry']} "
         "--dest-skip-tls --ignore-history"
     )
+    if icsp:
+        cmd += " --continue-on-error"
     exec_cmd(cmd, timeout=7200)
 
     # look for manifests directory with Image mapping, CatalogSource and ICSP
@@ -411,9 +414,17 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         # The `oc-mirror` tool is a technical preview in OCP 4.10, so we might
         # try to use it also there.
         # https://cloud.redhat.com/blog/how-oc-mirror-will-help-you-reduce-container-management-complexity
+
+        icsp_file = get_and_apply_icsp_from_catalog(image=index_image, apply=False)
+        icsp = {}
+        if icsp_file:
+            with open(icsp_file) as f:
+                icsp = yaml.safe_load(f)
+
         mirrored_index_image = mirror_index_image_via_oc_mirror(
             index_image,
             constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[get_ocp_version()],
+            icsp,
         )
     logger.debug(f"mirrored_index_image: {mirrored_index_image}")
 
