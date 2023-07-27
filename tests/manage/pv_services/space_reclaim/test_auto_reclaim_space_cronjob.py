@@ -3,7 +3,6 @@ import pytest
 import yaml
 from uuid import uuid4
 import os
-import time
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework.testlib import (
@@ -118,7 +117,7 @@ class TestReclaimSpaceCronJob(ManageTest):
             pvc_obj.delete()
 
         self.wait_for_cronjobs(
-            False, f"After PVCs deletion some reclaimspacecronjobs were left"
+            False, "After PVCs deletion some reclaimspacecronjobs were left"
         )
 
         # create CephFS PVC and test that no reclaim space job created for it
@@ -137,7 +136,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         self.pvc_objs_created.append(pvc_obj)
 
         self.wait_for_cronjobs(
-            False, f"After CephtFS PVC creation reclaim space cron job exists"
+            False, "After CephtFS PVC creation reclaim space cron job exists"
         )
 
         logger.info("No reclaim space cron job was created for CephFS PVCs")
@@ -189,7 +188,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         self.pvc_objs_created.append(pvc_obj)
 
         self.wait_for_cronjobs(
-            False, f"For RBD PVC creation reclaim space cron job exists"
+            False, "For RBD PVC creation reclaim space cron job exists"
         )
 
         logger.info(
