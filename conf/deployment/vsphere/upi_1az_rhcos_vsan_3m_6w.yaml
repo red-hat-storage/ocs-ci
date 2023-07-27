@@ -6,7 +6,7 @@ ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
   worker_replicas: 6
-  master_replicas: 3
+  master_replicas: 4
   worker_num_cpus: '16'
   master_num_cpus: '4'
   master_memory: '16384'
