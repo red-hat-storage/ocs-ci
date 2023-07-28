@@ -1,7 +1,6 @@
 import logging
 import pytest
 from random import choice
-from threading import Thread
 
 from ocs_ci.ocs.constants import (
     ROOK_CEPH_OPERATOR,
@@ -11,9 +10,9 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, run_io_in_bg
 from ocs_ci.ocs.resources.storage_cluster import ceph_mon_dump
-from ocs_ci.framework.pytest_customization.marks import tier3
+from ocs_ci.framework.pytest_customization.marks import tier3, skipif_external_mode
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.helpers.helpers import wait_for_resource_state
 
@@ -24,6 +23,7 @@ log = logging.getLogger(__name__)
 @tier3
 @pytest.mark.polarion_id("OCS-4942")
 @pytest.mark.bugzilla("2151591")
+@skipif_external_mode
 class TestMonCrashRecoveryScenario:
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):
@@ -47,6 +47,7 @@ class TestMonCrashRecoveryScenario:
             5. Scale up the operators to replicas = 1
             6. Verify 'ceph mon dump' command is working.
             7. Check for the any crash has generated.
+
         """
 
         mon_obj = choice(get_mon_deployments())
@@ -57,31 +58,18 @@ class TestMonCrashRecoveryScenario:
         toolbox.exec_ceph_cmd("ceph crash archive-all")
 
         # Step 1: Courrupting the mon database from the mon deployment.
-        mon_pods = mon_obj.pods
-        for monpod in mon_pods:
-            monpod.exec_cmd_on_pod(
-                f"rm -rf /var/lib/ceph/mon/ceph-{mon_name.split('-')[-1].strip()}",
-                ignore_error=True,
-            )
-            wait_for_resource_state(resource=monpod, state=STATUS_CLBO)
-
-        # Step 2:  Start IO Workload.
-        pod_obj = pod_factory(interface=CEPHBLOCKPOOL)
-
-        kwargs = {
-            "storage_type": "fs",
-            "size": "10G",
-            "runtime": 200,
-        }
-
-        io_thread = Thread(
-            target=pod_obj.run_io,
-            name="io_thread",
-            kwargs=kwargs,
+        monpod = mon_obj.pods[0]
+        monpod.exec_cmd_on_pod(
+            f"rm -rf /var/lib/ceph/mon/ceph-{mon_name.split('-')[-1].strip()}",
+            ignore_error=True,
         )
-        io_thread.start()
+        wait_for_resource_state(resource=monpod, state=STATUS_CLBO)
 
-        # Step 3: Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-a.
+        # Step 2:  Start IO Workload in the background.
+        pod_obj = pod_factory(interface=CEPHBLOCKPOOL)
+        run_io_in_bg(pod_obj)
+
+        # Step 3: Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-x.
         deployment_list = [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR, mon_name]
         log.info(
             f"Scaling down deployments: {','.join(deployment_list)} to 0 replicas..."
@@ -107,9 +95,6 @@ class TestMonCrashRecoveryScenario:
             assert modify_deployment_replica_count(
                 dep, 1
             ), f"Failed to scale deployment {dep} to replicas : 1"
-
-        # Waiting for IO to be completed.
-        io_thread.join()
 
         # Step 7: Verify 'ceph mon dump' output has the recovered mon information.
         log.info(
