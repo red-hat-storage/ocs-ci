@@ -6,8 +6,8 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     tier3,
-    bugzilla,
     polarion_id,
+    bugzilla,
 )
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
@@ -18,6 +18,7 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     wait_for_pods_to_be_running,
     get_pod_node,
+    get_pod_logs,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC
@@ -151,6 +152,8 @@ class TestPvPool:
         ), "Scale out PV Pool failed. "
         logger.info("Scale out was successful")
 
+    @polarion_id("OCS-4929")
+    @bugzilla("2189866")
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
         argvalues=[
@@ -226,6 +229,14 @@ class TestPvPool:
             label=pv_pod_label, namespace=config.ENV_DATA["cluster_namespace"]
         ):
             pv_pod_obj.append(Pod(**pod))
+
+        # verify there is no dummy access_key, secret_key messages are seen in the pv pool pod
+        for pod in pv_pod_obj:
+            pod_logs = get_pod_logs(pod_name=pod.name)
+            assert ("access_key:" not in pod_logs) and (
+                "secret_key:" not in pod_logs
+            ), f"access_key or secret_key are logged in the pv pool pod {pod.name} logs"
+
         req_cpu = "400m"
         req_mem = "600Mi"
         lim_cpu = "500m"
