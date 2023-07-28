@@ -965,8 +965,18 @@ class MCG:
                 image = f"registry.redhat.io/odf4/mcg-cli-rhel9:v{semantic_version}"
             else:
                 image = f"quay.io/rhceph-dev/mcg-cli:{get_ocs_build_number()}"
+
             pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
+            if not os.path.isfile(pull_secret_path):
+                logger.info(
+                    f"Extracting pull-secret and placing it under {pull_secret_path}"
+                )
+                exec_cmd(
+                    f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+                    f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+                    shell=True,
+                )
             exec_cmd(
                 f"oc image extract --registry-config {pull_secret_path} "
                 f"{image} --confirm "
