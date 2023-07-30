@@ -172,7 +172,7 @@ def wait_for_job_completion(namespace, timeout, error_msg):
         )
     except Exception as ex:
         # report some high level error as well in case of a timeout error
-        if type(ex) == TimeoutExpiredError:
+        if isinstance(ex, TimeoutExpiredError):
             logger.error(error_msg)
             ex.message = error_msg
         # fetch log(s) of any fio pod(s) in the job namespace
