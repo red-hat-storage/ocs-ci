@@ -111,7 +111,7 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             ocs_node_objs = generate_nodes_for_provider_worker_node_tests()
         else:
             # If it's not a provider cluster, test rolling terminate two ocs worker nodes will suffice
-            ocs_node_objs = random.choices(get_ocs_nodes(), k=2)
+            ocs_node_objs = random.sample(get_ocs_nodes(), k=2)
 
         log.info("Start rolling terminate and recovery of the OCS worker nodes")
         for node_obj in ocs_node_objs:
