@@ -182,9 +182,9 @@ class ObjectBucket(ABC):
         return hash(self.name)
 
     def __eq__(self, other):
-        if type(other) == str:
+        if isinstance(other, str):
             return self.name == other
-        elif type(other) == ObjectBucket:
+        elif isinstance(other, ObjectBucket):
             return self.name == other.name
 
     def delete(self, verify=True):
