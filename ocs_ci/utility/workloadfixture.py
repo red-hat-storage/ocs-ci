@@ -142,6 +142,7 @@ def measure_operation(
         logging_thread_prometheus.start()
 
         def do_operation():
+            nonlocal minimal_time, start_time, results
             try:
                 result = operation()
             except Exception as ex:
@@ -158,7 +159,6 @@ def measure_operation(
                 raise (ex)
             finally:
                 if measure_after:
-                    nonlocal start_time
                     start_time = time.time()
                 passed_time = time.time() - start_time
                 if minimal_time:
@@ -172,7 +172,6 @@ def measure_operation(
                 stop_time = time.time()
                 info["run"] = False
                 logging_thread_prometheus.join()
-                nonlocal results
                 results = {
                     "start": start_time,
                     "stop": stop_time,
