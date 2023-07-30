@@ -3,6 +3,7 @@ import random
 import time
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -141,12 +142,19 @@ class TestCapacityBreakdownUI(ManageTest):
         project_obj = helpers.create_project(project_name=namespace)
         teardown_project_factory(project_obj)
 
+        # create a number of PVC's using different storage classes and access modes
+        if config.DEPLOYMENT["external_mode"]:
+            ceph_blockpool_sc = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            ceph_filesystem_sc = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        else:
+            ceph_blockpool_sc = constants.DEFAULT_STORAGECLASS_RBD
+            ceph_filesystem_sc = constants.DEFAULT_STORAGECLASS_CEPHFS
         sc_block_random_num = [
-            {constants.CEPHBLOCKPOOL_SC: constants.ACCESS_MODE_RWO} for _ in range(1, 5)
+            {ceph_blockpool_sc: constants.ACCESS_MODE_RWO} for _ in range(1, 5)
         ]
         storage_classes_to_access_mode = [
             {
-                constants.CEPHFILESYSTEM_SC: random.choice(
+                ceph_filesystem_sc: random.choice(
                     [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
                 )
             }
