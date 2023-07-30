@@ -3218,7 +3218,7 @@ def convert_bytes_to_unit(bytes_to_convert):
         str: The converted bytes as biggest unit possible
 
     """
-    if type(bytes_to_convert) != str:
+    if not isinstance(bytes_to_convert, str):
         log.error("Unable to convert, expected string")
     if float(bytes_to_convert) < constants.BYTES_IN_KB:
         return f"{bytes_to_convert}B"
@@ -3250,7 +3250,7 @@ def prepare_customized_pull_secret(images=None):
 
     """
     log.debug(f"Prepare customized pull-secret for images: {images}")
-    if type(images) == str:
+    if isinstance(images, str):
         images = [images]
     # load pull-secret file to pull_secret dict
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
