@@ -8,7 +8,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     polarion_id,
     tier3,
-    skipif_external_mode,
     bugzilla,
     skipif_ibm_cloud_managed,
     skipif_ocs_version,
