@@ -72,7 +72,7 @@ class PackageManifest(OCP):
         selector = selector if selector else self.selector
 
         data = super(PackageManifest, self).get(**kwargs)
-        if type(data) == dict and (data.get("kind") == "List"):
+        if isinstance(data, dict) and (data.get("kind") == "List"):
             items = data["items"]
             data_len = len(items)
             if data_len == 0 and selector and resource_name:
