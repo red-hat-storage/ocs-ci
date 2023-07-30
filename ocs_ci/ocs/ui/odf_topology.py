@@ -338,7 +338,9 @@ class OdfTopologyHelper:
         """
         try:
             resource_list = self.topology_cli_df[node_name][deployment_name]
-            delp_obj = [resource for resource in resource_list if type(resource) == OCP]
+            delp_obj = [
+                resource for resource in resource_list if isinstance(resource, OCP)
+            ]
             if len(delp_obj) == 0:
                 logger.error(f"no deployment '{deployment_name}' in node '{node_name}'")
             return delp_obj[0]
@@ -417,7 +419,7 @@ class OdfTopologyHelper:
         pod_objs = [
             resource
             for resource in resource_list
-            if type(resource) == Pod and resource.name == pod_name
+            if isinstance(resource, Pod) and resource.name == pod_name
         ]
         if len(pod_objs) == 0:
             logger.error(
