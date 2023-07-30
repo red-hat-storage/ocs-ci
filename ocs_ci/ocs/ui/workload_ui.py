@@ -60,7 +60,7 @@ class WorkloadUi(metaclass=SingletonMeta):
 
     def deploy_busybox(
         self,
-        node: str = random.choice(get_worker_nodes()),
+        node: str = None,
         namespace=config.ENV_DATA["cluster_namespace"],
         depl_name="busybox-ui-test",
         pvc_name: str = None,
@@ -69,6 +69,7 @@ class WorkloadUi(metaclass=SingletonMeta):
         Deploys a busybox container to a randomly selected worker node.
 
         node (str): Name of the node where the busybox container is to be deployed.
+            If not specified, a random worker node is selected.
         namespace (str): Namespace where the busybox container is to be deployed.
         depl_name (str): Name of the deployment to be created. Defaults to None.
         pvc_name (str): Name of the PVC to be attached by the busybox container. Defaults to None.
@@ -77,6 +78,10 @@ class WorkloadUi(metaclass=SingletonMeta):
             tuple: The name of the node where the busybox container is deployed, and a deployment name if deployed,
             otherwise None.
         """
+        if not node:
+            node = random.choice(get_worker_nodes())
+            logger.info(f"selected node {node} for deployment")
+
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=True
         ) as temp_file:
