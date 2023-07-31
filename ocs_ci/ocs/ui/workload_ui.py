@@ -69,7 +69,7 @@ class WorkloadUi(metaclass=SingletonMeta):
         Deploys a busybox container to a randomly selected worker node.
 
         node (str): Name of the node where the busybox container is to be deployed.
-            If not specified, a random worker node is selected.
+        If not specified, a random worker node is selected.
         namespace (str): Namespace where the busybox container is to be deployed.
         depl_name (str): Name of the deployment to be created. Defaults to None.
         pvc_name (str): Name of the PVC to be attached by the busybox container. Defaults to None.
