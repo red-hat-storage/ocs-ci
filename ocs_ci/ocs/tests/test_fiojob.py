@@ -63,13 +63,13 @@ def test_fio_to_dict_empty():
 
 def test_fio_to_dict_without_error(fio_json_output):
     fio_dict = fiojob.fio_to_dict(fio_json_output)
-    assert type(fio_dict) == dict
+    assert isinstance(fio_dict, dict)
     assert len(fio_dict["jobs"]) == 1
 
 
 def test_fio_to_dict_with_error(fio_json_output_with_error):
     fio_dict = fiojob.fio_to_dict(fio_json_output_with_error)
-    assert type(fio_dict) == dict
+    assert isinstance(fio_dict, dict)
     assert len(fio_dict["jobs"]) == 1
 
 
