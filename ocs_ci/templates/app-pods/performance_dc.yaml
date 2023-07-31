@@ -17,7 +17,7 @@ spec:
       volumes:
       - name: perf-vol
         persistentVolumeClaim:
-          claimName: tet-2
+          claimName: test-2
       containers:
       - name: perf
         image: quay.io/ocsci/perf:latest
