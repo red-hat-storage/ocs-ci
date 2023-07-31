@@ -19,7 +19,7 @@ class TestNoobaaDbNFSMount:
     def mount_ngix_pod(self, request):
         # try to mount the reesi004 nfs mount to nginx pod
         nginx_pod_data = templating.load_yaml(constants.NGINX_POD_YAML)
-        logger.info(type(nginx_pod_data))
+        nginx_pod_data["metadata"]["namespace"] = constants.OPENSHIFT_STORAGE_NAMESPACE
         nginx_pod_data["spec"]["containers"][0]["volumeMounts"][0]["name"] = "nfs-vol"
         nginx_pod_data["spec"]["containers"][0]["volumeMounts"][0][
             "mountPath"
