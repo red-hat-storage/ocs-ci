@@ -752,7 +752,8 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
-    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir = os.path.abspath(bin_dir_rel_path)
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     client_binary_path = os.path.join(bin_dir, "oc")
@@ -938,7 +939,8 @@ def get_openshift_client(
 
     """
     version = version or config.RUN["client_version"]
-    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir = os.path.abspath(bin_dir_rel_path)
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
     download_client = True
