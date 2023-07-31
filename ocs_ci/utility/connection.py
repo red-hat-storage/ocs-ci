@@ -79,7 +79,10 @@ class Connection(object):
         _, out, err = self.client.exec_command(cmd)
         retcode = out.channel.recv_exit_status()
         stdout = out.read().decode("ascii").strip("\n")
-        stderr = err.read().decode("ascii").strip("\n")
+        try:
+            stderr = err.read().decode("ascii").strip("\n")
+        except UnicodeDecodeError:
+            stderr = err.read()
         logger.debug(f"retcode: {retcode}")
         logger.info(f"stdout: {stdout}") if self.stdout else logger.debug(
             f"stdout: {stdout}"
