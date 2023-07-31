@@ -1,8 +1,10 @@
 import json
 import logging
+
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import get_nb_bucket_stores
@@ -126,6 +128,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
         request.addfinalizer(finalizer)
         return override_nb_default_backingstore_implementation
 
+    @tier1
     def test_default_buckets_backingstore(
         self,
         mcg_obj_session,
@@ -141,19 +144,22 @@ class TestDefaultBackingstoreOverride(MCGTest):
 
         """
 
-        # Override the default noobaa backingstore
-        alternative_backingstore = backingstore_factory(
-            *("oc", {"aws": [(1, "eu-central-1")]})
-        )[0]
+        # 1. Override the default noobaa backingstore
+        if config.ENV_DATA["mcg_only_deployment"]:
+            uls_dict = {"aws": [(1, "eu-central-1")]}
+        else:
+            # Supported in all deployment types except mcg-only
+            uls_dict = {"pv": [(1, 20, constants.DEFAULT_STORAGECLASS_RBD)]}
+        alternative_backingstore = backingstore_factory("oc", uls_dict)[0]
         override_nb_default_backingstore(mcg_obj_session, alternative_backingstore.name)
 
-        # Create a new bucket using the mcg-cli with the default backingstore
+        # 2. Create a new bucket using the mcg-cli with the default backingstore
         default_cli_bucket = bucket_factory(amount=1, interface="cli")[0]
 
-        # Create a new OBC using oc and yamls without specifying the bucketclass
+        # 3. Create a new OBC using oc and yamls without specifying the bucketclass
         default_obc_bucket = bucket_factory(amount=1, interface="oc")[0]
 
-        # Verify the bucket's backingstore is the new default backingstore
+        # 4. Verify the bucket's backingstore is the new default backingstore
         assert (
             get_nb_bucket_stores(mcg_obj_session, default_cli_bucket.name)[0]
             == alternative_backingstore.name
@@ -162,6 +168,8 @@ class TestDefaultBackingstoreOverride(MCGTest):
             get_nb_bucket_stores(mcg_obj_session, default_obc_bucket.name)[0]
             == alternative_backingstore.name
         ), "The default OC bucket does not use the new default backingstore!"
+
+        self.a
 
     def test_default_backingstore_override_post_upgrade(self):
         pass
