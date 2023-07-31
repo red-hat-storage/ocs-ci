@@ -3,23 +3,23 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
-  platform: 'vsphere'
-  deployment_type: 'ipi'
+  platform: vsphere
+  deployment_type: ipi
   worker_replicas: 3
   master_replicas: 3
   worker_num_cpus: '16'
   master_num_cpus: '4'
   master_memory: '16384'
   compute_memory: '65536'
-  fio_storageutilization_min_mbps: 10.0
+  fio_storageutilization_min_mbps: 10
   custom_default_storageclass_names: true
   storageclassnames:
-    cephFilesystems: "custom-storageclass-cephfs"
-    cephObjectStores: "custom-storageclass-ceph-rgw"
-    cephBlockPools: "custom-storageclass-blockpools"
-    cephNonResilientPools: "custom-cephNonResilientPools"
-    nfs: "custom-storageclass-nfs"
-    encryption: "custom-storageclass-encryption"
+    cephFilesystems: custom-storageclass-cephfs
+    cephObjectStores: custom-storageclass-ceph-rgw
+    cephBlockPools: custom-storageclass-blockpools
+    cephNonResilientPools: custom-cephNonResilientPools
+    nfs: custom-storageclass-nfs
+    encryption: custom-storageclass-encryption
 REPORTING:
   polarion:
-    deployment_id: 'OCS-5131'
+    deployment_id: OCS-5131
