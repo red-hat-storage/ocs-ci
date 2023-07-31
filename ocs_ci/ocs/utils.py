@@ -854,10 +854,19 @@ def setup_ceph_toolbox(force_setup=False):
                 toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
                 toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
 
-            public_net_name = ocsci_config.ENV_DATA["multus_public_net_name"]
-            public_net_namespace = ocsci_config.ENV_DATA["multus_public_net_namespace"]
+            if ocsci_config.ENV_DATA["multus_create_public_net"]:
+                multus_net_name = ocsci_config.ENV_DATA["multus_public_net_name"]
+                multus_net_namespace = ocsci_config.ENV_DATA[
+                    "multus_public_net_namespace"
+                ]
+            elif ocsci_config.ENV_DATA["multus_create_cluster_net"]:
+                multus_net_name = ocsci_config.ENV_DATA["multus_cluster_net_name"]
+                multus_net_namespace = ocsci_config.ENV_DATA[
+                    "multus_cluster_net_namespace"
+                ]
+
             toolbox["spec"]["template"]["metadata"]["annotations"] = {
-                "k8s.v1.cni.cncf.io/networks": f"{public_net_namespace}/{public_net_name}"
+                "k8s.v1.cni.cncf.io/networks": f"{multus_net_namespace}/{multus_net_name}"
             }
             toolbox["spec"]["template"]["spec"]["hostNetwork"] = False
             rook_toolbox = OCS(**toolbox)
@@ -1527,6 +1536,28 @@ def get_all_acm_indexes():
         if cluster.MULTICLUSTER["acm_cluster"]:
             acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
     return acm_indexes
+
+
+def enable_mco_console_plugin():
+    """
+    Enables console plugin for MCO
+    """
+    if (
+        "odf-multicluster-console"
+        in OCP(kind="console.operator", resource_name="cluster").get()["spec"][
+            "plugins"
+        ]
+    ):
+        log.info("MCO console plugin is enabled")
+    else:
+        patch = '\'[{"op": "add", "path": "/spec/plugins/-", "value": "odf-multicluster-console"}]\''
+        patch_cmd = (
+            f"patch console.operator cluster -n openshift-console"
+            f" --type json -p {patch}"
+        )
+        log.info("Enabling MCO console plugin")
+        ocp_obj = OCP()
+        ocp_obj.exec_oc_cmd(command=patch_cmd)
 
 
 def get_active_acm_index():

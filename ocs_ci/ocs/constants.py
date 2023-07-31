@@ -712,6 +712,7 @@ FIO_IO_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io.yaml")
 FIO_IO_RW_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io_rw.yaml")
 FIO_IO_FILLUP_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io_fillup.yaml")
 FIO_DC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fio_dc.yaml")
+FIO_DEPLOYMENT_YAML = os.path.join(TEMPLATE_FIO_DIR, "fedora_deployment.yaml")
 
 # fio configuration files
 FIO_S3 = os.path.join(TEMPLATE_FIO_DIR, "config_s3.fio")
@@ -1442,6 +1443,10 @@ RHEL_WORKERS_CONF = os.path.join(CONF_DIR, "ocsci/aws_upi_rhel{version}_workers.
 NB_SERVICE_ACCOUNT_BASE = "system:serviceaccount:openshift-storage:{}"
 NOOBAA_SERVICE_ACCOUNT_NAME = "noobaa"
 NOOBAA_DB_SERVICE_ACCOUNT_NAME = "noobaa-db"
+NOOBAA_ENDPOINT_SERVICE_ACCOUNT_NAME = "noobaa-endpoint"
+NOOBAA_ENDPOINT_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
+    NOOBAA_ENDPOINT_SERVICE_ACCOUNT_NAME
+)
 NOOBAA_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(NOOBAA_SERVICE_ACCOUNT_NAME)
 NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
     NOOBAA_DB_SERVICE_ACCOUNT_NAME
@@ -2212,3 +2217,11 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
     "rule3": UI_INPUT_RULES_GENERAL["rule2"],
     "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }
+
+# DR
+DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+APPLICATION_SET = "ApplicationSet"
+PLACEMENT = "Placement"
+GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
+APPLICATION_ARGOCD = "applications.argoproj.io"
+PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"

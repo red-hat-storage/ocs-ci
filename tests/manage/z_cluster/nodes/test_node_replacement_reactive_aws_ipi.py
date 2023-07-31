@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 from ocs_ci.ocs import machine, constants, ocp
+from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -45,6 +46,10 @@ class TestNodeReplacement(ManageTest):
             # Verify OSD encrypted
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
+
+            assert (
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
         request.addfinalizer(finalizer)
 

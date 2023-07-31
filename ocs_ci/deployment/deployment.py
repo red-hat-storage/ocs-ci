@@ -30,6 +30,7 @@ from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
+from ocs_ci.helpers.dr_helpers import configure_drcluster_for_fencing
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -91,8 +92,12 @@ from ocs_ci.ocs.utils import (
     enable_console_plugin,
     get_all_acm_indexes,
     get_active_acm_index,
+    enable_mco_console_plugin,
 )
-from ocs_ci.utility.deployment import create_external_secret
+from ocs_ci.utility.deployment import (
+    create_external_secret,
+    get_and_apply_icsp_from_catalog,
+)
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
     templating,
@@ -110,7 +115,6 @@ from ocs_ci.utility.ssl_certs import (
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
-    create_directory_path,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -2054,48 +2058,6 @@ def setup_persistent_monitoring():
     )(pods_list)
 
 
-def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
-    """
-    Get ICSP from catalog image (if exists) and apply it on the cluster (if
-    requested).
-
-    Args:
-        image (str): catalog image of ocs registry.
-        apply (bool): controls if the ICSP should be applied or not
-            (default: true)
-        insecure (bool): If True, it allows push and pull operations to registries to be made over HTTP
-
-    Returns:
-        str: path to the icsp.yaml file or empty string, if icsp not available
-            in the catalog image
-
-    """
-
-    icsp_file_location = "/icsp.yaml"
-    icsp_file_dest_dir = os.path.join(
-        config.ENV_DATA["cluster_path"], f"icsp-{config.RUN['run_id']}"
-    )
-    icsp_file_dest_location = os.path.join(icsp_file_dest_dir, "icsp.yaml")
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-    create_directory_path(icsp_file_dest_dir)
-    cmd = (
-        f"oc image extract --filter-by-os linux/amd64 --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {icsp_file_location}:{icsp_file_dest_dir}"
-    )
-    if insecure:
-        cmd = f"{cmd} --insecure"
-    exec_cmd(cmd)
-    if not os.path.exists(icsp_file_dest_location):
-        return ""
-
-    if apply:
-        exec_cmd(f"oc apply -f {icsp_file_dest_location}")
-        wait_for_machineconfigpool_status("all")
-
-    return icsp_file_dest_location
-
-
 class RBDDRDeployOps(object):
     """
     All RBD specific DR deployment operations
@@ -2682,10 +2644,14 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         for i in acm_indexes:
             config.switch_ctx(i)
             self.deploy_dr_multicluster_orchestrator()
+            # Enable MCO console plugin
+            enable_mco_console_plugin()
         # Configure mirror peer
         self.configure_mirror_peer()
         # Deploy dr policy
         self.deploy_dr_policy()
+        # Configure DRClusters for fencing automation
+        configure_drcluster_for_fencing()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
@@ -2706,23 +2672,6 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
         self.enable_managed_serviceaccount()
-        # Create backupschedule resource
-        self.create_backup_schedule()
-
-    def create_backup_schedule(self):
-        """
-        Create backupschedule resource only on active hub
-
-        """
-        old_ctx = config.cur_index
-        config.switch_ctx(get_active_acm_index())
-        backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
-        backup_schedule_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="bkp", delete=False
-        )
-        templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
-        run_cmd(f"oc create -f {backup_schedule_yaml.name}")
-        config.switch_ctx(old_ctx)
 
     def enable_managed_serviceaccount(self):
         """

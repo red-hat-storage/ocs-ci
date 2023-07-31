@@ -1,0 +1,47 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fio_deployment_raw_block
+  labels:
+    app: fio-benchmark
+    name: fio_deployment_raw_block
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fio_deployment_raw_block
+  template:
+    metadata:
+      labels:
+        app: fio_deployment_raw_block
+    spec:
+      containers:
+        - name: fio
+          image: datawiseio/fio:latest
+          volumeDevices:
+            - devicePath: /dev/rbdblock
+              name: my-volume
+          command:
+            - /usr/bin/fio
+          args:
+            - --name=fio-rand-readwrite
+            - --filename=/dev/rbdblock
+            - --readwrite=randrw
+            - --bs=128K
+            - --direct=1
+            - --numjobs=1
+            - --iodepth=4
+            - --time_based=1
+            - --runtime=1000000
+            - --filesize=1G
+            - --invalidate=1
+            - --rwmixread=25
+            - --rate=15M
+            - --ioengine=libaio
+            - --output-format=json
+          imagePullPolicy: IfNotPresent
+      volumes:
+        - name: my-volume
+          persistentVolumeClaim:
+            claimName: test-raw-block-pv

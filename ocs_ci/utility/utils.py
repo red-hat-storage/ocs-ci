@@ -752,7 +752,8 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
-    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir = os.path.abspath(bin_dir_rel_path)
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     client_binary_path = os.path.join(bin_dir, "oc")
@@ -938,7 +939,8 @@ def get_openshift_client(
 
     """
     version = version or config.RUN["client_version"]
-    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir = os.path.abspath(bin_dir_rel_path)
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
     download_client = True
@@ -2979,7 +2981,13 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.rsplit(":", 1)[1].lstrip("latest-").lstrip("stable-")
+        version = (
+            image.rsplit(":", 1)[1]
+            .lstrip("latest-")
+            .lstrip("stable-")
+            .lstrip("rc-")
+            .lstrip("upgrade-")
+        )
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
     except ValueError:
@@ -3218,7 +3226,7 @@ def convert_bytes_to_unit(bytes_to_convert):
         str: The converted bytes as biggest unit possible
 
     """
-    if type(bytes_to_convert) != str:
+    if not isinstance(bytes_to_convert, str):
         log.error("Unable to convert, expected string")
     if float(bytes_to_convert) < constants.BYTES_IN_KB:
         return f"{bytes_to_convert}B"
@@ -3250,7 +3258,7 @@ def prepare_customized_pull_secret(images=None):
 
     """
     log.debug(f"Prepare customized pull-secret for images: {images}")
-    if type(images) == str:
+    if isinstance(images, str):
         images = [images]
     # load pull-secret file to pull_secret dict
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")

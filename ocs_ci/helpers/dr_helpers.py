@@ -1,7 +1,9 @@
 """
 Helper functions specific for DR
 """
+import json
 import logging
+import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -11,25 +13,32 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
-from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler, CommandFailed
+from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config,
+    get_active_acm_index,
+    get_primary_cluster_config,
+)
+from ocs_ci.utility import version, templating
+from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
 
 logger = logging.getLogger(__name__)
 
 
-def get_current_primary_cluster_name(namespace):
+def get_current_primary_cluster_name(namespace, workload_type=constants.SUBSCRIPTION):
     """
     Get current primary cluster name based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         str: Current primary cluster name
 
     """
     restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     drpc_data = DRPC(namespace=namespace).get()
     if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_data["spec"]["failoverCluster"]
@@ -39,18 +48,21 @@ def get_current_primary_cluster_name(namespace):
     return cluster_name
 
 
-def get_current_secondary_cluster_name(namespace):
+def get_current_secondary_cluster_name(namespace, workload_type=constants.SUBSCRIPTION):
     """
     Get current secondary cluster name based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         str: Current secondary cluster name
 
     """
     restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     primary_cluster_name = get_current_primary_cluster_name(namespace)
     drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
     config.switch_ctx(restore_index)
@@ -59,61 +71,88 @@ def get_current_secondary_cluster_name(namespace):
             return cluster_name
 
 
-def set_current_primary_cluster_context(namespace):
+def set_current_primary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
     """
     Set current primary cluster context based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     cluster_name = get_current_primary_cluster_name(namespace)
     config.switch_to_cluster_by_name(cluster_name)
 
 
-def set_current_secondary_cluster_context(namespace):
+def set_current_secondary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
     """
     Set secondary cluster context based on workload namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     """
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     cluster_name = get_current_secondary_cluster_name(namespace)
     config.switch_to_cluster_by_name(cluster_name)
 
 
-def get_scheduling_interval(namespace):
+def get_scheduling_interval(namespace, workload_type=constants.SUBSCRIPTION):
     """
     Get scheduling interval for the workload in the given namespace
 
     Args:
         namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
 
     Returns:
         int: scheduling interval value from DRPolicy
 
     """
     restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
     drpolicy_obj = DRPC(namespace=namespace).drpolicy_obj
     interval_value = int(drpolicy_obj.get()["spec"]["schedulingInterval"][:-1])
     config.switch_ctx(restore_index)
     return interval_value
 
 
-def failover(failover_cluster, namespace):
+def failover(
+    failover_cluster,
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    workload_placement_name=None,
+):
     """
     Initiates Failover action to the specified cluster
 
     Args:
         failover_cluster (str): Cluster name to which the workload should be failed over
         namespace (str): Namespace where workload is running
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
 
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
-    drpc_obj = DRPC(namespace=namespace)
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Failover action with failoverCluster:{failover_cluster}")
     assert drpc_obj.patch(
@@ -127,19 +166,32 @@ def failover(failover_cluster, namespace):
     config.switch_ctx(restore_index)
 
 
-def relocate(preferred_cluster, namespace):
+def relocate(
+    preferred_cluster,
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    workload_placement_name=None,
+):
     """
     Initiates Relocate action to the specified cluster
 
     Args:
         preferred_cluster (str): Cluster name to which the workload should be relocated
         namespace (str): Namespace where workload is running
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
 
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
     relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","preferredCluster":"{preferred_cluster}"}}}}'
-    drpc_obj = DRPC(namespace=namespace)
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Relocate action with preferredCluster:{preferred_cluster}")
     assert drpc_obj.patch(
@@ -500,7 +552,9 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         sample.wait_for_func_value(0)
 
 
-def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900):
+def wait_for_all_resources_creation(
+    pvc_count, pod_count, namespace, timeout=900, skip_replication_resources=False
+):
     """
     Wait for workload and replication resources to be created
 
@@ -509,6 +563,7 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
         pod_count (int): Expected number of Pods
         namespace (str): the namespace of the workload
         timeout (int): time in seconds to wait for resource creation
+        skip_replication_resources (bool): if true vr status wont't be check
 
     """
     logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
@@ -528,7 +583,8 @@ def wait_for_all_resources_creation(pvc_count, pod_count, namespace, timeout=900
         sleep=5,
     )
 
-    wait_for_replication_resources_creation(pvc_count, namespace, timeout)
+    if not skip_replication_resources:
+        wait_for_replication_resources_creation(pvc_count, namespace, timeout)
 
 
 def wait_for_all_resources_deletion(
@@ -611,6 +667,41 @@ def get_all_drpolicy():
     return drpolicy_list
 
 
+def get_managed_cluster_node_ips():
+    """
+    Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
+
+    Returns:
+        cluster (list): Returns list of managed cluster, indexes and their node IPs
+
+    """
+    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+    secondary_index = [
+        s.MULTICLUSTER["multicluster_index"]
+        for s in get_non_acm_cluster_config()
+        if s.MULTICLUSTER["multicluster_index"] != primary_index
+    ][0]
+    cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
+    cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
+    cluster_data = [
+        [cluster_name_primary, primary_index],
+        [cluster_name_secondary, secondary_index],
+    ]
+    for cluster in cluster_data:
+        config.switch_ctx(cluster[1])
+        logger.info(f"Getting node IPs on managed cluster: {cluster[0]}")
+        node_obj = ocp.OCP(kind=constants.NODE).get()
+        external_ips = []
+        for node in node_obj.get("items"):
+            addresses = node.get("status").get("addresses")
+            for address in addresses:
+                if address.get("type") == "ExternalIP":
+                    external_ips.append(address.get("address"))
+        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
+        cluster.append(external_ips_with_cidr)
+    return cluster_data
+
+
 def enable_fence(drcluster_name):
     """
     Once the managed cluster is fenced, all communication
@@ -632,6 +723,36 @@ def enable_fence(drcluster_name):
         raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
     logger.info(f"Successfully fenced {constants.DRCLUSTER}: {drcluster_name}")
     config.switch_ctx(restore_index)
+
+
+def configure_drcluster_for_fencing():
+    """
+    Configures DRClusters for enabling fencing
+
+    """
+    old_ctx = config.cur_index
+    cluster_ip_list = get_managed_cluster_node_ips()
+    config.switch_acm_ctx()
+    for cluster in cluster_ip_list:
+        fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
+        fence_ip_cmd = (
+            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_ip_data}'"
+        )
+        logger.info(f"Patching DRCluster: {cluster[0]} to add node IP addresses")
+        run_cmd(fence_ip_cmd)
+
+        fence_annotation_data = """{"metadata": {"annotations": {
+        "drcluster.ramendr.openshift.io/storage-clusterid": "openshift-storage",
+        "drcluster.ramendr.openshift.io/storage-driver": "openshift-storage.rbd.csi.ceph.com",
+        "drcluster.ramendr.openshift.io/storage-secret-name": "rook-csi-rbd-provisioner",
+        "drcluster.ramendr.openshift.io/storage-secret-namespace": "openshift-storage" } } }"""
+        fencing_annotation_cmd = (
+            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_annotation_data}'"
+        )
+        logger.info(f"Patching DRCluster: {cluster[0]} to add fencing annotations")
+        run_cmd(fencing_annotation_cmd)
+
+    config.switch_ctx(old_ctx)
 
 
 def enable_unfence(drcluster_name):
@@ -699,6 +820,22 @@ def get_fence_state(drcluster_name):
     state = drcluster_obj.get().get("spec").get("clusterFence")
     config.switch_ctx(restore_index)
     return state
+
+
+def create_backup_schedule():
+    """
+    Create backupschedule resource only on active hub
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_active_acm_index())
+    backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
+    backup_schedule_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="bkp", delete=False
+    )
+    templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
+    run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+    config.switch_ctx(old_ctx)
 
 
 def gracefully_reboot_ocp_nodes(namespace, drcluster_name):

@@ -331,6 +331,27 @@ def measure_obc_deletion_time(obc_name_list, timeout=60):
     return obc_dict
 
 
+def get_pod_obj(pod_name):
+    """
+    Function to get pod object using pod name
+
+    Args:
+        pod_name (str):  Name of a pod
+    Return:
+        pod object (obj): Object of a pod
+    """
+
+    pod_obj = pod.get_pod_obj(
+        (
+            get_pod_name_by_pattern(
+                pattern=pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+        )[0],
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    return pod_obj
+
+
 def noobaa_running_node_restart(pod_name):
     """
     Function to restart node which has noobaa pod's running
@@ -340,14 +361,7 @@ def noobaa_running_node_restart(pod_name):
 
     """
 
-    nb_pod_obj = pod.get_pod_obj(
-        (
-            get_pod_name_by_pattern(
-                pattern=pod_name, namespace=config.ENV_DATA["cluster_namespace"]
-            )
-        )[0],
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+    nb_pod_obj = get_pod_obj(pod_name)
     nb_node_name = pod.get_pod_node(nb_pod_obj).name
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
