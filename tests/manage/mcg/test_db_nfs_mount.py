@@ -8,7 +8,12 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
-from ocs_ci.framework.pytest_customization.marks import tier2, bugzilla, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    bugzilla,
+    polarion_id,
+    vsphere_platform_required,
+)
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
@@ -91,6 +96,7 @@ class TestNoobaaDbNFSMount:
         request.addfinalizer(finalizer)
 
     @tier2
+    @vsphere_platform_required
     @bugzilla("2115616")
     @polarion_id("OCS-4950")
     def test_db_nfs_mount(self, mount_ngix_pod, mount_noobaa_db_pod):
