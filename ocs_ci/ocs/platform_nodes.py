@@ -272,9 +272,7 @@ class VMWareNodes(NodesBase):
         """
         if not pvs:
             pvs = get_deviceset_pvs()
-        return [
-            pv.get().get("spec").get("vsphereVolume").get("volumePath") for pv in pvs
-        ]
+        return [pv.get().get("spec").get("csi").get("volumeHandle") for pv in pvs]
 
     def get_node_by_attached_volume(self, volume):
         """
