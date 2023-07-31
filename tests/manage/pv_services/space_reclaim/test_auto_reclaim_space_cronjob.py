@@ -116,6 +116,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         for pvc_obj in self.pvc_objs_created:
             pvc_obj.delete()
 
+        logger.info(
+            "Validating that all the cron jobs were deleted following deletion of the PVCs"
+        )
         self.wait_for_cronjobs(
             False, "After PVCs deletion some reclaimspacecronjobs were left"
         )
@@ -205,7 +208,9 @@ class TestReclaimSpaceCronJob(ManageTest):
             msg (str): Error message to be printed if the desired condition is not reached
             timeout (int): Timeout
         Returns:
+
             list : Result of 'oc get reclaimspacecronjob' command
+
         """
         try:
             for sample in TimeoutSampler(
