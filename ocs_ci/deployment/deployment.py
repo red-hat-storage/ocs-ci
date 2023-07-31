@@ -138,7 +138,7 @@ from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
-from ocs_ci.utility.utils import get_az_count, get_clusterset_name
+from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.utility.utils import get_clusterset_name
 from ocs_ci.deployment.cnv import CNVInstaller
@@ -278,6 +278,9 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
+
+            # Importing here to avoid circular import
+            from ocs_ci.utility.utils import get_clusterset_name
 
             cluster_set = get_clusterset_name()
 
