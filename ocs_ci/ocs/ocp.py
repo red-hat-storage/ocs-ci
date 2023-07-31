@@ -1279,7 +1279,7 @@ def get_images(data, images=None):
         # Check if we have those keys: 'name' and 'value' in the data dict.
         # If yes and the value ends with '_IMAGE' we found the image.
         if set(("name", "value")) <= data.keys() and (
-            type(data["name"]) == str and data["name"].endswith("_IMAGE")
+            isinstance(data["name"], str) and data["name"].endswith("_IMAGE")
         ):
             image_name = data["name"].rstrip("_IMAGE").lower()
             image = data["value"]
