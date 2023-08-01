@@ -45,7 +45,7 @@ class TestSelinuxrelabel(E2ETest):
             raise PodNotCreated("Pod attached to PVC was not created.")
         return pod_obj
 
-    def get_app_pod(self):
+    def get_app_pod_obj(self):
         """
         Get cephfs app pod
 
@@ -53,13 +53,13 @@ class TestSelinuxrelabel(E2ETest):
             object: app pod instance
 
         """
-        pod_obj = res_pod.get_all_pods(
+        pod_obj_list = res_pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
             selector=[self.pod_selector],
             selector_label=constants.DEPLOYMENTCONFIG,
         )
         pod_name = self.pod_selector + "-1-deploy"
-        for pod_obj in pod_obj:
+        for pod_obj in pod_obj_list:
             if pod_name not in pod_obj.name:
                 return pod_obj
 
@@ -294,19 +294,13 @@ class TestSelinuxrelabel(E2ETest):
         log.info(f"{key} is present in inspect logs of application pod running node")
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
 
-        # Get time for pod restart after applying fix
+        # Restart pod after applying fix
         self.pod_obj = self.get_app_pod()
         self.pod_obj.delete(wait=True)
         self.pod_obj = self.get_app_pod()
         assert wait_for_pods_to_be_running(
             pod_names=[self.pod_obj.name], timeout=600, sleep=15
         ), f"Pod {self.pod_obj.name} didn't reach to running state"
-        pod_restart_time_after_fix = self.get_pod_start_time(pod_name=self.pod_obj.name)
-        log.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
-
-        assert (
-            pod_restart_time_before_fix > pod_restart_time_after_fix
-        ), "Time taken for pod restart after fix is more than before fix."
 
         # Check data integrity.
         final_md5sum = []
@@ -320,3 +314,11 @@ class TestSelinuxrelabel(E2ETest):
         assert (
             initial_md5sum == final_md5sum
         ), "Data integrity failed after applying fix."
+
+        # Get pod restart time.
+        pod_restart_time_after_fix = self.get_pod_start_time(pod_name=self.pod_obj.name)
+        log.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
+
+        assert (
+            pod_restart_time_before_fix > pod_restart_time_after_fix
+        ), "Time taken for pod restart after fix is more than before fix."
