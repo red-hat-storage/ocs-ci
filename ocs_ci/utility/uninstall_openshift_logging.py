@@ -109,10 +109,9 @@ def uninstall_cluster_logging():
         delete_logging_namespaces(force=True)
         raise error
 
-    for pvc_obj in pvc_objs:
-        pv_obj = pvc_obj.backed_pv_obj
     assert delete_pvcs(pvc_objs=pvc_objs), "PVCs deletion failed"
     for pvc_obj in pvc_objs:
+        pv_obj = pvc_obj.backed_pv_obj
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name, timeout=300)
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
     logger.info("Verified: PVCs are deleted.")
