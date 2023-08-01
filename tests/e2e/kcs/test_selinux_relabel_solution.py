@@ -20,28 +20,20 @@ log = logging.getLogger(__name__)
 
 
 class TestSelinuxrelabel(E2ETest):
-    def create_deploymentconfig_pod(self, service_account_factory, **kwargs):
+    def create_deploymentconfig_pod(self, **kwargs):
         """
         Create deployment pod.
-
-        Args:
-            service_account_factory (function): A call to service_account_factory function
 
         Returns:
             object: helpers.create_pod instance
 
         """
-
-        # Create service_account to get privilege for deployment pods
-        service_account_obj = service_account_factory(
-            project=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
         try:
             pod_obj = helpers.create_pod(
                 interface_type=constants.CEPHFS_INTERFACE,
                 pvc_name=self.pvc_obj.name,
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-                sa_name=service_account_obj.name,
+                sa_name=self.service_account_obj.name,
                 dc_deployment=True,
                 pod_dict_path=constants.PERF_DC_YAML,
                 **kwargs,
@@ -135,7 +127,9 @@ class TestSelinuxrelabel(E2ETest):
                 "path": "/metadata/annotations/pv.kubernetes.io~1bind-completed",
             }
         ]
-        ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=self.project_namespace)
+        ocp_pvc = ocp.OCP(
+            kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
         ocp_pvc.patch(
             resource_name=self.pvc_obj.name,
             params=params,
@@ -156,7 +150,7 @@ class TestSelinuxrelabel(E2ETest):
         """
         try:
             # Get the pod conditions
-            pod = ocp.OCP(kind="pod", namespace=self.project_namespace)
+            pod = ocp.OCP(kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
             conditions = pod.exec_oc_cmd(
                 f"get pod {pod_name} -n openshift-storage -o jsonpath='{{.status.conditions}}'"
             )
@@ -195,7 +189,9 @@ class TestSelinuxrelabel(E2ETest):
         res_pod.delete_deploymentconfig_pods(self.pod_obj)
 
     @pytest.mark.parametrize("copies", [5])
-    def test_selinux_relabel_for_existing_pvc(self, pvc_factory, copies):
+    def test_selinux_relabel_for_existing_pvc(
+        self, pvc_factory, service_account_factory, copies
+    ):
         """
         Steps:
             1. Create cephfs pvcs and attach pod with more than 100K files across multiple nested directories
@@ -206,11 +202,11 @@ class TestSelinuxrelabel(E2ETest):
             6. Check for relabeling - this should not be happening.
 
         Args:
-            copies (int): number of copies to write kernel files in pod
             pvc_factory (function): A call to pvc_factory function
+            service_account_factory (function): A call to service_account_factory function
+            copies (int): number of copies to write kernel files in pod
 
         """
-        self.project_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         self.ocp_project = ocp.OCP(
             kind=constants.NAMESPACE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
@@ -222,6 +218,11 @@ class TestSelinuxrelabel(E2ETest):
             size="20",
         )
 
+        # Create service_account to get privilege for deployment pods
+        self.service_account_obj = service_account_factory(
+            project=self.ocp_project,
+        )
+
         # Create deployment pod
         self.pod_obj = self.create_deploymentconfig_pod(
             command=["/opt/multiple_files.sh"],
@@ -230,7 +231,7 @@ class TestSelinuxrelabel(E2ETest):
         log.info(f"files copied to pod {self.pod_obj.name}")
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
-        # Leave pod for some time to run
+        # Leave pod for some time to run since file creation time is longer
         waiting_time = 120
         log.info(f"Waiting for {waiting_time} seconds")
         time.sleep(120)
@@ -238,7 +239,7 @@ class TestSelinuxrelabel(E2ETest):
         # Get the md5sum of some random files
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         num_of_files = random.randint(3, 9)
-        pod = ocp.OCP(kind="pod", namespace=self.project_namespace)
+        pod = ocp.OCP(kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         random_files = pod.exec_oc_cmd(
             f"exec -it {self.pod_obj.name} -- /bin/bash"
             f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
@@ -257,9 +258,13 @@ class TestSelinuxrelabel(E2ETest):
         # Delete pod and Get time for pod restart
         self.pod_obj.delete(wait=True)
         self.pod_obj = self.get_app_pod()
-        assert wait_for_pods_to_be_running(
-            pod_names=[self.pod_obj.name], timeout=600, sleep=15
-        )
+        try:
+            wait_for_pods_to_be_running(
+                pod_names=[self.pod_obj.name], timeout=600, sleep=15
+            )
+        except CommandFailed:
+            log.exception(f"Pod {self.pod_obj.name} didn't reach to running state")
+
         pod_restart_time_before_fix = self.get_pod_start_time(
             pod_name=self.pod_obj.name
         )
@@ -299,9 +304,9 @@ class TestSelinuxrelabel(E2ETest):
         pod_restart_time_after_fix = self.get_pod_start_time(pod_name=self.pod_obj.name)
         log.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
 
-        assert pod_restart_time_before_fix > pod_restart_time_after_fix, (
-            "Time taken for pod restart after fix is " "more than before fix."
-        )
+        assert (
+            pod_restart_time_before_fix > pod_restart_time_after_fix
+        ), "Time taken for pod restart after fix is more than before fix."
 
         # Check data integrity.
         final_md5sum = []
@@ -314,4 +319,4 @@ class TestSelinuxrelabel(E2ETest):
 
         assert (
             initial_md5sum == final_md5sum
-        ), "Data integrity failed after applying fix"
+        ), "Data integrity failed after applying fix."
