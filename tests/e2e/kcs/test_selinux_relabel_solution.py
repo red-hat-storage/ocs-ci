@@ -15,6 +15,11 @@ from ocs_ci.ocs.resources import pod as res_pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    bugzilla,
+    polarion_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -188,6 +193,9 @@ class TestSelinuxrelabel(E2ETest):
         """
         res_pod.delete_deploymentconfig_pods(self.pod_obj)
 
+    @tier1
+    @bugzilla("1988284")
+    @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
     def test_selinux_relabel_for_existing_pvc(
         self, pvc_factory, service_account_factory, copies
@@ -257,7 +265,7 @@ class TestSelinuxrelabel(E2ETest):
 
         # Delete pod and Get time for pod restart
         self.pod_obj.delete(wait=True)
-        self.pod_obj = self.get_app_pod()
+        self.pod_obj = self.get_app_pod_obj()
         try:
             wait_for_pods_to_be_running(
                 pod_names=[self.pod_obj.name], timeout=600, sleep=15
@@ -274,15 +282,15 @@ class TestSelinuxrelabel(E2ETest):
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
 
         # Delete pod so that fix will be applied for new pod
-        self.pod_obj = self.get_app_pod()
+        self.pod_obj = self.get_app_pod_obj()
         self.pod_obj.delete(wait=True)
-        self.pod_obj = self.get_app_pod()
+        self.pod_obj = self.get_app_pod_obj()
         assert wait_for_pods_to_be_running(
             pod_names=[self.pod_obj.name], timeout=600, sleep=15
         ), f"Pod {self.pod_obj.name} didn't reach to running state"
 
         # Get the node of cephfs pod
-        self.pod_obj = self.get_app_pod()
+        self.pod_obj = self.get_app_pod_obj()
         node_name = res_pod.get_pod_node(pod_obj=self.pod_obj).name
 
         # Check SeLinux Relabeling is set to false
@@ -295,9 +303,9 @@ class TestSelinuxrelabel(E2ETest):
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
 
         # Restart pod after applying fix
-        self.pod_obj = self.get_app_pod()
+        self.pod_obj = self.get_app_pod_obj()
         self.pod_obj.delete(wait=True)
-        self.pod_obj = self.get_app_pod()
+        self.pod_obj = self.get_app_pod_obj()
         assert wait_for_pods_to_be_running(
             pod_names=[self.pod_obj.name], timeout=600, sleep=15
         ), f"Pod {self.pod_obj.name} didn't reach to running state"
