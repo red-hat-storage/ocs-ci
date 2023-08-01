@@ -23,16 +23,6 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @tier4b
-@pytest.mark.parametrize(
-    argnames=["resource_on_node"],
-    argvalues=[
-        pytest.param(
-            "ramen-dr-cluster-operator", marks=pytest.mark.polarion_id("OCS-4438")
-        ),
-        pytest.param("rbd-mirror", marks=pytest.mark.polarion_id("OCS-4437")),
-        pytest.param("submariner-gateway", marks=pytest.mark.polarion_id("OCS-4439")),
-    ],
-)
 class TestManagedClusterNodeFailure:
     """
     Test to verify failure of node hosting important pods of different
@@ -65,6 +55,18 @@ class TestManagedClusterNodeFailure:
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.parametrize(
+        argnames=["resource_on_node"],
+        argvalues=[
+            pytest.param(
+                "ramen-dr-cluster-operator", marks=pytest.mark.polarion_id("OCS-4438")
+            ),
+            pytest.param("rbd-mirror", marks=pytest.mark.polarion_id("OCS-4437")),
+            pytest.param(
+                "submariner-gateway", marks=pytest.mark.polarion_id("OCS-4439")
+            ),
+        ],
+    )
     def test_single_managed_cluster_node_failure(
         self, resource_on_node, dr_workload, nodes_multicluster, node_restart_teardown
     ):
@@ -127,6 +129,18 @@ class TestManagedClusterNodeFailure:
                 ), "Not all the pods reached running state."
             dr_helpers.wait_for_mirroring_status_ok(timeout=600)
 
+    @pytest.mark.parametrize(
+        argnames=["resource_on_node"],
+        argvalues=[
+            pytest.param(
+                "ramen-dr-cluster-operator", marks=pytest.mark.polarion_id("OCS-5029")
+            ),
+            pytest.param("rbd-mirror", marks=pytest.mark.polarion_id("OCS-5028")),
+            pytest.param(
+                "submariner-gateway", marks=pytest.mark.polarion_id("OCS-5030")
+            ),
+        ],
+    )
     def test_both_managed_cluster_node_failure(
         self, resource_on_node, dr_workload, nodes_multicluster, node_restart_teardown
     ):
