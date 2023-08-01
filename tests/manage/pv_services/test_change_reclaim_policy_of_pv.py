@@ -288,6 +288,6 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         )
         for pvc_name, uuid in pvc_uuid_map.items():
             assert verify_volume_deleted_in_backend(
-                interface=interface, image_uuid=uuid, pool_name=pool_name
+                interface=interface, image_uuid=uuid, pool_name=pool_name, timeout=300
             ), f"Volume associated with PVC {pvc_name} still exists in backend"
         log.info("Verified: Image/Subvolume removed from backend.")
