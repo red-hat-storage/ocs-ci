@@ -272,7 +272,6 @@ def create_pod(
             only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
         deployment (bool): True for Deployment creation, False otherwise
-        subpath (list): Value of subPath parameter in pod yaml
         scc (dict): Security context for fsGroup, runAsUer, runAsGroup
         mountpath (list): Value of mountPath parameter in pod yaml
 
@@ -284,8 +283,6 @@ def create_pod(
 
     """
 
-    if namespace:
-        namespace = namespace if namespace else config.ENV_DATA["cluster_namespace"]
     if (
         interface_type == constants.CEPHBLOCKPOOL
         or interface_type == constants.CEPHBLOCKPOOL_THICK
