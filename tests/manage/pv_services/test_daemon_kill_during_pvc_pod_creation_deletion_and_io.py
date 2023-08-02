@@ -599,10 +599,11 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
                     interface=constants.CEPHBLOCKPOOL,
                     image_uuid=uuid,
                     pool_name=pool_name,
+                    timeout=300,
                 )
             if pvc_obj.interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
-                    interface=constants.CEPHFILESYSTEM, image_uuid=uuid
+                    interface=constants.CEPHFILESYSTEM, image_uuid=uuid, timeout=300
                 )
             assert (
                 ret
