@@ -12,7 +12,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.helpers.disconnected import get_oc_mirror_tool, get_opm_tool
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import NotFoundError
+from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
 from ocs_ci.utility.deployment import get_and_apply_icsp_from_catalog
 from ocs_ci.utility import templating
@@ -275,8 +275,16 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
         "--dest-skip-tls --ignore-history"
     )
     if icsp:
-        cmd += " --continue-on-error"
-    exec_cmd(cmd, timeout=7200)
+        cmd += " --continue-on-error --skip-missing"
+    try:
+        exec_cmd(cmd, timeout=7200)
+    except CommandFailed:
+        # if icsp is configured, the oc mirror command might fail (return non 0 rc),
+        # even though we use --continue-on-error and --skip-missing arguments
+        # (not sure if it is because of a bug in oc mirror plugin or because of some other issue),
+        # but we want to continue to try to mirror the images manually with applied the icsp rules
+        if not icsp:
+            raise
 
     # look for manifests directory with Image mapping, CatalogSource and ICSP
     # manifests
