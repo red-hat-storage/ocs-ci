@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ms_provider_and_consumer_required,
     skipif_ms_provider_and_consumer,
     ms_consumer_required,
+    skipif_bm,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -43,6 +44,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @skipif_bm
     @skipif_external_mode
     @ipi_deployment_required
     def test_create_scale_pods_and_pvcs_using_kube_job(
