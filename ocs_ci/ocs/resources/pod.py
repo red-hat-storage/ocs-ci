@@ -227,7 +227,7 @@ class Pod(OCS):
             str: stdout of the command
         """
         cmd = f"cat {src_path} | oc exec -i {self.name} -n {self.namespace} -- sh -c 'cat > {target_path}'"
-        return exec_cmd(cmd, timeout=timeout, use_shell=True)
+        return exec_cmd(cmd, timeout=timeout, shell=True)
 
     def copy_from_pod_oc_exec(
         self, target_path, src_path, timeout=600, chunk_size=2000
@@ -256,7 +256,7 @@ class Pod(OCS):
                 cmd
                 + f"\"tail -n '+{start_line}' {src_path}| head -n '{chunk_size}'\" >> {target_path}",
                 timeout=timeout,
-                use_shell=True,
+                shell=True,
             )
             start_line += chunk_size
             logger.info(f"size of target file = {os.stat(target_path).st_size}b")
