@@ -18,7 +18,7 @@ spec:
         app: s3cli
     spec:
       securityContext:
-        runAsUser: 0
+        runAsUser: 1000
       volumes:
         - name: service-ca
           configMap:

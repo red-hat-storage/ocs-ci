@@ -139,7 +139,6 @@ class TestBucketIO(MCGTest):
         ],
     )
     @flaky
-    @bugzilla("2227162")
     def test_write_file_to_bucket(
         self,
         mcg_obj,
