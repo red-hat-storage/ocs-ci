@@ -2,7 +2,9 @@ import logging
 from time import sleep
 from selenium.webdriver.support.wait import WebDriverWait
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
 from ocs_ci.ocs.ui.helpers_ui import get_element_by_text
+
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +237,7 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.generic_locators["confirm_action"])
 
 
-class NamespaceStoreUI(PageNavigator):
+class NamespaceStoreUI(ObjectService):
     def __init__(self):
         super().__init__()
         self.sc_loc = self.obc_loc
@@ -257,9 +259,9 @@ class NamespaceStoreUI(PageNavigator):
 
         """
         logger.info("Create namespace-store via UI")
-
-        self.nav_object_storage_page()
-        self.do_click(locator=self.validation_loc["namespacestore_page"])
+        self.navigate_namespace_store_tab()
+        # self.nav_object_storage_page().navigate_namespace_store_tab()
+        # self.do_click(locator=self.validation_loc["namespacestore_page"])
         self.do_click(self.sc_loc["namespace_store_create"])
         self.do_send_keys(self.sc_loc["namespace_store_name"], namespace_store_name)
 
