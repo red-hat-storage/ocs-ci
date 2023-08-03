@@ -66,7 +66,7 @@ setup(
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
         "GitPython==3.1.30",
-        "selenium==3.141.0",
+        "selenium==4.11.2",
         "webdriver-manager==3.9.1",
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
