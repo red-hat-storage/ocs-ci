@@ -2311,8 +2311,6 @@ def awscli_pod_fixture(request, scope_name):
         awscli_pod_obj, constants.STATUS_RUNNING, timeout=180
     )
 
-    awscli_pod_obj.exec_cmd_on_pod(f"chmod +x {constants.AWSCLI_TEST_OBJ_DIR}")
-
     def _awscli_pod_cleanup():
         s3cli_sts_obj.delete()
         service_ca_configmap.delete()

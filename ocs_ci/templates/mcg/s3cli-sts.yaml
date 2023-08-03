@@ -18,14 +18,14 @@ spec:
         app: s3cli
     spec:
       securityContext:
-        runAsUser: 1000
+        runAsUser: 0
       volumes:
         - name: service-ca
           configMap:
             name: awscli-service-ca
       containers:
         - name: s3cli
-          image: quay.io/ocsci/s3-cli-with-test-objects-multiarch:1.0
+          image: quay.io/ocsci/s3-cli-with-test-objects-multiarch:2.0
           command: ['/bin/sh']
           stdin: true
           tty: true
