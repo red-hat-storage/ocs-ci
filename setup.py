@@ -66,7 +66,7 @@ setup(
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
         "GitPython==3.1.30",
-        "urllib3==2.0.4",
+        "urllib3==1.26.15",
         "selenium==4.11.2",
         "webdriver-manager==4.0.0",
         # greenlet 1.0.0 is broken on ppc64le
