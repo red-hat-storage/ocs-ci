@@ -7,23 +7,20 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier1,
     skipif_external_mode,
+    skipif_ocs_version,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import skipif_ocs_version
+
 
 logger = logging.getLogger(__name__)
 
 
-@bugzilla("2228555")
 class TestDeleteRbdPool(ManageTest):
-    """
-    Delete a rbd pool with reference to storageclass
-    """
-
     @tier1
+    @bugzilla("2228555")
     @skipif_external_mode
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
