@@ -8,28 +8,9 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     polarion_id,
 )
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pod_obj
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.helpers.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
-
-
-def respin_app_pod(pvc_obj):
-    """
-    Respin app pod
-    """
-    namespace = pvc_obj.project.namespace
-    app_pod = get_pod_name_by_pattern("pod-test-cephfs-", namespace=namespace)
-    pod_obj = get_pod_obj(name=app_pod[0], namespace=namespace)
-    log.info(f"Deleting pod {app_pod[0]}")
-    pod_obj.delete(wait=True, force=False)
-    log.info("Creating pod and mounting the same PVC")
-    pod_obj.create()
-    wait_for_resource_state(
-        resource=pod_obj, state=constants.STATUS_RUNNING, timeout=300
-    )
 
 
 def validate_permissions(pod_obj):
@@ -38,7 +19,6 @@ def validate_permissions(pod_obj):
     """
 
     cmd_output = pod_obj.exec_cmd_on_pod(command="ls -l /etc/healing-controller.d/")
-    log.info(cmd_output)
     cmd_output = cmd_output.split()
     assert "root" in cmd_output[4] and cmd_output[13], "Owner is not set to root "
     assert "9999" in cmd_output[5] and cmd_output[14], "Owner group is not set to 9999"
@@ -53,7 +33,9 @@ class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
     Test to verify fsgroup set on subpath volume for cephfs PVC
     """
 
-    def test_verify_fsgroup_set_on_subpath_volume_for_cephfs(self, pvc_factory):
+    def test_verify_fsgroup_set_on_subpath_volume_for_cephfs(
+        self, pvc_factory, teardown_factory
+    ):
         """
         1. Create cephfs pvc
         2. Create pod with scc
@@ -79,7 +61,7 @@ class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
             "runAsGroup": 9999,
             "runAsUser": 9999,
         }
-        mountpath = [
+        volumemounts = [
             {
                 "mountPath": "/etc/healing-controller.d/record",
                 "subPath": "record",
@@ -103,22 +85,26 @@ class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
             security_context=security_context,
             command=command,
             scc=scc,
-            mountpath=mountpath,
+            volumemounts=volumemounts,
         )
-        assert (
-            OCP(kind=constants.POD, namespace=pvc_obj.project.namespace)
-        ).wait_for_resource(
+        pod.ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=pod.name,
             timeout=360,
             sleep=3,
         )
-
         validate_permissions(pod)
 
         # Respin app pod and validate the permissions again
-        respin_app_pod(pvc_obj)
+        log.info(f"Deleting pod {pod.name}")
+        pod.delete()
+        pod.ocp.wait_for_delete(resource_name=pod.name)
+        log.info("Creating pod and mounting the same PVC")
+        pod.create()
+        wait_for_resource_state(
+            resource=pod, state=constants.STATUS_RUNNING, timeout=300
+        )
 
         validate_permissions(pod)
 
-        pod.delete()
+        teardown_factory(pod)

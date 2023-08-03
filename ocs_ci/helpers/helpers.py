@@ -243,7 +243,7 @@ def create_pod(
     subpath=None,
     deployment=False,
     scc=None,
-    mountpath=None,
+    volumemounts=None,
 ):
     """
     Create a pod
@@ -256,7 +256,7 @@ def create_pod(
         node_name (str): The name of specific node to schedule the pod
         pod_dict_path (str): YAML path for the pod
         sa_name (str): Serviceaccount name
-        security_context (dict): security context in the form of dictionary
+        security_context (dict): Set security context on container in the form of dictionary
         dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
@@ -272,8 +272,8 @@ def create_pod(
             only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
         deployment (bool): True for Deployment creation, False otherwise
-        scc (dict): Security context for fsGroup, runAsUer, runAsGroup
-        mountpath (list): Value of mountPath parameter in pod yaml
+        scc (dict): Set security context on pod like fsGroup, runAsUer, runAsGroup
+        volumemounts (list): Value of mountPath parameter in pod yaml
 
     Returns:
         Pod: A Pod instance
@@ -402,13 +402,13 @@ def create_pod(
     if sa_name and (dc_deployment or deployment):
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
 
-    if mountpath:
+    if volumemounts:
         if dc_deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "volumeMounts"
-            ] = mountpath
+            ] = volumemounts
         else:
-            pod_data["spec"]["containers"][0]["volumeMounts"] = mountpath
+            pod_data["spec"]["containers"][0]["volumeMounts"] = volumemounts
 
     if subpath:
         if dc_deployment or deployment:
