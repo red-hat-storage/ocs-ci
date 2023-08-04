@@ -36,6 +36,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
     get_nodes,
+    get_worker_nodes,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
@@ -93,7 +94,7 @@ class PlatformNodesFactory:
             "rosa": AWSNodes,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
-            "ibm_cloud_ipi": IBMCloudIPI
+            "ibm_cloud_ipi": IBMCloudIPI,
         }
 
     def get_nodes_platform(self):
@@ -2968,12 +2969,21 @@ class IBMCloudIPI(object):
         self.ibmcloud_ipi = ibmcloud.IBMCloudIPI()
 
     def get_data_volumes(self):
-        raise NotImplementedError("Get data volume functionality is not implemented")
+        pvs = get_deviceset_pvs()
+        s = [
+            pv.get().get("spec").get("csi").get("volumeAttributes").get("volumeId")
+            for pv in pvs
+        ]
+        logger.info(s)
+        return s
 
     def get_node_by_attached_volume(self, volume):
-        raise NotImplementedError(
-            "Get node by attached volume functionality is not implemented"
-        )
+        volume_kube_path = f"kubernetes.io/csi/vpc.block.csi.ibm.io^{volume}"
+        all_nodes = get_node_objs(get_worker_nodes())
+        for node in all_nodes:
+            for volume in node.data["status"]["volumesAttached"]:
+                if volume_kube_path in volume.values():
+                    return node
 
     def stop_nodes(self, nodes, force=True):
         self.ibmcloud_ipi.stop_nodes(nodes=nodes, force=force)
@@ -2988,15 +2998,13 @@ class IBMCloudIPI(object):
         self.ibmcloud_ipi.restart_nodes_by_stop_and_start(nodes=nodes, force=force)
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
-        raise NotImplementedError("Detach volume functionality is not implemented")
+        self.ibmcloud_ipi.detach_volume(volume=volume, node=node)
 
     def attach_volume(self, volume, node):
-        raise NotImplementedError("Attach volume functionality is not implemented")
+        self.ibmcloud_ipi.attach_volume(volume=volume, node=node)
 
     def wait_for_volume_attach(self, volume):
-        raise NotImplementedError(
-            "Wait for volume attach functionality is not implemented"
-        )
+        self.ibmcloud_ipi.wait_for_volume_attach(volume=volume)
 
     def restart_nodes_by_stop_and_start_teardown(self):
         self.ibmcloud_ipi.restart_nodes_by_stop_and_start_force()

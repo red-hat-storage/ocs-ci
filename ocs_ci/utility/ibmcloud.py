@@ -379,7 +379,7 @@ class IBMCloud(object):
                     logger.info(f"return worker node is:{worker_id}")
                     return worker_node
 
-    def get_data_volumes(self):
+    def get_data_volumes(self, volumes):
         """
         Returns volumes in IBM Cloud for cluster.
 
@@ -544,7 +544,10 @@ class IBMCloudIPI(object):
         if wait:
             for node in nodes:
                 sample = TimeoutSampler(
-                    timeout=timeout, sleep=10, func=self.check_node_status, node_name=node.name
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
                 )
                 sample.wait_for_func_status(result=constants.STATUS_RUNNING.lower())
 
@@ -582,11 +585,16 @@ class IBMCloudIPI(object):
         if wait:
             for node in nodes:
                 sample = TimeoutSampler(
-                    timeout=300, sleep=10, func=self.check_node_status, node_name=node.name
+                    timeout=300,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
                 )
                 sample.wait_for_func_status(result=constants.STATUS_STOPPED)
 
-    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True, timeout=300):
+    def restart_nodes_by_stop_and_start(
+        self, nodes, wait=True, force=True, timeout=300
+    ):
         """
         Restart nodes by stopping and starting VM in IBM Cloud
 
@@ -604,7 +612,10 @@ class IBMCloudIPI(object):
         if wait:
             for node in nodes:
                 sample = TimeoutSampler(
-                    timeout=timeout, sleep=10, func=self.check_node_status, node_name=node.name
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
                 )
                 sample.wait_for_func_status(result=constants.STATUS_STOPPED)
         logger.info(f"Starting instances {list(nodes)}")
@@ -613,7 +624,10 @@ class IBMCloudIPI(object):
         if wait:
             for node in nodes:
                 sample = TimeoutSampler(
-                    timeout=timeout, sleep=10, func=self.check_node_status, node_name=node.name
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
                 )
                 sample.wait_for_func_status(result=constants.STATUS_RUNNING.lower())
 
@@ -633,7 +647,7 @@ class IBMCloudIPI(object):
 
             out = run_ibmcloud_cmd(cmd)
             out = json.loads(out)
-            return out['status']
+            return out["status"]
         except CommandFailed as cf:
             if "Instance not found" in str(cf):
                 return True
@@ -647,31 +661,25 @@ class IBMCloudIPI(object):
         resource_name = None
         stop_node_list = []
         stopping_node_list = []
-        cmd = f"ibmcloud is ins --all-resource-groups --output json"
+        cmd = "ibmcloud is ins --all-resource-groups --output json"
         out = run_ibmcloud_cmd(cmd)
         all_resource_grp = json.loads(out)
         cluster_name = config.ENV_DATA["cluster_name"]
         for resource_name in all_resource_grp:
-            if cluster_name in resource_name['resource_group']['name']:
-                resource_name = resource_name['resource_group']['name']
+            if cluster_name in resource_name["resource_group"]["name"]:
+                resource_name = resource_name["resource_group"]["name"]
                 break
         assert resource_name, "Resource Not found"
         cmd = f"ibmcloud is ins --resource-group-name {resource_name} --output json"
         out = run_ibmcloud_cmd(cmd)
         all_instance_output = json.loads(out)
         for instance_name in all_instance_output:
-            if instance_name['status'] == constants.STATUS_STOPPED:
-                node_obj = OCP(
-                    kind="Node",
-                    resource_name=instance_name['name']
-                ).get()
+            if instance_name["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
                 node_obj_ocs = OCS(**node_obj)
                 stop_node_list.append(node_obj_ocs)
-            if instance_name['status'] == constants.STATUS_STOPPED:
-                node_obj = OCP(
-                    kind="Node",
-                    resource_name=instance_name['name']
-                ).get()
+            if instance_name["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
                 node_obj_ocs = OCS(**node_obj)
                 stopping_node_list.append(node_obj_ocs)
                 stop_node_list.append(node_obj_ocs)
@@ -699,7 +707,108 @@ class IBMCloudIPI(object):
         if wait:
             for node in nodes:
                 sample = TimeoutSampler(
-                    timeout=300, sleep=10, func=self.check_node_status, node_name=node.name
+                    timeout=300,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
                 )
                 sample.wait_for_func_status(result=True)
                 break
+
+    def detach_volume(self, volume, node=None):
+        """
+        Detach volume from node on IBM Cloud.
+
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node id to detach.
+
+        """
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if out["status"] == "available":
+            attachment_id = out["volume_attachments"][0]["id"]
+            cmd = (
+                f"ibmcloud is instance-volume-attachment-update {node.name} {attachment_id} "
+                f"--output json --auto-delete=false"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            logger.info(f"Update command output: {out}")
+            cmd = (
+                f"ibmcloud is instance-volume-attachment-detach {node.name} {attachment_id} "
+                f"--output=json --force"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"detachment command output: {out}")
+
+    def attach_volume(self, volume, node):
+        """
+        Attach volume to node on IBM Cloud.
+
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node id to attach.
+
+        """
+        logger.info(
+            f"attach_volumes:{node[0].get()['metadata']['labels']['failure-domain.beta.kubernetes.io/zone']}"
+        )
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if len(out["volume_attachments"]) == 0:
+
+            logger.info(f"attachment command output: {out}")
+            cmd = f"ibmcloud is instance-volume-attachment-add data-vol-name {node[0].name} {volume} --output json"
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            logger.info(f"attachment command output: {out}")
+        else:
+            logger.info(f"volume is already attached to node: {out}")
+
+    def is_volume_attached(self, volume):
+        """
+        Check if volume is attached to node or not.
+
+        Args:
+            volume (str): The volume to check for to attached
+
+        Returns:
+            bool: 'True' if volume is attached otherwise 'False'
+
+        """
+        logger.info("Checking volume attachment status")
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        return out["volume_attachments"]
+
+    def wait_for_volume_attach(self, volume):
+        """
+        Checks volume is attached to node or not
+
+        Args:
+            volume (str): The volume to wait for to be attached
+
+        Returns:
+            bool: True if the volume has been attached to the
+                instance, False otherwise
+
+        """
+        try:
+            for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
+                if sample:
+                    return True
+        except TimeoutExpiredError:
+            logger.info("Volume is not attached to node")
+            return False
