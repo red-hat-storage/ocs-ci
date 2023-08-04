@@ -69,7 +69,7 @@ class TestDiskFailures(ManageTest):
             """
             assert nodes.wait_for_volume_attach(data_volume), (
                 f"Volume {data_volume} failed to be re-attached to worker "
-                f"node {worker_node}"
+                f"node {worker_node.name}"
             )
 
     @pytest.fixture(autouse=True)
