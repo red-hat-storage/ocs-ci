@@ -629,3 +629,7 @@ class ReturnedEmptyResponseException(Exception):
 
 class ArchitectureNotSupported(Exception):
     pass
+
+
+class PDBNotCreatedException(Exception):
+    pass
