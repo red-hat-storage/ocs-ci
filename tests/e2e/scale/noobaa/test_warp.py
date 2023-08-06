@@ -22,7 +22,7 @@ def warps3(request):
     warps3.create_resource_warp()
 
     def teardown():
-        warps3.cleanup()
+        warps3.cleanup(multi_client=False)
 
     request.addfinalizer(teardown)
     return warps3
@@ -65,6 +65,7 @@ class TestWarp(E2ETest):
             obj_size="1.5MiB",
             validate=True,
             timeout=4000,
+            multi_client=False,
         )
 
         # Check ceph health status
