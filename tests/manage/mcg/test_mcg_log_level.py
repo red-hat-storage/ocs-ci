@@ -22,8 +22,9 @@ from ocs_ci.ocs.constants import (
 
 log = getLogger(__name__)
 NAMESPACE = config.ENV_DATA.get("cluster_namespace", OPENSHIFT_STORAGE_NAMESPACE)
-LOG_LEVEL_DEFAULT = "default"
+LOG_LEVEL_DEFAULT = "default_level"
 LOG_LEVEL_WARN = "warn"
+LOG_LEVEL_ALL = "all"
 
 
 def get_noobaa_cfg_log_level(cfgmap: OCP) -> str:
