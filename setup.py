@@ -66,8 +66,8 @@ setup(
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
         "GitPython==3.1.30",
-        "selenium==4.11.0",
-        "webdriver-manager==4.0.0",
+        "selenium==3.141.0",
+        "webdriver-manager==3.9.1",
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
         # by default program attempting to load an x86_64-only library from a native arm64 process
