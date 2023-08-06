@@ -1,12 +1,16 @@
 import logging
+import random
+
 import pytest
 
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
     polarion_id,
+    skipif_external_mode,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -14,8 +18,8 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence
-from ocs_ci.helpers.helpers import fetch_used_size
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.helpers.helpers import fetch_used_size, create_unique_resource_name
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 
 log = logging.getLogger(__name__)
 
@@ -137,3 +141,152 @@ class TestRbdSpaceReclaim(ManageTest):
         log.info(check_file_existence(pod_obj=pod_obj, file_path=file_path))
         if check_file_existence(pod_obj=pod_obj, file_path=file_path):
             log.info(f"{fio_filename4} is intact")
+
+    @tier1
+    @skipif_external_mode
+    @pytest.mark.parametrize(
+        argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
+        argvalues=[
+            pytest.param(
+                *[
+                    2,
+                    "aggressive",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_PENDING,
+                ],
+                marks=pytest.mark.polarion_id("OCS-8888"),
+            ),
+            # pytest.param(
+            #     *[
+            #         3,
+            #         "aggressive",
+            #         constants.IMMEDIATE_VOLUMEBINDINGMODE,
+            #         constants.STATUS_BOUND,
+            #     ],
+            #     marks=pytest.mark.polarion_id("OCS-5135"),
+            # ),
+            # pytest.param(
+            #     *[
+            #         2,
+            #         "none",
+            #         constants.WFFC_VOLUMEBINDINGMODE,
+            #         constants.STATUS_PENDING,
+            #     ],
+            #     marks=pytest.mark.polarion_id("OCS-5136"),
+            # ),
+            # pytest.param(
+            #     *[
+            #         3,
+            #         "none",
+            #         constants.IMMEDIATE_VOLUMEBINDINGMODE,
+            #         constants.STATUS_BOUND,
+            #     ],
+            #     marks=pytest.mark.polarion_id("OCS-5137"),
+            # ),
+        ],
+    )
+    def test_reclaim_space_cronjob_with_annotation(
+        self,
+        replica,
+        compression,
+        volume_binding_mode,
+        pvc_status,
+        project_factory,
+        storageclass_factory_class,
+        pvc_factory,
+        pod_factory,
+    ):
+        """
+        Test case to check that reclaim space job is created for rbd pvc
+        in the openshift-* namespace if reclaim space annotation is set to true
+        """
+        # namespace = f"openshift-{uuid4().hex}"
+        # self.namespace = namespace
+        # with open(
+        #     os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "ReclaimSpace.yaml"), "r"
+        # ) as stream:
+        #     try:
+        #         namespace_yaml = yaml.safe_load(stream)
+        #         namespace_yaml["metadata"]["name"] = namespace
+        #     except yaml.YAMLError as exc:
+        #         log.error(f"Can not read template yaml file {exc}")
+        #
+        # temp_file = NamedTemporaryFile(
+        #     mode="w+", prefix="namespace_reclaim_space", suffix=".yaml"
+        # )
+        # with open(temp_file.name, "w") as f:
+        #     yaml.dump(namespace_yaml, f)
+        #
+        # self.temp_files_list.append(temp_file.name)
+        #
+        # res = run_oc_command(cmd=f"create -f {temp_file.name}")
+        # assert ERRMSG not in res[0], (
+        #     f"Failed to create namespace with name {namespace} " f"got result: {res}"
+        # )
+        # log.info(f"Namespace {namespace} created")
+
+        self.namespace = create_unique_resource_name(
+            "reclaim-space-cronjob", "namespace"
+        )
+        project = project_factory(project_name=self.namespace)
+
+        interface_type = constants.CEPHBLOCKPOOL
+        sc_obj = storageclass_factory_class(
+            interface=interface_type,
+            new_rbd_pool=True,
+            replica=replica,
+            compression=compression,
+            volume_binding_mode=volume_binding_mode,
+            pool_name="test-pool",
+        )
+
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=self.namespace,
+            storageclass=sc_obj.name,
+            size="1Gi",
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=pvc_status,
+            volume_mode=volume_binding_mode,
+        )
+
+        helpers.wait_for_resource_state(pvc_obj, pvc_status)
+
+        schedule = ["hourly", "midnight", "weekly"]
+        schedule = random.choice(schedule)
+
+        log.info("add reclaimspace.csiaddons.openshift.io/schedule label to PVC ")
+        pvc_obj.add_label(
+            "reclaimspace.csiaddons.openshift.io/schedule", f"@{schedule}"
+        )
+
+        chron_job_list = self.wait_for_cronjobs(True, 60)
+
+        assert chron_job_list, "Reclaim space cron job does not exist"
+
+    def wait_for_cronjobs(self, cronjobs_exist, timeout=60):
+        """
+        Runs 'oc get reclaimspacecronjob' with the TimeoutSampler
+
+        Args:
+            cronjobs_exist (bool): Condition to be tested, True if cronjobs should exist, False otherwise
+            timeout (int): Timeout
+        Returns:
+
+            list : Result of 'oc get reclaimspacecronjob' command
+
+        """
+        try:
+            for sample in TimeoutSampler(
+                timeout=timeout,
+                sleep=5,
+                func=exec_cmd,
+                cmd="get reclaimspacecronjob",
+                namespace=self.namespace,
+            ):
+                if (len(sample) > 1 and cronjobs_exist) or (
+                    len(sample) == 1 and not cronjobs_exist
+                ):
+                    return sample
+        except TimeoutExpiredError:
+            return False
