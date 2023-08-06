@@ -156,33 +156,33 @@ class TestRbdSpaceReclaim(ManageTest):
                 ],
                 marks=pytest.mark.polarion_id("OCS-8888"),
             ),
-            # pytest.param(
-            #     *[
-            #         3,
-            #         "aggressive",
-            #         constants.IMMEDIATE_VOLUMEBINDINGMODE,
-            #         constants.STATUS_BOUND,
-            #     ],
-            #     marks=pytest.mark.polarion_id("OCS-5135"),
-            # ),
-            # pytest.param(
-            #     *[
-            #         2,
-            #         "none",
-            #         constants.WFFC_VOLUMEBINDINGMODE,
-            #         constants.STATUS_PENDING,
-            #     ],
-            #     marks=pytest.mark.polarion_id("OCS-5136"),
-            # ),
-            # pytest.param(
-            #     *[
-            #         3,
-            #         "none",
-            #         constants.IMMEDIATE_VOLUMEBINDINGMODE,
-            #         constants.STATUS_BOUND,
-            #     ],
-            #     marks=pytest.mark.polarion_id("OCS-5137"),
-            # ),
+            pytest.param(
+                *[
+                    3,
+                    "aggressive",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_BOUND,
+                ],
+                marks=pytest.mark.polarion_id("OCS-8888"),
+            ),
+            pytest.param(
+                *[
+                    2,
+                    "none",
+                    constants.WFFC_VOLUMEBINDINGMODE,
+                    constants.STATUS_PENDING,
+                ],
+                marks=pytest.mark.polarion_id("OCS-8888"),
+            ),
+            pytest.param(
+                *[
+                    3,
+                    "none",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_BOUND,
+                ],
+                marks=pytest.mark.polarion_id("OCS-8888"),
+            ),
         ],
     )
     def test_reclaim_space_cronjob_with_annotation(
@@ -198,32 +198,17 @@ class TestRbdSpaceReclaim(ManageTest):
     ):
         """
         Test case to check that reclaim space job is created for rbd pvc
-        in the openshift-* namespace if reclaim space annotation is set to true
+        in the openshift-* namespace with reclaim space annotation
+
+        Steps:
+        1. Create a project
+        2. Create a storage class with reclaim policy as delete
+        3. Create a pvc with above storage class
+        4. Create a pod using above pvc
+        5. Run IO on the pod
+        6. Add reclaim space annotation to the pvc
+        7. Validate the reclaim space cronjob
         """
-        # namespace = f"openshift-{uuid4().hex}"
-        # self.namespace = namespace
-        # with open(
-        #     os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "ReclaimSpace.yaml"), "r"
-        # ) as stream:
-        #     try:
-        #         namespace_yaml = yaml.safe_load(stream)
-        #         namespace_yaml["metadata"]["name"] = namespace
-        #     except yaml.YAMLError as exc:
-        #         log.error(f"Can not read template yaml file {exc}")
-        #
-        # temp_file = NamedTemporaryFile(
-        #     mode="w+", prefix="namespace_reclaim_space", suffix=".yaml"
-        # )
-        # with open(temp_file.name, "w") as f:
-        #     yaml.dump(namespace_yaml, f)
-        #
-        # self.temp_files_list.append(temp_file.name)
-        #
-        # res = run_oc_command(cmd=f"create -f {temp_file.name}")
-        # assert ERRMSG not in res[0], (
-        #     f"Failed to create namespace with name {namespace} " f"got result: {res}"
-        # )
-        # log.info(f"Namespace {namespace} created")
 
         self.namespace = create_unique_resource_name(
             "reclaim-space-cronjob", "namespace"
