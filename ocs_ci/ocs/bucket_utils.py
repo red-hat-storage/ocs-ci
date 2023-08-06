@@ -2058,3 +2058,37 @@ def delete_all_noobaa_buckets(mcg_obj, request):
             logger.info("Skipping creation of first.bucket as it already exists")
 
     request.addfinalizer(finalizer)
+
+
+def get_nb_bucket_stores(mcg_obj, bucket_name):
+    """
+    Query the noobaa-db for the backingstores/namespacestores
+    that a given bucket is using for its data placement
+
+    Args:
+        mcg_obj: MCG object
+        bucket_name: name of the bucket
+
+    Returns:
+        list: list of backingstores/namespacestores names
+
+    """
+    stores = set()
+    bucket_data = bucket_read_api(mcg_obj, bucket_name)
+
+    # Namespacestore bucket
+    if "namespace" in bucket_data:
+        read_srcs_list = [
+            d["resource"] for d in bucket_data["namespace"]["read_resources"]
+        ]
+        write_src = bucket_data["namespace"]["write_resource"]["resource"]
+        stores.update(read_srcs_list + [write_src])
+
+    # Data bucket
+    else:
+        tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
+        for tier in tiers:
+            tier_data = mcg_obj.send_rpc_query("tier_api", "read_tier", {"name": tier})
+            stores.update(tier_data["reply"]["attached_pools"])
+
+    return list(stores)
