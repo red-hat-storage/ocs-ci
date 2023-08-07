@@ -1,6 +1,5 @@
 import logging
 import random
-
 import pytest
 
 from ocs_ci.helpers import helpers
@@ -11,12 +10,15 @@ from ocs_ci.framework.testlib import (
     tier1,
     polarion_id,
     skipif_external_mode,
+    bugzilla,
 )
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     UnexpectedBehaviour,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence
 from ocs_ci.helpers.helpers import fetch_used_size, create_unique_resource_name
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
@@ -143,45 +145,28 @@ class TestRbdSpaceReclaim(ManageTest):
             log.info(f"{fio_filename4} is intact")
 
     @tier1
+    @bugzilla("2046677")
     @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
         argvalues=[
             pytest.param(
                 *[
-                    2,
-                    "aggressive",
-                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
-                    constants.STATUS_PENDING,
-                ],
-                marks=pytest.mark.polarion_id("OCS-8888"),
-            ),
-            pytest.param(
-                *[
                     3,
                     "aggressive",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
                 ],
-                marks=pytest.mark.polarion_id("OCS-8888"),
+                marks=pytest.mark.polarion_id("OCS-4587"),
             ),
             pytest.param(
                 *[
-                    2,
-                    "none",
-                    constants.WFFC_VOLUMEBINDINGMODE,
-                    constants.STATUS_PENDING,
-                ],
-                marks=pytest.mark.polarion_id("OCS-8888"),
-            ),
-            pytest.param(
-                *[
-                    3,
+                    1,
                     "none",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
                 ],
-                marks=pytest.mark.polarion_id("OCS-8888"),
+                marks=pytest.mark.polarion_id("OCS-4587"),
             ),
         ],
     )
@@ -194,7 +179,6 @@ class TestRbdSpaceReclaim(ManageTest):
         project_factory,
         storageclass_factory_class,
         pvc_factory,
-        pod_factory,
     ):
         """
         Test case to check that reclaim space job is created for rbd pvc
@@ -210,10 +194,18 @@ class TestRbdSpaceReclaim(ManageTest):
         7. Validate the reclaim space cronjob
         """
 
+        # get random size for pvc
+        ceph_cluster = CephCluster()
+        pvc_size = random.randint(1, int(ceph_cluster.get_ceph_free_capacity()))
+
+        # get random schedule
+        schedule = ["hourly", "midnight", "weekly"]
+        schedule = random.choice(schedule)
+
         self.namespace = create_unique_resource_name(
             "reclaim-space-cronjob", "namespace"
         )
-        project = project_factory(project_name=self.namespace)
+        project_obj = project_factory(project_name=self.namespace)
 
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj = storageclass_factory_class(
@@ -222,32 +214,45 @@ class TestRbdSpaceReclaim(ManageTest):
             replica=replica,
             compression=compression,
             volume_binding_mode=volume_binding_mode,
-            pool_name="test-pool",
+            pool_name="test-pool-cronjob",
         )
 
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
-            project=self.namespace,
-            storageclass=sc_obj.name,
-            size="1Gi",
+            project=project_obj,
+            storageclass=sc_obj,
+            size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWO,
             status=pvc_status,
-            volume_mode=volume_binding_mode,
+            volume_mode=constants.VOLUME_MODE_BLOCK,
         )
 
         helpers.wait_for_resource_state(pvc_obj, pvc_status)
 
-        schedule = ["hourly", "midnight", "weekly"]
-        schedule = random.choice(schedule)
-
         log.info("add reclaimspace.csiaddons.openshift.io/schedule label to PVC ")
-        pvc_obj.add_label(
-            "reclaimspace.csiaddons.openshift.io/schedule", f"@{schedule}"
+        OCP(kind=constants.PVC, namespace=self.namespace).annotate(
+            f"reclaimspace.csiaddons.openshift.io/schedule=@{schedule}", pvc_obj.name
         )
 
-        chron_job_list = self.wait_for_cronjobs(True, 60)
+        pvc_to_chron_job_dict = self.wait_for_cronjobs(True, 60)
+        assert pvc_to_chron_job_dict, "Reclaim space cron job does not exist"
 
-        assert chron_job_list, "Reclaim space cron job does not exist"
+        chron_job_name = (
+            pvc_obj.get()
+            .get("metadata")
+            .get("annotations")
+            .get("reclaimspace.csiaddons.openshift.io/cronjob")
+        )
+        chron_job_schedule = (
+            pvc_obj.get()
+            .get("metadata")
+            .get("annotations")
+            .get("reclaimspace.csiaddons.openshift.io/schedule")
+        )
+
+        assert (
+            pvc_to_chron_job_dict[chron_job_name] == chron_job_schedule
+        ), "Reclaim space cron job does not exist, or schedule is not correct"
 
     def wait_for_cronjobs(self, cronjobs_exist, timeout=60):
         """
@@ -258,20 +263,28 @@ class TestRbdSpaceReclaim(ManageTest):
             timeout (int): Timeout
         Returns:
 
-            list : Result of 'oc get reclaimspacecronjob' command
+            pvc_to_chron_job_dict (dict): Dictionary with PVC name as key and cronjob schedule as value,
+            None if no cronjobs exist
 
         """
+        name_json_path = '{.items[*].metadata.name}{"\t"}{.items[*].spec.schedule}'
         try:
             for sample in TimeoutSampler(
                 timeout=timeout,
                 sleep=5,
                 func=exec_cmd,
-                cmd="get reclaimspacecronjob",
-                namespace=self.namespace,
+                cmd=f"oc get reclaimspacecronjob -n {self.namespace} -o jsonpath='{name_json_path}'",
             ):
-                if (len(sample) > 1 and cronjobs_exist) or (
-                    len(sample) == 1 and not cronjobs_exist
+                if len(sample.stderr) > 0:
+                    return None
+                if (len(sample.stdout) > 0 and cronjobs_exist) or (
+                    len(sample.stdout) == 0 and not cronjobs_exist
                 ):
-                    return sample
+                    pvc_to_schedule_list = sample.stdout.decode().split()
+                    mid_index = len(pvc_to_schedule_list) // 2
+                    chronjob_schedules = pvc_to_schedule_list[mid_index:]
+                    chronjob_names = pvc_to_schedule_list[:mid_index]
+                    pvc_to_schedule_dict = dict(zip(chronjob_names, chronjob_schedules))
+                    return pvc_to_schedule_dict
         except TimeoutExpiredError:
-            return False
+            return None
