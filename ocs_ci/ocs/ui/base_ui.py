@@ -725,9 +725,12 @@ class SeleniumDriver(WebDriver):
 
     # noinspection PyUnresolvedReferences
     def __new__(cls):
-        if not hasattr(cls, "instance"):
+        if not hasattr(cls, "instance") or not hasattr(cls.instance, "driver"):
+            logger.info("Creating instance of Selenium Driver")
             cls.instance = super(SeleniumDriver, cls).__new__(cls)
             cls.instance.driver = cls._set_driver()
+        else:
+            logger.info("SeleniumDriver instance already exists")
         return cls.instance.driver
 
     @classmethod

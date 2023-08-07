@@ -1,2 +1,3 @@
 -e git+https://gitlab.com/mbukatov/ocp-network-split.git@v0.3.0#egg=ocp-network-split
 -e .
+-e git+https://github.com/jayph88/webdriver_manager.git@fix_chromedriver_download#egg=webdriver_manager
