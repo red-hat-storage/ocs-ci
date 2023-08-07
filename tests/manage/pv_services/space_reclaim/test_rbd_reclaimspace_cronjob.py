@@ -181,17 +181,15 @@ class TestRbdSpaceReclaim(ManageTest):
         pvc_factory,
     ):
         """
-        Test case to check that reclaim space job is created for rbd pvc
-        in the openshift-* namespace with reclaim space annotation
+        Test case to check that reclaim space job is created for rbd pvc with reclaim space annotation
 
         Steps:
         1. Create a project
         2. Create a storage class with reclaim policy as delete
         3. Create a pvc with above storage class
-        4. Create a pod using above pvc
-        5. Run IO on the pod
-        6. Add reclaim space annotation to the pvc
-        7. Validate the reclaim space cronjob
+        4. Run IO on the pod
+        5. Add reclaim space annotation to the pvc
+        6. Validate the reclaim space cronjob
         """
 
         # get random size for pvc
