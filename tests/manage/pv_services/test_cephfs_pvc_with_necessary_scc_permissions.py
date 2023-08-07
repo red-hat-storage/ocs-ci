@@ -87,6 +87,9 @@ class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
             scc=scc,
             volumemounts=volumemounts,
         )
+
+        teardown_factory(pod)
+
         pod.ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=pod.name,
@@ -106,5 +109,3 @@ class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
         )
 
         validate_permissions(pod)
-
-        teardown_factory(pod)
