@@ -884,7 +884,8 @@ class VSPHEREUPI(VSPHEREBASE):
             # prepare configuration for disconnected deployment
             if config.DEPLOYMENT.get("disconnected"):
                 # set non-existing gateway, to make the cluster disconnected
-                config.ENV_DATA["gateway"] = "0.0.0.0"
+                # config.ENV_DATA["gateway"] = "0.0.0.0"
+                config.ENV_DATA["gateway"] = "${cidrhost(var.machine_cidr, 1)}"
                 # set DNS server accessible from the disconnected env
                 config.ENV_DATA["dns"] = config.DEPLOYMENT["disconnected_dns_server"]
                 ocp_relase_image = get_ocp_release_image()
