@@ -20,6 +20,10 @@ from ocs_ci.ocs.resources.pod import (
     get_mgr_pods,
     get_osd_pods,
     get_fio_rw_iops,
+    get_plugin_pods,
+    get_cephfsplugin_provisioner_pods,
+    get_rbdfsplugin_provisioner_pods,
+    get_operator_pods,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
@@ -322,6 +326,13 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             "mon": partial(get_mon_pods),
             "mgr": partial(get_mgr_pods),
             "osd": partial(get_osd_pods),
+            "rbdplugin": partial(get_plugin_pods, interface=constants.CEPHBLOCKPOOL),
+            "cephfsplugin": partial(
+                get_plugin_pods, interface=constants.CEPHFILESYSTEM
+            ),
+            "cephfsplugin_provisioner": partial(get_cephfsplugin_provisioner_pods),
+            "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
+            "operator": partial(get_operator_pods),
         }
 
         # Disruption object for each pod type
