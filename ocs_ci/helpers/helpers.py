@@ -244,6 +244,7 @@ def create_pod(
     deployment=False,
     scc=None,
     volumemounts=None,
+    pvc_readOnlyMode=None,
 ):
     """
     Create a pod
@@ -308,10 +309,18 @@ def create_pod(
             pod_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = pvc_name
+            if pvc_readOnlyMode:
+                pod_data["spec"]["template"]["spec"]["volumes"][0][
+                    "persistentVolumeClaim"
+                ]["readOnly"] = pvc_readOnlyMode
         else:
             pod_data["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = pvc_name
+            if pvc_readOnlyMode:
+                pod_data["spec"]["volumes"][0]["persistentVolumeClaim"][
+                    "readOnly"
+                ] = pvc_readOnlyMode
     if ports:
         if dc_deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["ports"] = ports
