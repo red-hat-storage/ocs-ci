@@ -1049,6 +1049,9 @@ class VSPHEREUPI(VSPHEREBASE):
                     # comment bootstrap module
                     comment_bootstrap_in_lb_module()
 
+                    logger.debug(
+                        "Remove bootstrap IP from load balancer and restart haproxy"
+                    )
                     # remove bootstrap IP in load balancer and
                     # restart haproxy
                     lb = LoadBalancer()
