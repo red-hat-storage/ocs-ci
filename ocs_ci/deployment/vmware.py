@@ -42,6 +42,7 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.ocs.openshift_ops import OCP
@@ -1108,6 +1109,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 # Approving CSRs here in-case if any exists
                 approve_pending_csr()
 
+            # Update kubeconfig with proxy-url (if client_http_proxy
+            # configured) to redirect client access through proxy server.
+            update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
