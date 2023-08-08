@@ -539,7 +539,9 @@ class OCSUpgrade(object):
             with NamedTemporaryFile() as cs_yaml:
                 dump_data_to_temp_yaml(cs_data, cs_yaml.name)
                 ocs_catalog.apply(cs_yaml.name)
-                get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
+                if not config.DEPLOYMENT.get("disconnected"):
+                    # on Disconnected cluster, ICSP from the ocs-registry image is not needed/valid
+                    get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
 
 
 def run_ocs_upgrade(
