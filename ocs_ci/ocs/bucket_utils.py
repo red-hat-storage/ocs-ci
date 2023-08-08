@@ -1,6 +1,7 @@
 """
 Helper functions file for working with object buckets
 """
+
 import json
 import logging
 import os
@@ -17,7 +18,11 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    run_cmd,
+    exec_nb_db_query,
+)
 from ocs_ci.helpers.helpers import create_resource
 
 logger = logging.getLogger(__name__)
@@ -2246,3 +2251,34 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
             stores.update(tier_data["reply"]["attached_pools"])
 
     return list(stores)
+
+
+def change_objects_creation_date(bucket_name, object_keys, new_creation_time):
+    """
+    Change the creation date of given objects one year back at the noobaa-db
+
+    Args:
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list): A list of object keys to change their creation date
+        new_creation_time (int): The new creation time in unix timestamp in seconds
+
+    Example usage:
+        # Change the creation date of objects obj1 and obj2 in bucket my-bucket to one minute back
+        change_objects_creation_date("my-bucket", ["obj1", "obj2"], time.time() - 60)
+
+    """
+    if not object_keys:
+        return
+
+    psql_query = (
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({new_creation_time}))) "
+        "WHERE data->>'bucket' IN ( "
+        "SELECT _id "
+        "FROM buckets "
+        f"WHERE data->>'name' = '{bucket_name}') "
+        f"AND data->>'key' IN {tuple(object_keys)};"
+    )
+
+    exec_nb_db_query(psql_query)

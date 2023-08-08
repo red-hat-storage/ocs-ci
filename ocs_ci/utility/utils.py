@@ -4579,3 +4579,41 @@ def is_cluster_y_version_upgraded():
     ) > version_module.get_semantic_version(prev_version_num, only_major_minor=True):
         is_upgraded = True
     return is_upgraded
+
+
+def exec_nb_db_query(query):
+    """
+    Send a psql query to the Noobaa DB
+
+    Example usage:
+        exec_nb_db_query("SELECT data ->> 'key' FROM objectmds;")
+
+    Args:
+        query (str): The query to send
+
+    Returns:
+        list of str: The query result rows
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.resources import pod
+
+    nb_db_pod = pod.Pod(
+        **pod.get_pods_having_label(
+            label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )[0]
+    )
+
+    response = nb_db_pod.exec_cmd_on_pod(
+        command=f'psql -U postgres -d nbcore -c "{query}"',
+        out_yaml_format=False,
+    )
+
+    output = response.strip().split("\n")
+
+    if len(output) >= 3:
+        # Remove the two header rows and the summary row
+        output = output[2:-1]
+
+    return output
