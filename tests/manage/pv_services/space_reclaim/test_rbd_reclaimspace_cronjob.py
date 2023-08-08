@@ -161,7 +161,7 @@ class TestRbdSpaceReclaim(ManageTest):
             ),
             pytest.param(
                 *[
-                    1,
+                    2,
                     "none",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
