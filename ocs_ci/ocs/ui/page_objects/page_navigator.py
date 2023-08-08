@@ -54,7 +54,7 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
-        self.page_has_loaded(5, 5, self.page_nav["page_navigator_sidebar"])
+        self.page_has_loaded(5, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
         """

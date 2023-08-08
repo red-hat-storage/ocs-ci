@@ -1,6 +1,3 @@
-import random
-import re
-import string
 from pathlib import Path
 import datetime
 import logging
@@ -10,8 +7,6 @@ import time
 import zipfile
 import traceback
 from functools import reduce
-
-import pandas as pd
 from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
@@ -33,8 +28,6 @@ from ocs_ci.helpers.helpers import get_current_test_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
-    CephHealthException,
-    IncorrectUIOptionRequested,
 )
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.views import locators
@@ -635,196 +628,6 @@ class BaseUI:
         wait = WebDriverWait(self.driver, timeout=timeout)
         wait.until(ec.url_matches(endswith))
 
-
-class EditLabelForm(PageNavigator):
-    def __init__(self):
-        super().__init__()
-
-    def check_edit_labels(self, block_pool_name: str = None):
-        """
-        Method to validate that warning message appears when input rule is violated
-           Rule (visible on warning):
-               Labels must start and end with an alphanumeric character,
-               can consist of lower-case letters, numbers and non-consecutive dots (.),
-               and hyphens (-), forward slash (/), underscore(_) and equal to (=)
-
-           Error (visible on metadata.label rule violated):
-               Error "Invalid value: <value>: name part must consist of alphanumeric characters, '-', '_' or '.',
-               and must start and end with an alphanumeric character (e.g. 'MyName', or 'my.name', or '123-abc',
-               regex used for validation is <regex> for field "metadata.labels".
-
-           Args:
-               block_pool_name (str): Name of the block pool. If not provided, the value will be retrieved from the
-                   instance attribute `block_pool_name` if available. If neither `block_pool_name` argument nor
-                   the instance attribute is provided, an `IncorrectUIOptionRequested` exception will be raised.
-
-           Returns:
-               bool: The result of the validation.
-
-           Raises:
-               IncorrectUIOptionRequested: If `block_pool_name` argument is not provided and the instance attribute
-                   `block_pool_name` is not available.
-        """
-
-        if not block_pool_name and not hasattr(self, "block_pool_name"):
-            raise IncorrectUIOptionRequested(
-                "function require that Blocking Pool created and block_pool_name was passed either "
-                "as argument to method verify_edit_labels or to BlockPools constructor"
-            )
-        elif block_pool_name:
-            block_pool_name = block_pool_name
-        elif hasattr(self, "block_pool_name"):
-            block_pool_name = random.choice(self.block_pool_name)
-
-        def create_random_valid_label():
-            alphanumeric_chars = (
-                string.ascii_lowercase + string.ascii_uppercase + string.digits
-            )
-            valid_chars = alphanumeric_chars + "./-_"
-            first_char = random.choice(alphanumeric_chars)
-            middle_chars = [
-                random.choice(valid_chars) for _ in range(random.randint(0, 10))
-            ]
-            middle_chars = re.sub(r"\.{2,}", ".", "".join(middle_chars))
-            last_char = random.choice(alphanumeric_chars)
-            return first_char + "".join(middle_chars) + last_char
-
-        valid_label = create_random_valid_label() + "=" + create_random_valid_label()
-
-        def create_random_invalid_label():
-            invalid_chars = string.punctuation.translate(str.maketrans("", "", "./-_"))
-            invalid_label_list = [
-                valid_label + random.choice(invalid_chars),
-                random.choice(invalid_chars) + valid_label,
-                valid_label + ".." + create_random_valid_label(),
-            ]
-            return random.choice(invalid_label_list)
-
-        invalid_label = create_random_invalid_label()
-
-        self.open_edit_label_of_block_pool(block_pool_name)
-
-        if random.choice([True, False]):
-            logger.info(
-                f"send valid label '{valid_label}' to check edit Block Pool label warning message"
-            )
-            self.do_send_keys(self.bp_loc["edit_labels_of_pool_input"], valid_label)
-            res = not self.wait_until_expected_text_is_found(
-                self.bp_loc["invalid_label_name_note_edit_label_pool"],
-                expected_text="Invalid label name",
-                timeout=10,
-            )
-        else:
-            logger.info(
-                f"send invalid label '{invalid_label}' to check edit Block Pool label warning message"
-            )
-            self.do_send_keys(self.bp_loc["edit_labels_of_pool_input"], invalid_label)
-            res = self.wait_until_expected_text_is_found(
-                self.bp_loc["invalid_label_name_note_edit_label_pool"],
-                expected_text="Invalid label name",
-                timeout=10,
-            )
-        self.cancel_edit_label()
-
-        # if the test is complex add result of this function to results dataframe
-        if hasattr(self, "test_results"):
-            self.test_results.loc[len(self.test_results)] = [
-                "edit Block Pool label warnings",
-                self.check_edit_labels.__name__,
-                res,
-            ]
-        return res
-
-    def open_edit_label_of_block_pool(self, block_pool_name):
-        """
-        Opens the edit label popup of a Block Pool specified by the given `block_pool_name`.
-
-        Args:
-            block_pool_name (str): The name of the block pool to open the edit label page for.
-        """
-        self.do_send_keys(
-            self.generic_locators["search_resource_field"], block_pool_name
-        )
-        self.do_click(self.bp_loc["actions_outside_pool"])
-        self.do_click(self.bp_loc["edit_labels_of_pool"])
-
-    def enter_label_and_save(self, label):
-        """Enter the specified `label` in the edit label input field and save it.
-
-        Args:
-            label (str): The label to enter.
-        """
-        self.do_send_keys(self.bp_loc["edit_labels_of_pool_input"], label)
-        self.save_edit_label()
-
-    def cancel_edit_label(self):
-        """
-        Cancel the edit label operation.
-        """
-        self.do_click(self.bp_loc["cancel_edit_labels_of_pool"], enable_screenshot=True)
-
-    def save_edit_label(self):
-        """
-        Save the changes made in the edit label operation.
-        """
-        self.do_click(self.bp_loc["edit_labels_of_pool_save"], enable_screenshot=True)
-
-
-class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm):
-    def __init__(self, block_pool_existed: list = None):
-        StorageSystemTab.__init__(self)
-        CreateResourceForm.__init__(self)
-        self.name_input_loc = self.validation_loc["blockpool_name"]
-        self.rules = {
-            constants.UI_INPUT_RULES_BLOCKING_POOL[
-                "rule1"
-            ]: self._check_max_length_backing_store_rule,
-            constants.UI_INPUT_RULES_BLOCKING_POOL[
-                "rule2"
-            ]: self._check_start_end_char_rule,
-            constants.UI_INPUT_RULES_BLOCKING_POOL[
-                "rule3"
-            ]: self._check_only_lower_case_numbers_periods_hyphens_rule,
-            constants.UI_INPUT_RULES_BLOCKING_POOL[
-                "rule4"
-            ]: self._check_blockpool_not_used_before_rule,
-        }
-        self.block_pool_existed = block_pool_existed
-
-    def _check_blockpool_not_used_before_rule(self, rule_exp) -> bool:
-        """
-        Checks whether the blockpool name allowed to use again.
-
-        This function executes an OpenShift command to retrieve the names of all existing blockpools in all namespaces.
-        It then checks whether the name of the existed namespace store would be allowed to use.
-
-        Args:
-            rule_exp (str): the rule requested to be checked. rule_exp text should match the text from validation popup
-
-        Returns:
-            bool: True if not allowed to use duplicated blockpool name, False otherwise.
-        """
-
-        existing_blockpool_names = str(
-            OCP().exec_oc_cmd(
-                "get CephBlockPool --all-namespaces -o custom-columns=':metadata.name'"
-            )
-        )
-        return self._check_resource_name_not_exists_rule(
-            existing_blockpool_names, rule_exp
-        )
-
-    def verify_cephblockpool_status(self, status_exp: str = "Ready"):
-
-        logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHBLOCKPOOL}'")
-        cephblockpool_status = self.get_element_text(
-            self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}-status"]
-        )
-        if not status_exp == cephblockpool_status:
-            raise CephHealthException(
-                f"cephblockpool status error | expected status:Ready \n "
-                f"actual status:{cephblockpool_status}"
-            )
 
 def screenshot_dom_location(type_loc="screenshot"):
     """
