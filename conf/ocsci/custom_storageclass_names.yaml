@@ -1,5 +1,6 @@
 ---
 ENV_DATA:
+  custom_default_storageclass_names: true
   storageclassnames:
     cephFilesystems: custom-storageclass-cephfs
     cephObjectStores: custom-storageclass-ceph-rgw
