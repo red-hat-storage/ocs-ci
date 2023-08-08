@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_intransit_encryption_notset,
     tier1,
     skipif_ocs_version,
+    green_squad,
 )
 from ocs_ci.ocs.constants import STATUS_BOUND, CEPHBLOCKPOOL
 
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 
 @skipif_intransit_encryption_notset
+@green_squad
 class TestDataIntegrityWithInTransitEncryption:
     @pytest.fixture(autouse=True)
     def set_encryption_at_teardown(self, request):

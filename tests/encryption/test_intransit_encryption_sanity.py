@@ -9,12 +9,14 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ocs_version,
+    green_squad,
 )
 from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
 
+@green_squad
 class TestInTransitEncryptionSanity:
     @pytest.fixture(autouse=True)
     def set_encryption_at_teardown(self, request):
