@@ -161,9 +161,6 @@ class BAREMETALUPI(Deployment):
                 cmd=cmd
             ), "Failed to create required folder"
 
-            cmd = f"rm -rf {self.helper_node_details['bm_dnsmasq_dir']}*"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Delete dir"
-
             # Install syslinux
             cmd = "yum install syslinux -y"
             assert self.helper_node_handler.exec_cmd(
@@ -176,18 +173,6 @@ class BAREMETALUPI(Deployment):
                 cmd=cmd
             ), "Failed to Copy required files"
 
-            upload_dict = {
-                constants.PXE_CONF_FILE: "dnsmasq.pxe.conf",
-                constants.COMMON_CONF_FILE: "dnsmasq.common.conf",
-            }
-            for key, val in zip(upload_dict.keys(), upload_dict.values()):
-                upload_file(
-                    self.host,
-                    key,
-                    os.path.join(self.helper_node_details["bm_dnsmasq_dir"], val),
-                    self.user,
-                    key_file=self.private_key,
-                )
             # Restarting dnsmasq service
             cmd = "systemctl restart dnsmasq"
             assert self.helper_node_handler.exec_cmd(
@@ -306,16 +291,6 @@ class BAREMETALUPI(Deployment):
             worker_count = 0
             logger.info("Deploying OCP cluster for Bare Metal platform")
             logger.info(f"Openshift-installer will be using log level:{log_cli_level}")
-            upload_file(
-                self.host,
-                constants.COMMON_CONF_FILE,
-                os.path.join(
-                    self.helper_node_details["bm_dnsmasq_dir"], "dnsmasq.common.conf"
-                ),
-                self.user,
-                key_file=self.private_key,
-            )
-            logger.info("Uploading PXE files")
             ocp_version = get_ocp_version()
             for machine in self.mgmt_details:
                 if self.mgmt_details[machine].get("cluster_name") or self.mgmt_details[
@@ -324,12 +299,13 @@ class BAREMETALUPI(Deployment):
                     pxe_file_path = self.create_pxe_files(
                         ocp_version=ocp_version,
                         role=self.mgmt_details[machine].get("role"),
+                        disk_path=self.mgmt_details[machine].get("root_disk_id"),
                     )
                     upload_file(
                         server=self.host,
                         localpath=pxe_file_path,
                         remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                        f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                        f"/pxelinux.cfg/01-{self.mgmt_details[machine]['private_mac'].replace(':', '-')}",
                         user=self.user,
                         key_file=self.private_key,
                     )
@@ -629,7 +605,7 @@ class BAREMETALUPI(Deployment):
             )
             return response.json()["message"]
 
-        def create_pxe_files(self, ocp_version, role):
+        def create_pxe_files(self, ocp_version, role, disk_path):
             """
             Create pxe file for giver role
 
@@ -659,8 +635,9 @@ LABEL pxeboot
     MENU LABEL PXE Boot
     MENU DEFAULT
     KERNEL rhcos-installer-kernel-x86_64
-    APPEND ip=dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 coreos.inst=yes \
-coreos.inst.install_dev=sda {bm_metal_loc} coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
+    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 \
+console=tty0 coreos.inst.install_dev=/dev/disk/by-id/{disk_path} {bm_metal_loc} \
+coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
 {extra_data}
 LABEL disk0
   MENU LABEL Boot disk (0x80)
@@ -707,6 +684,7 @@ LABEL disk0
             run_cmd(cmd=cmd, secrets=secrets)
 
 
+@retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
 def clean_disk():
     """
     Perform disk cleanup
