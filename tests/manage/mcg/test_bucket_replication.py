@@ -307,18 +307,18 @@ class TestReplication(MCGTest):
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
-            # pytest.param(
-            #     {
-            #         "interface": "OC",
-            #         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-            #     },
-            #     {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-            #     marks=[
-            #         tier2,
-            #         pytest.mark.polarion_id("OCS-2680"),
-            #         pytest.mark.bugzilla("2168788"),
-            #     ],
-            # ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                marks=[
+                    tier2,
+                    pytest.mark.polarion_id("OCS-2680"),
+                    pytest.mark.bugzilla("2168788"),
+                ],
+            ),
             pytest.param(
                 {
                     "interface": "CLI",
@@ -330,34 +330,34 @@ class TestReplication(MCGTest):
                 },
                 marks=[tier2, pytest.mark.polarion_id("OCS-2684")],
             ),
-            # pytest.param(
-            #     {
-            #         "interface": "CLI",
-            #         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-            #     },
-            #     {
-            #         "interface": "OC",
-            #         "backingstore_dict": {"gcp": [(1, None)]},
-            #     },
-            #     marks=[tier1],
-            # ),
-            # pytest.param(
-            #     {
-            #         "interface": "OC",
-            #         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-            #     },
-            #     None,
-            #     marks=[
-            #         tier2,
-            #         pytest.mark.bugzilla("2168788"),
-            #     ],
-            # ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"gcp": [(1, None)]},
+                },
+                marks=[tier1],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                None,
+                marks=[
+                    tier2,
+                    pytest.mark.bugzilla("2168788"),
+                ],
+            ),
         ],
         ids=[
-            # "AWStoAZURE-BC-OC",
+            "AWStoAZURE-BC-OC",
             "AZUREtoAWS-BC-CLI",
-            # "AWStoGCP-BC-Hybrid",
-            # "AWStoDefault-BS-Hybrid",
+            "AWStoGCP-BC-Hybrid",
+            "AWStoDefault-BS-Hybrid",
         ],
     )
     def test_unidirectional_bucketclass_replication(
