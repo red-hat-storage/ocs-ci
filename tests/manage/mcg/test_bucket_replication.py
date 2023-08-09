@@ -397,7 +397,7 @@ class TestReplication(MCGTest):
         standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
         ).split(" ")
-        retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
+        retry(CommandFailed, tries=10, delay=10)(sync_object_directory)(
             awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj_session
         )
         written_objects = mcg_obj_session.s3_list_all_objects_in_bucket(
