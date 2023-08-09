@@ -1979,6 +1979,7 @@ OCS_COMPONENTS_MAP = {
     "cephfs": "cephFilesystems",
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
+    "cephnonresilentpools": "cephNonResilientPools",
 }
 
 DEFAULT_PAXOS_SERVICE_TRIM_MIN = 250

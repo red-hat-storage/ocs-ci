@@ -46,6 +46,9 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import convert_device_size
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_storageclass_names_from_storagecluster_spec,
+)
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -608,15 +611,23 @@ def default_storage_class(
         OCS: Existing StorageClass Instance
     """
     external = config.DEPLOYMENT["external_mode"]
+    custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
+    if custom_storage_class:
+        resources = get_storageclass_names_from_storagecluster_spec()
+
     if interface_type == constants.CEPHBLOCKPOOL:
-        if external:
+        if external and (not custom_storage_class):
             resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        elif custom_storage_class:
+            resource_name = resources[constants.OCS_COMPONENTS_MAP["blockpools"]]
         else:
             resource_name = constants.DEFAULT_STORAGECLASS_RBD
         base_sc = OCP(kind="storageclass", resource_name=resource_name)
     elif interface_type == constants.CEPHFILESYSTEM:
-        if external:
+        if external and (not custom_storage_class):
             resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        elif custom_storage_class:
+            resource_name = resources[constants.OCS_COMPONENTS_MAP["cephfs"]]
         else:
             resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
         base_sc = OCP(kind="storageclass", resource_name=resource_name)

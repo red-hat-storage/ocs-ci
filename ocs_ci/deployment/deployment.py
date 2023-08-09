@@ -1304,15 +1304,15 @@ class Deployment(object):
                 "encryption": {"enabled": True}
             }
 
-        # Use Coustome Storageclass Names
+        # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
 
             keys_to_update = [
-                "cephFilesystems",
-                "cephObjectStores",
-                "cephBlockPools",
-                "cephNonResilientPools",
+                constants.OCS_COMPONENTS_MAP["cephfs"],
+                constants.OCS_COMPONENTS_MAP["rgw"],
+                constants.OCS_COMPONENTS_MAP["blockpools"],
+                constants.OCS_COMPONENTS_MAP["cephnonresilentpools"],
             ]
 
             cluster_data.setdefault("spec", {}).setdefault("managedResources", {})

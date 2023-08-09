@@ -2172,10 +2172,10 @@ def get_storageclass_names_from_storagecluster_spec():
     data = {}
 
     keys_to_search = [
-        "cephFilesystems",
-        "cephObjectStores",
-        "cephBlockPools",
-        "cephNonResilientPools",
+        constants.OCS_COMPONENTS_MAP["cephfs"],
+        constants.OCS_COMPONENTS_MAP["rgw"],
+        constants.OCS_COMPONENTS_MAP["blockpools"],
+        constants.OCS_COMPONENTS_MAP["cephnonresilentpools"],
         "nfs",
         "encryption",
     ]
