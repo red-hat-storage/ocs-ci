@@ -46,9 +46,6 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import convert_device_size
-from ocs_ci.ocs.resources.storage_cluster import (
-    get_storageclass_names_from_storagecluster_spec,
-)
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -613,6 +610,10 @@ def default_storage_class(
     external = config.DEPLOYMENT["external_mode"]
     custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
     if custom_storage_class:
+        from ocs_ci.ocs.resources.storage_cluster import (
+            get_storageclass_names_from_storagecluster_spec,
+        )
+
         resources = get_storageclass_names_from_storagecluster_spec()
 
     if interface_type == constants.CEPHBLOCKPOOL:
