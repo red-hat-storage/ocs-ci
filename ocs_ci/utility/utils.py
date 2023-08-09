@@ -24,6 +24,7 @@ from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
 import pexpect
 import pytest
+import unicodedata
 
 import hcl2
 import requests
@@ -649,6 +650,7 @@ def exec_cmd(
         log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
+        masked_stderr = filter_out_emojis(masked_stderr)
         if (
             "grep" in masked_cmd
             and b"command terminated with exit code 1" in completed_process.stderr
@@ -4313,3 +4315,27 @@ def get_latest_acm_tag_unreleased(version):
             return data["name"]
 
     raise TagNotFoundException("Couldn't find given ACM tag!")
+
+
+def is_emoji(char):
+    # Check if a character belongs to the "So" (Symbol, Other) Unicode category
+    return unicodedata.category(char) == "So"
+
+
+def filter_out_emojis(plaintext):
+    """
+    Filter out emojis from a string
+
+    Args:
+        string (str): String to filter out emojis from
+
+    Returns:
+        str: Filtered string
+
+    """
+
+    # Create a list of characters that are not emojis
+    filtered_chars = [char for char in plaintext if not is_emoji(char)]
+    # Join the characters back together to form the filtered string
+    filtered_string = "".join(filtered_chars)
+    return filtered_string
