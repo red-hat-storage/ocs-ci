@@ -5,6 +5,6 @@ ENV_DATA:
     cephFilesystems: custom-storageclass-cephfs
     cephObjectStores: custom-storageclass-ceph-rgw
     cephBlockPools: custom-storageclass-blockpools
-    cephNonResilientPools: custom-cephNonResilientPools
+    cephNonResilientPools: custom-ceph-nonresilientpools
     nfs: custom-storageclass-nfs
     encryption: custom-storageclass-encryption

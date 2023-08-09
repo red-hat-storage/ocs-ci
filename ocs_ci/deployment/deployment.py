@@ -1315,10 +1315,12 @@ class Deployment(object):
                 "cephNonResilientPools",
             ]
 
+            cluster_data.setdefault("spec", {}).setdefault("managedResources", {})
+
             for key in keys_to_update:
                 if storageclassnames.get(key):
-                    cluster_data["spec"]["managedResources"] = {
-                        key: {"storageClassName": storageclassnames[key]}
+                    cluster_data["spec"]["managedResources"][key] = {
+                        "storageClassName": storageclassnames[key]
                     }
 
             if cluster_data["spec"].get("nfs"):
