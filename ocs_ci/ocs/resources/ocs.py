@@ -111,6 +111,8 @@ class OCS(object):
 
     def create(self, do_reload=True):
         log.info(f"Adding {self.kind} with name {self.name}")
+        if self.kind in ("Pod", "Deployment", "DeploymentConfig", "StatefulSet"):
+            utils.update_container_with_mirrored_image(self.data)
         templating.dump_data_to_temp_yaml(self.data, self.temp_yaml)
         status = self.ocp.create(yaml_file=self.temp_yaml)
         if do_reload:
