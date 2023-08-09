@@ -190,7 +190,7 @@ def available_subvolumes(sc_name, toolbox_pod, fs):
         log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")
         return rbd_cephblockpool
     elif sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
-        rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod(f"rbd ls --format json")
+        rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod("rbd ls --format json")
         log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")
         return rbd_cephblockpool
     else:
