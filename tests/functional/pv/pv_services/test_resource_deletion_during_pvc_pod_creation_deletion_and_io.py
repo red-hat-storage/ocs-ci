@@ -417,7 +417,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods having PVCs to delete.")
         for pod_obj in pods_for_pvc_io:
-            get_fio_rw_iops(pod_obj)
+            pod_obj.get_fio_results(300)
         log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
