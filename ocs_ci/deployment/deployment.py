@@ -1317,19 +1317,19 @@ class Deployment(object):
 
             for key in keys_to_update:
                 if storageclassnames.get(key):
-                    cluster_data["spec"]["managedResources"][key][
-                        "storageClassName"
-                    ] = storageclassnames[key]
+                    cluster_data["spec"]["managedResources"] = {
+                        key: {"storageClassName": storageclassnames[key]}
+                    }
 
             if cluster_data["spec"].get("nfs"):
-                cluster_data["spec"]["nfs"]["storageClassName"] = storageclassnames[
-                    "nfs"
-                ]
+                cluster_data["spec"]["nfs"] = {
+                    "storageClassName": storageclassnames["nfs"]
+                }
 
             if cluster_data["spec"].get("encryption"):
-                cluster_data["spec"]["encryption"][
-                    "storageClassName"
-                ] = storageclassnames["encryption"]
+                cluster_data["spec"]["encryption"] = {
+                    "storageClassName": storageclassnames["encryption"]
+                }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
