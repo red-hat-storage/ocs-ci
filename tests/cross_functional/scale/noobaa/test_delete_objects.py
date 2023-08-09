@@ -7,7 +7,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_delete_object,
     s3_delete_objects,
 )
-from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id
+from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id, scale
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ def s3bench(request):
     return s3bench
 
 
+@scale
 class TestDeleteObjects:
     @bugzilla("2181535")
     @polarion_id("OCS-4916")
@@ -64,25 +65,26 @@ class TestDeleteObjects:
         time_1 = datetime.now()
         s3bench.run_benchmark(
             num_obj=1000000,
-            timeout=48000,
-            object_size="1M",
+            timeout=20000,
+            object_size="1K",
             end_point=f"http://s3.openshift-storage.svc/{bucket.name}",
             access_key=mcg_obj.access_key_id,
             secret_key=mcg_obj.access_key,
             validate=False,
         )
 
-        # s3bench.run_benchmark(
-        #     num_obj=1000000,
-        #     timeout=48000,
-        #     object_size="4M",
-        #     end_point=f"http://s3.openshift-storage.svc/{bucket.name}",
-        #     access_key=mcg_obj.access_key_id,
-        #     secret_key=mcg_obj.access_key,
-        # )
+        s3bench.run_benchmark(
+            num_obj=1000000,
+            timeout=80000,
+            object_size="4M",
+            end_point=f"http://s3.openshift-storage.svc/{bucket.name}",
+            access_key=mcg_obj.access_key_id,
+            secret_key=mcg_obj.access_key,
+            validate=False,
+        )
         time_2 = datetime.now()
         log.info(
-            f" Time taken to generate 1 mil objects of 4k size: {(time_2-time_1).total_seconds()}"
+            f" Time taken to generate and upload objects: {(time_2-time_1).total_seconds()}"
         )
 
         # List all the objects in the bucket
