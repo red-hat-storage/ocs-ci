@@ -1,0 +1,4 @@
+---
+# This configuration file is used to deploy OpenShiftSDN network
+ENV_DATA:
+  network_type: "OpenShiftSDN"
