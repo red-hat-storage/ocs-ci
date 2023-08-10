@@ -49,7 +49,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
         object_bucket_claim_create_tab = (
-            PageNavigator().nav_odf_default_page().navigate_object_bucket_claims_page()
+            PageNavigator().nav_object_storage().nav_object_buckets_claims_tab()
         )
         object_bucket_claim_create_tab.proceed_resource_creation()
         object_bucket_claim_create_tab.check_error_messages()

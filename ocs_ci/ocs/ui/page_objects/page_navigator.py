@@ -54,7 +54,7 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
-        self.page_has_loaded(5, 5, self.page_nav["page_navigator_sidebar"])
+        self.page_has_loaded(5, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
         """
@@ -99,6 +99,20 @@ class PageNavigator(BaseUI):
         default_tab = OverviewTab()
         logger.info(f"Default page is {self.driver.title}")
         return default_tab
+
+    def nav_object_storage(self):
+        """
+        Navigate to Object Storage Page
+
+        Returns:
+            ObjectService: ObjectService page object
+        """
+        self.navigate_storage()
+        self.do_click(locator=self.page_nav["object_storage"], timeout=90)
+
+        from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+
+        return ObjectService()
 
     def navigate_quickstarts_page(self):
         """
@@ -262,26 +276,16 @@ class PageNavigator(BaseUI):
         Navigate to Object Buckets Page
 
         """
-        logger.info("Navigate to Object Buckets Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(
-            locator=self.page_nav["object_buckets_page"], enable_screenshot=False
-        )
+
+        return self.nav_object_storage().nav_object_buckets_tab()
 
     def navigate_object_bucket_claims_page(self):
         """
         Navigate to Object Bucket Claims Page
 
         """
-        logger.info("Navigate to Object Bucket Claims Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.do_click(
-            locator=self.page_nav["object_bucket_claims_page"], enable_screenshot=False
-        )
 
-        from ocs_ci.ocs.ui.page_objects.object_bucket_claim import ObcUI
-
-        return ObcUI()
+        return self.nav_object_storage().nav_object_buckets_claims_tab()
 
     def navigate_alerting_page(self):
         """

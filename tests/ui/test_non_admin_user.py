@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import skipif_ibm_cloud_managed
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
-from ocs_ci.ocs.ui.page_objects.object_bucket_claim import ObcUI
+from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import ObjectBucketClaimsTab
 
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs import ocp
@@ -62,7 +62,7 @@ class TestOBCUi(ManageTest):
 
         """Login using created user"""
         login_factory(user[0], user[1])
-        obc_ui_obj = ObcUI()
+        obc_ui_obj = ObjectBucketClaimsTab()
         obc_ui_obj.check_obc_option()
 
 
