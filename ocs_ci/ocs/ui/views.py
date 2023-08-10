@@ -33,6 +33,10 @@ login_4_11 = {
     "ocp_page": f"Overview · {azure_managed}Red Hat OpenShift",
     "login_page_title": "Log in · Red Hat OpenShift",
 }
+# Bug opened in Jira https://issues.redhat.com/browse/OCPBUGS-15419. Tmp solution to check locators
+login_4_14 = {
+    "ocp_page": "Cluster · Red Hat OpenShift",
+}
 
 deployment = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
@@ -457,6 +461,11 @@ pvc_4_9 = {
     "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
+
+pvc_4_10 = {
+    "test-project-link": ("(//*[contains(text(),'{}')])[1]", By.XPATH),
+}
+
 pvc_4_12 = {
     "resize-value": ("//input[@data-test='pvc-expand-size-input']", By.XPATH),
 }
@@ -845,6 +854,43 @@ block_pool_4_12 = {
 }
 block_pool_4_13 = {
     "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
+    "pool_name": (
+        "//dt[normalize-space()='Pool name']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "block_pool_volume_type": (
+        "//dt[normalize-space()='Volume type']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "block_pool_replica": (
+        "//dt[normalize-space()='Replicas']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "block_pool_used_capacity": (
+        "//div[normalize-space()='Used']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_avail_capacity": (
+        "//div[normalize-space()='Available']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_compression_status": (
+        "//dt[normalize-space()='Compression status']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "blockpool_compression_eligibility": (
+        "//div[normalize-space()='Compression eligibility']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_compression_ratio": (
+        "//div[normalize-space()='Compression ratio']/following-sibling::div",
+        By.XPATH,
+    ),
+    "blockpool_compression_savings": (
+        "//div[normalize-space()='Compression savings']/following-sibling::div",
+        By.XPATH,
+    ),
+    "storage_class_attached": ("//a[@data-test='inventory-sc']", By.XPATH),
 }
 
 block_pool = {
@@ -1023,6 +1069,7 @@ validation = {
     ),
     "capacity_breakdown_projects": ("//button[text()='Projects']", By.XPATH),
     "capacity_breakdown_pods": ("//button[text()='Pods']", By.XPATH),
+    "storage_cluster_readiness": ("//*[contains(text(),'Ready')]", By.XPATH),
     "backingstore_name": ("input[placeholder='my-backingstore']", By.CSS_SELECTOR),
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
     "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
@@ -1031,6 +1078,7 @@ validation = {
         "input[data-ouia-component-id='OUIA-Generated-TextInputBase-1']",
         By.CSS_SELECTOR,
     ),
+    "blockpool_status": ("//span[@data-test='status-text']", By.XPATH),
 }
 
 validation_4_7 = {
@@ -1180,6 +1228,8 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
+    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "developer_dropdown": (
         'button[data-test-id="perspective-switcher-toggle"]',
         By.CSS_SELECTOR,
@@ -1250,8 +1300,231 @@ validation_4_11 = {
     ),
 }
 
+validation_4_12 = {
+    "storage-system-on-installed-operators": (
+        "//a[normalize-space()='Storage System']",
+        By.XPATH,
+    ),
+}
+
+validation_4_13 = {"topology_tab": ("//a[normalize-space()='Topology']", By.XPATH)}
+
+topology = {
+    "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
+    "node_label": ("//*[@class='pf-topology__node__label']", By.XPATH),
+    # status is in class name of the node_status_axis one from pf-m-warning / pf-m-danger / pf-m-success
+    "node_status_class_axis": (
+        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]/parent::*/parent::*/parent::*/parent::*",
+        By.XPATH,
+    ),
+    "select_entity": (
+        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]/..",
+        By.XPATH,
+    ),
+    "entity_box_select_indicator": (
+        "//*[@class='pf-topology__node__label']"
+        "//*[contains(text(), '{}')]/../../../..",
+        By.XPATH,
+    ),
+    "enter_into_entity_arrow": (
+        "(//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]/parent::*/parent::*/parent::*/parent::*"
+        "//*[@class='pf-topology__node__decorator'])[2]",
+        By.XPATH,
+    ),
+    "cluster_state_ready": (
+        "//*[@class='pf-topology__group odf-topology__group']",
+        By.XPATH,
+    ),
+    "cluster_in_danger": (
+        "//*[@class='pf-topology__group odf-topology__group odf-topology__group-state--error']",
+        By.XPATH,
+    ),
+    # node_group_name may be 'zone-<num>' or 'rack-<num>'
+    "node_group_name": (
+        "//*[@data-kind='node' and @data-type='group' and not (@transform)]",
+        By.XPATH,
+    ),
+    "zoom_out": ("zoom-out", By.ID),
+    "zoom_in": ("zoom-in", By.ID),
+    "fill_to_screen": ("fit-to-screen", By.ID),
+    "reset_view": ("reset-view", By.ID),
+    "expand_to_full_screen": (
+        "//a[normalize-space()='Expand to fullscreen']",
+        By.XPATH,
+    ),
+    "close_sidebar": ("//button[@aria-label='Close']//*[name()='svg']", By.XPATH),
+    "back_btn": ("//div[@class='odf-topology__back-button']", By.XPATH),
+    "alerts_sidebar_tab": ("//span[normalize-space()='Alerts']", By.XPATH),
+    "number_of_alerts": (
+        "//span[normalize-space()='{}']/preceding-sibling::*//*[@data-test='status-text']",
+        By.XPATH,
+    ),
+    "alert_list_expand_arrow": ("//span[normalize-space()='{} alerts']", By.XPATH),
+    "alerts_sidebar_alert_title": (
+        "//span[@class='co-status-card__alert-item-header']",
+        By.XPATH,
+    ),
+    "details_sidebar_tab": ("//span[normalize-space()='Details']", By.XPATH),
+    # use this locator to determine Node or Deployment details are open
+    "details_sidebar_entity_header": (
+        "//h2[@class='odf-section-heading']//span",
+        By.XPATH,
+    ),
+    "details_sidebar_node_name": (
+        "(//dt[normalize-space()='Name']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_status": ("(//span[@data-test='status-text'])[2]", By.XPATH),
+    "details_sidebar_node_operating_system": (
+        "(//dt[normalize-space()='Operating system']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_role": (
+        "(//dt[normalize-space()='Role']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_instance_type": (
+        "(//dt[normalize-space()='Instance type']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_kernel_version": (
+        "(//dt[normalize-space()='Kernel version']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_zone": (
+        "(//dt[normalize-space()='Zone']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_OS_image": (
+        "(//dt[normalize-space()='OS image']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_external_id": (
+        "(//dt[normalize-space()='External ID']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_architecture": (
+        "(//dt[normalize-space()='Architecture']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_kubelet_version": (
+        "(//dt[normalize-space()='Kubelet version']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_annotations_number": (
+        "(//dt[normalize-space()='Annotations']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_node_provider_ID": (
+        "(//dt[normalize-space()='Provider ID']/following::dd)[1]",
+        By.XPATH,
+    ),
+    # details_sidebar_node_addresses has multiple lines of text, every text should be taken with self.get_element_text()
+    "details_sidebar_node_addresses": (
+        "(//dt[normalize-space()='Node addresses']/following::dd)[1]/ul/li",
+        By.XPATH,
+    ),
+    "details_sidebar_node_created": (
+        "(//dt[normalize-space()='Created']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_depl_created": (
+        "(//dt[normalize-space()='Created at']/following::dd)[1]",
+        By.XPATH,
+    ),
+    "details_sidebar_depl_name": (
+        "//dd[@class='details-item__value' and @data-test-selector='details-item-value__Name']",
+        By.XPATH,
+    ),
+    "details_sidebar_depl_namespace": (
+        "//dd[@class='details-item__value' and @data-test-selector='details-item-value__Namespace']",
+        By.XPATH,
+    ),
+    # details_sidebar_depl_labels points to a list of labels, use with get_elements(...)
+    "details_sidebar_depl_labels": (
+        "//div[@class='co-m-label co-m-label--expand']",
+        By.XPATH,
+    ),
+    # details_sidebar_depl_label_all_texts points to a list of labels as a solid text
+    "details_sidebar_depl_label_all_texts": (
+        "//div[@class='co-m-label-list']",
+        By.XPATH,
+    ),
+    "details_sidebar_depl_annotations": (
+        "//dd[@class='details-item__value' and @data-test-selector='details-item-value__Annotations']",
+        By.XPATH,
+    ),
+    "details_sidebar_depl_created_at": ("//span[@data-test='timestamp']", By.XPATH),
+    "details_sidebar_depl_owner": (
+        "//dd[@data-test-selector='details-item-value__Owner']//a[@class='co-resource-item__resource-name']",
+        By.XPATH,
+    ),
+    "resources_sidebar_tab": ("//span[normalize-space()='Details']", By.XPATH),
+    # resources_sidebar_resource_names points to a list of names, use with get_elements(...)
+    "resources_sidebar_resource_names": (
+        "//section[@data-ouia-component-type='PF4/TabContent']//*[@href]",
+        By.XPATH,
+    ),
+    # memory of specific resource
+    "resources_sidebar_resource_memory": (
+        "//section[@data-ouia-component-type='PF4/TabContent']//*[@href and normalize-space()='{}']/ancestor::"
+        "div[@class='row']//*[normalize-space()='Memory']/following-sibling::span",
+        By.XPATH,
+    ),
+    "observe_sidebar_tab": ("//span[normalize-space()='Observe']", By.XPATH),
+    "topology_search_bar": ("//input[@placeholder='Search...']", By.XPATH),
+    "topology_search_bar_enter_arrow": ("//button[@aria-label='Search']", By.XPATH),
+    "topology_search_bar_reset_search": ("//button[@aria-label='Reset']", By.XPATH),
+    "node_filter_toggle_icon_from_node_filtering_bar": (
+        "//*[@class='pf-c-options-menu__toggle-icon']/..",
+        By.XPATH,
+    ),
+    # node_selector_node_filtering_bar accessible only from deployment level view of Topology
+    "node_selector_from_node_filtering_bar": (
+        "//li[@id='{}']//button[@role='menuitem']",
+        By.XPATH,
+    ),
+    "current_node_from_node_filtering_bar": (
+        "//span[@class='pf-c-options-menu__toggle-text']",
+        By.XPATH,
+    ),
+}
 
 locators = {
+    "4.14": {
+        "login": {**login, **login_4_11, **login_4_14},
+        "page": {**page_nav, **page_nav_4_10},
+        "generic": generic_locators,
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+        },
+        "obc": obc,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+    },
     "4.13": {
         "login": {**login, **login_4_11},
         "page": {**page_nav, **page_nav_4_10},
@@ -1271,6 +1544,7 @@ locators = {
             **validation_4_9,
             **validation_4_10,
             **validation_4_11,
+            **validation_4_13,
         },
         "obc": obc,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
@@ -1284,6 +1558,7 @@ locators = {
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
         "bucketclass": bucketclass,
+        "topology": topology,
     },
     "4.12": {
         "login": {**login, **login_4_11},
@@ -1304,8 +1579,9 @@ locators = {
             **validation_4_9,
             **validation_4_10,
             **validation_4_11,
+            **validation_4_12,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10, **pvc_4_12},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
@@ -1333,7 +1609,7 @@ locators = {
             **validation_4_10,
             **validation_4_11,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
@@ -1359,7 +1635,7 @@ locators = {
             **validation_4_9,
             **validation_4_10,
         },
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_10},
         "acm_page": {**acm_page_nav, **acm_configuration},
     },
     "4.9": {
