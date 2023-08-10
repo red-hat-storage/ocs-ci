@@ -150,6 +150,7 @@ class AMQ(object):
         for adm_yaml in crds:
             try:
                 adm_data = templating.load_yaml(self.strimzi_kafka_operator + adm_yaml)
+                utils.update_container_with_mirrored_image(adm_data)
                 adm_obj = OCS(**adm_data)
                 adm_obj.create()
                 self.crd_objects.append(adm_obj)
