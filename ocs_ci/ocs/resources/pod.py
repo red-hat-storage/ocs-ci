@@ -412,7 +412,9 @@ class Pod(OCS):
             self.io_params["timeout"] = timeout
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
-    def fillup_fs(self, size, fio_filename=None, performance_pod=False):
+    def fillup_fs(
+        self, size, fio_filename=None, performance_pod=False, chunk_size="1m"
+    ):
         """
         Execute FIO on a pod to fillup a file
         This will run sequential IO of 1MB block size to fill up the fill with data
@@ -427,6 +429,7 @@ class Pod(OCS):
             size (str): Size in MB, e.g. '200M'
             fio_filename(str): Name of fio file created on app pod's mount point
             performance_pod (bool): True if this pod is the performance pod created with PERF_POD_YAML
+            chunk_size (str): Size of chunk to be written at a time, default 1m
         """
 
         if not self.wl_setup_done:
@@ -437,6 +440,7 @@ class Pod(OCS):
         self.io_params = templating.load_yaml(constants.FIO_IO_FILLUP_PARAMS_YAML)
         size = size if isinstance(size, str) else f"{size}M"
         self.io_params["size"] = size
+        self.io_params["bs"] = chunk_size
         if fio_filename:
             self.io_params["filename"] = fio_filename
         self.fio_thread = self.wl_obj.run(**self.io_params)

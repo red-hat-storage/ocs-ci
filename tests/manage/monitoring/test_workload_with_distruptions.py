@@ -248,7 +248,11 @@ class TestCephOSDSlowOps(object):
             )
             self.pod_objs.append(pod_obj)
             file_name = pod_obj.name
-            pod_obj.fillup_fs(size=f"{round(pvc_size * 1024)}M", fio_filename=file_name)
+            pod_obj.fillup_fs(
+                size=f"{round(pvc_size * 1024)}M",
+                fio_filename=file_name,
+                chunk_size="32m",
+            )
             pod_obj.run_io(
                 storage_type="fs",
                 size="3G",
