@@ -173,7 +173,7 @@ def prune_and_mirror_index_image(
         f"oc adm catalog mirror {mirrored_index_image} -a {pull_secret_path} --insecure "
         f"{config.DEPLOYMENT['mirror_registry']} --index-filter-by-os='.*' --max-per-registry=2"
     )
-    oc_acm_result = exec_cmd(cmd, timeout=7200)
+    oc_acm_result = exec_cmd(cmd, timeout=10800)
 
     for line in oc_acm_result.stdout.decode("utf-8").splitlines():
         if "wrote mirroring manifests to" in line:
