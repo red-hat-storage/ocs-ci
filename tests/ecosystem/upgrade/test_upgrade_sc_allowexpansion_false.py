@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import (
     pre_ocs_upgrade,
     post_ocs_upgrade,
+    green_squad,
 )
 from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
@@ -36,6 +37,7 @@ upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
         "no need to check for upcoming releases. "
     ),
 )
+@green_squad
 class TestUpgrade(ManageTest):
     """
     Tests to check upgrade of OCS when we set without expansion secret and allowExpansion to false
