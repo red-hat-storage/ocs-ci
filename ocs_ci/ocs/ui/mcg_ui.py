@@ -259,9 +259,8 @@ class NamespaceStoreUI(ObjectService):
 
         """
         logger.info("Create namespace-store via UI")
-        self.navigate_namespace_store_tab()
-        # self.nav_object_storage_page().navigate_namespace_store_tab()
-        # self.do_click(locator=self.validation_loc["namespacestore_page"])
+
+        self.nav_object_storage_page().navigate_namespace_store_tab()
         self.do_click(self.sc_loc["namespace_store_create"])
         self.do_send_keys(self.sc_loc["namespace_store_name"], namespace_store_name)
 
