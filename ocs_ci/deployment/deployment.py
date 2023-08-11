@@ -1695,10 +1695,17 @@ class Deployment(object):
                 f"{self.__class__.__name__}"
             )
             return
-        logger.info(f"Patch {self.DEFAULT_STORAGECLASS} storageclass as non-default")
+
+        sc_to_patch = self.DEFAULT_STORAGECLASS
+        if (
+            config.ENV_DATA.get("use_custom_sc_in_deployment")
+            and self.platform.lower() == constants.VSPHERE_PLATFORM
+        ):
+            sc_to_patch = "thin-csi"
+        logger.info(f"Patch {sc_to_patch} storageclass as non-default")
         patch = ' \'{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}\' '
         run_cmd(
-            f"oc patch storageclass {self.DEFAULT_STORAGECLASS} "
+            f"oc patch storageclass {sc_to_patch} "
             f"-p {patch} "
             f"--request-timeout=120s"
         )
