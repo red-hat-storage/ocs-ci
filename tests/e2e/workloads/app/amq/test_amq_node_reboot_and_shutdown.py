@@ -5,6 +5,7 @@ import time
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
+    magenta_squad,
 )
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -21,6 +22,7 @@ POD = ocp.OCP(kind=constants.POD, namespace=constants.AMQ_NAMESPACE)
 TILLER_NAMESPACE = "tiller"
 
 
+@magenta_squad
 @ignore_leftovers
 @workloads
 @skipif_vsphere_ipi

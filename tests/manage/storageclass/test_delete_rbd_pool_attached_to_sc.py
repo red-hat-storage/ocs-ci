@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ignore_resource_not_found_error_label,
     tier1,
+    green_squad,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
@@ -85,6 +86,7 @@ def preconditions_rbd_pool_created_associated_to_sc(
     return cbp_name
 
 
+@green_squad
 @ignore_resource_not_found_error_label
 class TestDeleteRbdPool(ManageTest):
     @tier1

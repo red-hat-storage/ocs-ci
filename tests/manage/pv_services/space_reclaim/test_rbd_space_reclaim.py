@@ -4,6 +4,7 @@ import time
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -25,6 +26,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @skipif_ocs_version("<4.10")
 class TestRbdSpaceReclaim(ManageTest):
     """

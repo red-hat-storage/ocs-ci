@@ -4,6 +4,7 @@ import pytest
 
 from time import sleep
 from ocs_ci.ocs import constants, node
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
@@ -13,6 +14,7 @@ from ocs_ci.helpers import helpers
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier1
 @bugzilla("2075068")
 class TestKernelCrash(E2ETest):

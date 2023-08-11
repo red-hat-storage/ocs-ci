@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     ignore_leftovers,
     skipif_external_mode,
+    magenta_squad,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
@@ -30,6 +31,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @ignore_leftovers
 @system_test
 @skipif_ocs_version("<4.9")

@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_bm,
+    brown_squad,
 )
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes, is_node_rack_or_zone_exist
 from ocs_ci.helpers.helpers import get_failure_domin
@@ -31,6 +32,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @ignore_leftovers
 @bugzilla("1898808")

@@ -2,6 +2,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4b,
@@ -19,6 +20,7 @@ from ocs_ci.ocs.resources.pod import wait_for_storage_pods, list_of_nodes_runnin
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4b
 class TestOCSWorkerNodeShutdown(ManageTest):

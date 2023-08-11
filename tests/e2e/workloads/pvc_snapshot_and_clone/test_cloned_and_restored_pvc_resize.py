@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -12,6 +13,7 @@ from ocs_ci.ocs.constants import VOLUME_MODE_FILESYSTEM
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier2
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")

@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     skipif_ocs_version,
@@ -12,6 +13,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@orange_squad
 @skipif_ocs_version("!=4.6")
 @scale
 class TestScaleNamespace(E2ETest):

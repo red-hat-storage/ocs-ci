@@ -8,6 +8,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     bugzilla,
     tier3,
@@ -21,6 +22,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_en
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @tier3
 @pytest.mark.polarion_id("OCS-1306")
 @skipif_managed_service
@@ -93,6 +95,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon, threading_lock):
     assert mon_sample_size >= min_mon_samples
 
 
+@blue_squad
 @tier3
 @pytest.mark.polarion_id("OCS-1307")
 @skipif_managed_service
@@ -164,6 +167,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd, threading_lock):
     assert osd_in_validation, osd_in_msg
 
 
+@blue_squad
 @tier3
 @bugzilla("2203795")
 @pytest.mark.polarion_id("OCS-2734")

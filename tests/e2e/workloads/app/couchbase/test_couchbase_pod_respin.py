@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     workloads,
@@ -14,6 +15,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @skipif_ocp_version(">=4.13")
 @workloads
 @ignore_leftovers

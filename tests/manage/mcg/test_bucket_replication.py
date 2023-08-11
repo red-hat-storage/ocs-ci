@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, tier2
+from ocs_ci.framework.pytest_customization.marks import tier1, tier2, red_squad
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.utility.retry import retry
@@ -29,6 +29,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @skipif_ocs_version("<4.9")
 class TestReplication(MCGTest):
     """

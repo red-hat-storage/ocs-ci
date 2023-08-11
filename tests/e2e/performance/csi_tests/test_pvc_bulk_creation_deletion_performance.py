@@ -10,6 +10,7 @@ import datetime
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a, polarion_id
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 Interface_Types = {constants.CEPHFILESYSTEM: "CephFS", constants.CEPHBLOCKPOOL: "RBD"}
 
 
+@grey_squad
 @performance
 @performance_a
 class TestPVCCreationPerformance(PASTest):

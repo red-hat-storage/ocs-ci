@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4, tier4a, skipif_managed_service
+from ocs_ci.framework.testlib import tier4, tier4a, skipif_managed_service, blue_squad
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -9,6 +9,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-903")
@@ -54,6 +55,7 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
         )
 
 
+@blue_squad
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-898")

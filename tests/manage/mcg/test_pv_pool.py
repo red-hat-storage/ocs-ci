@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     tier2,
     tier3,
+    red_squad,
 )
 
 from ocs_ci.ocs.bucket_utils import (
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
 
 
+@red_squad
 @skipif_mcg_only
 class TestPvPool:
     """

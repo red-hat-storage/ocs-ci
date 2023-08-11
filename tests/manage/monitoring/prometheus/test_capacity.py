@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     gather_metrics_on_fail,
     skipif_managed_service,
+    blue_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -14,6 +15,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @pytest.mark.polarion_id("OCS-899")
 @pytest.mark.bugzilla("1943137")
 @tier2
@@ -78,6 +80,7 @@ def test_rbd_capacity_workload_alerts(workload_storageutilization_97p_rbd):
         )
 
 
+@blue_squad
 @pytest.mark.polarion_id("OCS-1934")
 @pytest.mark.bugzilla("1943137")
 @tier2

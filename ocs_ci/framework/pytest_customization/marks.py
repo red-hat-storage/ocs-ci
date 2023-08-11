@@ -484,6 +484,7 @@ orange_squad = pytest.mark.orange_squad
 purple_squad = pytest.mark.purple_squad
 red_squad = pytest.mark.red_squad
 turquoise_squad = pytest.mark.turquoise_squad
+yellow_squad = pytest.mark.yellow_squad
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider

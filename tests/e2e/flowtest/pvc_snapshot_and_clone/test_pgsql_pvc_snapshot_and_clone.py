@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -14,6 +15,7 @@ from ocs_ci.ocs.benchmark_operator import BMO_NAME
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @flowtests
 class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     """

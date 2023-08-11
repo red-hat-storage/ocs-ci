@@ -4,6 +4,7 @@ Module to perform IOs with several weights
 import pytest
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import libtest
 from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.ocs import constants
 
@@ -11,6 +12,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@libtest
 class TestPVCFillup(BaseTest):
     """
     Test PVC Fillup

@@ -2,6 +2,7 @@ import json
 import requests
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.framework.testlib import tier1
 
 from ocs_ci.framework.testlib import MCGTest
@@ -12,6 +13,7 @@ from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 logger = logging.getLogger(name=__file__)
 
 
+@red_squad
 @tier1
 @skipif_ocs_version(">4.13")
 class TestNoobaaMgmtEndpoint(MCGTest):

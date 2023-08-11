@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import tier3, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
@@ -56,6 +57,7 @@ def teardown():
     log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
 
 
+@green_squad
 @tier3
 @pytest.mark.usefixtures(test_fixture.__name__)
 @pytest.mark.polarion_id("OCS-284")

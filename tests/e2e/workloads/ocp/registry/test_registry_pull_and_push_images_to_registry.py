@@ -7,11 +7,13 @@ from ocs_ci.ocs.registry import (
     image_pull_and_push,
     validate_image_exists,
 )
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @workloads
 class TestRegistryPullAndPushImagestoRegistry(E2ETest):
     """

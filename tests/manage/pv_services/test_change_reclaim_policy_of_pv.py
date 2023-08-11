@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier1, skipif_managed_service
 from ocs_ci.ocs.constants import RECLAIM_POLICY_DELETE, RECLAIM_POLICY_RETAIN
 from ocs_ci.utility.utils import TimeoutSampler
@@ -16,6 +17,7 @@ from ocs_ci.helpers.helpers import (
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier1
 @pytest.mark.parametrize(
     argnames=["interface", "reclaim_policy"],

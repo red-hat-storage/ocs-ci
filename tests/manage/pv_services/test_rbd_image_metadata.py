@@ -5,11 +5,17 @@ from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name, get_snapshot_content_obj
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id, bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    polarion_id,
+    bugzilla,
+    green_squad,
+)
 
 log = logging.getLogger(__name__)
 
 
+@green_squad
 class TestRbdImageMetadata:
     @tier2
     @polarion_id("OCS-4465")

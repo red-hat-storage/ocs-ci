@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.constants import STATUS_COMPLETED
@@ -20,6 +21,7 @@ def jenkins(request):
     return jenkins
 
 
+@magenta_squad
 @workloads
 @pytest.mark.polarion_id("OCS-2175")
 class TestJenkinsWorkload(E2ETest):

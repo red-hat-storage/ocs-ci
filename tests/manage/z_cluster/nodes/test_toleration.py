@@ -1,6 +1,7 @@
 import logging
 import pytest
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4c,
     E2ETest,
@@ -22,6 +23,7 @@ from ocs_ci.ocs.node import (
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4c
 @ignore_leftovers
 @skipif_managed_service

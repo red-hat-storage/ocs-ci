@@ -11,6 +11,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     metrics_for_external_mode_required,
+    blue_squad,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
@@ -24,6 +25,7 @@ from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @tier1
 @pytest.mark.post_ocp_upgrade
 @pytest.mark.first
@@ -74,6 +76,7 @@ def test_monitoring_enabled():
         assert int(value) >= 0, "bucket status isn't a positive integer or zero"
 
 
+@blue_squad
 @tier1
 @pytest.mark.polarion_id("OCS-1265")
 @skipif_managed_service
@@ -108,6 +111,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
+@blue_squad
 @skipif_ocs_version("<4.6")
 @metrics_for_external_mode_required
 @tier1
@@ -129,6 +133,7 @@ def test_ceph_rbd_metrics_available():
     assert list_of_metrics_without_results == [], msg
 
 
+@blue_squad
 @tier1
 @pytest.mark.bugzilla("2203795")
 @metrics_for_external_mode_required
@@ -159,6 +164,7 @@ def test_ceph_metrics_available():
     assert list_of_metrics_without_results == [], msg
 
 
+@blue_squad
 @tier1
 @metrics_for_external_mode_required
 @pytest.mark.post_ocp_upgrade

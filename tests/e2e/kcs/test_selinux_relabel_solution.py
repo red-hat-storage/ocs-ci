@@ -19,11 +19,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     bugzilla,
     polarion_id,
+    magenta_squad,
 )
 
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 class TestSelinuxrelabel(E2ETest):
     def create_deploymentconfig_pod(self, **kwargs):
         """

@@ -15,12 +15,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_ocp_upgrade,
     post_ocp_upgrade,
     post_ocs_upgrade,
+    purple_squad,
     workloads,
     performance,
     scale,
 )
 
 
+@purple_squad
 @tier1
 @acceptance
 @tier2

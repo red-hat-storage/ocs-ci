@@ -18,6 +18,7 @@ from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.framework.pytest_customization.marks import (
+    orange_squad,
     skipif_external_mode,
     skipif_aws_i3,
 )
@@ -26,6 +27,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 logger = logging.getLogger(__name__)
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @skipif_external_mode

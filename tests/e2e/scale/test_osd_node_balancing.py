@@ -6,6 +6,7 @@ import pytest
 from uuid import uuid4
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    orange_squad,
     skipif_aws_i3,
     skipif_bm,
     skipif_external_mode,
@@ -135,6 +136,7 @@ class ElasticData(PerfResult):
         logger.info(f"skew_value: {new_data['skew_value']}")
 
 
+@orange_squad
 @scale_changed_layout
 @skipif_aws_i3
 @skipif_bm

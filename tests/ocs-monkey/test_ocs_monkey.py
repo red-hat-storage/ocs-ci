@@ -4,6 +4,7 @@ import subprocess
 import os
 import time
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import ignore_leftovers
 from ocs_ci.utility.utils import clone_repo, run_cmd, ceph_health_check
 from ocs_ci.ocs import constants
@@ -11,6 +12,7 @@ from ocs_ci.ocs import constants
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @ignore_leftovers
 def test_ocs_monkey():
     ocs_monkety_dir = "/tmp/ocs-monkey"

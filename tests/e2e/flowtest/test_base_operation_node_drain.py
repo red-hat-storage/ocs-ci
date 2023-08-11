@@ -5,6 +5,7 @@ from time import sleep
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework.pytest_customization.marks import (
+    magenta_squad,
     skipif_bm,
     skipif_aws_i3,
     skipif_vsphere_ipi,
@@ -28,6 +29,7 @@ class TestBaseOperationNodeDrain(E2ETest):
 
     """
 
+    @magenta_squad
     @skipif_aws_i3
     @skipif_bm
     @skipif_vsphere_ipi

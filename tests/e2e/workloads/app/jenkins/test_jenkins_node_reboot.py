@@ -1,7 +1,10 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_vsphere_ipi
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_vsphere_ipi,
+    magenta_squad,
+)
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.constants import STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
@@ -25,6 +28,7 @@ def jenkins(request, nodes):
     return jenkins
 
 
+@magenta_squad
 @workloads
 @ignore_leftovers
 @skipif_vsphere_ipi

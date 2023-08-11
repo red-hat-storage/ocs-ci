@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, ignore_leftovers, skipif_external_mode
 from ocs_ci.ocs.longevity import Longevity
 
@@ -7,6 +8,7 @@ from ocs_ci.ocs.longevity import Longevity
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @skipif_external_mode
 @ignore_leftovers
 class TestLongevity(E2ETest):

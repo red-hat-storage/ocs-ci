@@ -1,9 +1,10 @@
 import logging
 from ocs_ci.framework.testlib import ManageTest, tier2
-from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id,
     skipif_external_mode,
     skipif_ocs_version,
+    green_squad,
 )
 from ocs_ci.ocs.resources.pod import delete_pods
 from ocs_ci.ocs.cluster import (
@@ -27,6 +28,7 @@ from ocs_ci.helpers.helpers import (
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @skipif_external_mode
 @skipif_ocs_version("<4.6")

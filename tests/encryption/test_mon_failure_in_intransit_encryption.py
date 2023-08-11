@@ -21,6 +21,7 @@ from ocs_ci.helpers.helpers import modify_deployment_replica_count
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4a
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-4919")

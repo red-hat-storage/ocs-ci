@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.jenkins import Jenkins
@@ -22,6 +23,7 @@ def jenkins(request):
     return jenkins
 
 
+@magenta_squad
 @workloads
 class TestJenkinsPodRespin(E2ETest):
     """

@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers import helpers
 
@@ -86,6 +87,7 @@ def teardown_fs():
     CEPHFS_SC_OBJ.delete()
 
 
+@green_squad
 class TestOSCBasics(ManageTest):
     @pytest.mark.polarion_id("OCS-336")
     def test_basics_rbd(self, test_fixture_rbd):

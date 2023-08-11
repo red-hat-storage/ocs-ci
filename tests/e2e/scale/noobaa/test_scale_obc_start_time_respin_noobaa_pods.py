@@ -5,6 +5,7 @@ import pytest
 import csv
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import ocsci_log_path
@@ -21,6 +22,7 @@ def teardown(request):
     request.addfinalizer(finalizer)
 
 
+@orange_squad
 @scale
 class TestScaleOBCStartTime(E2ETest):
 

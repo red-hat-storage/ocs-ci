@@ -6,11 +6,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_flexy_deployment,
     skipif_ibm_flash,
     skipif_managed_service,
+    brown_squad,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 # https://github.com/red-hat-storage/ocs-ci/issues/4802
 @skipif_managed_service
 @skipif_flexy_deployment

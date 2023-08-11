@@ -3,7 +3,10 @@ import random
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import aws_platform_required
+from ocs_ci.framework.pytest_customization.marks import (
+    aws_platform_required,
+    brown_squad,
+)
 from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers import sanity_helpers
@@ -11,6 +14,7 @@ from ocs_ci.helpers import sanity_helpers
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4
 @tier4b
 @pytest.mark.polarion_id("OCS-1287")

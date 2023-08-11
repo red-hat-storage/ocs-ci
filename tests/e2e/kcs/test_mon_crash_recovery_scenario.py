@@ -12,7 +12,11 @@ from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, run_io_in_bg
 from ocs_ci.ocs.resources.storage_cluster import ceph_mon_dump
-from ocs_ci.framework.pytest_customization.marks import tier3, skipif_external_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    tier3,
+    skipif_external_mode,
+    magenta_squad,
+)
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.helpers.helpers import wait_for_resource_state
 
@@ -20,6 +24,7 @@ from ocs_ci.helpers.helpers import wait_for_resource_state
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier3
 @pytest.mark.polarion_id("OCS-4942")
 @pytest.mark.bugzilla("2151591")
