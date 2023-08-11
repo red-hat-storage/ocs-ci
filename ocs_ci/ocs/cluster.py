@@ -210,12 +210,12 @@ class CephCluster(object):
                 logger.warning(e)
                 logger.warning("No CephFS found")
 
-        self.mon_count = len(self.mons)
-        self.mds_count = len(self.mdss)
-        self.mgr_count = len(self.mgrs)
-        self.osd_count = len(self.osds)
-        self.noobaa_count = len(self.noobaas)
-        self.rgw_count = len(self.rgws)
+        self.mon_count = len(set([mon.name for mon in self.mons]))
+        self.mds_count = len(set([mds.name for mds in self.mdss]))
+        self.mgr_count = len(set([mgr.name for mgr in self.mgrs]))
+        self.osd_count = len(set([osd.name for osd in self.osds]))
+        self.noobaa_count = len(set([noobaa.name for noobaa in self.noobaas]))
+        self.rgw_count = len(set([rgw.name for rgw in self.rgws]))
 
     @staticmethod
     def set_port(pod):
