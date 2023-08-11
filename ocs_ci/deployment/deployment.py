@@ -1098,6 +1098,7 @@ class Deployment(object):
                         },
                     )
 
+        device_class = config.ENV_DATA.get("device_class")
         if arbiter_deployment:
             cluster_data["spec"]["arbiter"] = {}
             cluster_data["spec"]["nodeTopologies"] = {}
@@ -1111,6 +1112,8 @@ class Deployment(object):
 
         deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
         device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
+        if device_class:
+            deviceset_data["deviceClass"] = device_class
 
         logger.info(
             "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
