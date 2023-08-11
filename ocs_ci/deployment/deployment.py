@@ -1488,9 +1488,6 @@ class Deployment(object):
             # validate ceph mon/osd volumes are backed by pvc
             validate_cluster_on_pvc()
 
-            # validate PDB creation of MON, MDS, OSD pods
-            validate_pdb_creation()
-
             # check for odf-console
             ocs_version = version.get_semantic_ocs_version_from_config()
             if ocs_version >= version.VERSION_4_9:
@@ -1539,6 +1536,9 @@ class Deployment(object):
 
         # Enable console plugin
         enable_console_plugin()
+
+        # validate PDB creation of MON, MDS, OSD pods
+        validate_pdb_creation()
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")

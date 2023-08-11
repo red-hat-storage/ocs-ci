@@ -22,6 +22,7 @@ from ocs_ci.ocs.utils import thread_init_class
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
+    PDBNotCreatedException,
     PoolSizeWrong,
     PoolCompressionWrong,
     CommandFailed,
@@ -1224,6 +1225,7 @@ def count_cluster_osd():
     return osd_count
 
 
+@retry(PDBNotCreatedException, tries=9, backoff=2)
 def validate_pdb_creation():
     """
     Validate creation of PDBs for MON, MDS and OSD pods.
@@ -1232,13 +1234,16 @@ def validate_pdb_creation():
         AssertionError: If required PDBs were not created.
 
     """
-    pdb_obj = ocp.OCP(kind="PodDisruptionBudget")
+    pdb_obj = ocp.OCP(
+        kind="PodDisruptionBudget", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
     item_list = pdb_obj.get().get("items")
+    if len(item_list) != constants.PDB_COUNT:
+        raise PDBNotCreatedException(
+            f"Not All PDB's created. Expected {constants.PDB_COUNT} PDB's but found {len(item_list)}"
+        )
     pdb_list = [item["metadata"]["name"] for item in item_list]
-    osd_count = count_cluster_osd()
-    pdb_required = [constants.MDS_PDB, constants.MON_PDB]
-    for num in range(osd_count):
-        pdb_required.append(constants.OSD_PDB + str(num))
+    pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
 
     pdb_list.sort()
     pdb_required.sort()
