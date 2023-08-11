@@ -535,6 +535,12 @@ IBM_BDI_DATA_LOAD_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "data-load-job.
 
 IBM_BDI_RUN_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "run-workload.yaml")
 
+SCALECLI_SERVICE_CA_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "scale-cli-service-ca-configmap.yaml"
+)
+
+SCALECLI_POD_YAML = os.path.join(TEMPLATE_MCG_DIR, "scalecli_pod.yaml")
+
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
 )
@@ -1329,6 +1335,7 @@ SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
+SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 
