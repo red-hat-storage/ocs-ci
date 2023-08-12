@@ -1431,6 +1431,35 @@ class Deployment(object):
         cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
+        # Use Custom Storageclass Names
+        if config.ENV_DATA.get("custom_default_storageclass_names"):
+            storageclassnames = config.ENV_DATA.get("storageclassnames")
+
+            keys_to_update = [
+                constants.OCS_COMPONENTS_MAP["cephfs"],
+                constants.OCS_COMPONENTS_MAP["rgw"],
+                constants.OCS_COMPONENTS_MAP["blockpools"],
+                constants.OCS_COMPONENTS_MAP["cephnonresilentpools"],
+            ]
+
+            cluster_data.setdefault("spec", {}).setdefault("managedResources", {})
+
+            for key in keys_to_update:
+                if storageclassnames.get(key):
+                    cluster_data["spec"]["managedResources"][key] = {
+                        "storageClassName": storageclassnames[key]
+                    }
+
+            if cluster_data["spec"].get("nfs"):
+                cluster_data["spec"]["nfs"] = {
+                    "storageClassName": storageclassnames["nfs"]
+                }
+
+            if cluster_data["spec"].get("encryption"):
+                cluster_data["spec"]["encryption"] = {
+                    "storageClassName": storageclassnames["encryption"]
+                }
+
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
             cluster_data["spec"]["network"] = {

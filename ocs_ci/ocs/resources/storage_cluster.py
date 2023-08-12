@@ -2169,8 +2169,6 @@ def get_storageclass_names_from_storagecluster_spec():
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
-    data = {}
-
     keys_to_search = [
         constants.OCS_COMPONENTS_MAP["cephfs"],
         constants.OCS_COMPONENTS_MAP["rgw"],
@@ -2180,12 +2178,13 @@ def get_storageclass_names_from_storagecluster_spec():
         "encryption",
     ]
 
-    spec_data = sc_obj.get("spec")  # Get the "spec" data once
+    spec_data = sc_obj.get()["items"][0]["spec"]  # Get the "spec" data once
 
-    for key in keys_to_search:
-        data[key] = (
-            spec_data.get("managedResources", {}).get(key, {}).get("storageClassName")
-        )
+    data = {
+        key: value.get("storageClassName")
+        for key, value in spec_data.get("managedResources", {}).items()
+        if key in keys_to_search and value.get("storageClassName")
+    }
 
     return data
 
@@ -2201,6 +2200,9 @@ def check_custom_storageclass_presence():
         bool: Returns True if all custom-defined storage class names are present in the `oc get sc` output.
     """
     sc_from_spec = get_storageclass_names_from_storagecluster_spec()
+    if not sc_from_spec:
+        raise ValueError("No Custom Storageclass are defined in StorageCluster spec.")
+
     sc_list = run_cmd("oc get sc -o jsonpath='{.items[*].metadata.name}'").split()
 
     missing_sc = [value for value in sc_from_spec.values() if value not in sc_list]
