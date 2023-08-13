@@ -314,10 +314,28 @@ def ocs_install_verification(
     log.info("Verifying storage classes")
     storage_class = OCP(kind=constants.STORAGECLASS, namespace=namespace)
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    required_storage_classes = {
-        f"{storage_cluster_name}-cephfs",
-        f"{storage_cluster_name}-ceph-rbd",
-    }
+    if config.ENV_DATA.get("custom_default_storageclass_names"):
+        custom_sc = get_storageclass_names_from_storagecluster_spec()
+        if not all(
+            sc in custom_sc
+            for sc in [
+                constants.OCS_COMPONENTS_MAP["blockpools"],
+                constants.OCS_COMPONENTS_MAP["cephfs"],
+            ]
+        ):
+            raise ValueError(
+                "Custom StorageClass are not defined in Storagecluster Spec."
+            )
+
+        required_storage_classes = {
+            custom_sc[constants.OCS_COMPONENTS_MAP["cephfs"]],
+            custom_sc[constants.OCS_COMPONENTS_MAP["blockpools"]],
+        }
+    else:
+        required_storage_classes = {
+            f"{storage_cluster_name}-cephfs",
+            f"{storage_cluster_name}-ceph-rbd",
+        }
     skip_storage_classes = set()
     if disable_cephfs or provider_cluster:
         skip_storage_classes.update(
