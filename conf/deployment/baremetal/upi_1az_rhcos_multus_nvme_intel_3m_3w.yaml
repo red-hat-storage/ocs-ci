@@ -11,8 +11,8 @@ ENV_DATA:
   osd_type: 'nvme'
   disk_pattern: 'nvme-INTEL'
   is_multus_enabled: true
-  multus_public_net_interface: 'enp1s0f0'
-  multus_cluster_net_interface: 'enp1s0f0'
+  multus_public_net_interface: 'enp1s0f1'
+  multus_cluster_net_interface: 'enp1s0f1'
 REPORTING:
   polarion:
     deployment_id: 'OCS-2510'
