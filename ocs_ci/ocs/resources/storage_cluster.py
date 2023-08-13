@@ -2199,9 +2199,6 @@ def get_storageclass_names_from_storagecluster_spec():
         constants.OCS_COMPONENTS_MAP["cephfs"],
         constants.OCS_COMPONENTS_MAP["rgw"],
         constants.OCS_COMPONENTS_MAP["blockpools"],
-        constants.OCS_COMPONENTS_MAP["cephnonresilentpools"],
-        "nfs",
-        "encryption",
     ]
 
     spec_data = sc_obj.get()["items"][0]["spec"]  # Get the "spec" data once
@@ -2211,6 +2208,26 @@ def get_storageclass_names_from_storagecluster_spec():
         for key, value in spec_data.get("managedResources", {}).items()
         if key in keys_to_search and value.get("storageClassName")
     }
+
+    # get custom storageclass name for nonresilientPools
+    nonresilientpool_key = constants.OCS_COMPONENTS_MAP["cephnonresilentpools"]
+    nonresilientpool_data = spec_data["managedResources"].get(nonresilientpool_key, {})
+    storage_class_name = nonresilientpool_data.get("storageClassName")
+
+    if nonresilientpool_data.get("enable") and storage_class_name:
+        data[nonresilientpool_key] = storage_class_name
+
+    # Get custom storageclass name for 'nfs' service
+    if spec_data.get("nfs", {}).get("enable"):
+        nfs_storage_class_name = spec_data["nfs"].get("storageClassName")
+        if nfs_storage_class_name:
+            data["nfs"] = nfs_storage_class_name
+
+    # Get custom storageclass name for 'encryption' service
+    if spec_data.get("encryption", {}).get("enable"):
+        encryption_storage_class_name = spec_data["encryption"].get("storageClassName")
+        if encryption_storage_class_name:
+            data["encryption"] = encryption_storage_class_name
 
     return data
 

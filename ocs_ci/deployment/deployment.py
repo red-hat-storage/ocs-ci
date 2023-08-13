@@ -1467,16 +1467,16 @@ class Deployment(object):
             ] = non_resilient_pool_data
 
             # Setting up custom storageclass names for 'nfs' service
-            if cluster_data["spec"].get("nfs"):
-                cluster_data["spec"]["nfs"] = {
-                    "storageClassName": storageclassnames["nfs"]
-                }
+            if cluster_data["spec"].get("nfs", {}).get("enable"):
+                cluster_data["spec"]["nfs"]["storageClassName"] = storageclassnames[
+                    "nfs"
+                ]
 
             # Setting up custom storageclass names for 'encryption' service
-            if cluster_data["spec"].get("encryption"):
-                cluster_data["spec"]["encryption"] = {
-                    "storageClassName": storageclassnames["encryption"]
-                }
+            if cluster_data["spec"].get("encryption", {}).get("enable"):
+                cluster_data["spec"]["encryption"][
+                    "storageClassName"
+                ] = storageclassnames["nfs"]
 
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
