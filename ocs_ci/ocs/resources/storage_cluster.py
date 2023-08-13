@@ -397,7 +397,15 @@ def ocs_install_verification(
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
     cluster_name = config.ENV_DATA["cluster_name"]
-    if config.DEPLOYMENT["external_mode"]:
+    if config.ENV_DATA.get("custom_default_storageclass_names"):
+        sc_rbd = storage_class.get(
+            resource_name=custom_sc[constants.OCS_COMPONENTS_MAP["blockpools"]]
+        )
+        sc_cephfs = storage_class.get(
+            resource_name=custom_sc[constants.OCS_COMPONENTS_MAP["cephfs"]]
+        )
+
+    elif config.DEPLOYMENT["external_mode"]:
         sc_rbd = storage_class.get(
             resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         )
