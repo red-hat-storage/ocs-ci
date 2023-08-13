@@ -2,7 +2,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
-    DataFoundationDefaultTab,
     CreateResourceForm,
 )
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
@@ -10,7 +9,7 @@ from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
 
 class BackingStoreTab(ObjectService, CreateResourceForm):
     def __init__(self):
-        DataFoundationDefaultTab.__init__(self)
+        ObjectService.__init__(self)
         CreateResourceForm.__init__(self)
         self.rules = {
             constants.UI_INPUT_RULES_BACKING_STORE[

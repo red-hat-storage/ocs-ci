@@ -8,14 +8,13 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import logger
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
-    DataFoundationTabBar,
 )
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
 
 
 class BucketClassTab(ObjectService, CreateResourceForm):
     def __init__(self):
-        DataFoundationTabBar.__init__(self)
+        ObjectService.__init__(self)
         CreateResourceForm.__init__(self)
         self.rules = {
             constants.UI_INPUT_RULES_BUCKET_CLASS["rule1"]: self._check_3_63_char_rule,
