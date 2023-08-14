@@ -1609,7 +1609,14 @@ def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
         }
         if first_bucket_object_set == second_bucket_object_set:
-            logger.info("Objects in both buckets are identical")
+            logger.info(
+                f"""Objects in both buckets are identical
+                {first_bucket_name} objects:
+                {first_bucket_object_set}
+                {second_bucket_name} objects:
+                {second_bucket_object_set}
+                """
+            )
             return True
         else:
             logger.warning(
