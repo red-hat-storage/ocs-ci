@@ -2882,22 +2882,26 @@ def default_storageclasses(request, teardown_factory_session):
     # TODO(fbalak): Use proper constants after
     # https://github.com/red-hat-storage/ocs-ci/issues/1056
     # is resolved
-    storage_classes = ("ocs-storagecluster-ceph-rbd", "ocs-storagecluster-cephfs")
+    storage_classes = []
     if config.ENV_DATA.get("custom_default_storageclass_names"):
         from ocs_ci.ocs.resources.storage_cluster import (
             get_storageclass_names_from_storagecluster_spec,
         )
 
         sc_from_spec = get_storageclass_names_from_storagecluster_spec()
-        if "cephfs" in sc_from_spec:
-            storage_classes.append(sc_from_spec["cephfs"])
-        else:
-            storage_classes.append(constants.CEPHFILESYSTEM_SC)
-
-        if "rbd" in sc_from_spec:
-            storage_classes.append(sc_from_spec[""])
-        else:
-            storage_classes.append(constants.CEPHBLOCKPOOL_SC)
+        for component_key in [
+            constants.OCS_COMPONENTS_MAP["blockpools"],
+            constants.OCS_COMPONENTS_MAP["cephfs"],
+        ]:
+            sc_name = sc_from_spec.get(component_key)
+            if sc_name:
+                storage_classes.append(sc_name)
+            else:
+                raise ValueError(
+                    f"Custome Storageclass is not defined from {component_key} in storagecluster spec."
+                )
+    else:
+        storage_classes = [constants.CEPHBLOCKPOOL_SC, constants.CEPHFILESYSTEM_SC]
 
     for sc_name in storage_classes:
         sc = OCS(kind=constants.STORAGECLASS, metadata={"name": sc_name})
