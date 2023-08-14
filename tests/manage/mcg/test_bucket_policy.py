@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 import botocore.exceptions as boto3exception
@@ -907,6 +908,9 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(f"Getting bucket policy for bucket: {s3_bucket[0].name}")
         get_policy = get_bucket_policy(mcg_obj, s3_bucket[0].name)
         logger.info(f"Bucket policy: {get_policy['Policy']}")
+
+        logger.info("Waiting 5 seconds for bucket policy to propagate...")
+        time.sleep(5)
 
         # Verifying GetObject by reading the index of the website by anonymous users
         for user in users:
