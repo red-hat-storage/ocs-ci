@@ -1245,30 +1245,6 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
         read_resource (list): Resource dicts or names to provide read access
         write_resource (str or dict): Resource dict or name to provide write access
 
-    A resource dict should follow the following structure:
-    {
-        "resource": "resource-name",
-        "path": "path/in/target/bucket"
-    }
-
-    Example usage::
-
-        namespace_bucket_update(
-            mcg_obj,
-            bucket_name="bucket",
-            read_resource=["read-nss-a", "read-nss-b"],
-            write_resource="write-nss"
-        )
-
-        namespace_bucket_update(
-            mcg_obj,
-            bucket_name="bucket",
-            read_resource=[
-                {"resource": "read-nss-a", "path": "some/path"},
-                {"resource": "read-nss-b", "path": "some/other/path"},
-            ],
-            write_resource={"resource": "write-nss", "path": "some/path"}
-        )
     """
     read_resource = [
         {"resource": resource}
