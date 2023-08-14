@@ -19,7 +19,7 @@ class TestNamespaceStoreUI(object):
 
     def teardown(self):
         """
-        Delete namespacestore
+        Delete namespacestore.
 
         """
         if self.namespace_store_obj is not None:
