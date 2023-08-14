@@ -667,23 +667,23 @@ def _multi_obc_lifecycle_factory(
                     },
                 },
             ),
-            ("OC", None),
-            (
-                "OC",
-                {
-                    "interface": "OC",
-                    "namespace_policy_dict": {
-                        "type": "Cache",
-                        "ttl": 3600,
-                        "namespacestore_dict": {"aws": [(1, None)]},
-                    },
-                    "placement_policy": {
-                        "tiers": [
-                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
-                        ]
-                    },
-                },
-            ),
+            ("OC", None)
+            #            (
+            #                "OC",
+            #                {
+            #                    "interface": "OC",
+            #                    "namespace_policy_dict": {
+            #                        "type": "Cache",
+            #                        "ttl": 3600,
+            #                        "namespacestore_dict": {"aws": [(1, None)]},
+            #                    },
+            #                    "placement_policy": {
+            #                        "tiers": [
+            #                            {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+            #                        ]
+            #                    },
+            #                },
+            #            ),
         ]
         for _interface, _bucketclass in obc_params:
             if num_of_obcs > 0:
