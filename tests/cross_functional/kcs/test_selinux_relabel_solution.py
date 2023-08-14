@@ -332,3 +332,114 @@ class TestSelinuxrelabel(E2ETest):
         assert (
             pod_restart_time_before_fix > pod_restart_time_after_fix
         ), "Time taken for pod restart after fix is more than before fix."
+
+    @pytest.mark.parametrize("copies", [5])
+    def test_selinux_relabel_for_new_pvc(
+        self,
+        pvc_factory,
+        service_account_factory,
+        storageclass_factory,
+        copies,
+    ):
+        """
+        Steps:
+            1. Create storageclass with security context set.
+            2. Create cephfs pvcs and attach pod with more than 100K files across multiple nested directories
+            3. Take md5sum for them some random files and get pod restart time
+            4. Restart the pod which is hosting cephfs files in large numbers.
+            5. Check data integrity.
+            6. Check for relabeling - this should not be happening.
+
+        Args:
+            pvc_factory (function): A call to pvc_factory function
+            service_account_factory (function): A call to service_account_factory function
+            storageclass_factory ((function): A call to storageclass_factory function
+            copies (int): number of copies to write kernel files in pod
+
+        """
+        # Create storageclass with security context
+        self.ocp_project = ocp.OCP(
+            kind=constants.NAMESPACE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        sc_name = "ocs-storagecluster-cephfs-selinux-relabel"
+        self.storage_class = storageclass_factory(
+            sc_name=sc_name,
+            interface=constants.CEPHFILESYSTEM,
+            kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
+        )
+
+        # Create PVC using new storageclass
+        self.pvc_obj = pvc_factory(
+            project=self.ocp_project,
+            storageclass=self.storage_class,
+            size="20",
+        )
+        log.info(f"PVC {self.pvc_obj.name} created")
+
+        # Create service_account to get privilege for deployment pods
+        self.service_account_obj = service_account_factory(
+            project=self.ocp_project,
+        )
+
+        # Create deployment pod
+        self.pod_obj = self.create_deploymentconfig_pod(
+            command=["/opt/multiple_files.sh"],
+            command_args=[f"{copies}", "/mnt"],
+        )
+
+        log.info(f"pod {self.pod_obj.name} created")
+        self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
+
+        # Get the md5sum of some random files
+        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
+        num_of_files = random.randint(3, 9)
+        pod = ocp.OCP(kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        random_files = pod.exec_oc_cmd(
+            f"exec -it {self.pod_obj.name} -- /bin/bash"
+            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
+            timeout=300,
+        )
+        random_files = random_files.split()
+        log.info(f"files are {random_files}")
+        initial_md5sum = []
+        for file_path in random_files:
+            md5sum = res_pod.cal_md5sum(
+                pod_obj=self.pod_obj,
+                file_name=file_path,
+            )
+            initial_md5sum.append(md5sum)
+
+        # Check data integrity and Get time for pod restart
+        self.pod_obj.delete(wait=True)
+        self.pod_obj = self.get_app_pod_obj()
+        try:
+            wait_for_pods_to_be_running(
+                pod_names=[self.pod_obj.name], timeout=600, sleep=15
+            )
+        except CommandFailed:
+            log.exception(f"Pod {self.pod_obj.name} didn't reach to running state")
+
+        pod_restart_time_after_fix = self.get_pod_start_time(pod_name=self.pod_obj.name)
+        log.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
+        final_md5sum = []
+        for file_path in random_files:
+            md5sum = res_pod.cal_md5sum(
+                pod_obj=self.pod_obj,
+                file_name=file_path,
+            )
+            final_md5sum.append(md5sum)
+        assert initial_md5sum == final_md5sum, "Data integrity failed after on new PVC."
+
+        # Get the node on which application pod is running
+        self.pod_obj = self.get_app_pod_obj()
+        node_name = res_pod.get_pod_node(pod_obj=self.pod_obj).name
+
+        # Check SeLinux Relabeling is set to false
+        log.info("checking for crictl logs")
+        oc_cmd = ocp.OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        cmd1 = "crictl inspect $(crictl ps --name perf -q)"
+        output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
+        key = '"selinuxRelabel": false'
+        assert key in output, f"{key} is not present in inspect logs"
+        log.info(f"{key} is present in inspect logs of application pod running node")
+        log.info(f"SeLinux Relabeling is skipped for the pvc {self.pvc_obj.name}")
