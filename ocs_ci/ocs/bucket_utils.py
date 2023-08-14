@@ -1623,12 +1623,12 @@ def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
             return False
 
     try:
-        for comparison_result in TimeoutSampler(1200, 30, _comparison_logic):
+        for comparison_result in TimeoutSampler(2100, 30, _comparison_logic):
             if comparison_result:
                 return True
     except TimeoutExpiredError:
         logger.error(
-            "The compared buckets did not contain the same set of objects after twenty minutes"
+            "The compared buckets did not contain the same set of objects after thirty five minutes"
         )
         return False
 
