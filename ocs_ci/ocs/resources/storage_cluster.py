@@ -719,7 +719,9 @@ def ocs_install_verification(
 
     # Verify Custome Storageclass Names
     if config.ENV_DATA.get("custom_default_storageclass_names"):
-        check_custom_storageclass_presence()
+        assert (
+            check_custom_storageclass_presence()
+        ), "Custom Storageclass Verification Failed."
 
     # Verify olm.maxOpenShiftVersion property
     # check ODF version due to upgrades
@@ -2236,11 +2238,9 @@ def check_custom_storageclass_presence():
     """
     Verify if the custom-defined storage class names are present in the `oc get sc` output.
 
-    Raises:
-        ValueError: If any of the custom-defined storage class names is not found in the output.
-
     Returns:
-        bool: Returns True if all custom-defined storage class names are present in the `oc get sc` output.
+        bool: Returns True if all custom-defined storage class names are present \
+            in the `oc get sc` output , otherwise False.
     """
     sc_from_spec = get_storageclass_names_from_storagecluster_spec()
     if not sc_from_spec:
@@ -2252,9 +2252,10 @@ def check_custom_storageclass_presence():
 
     if missing_sc:
         missing_sc_str = ",".join(missing_sc)
-        raise ValueError(
+        log.error(
             f"StorageClasses {missing_sc_str}' mentioned in the spec is not exist in the `oc get sc` output"
         )
+        return False
 
     log.info("Custom-defined storage classes are correctly present.")
     return True

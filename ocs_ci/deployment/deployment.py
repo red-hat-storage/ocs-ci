@@ -1476,7 +1476,7 @@ class Deployment(object):
             if cluster_data["spec"].get("encryption", {}).get("enable"):
                 cluster_data["spec"]["encryption"][
                     "storageClassName"
-                ] = storageclassnames["nfs"]
+                ] = storageclassnames["encryption"]
 
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
