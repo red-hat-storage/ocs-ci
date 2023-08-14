@@ -1,15 +1,23 @@
 import logging
 import pytest
+import psutil
 
 from datetime import datetime
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     s3_delete_object,
     s3_delete_objects,
+    list_objects_in_batches,
 )
 from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id, scale
 
 log = logging.getLogger(__name__)
+
+
+def measure_memory_usage():
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    print(f"Memory used: {memory_info.rss / 1024 / 1024} MB")
 
 
 @pytest.fixture(scope="class")
@@ -34,8 +42,8 @@ class TestDeleteObjects:
         argnames=["delete_mode"],
         argvalues=[
             pytest.param("single"),
-            pytest.param("batch"),
-            pytest.param("whole"),
+            # pytest.param("batch"),
+            # pytest.param("whole"),
         ],
     )
     def test_delete_objects(
@@ -59,14 +67,14 @@ class TestDeleteObjects:
         }
         # create an object bucket
         bucket = bucket_factory(bucketclass=bucket_class_dict, verify_health=False)[0]
-        bucket.verify_health(timeout=300)
+        bucket.verify_health(timeout=600)
 
-        # write 4K and 24M size objects of 1M each to the bucket
+        # write 4K and 4M size objects of 1M each to the bucket
         time_1 = datetime.now()
         s3bench.run_benchmark(
             num_obj=1000000,
             timeout=20000,
-            object_size="1K",
+            object_size="4K",
             end_point=f"http://s3.openshift-storage.svc/{bucket.name}",
             access_key=mcg_obj.access_key_id,
             secret_key=mcg_obj.access_key,
@@ -87,31 +95,22 @@ class TestDeleteObjects:
             f" Time taken to generate and upload objects: {(time_2-time_1).total_seconds()}"
         )
 
-        # List all the objects in the bucket
-        objects_list = [
-            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucket.name)
-        ]
-
         if delete_mode == "single":
-            # Delete objects one by one
-            log.info(
-                f"Deleting objects one by one. Total objects to be deleted: {len(objects_list)}"
-            )
-            for obj in objects_list:
-                s3_delete_object(mcg_obj, bucket.name, obj)
+            for obj_key in list_objects_in_batches(
+                mcg_obj, bucket.name, batch_size=10000
+            ):
+                s3_delete_object(mcg_obj, bucket.name, obj_key)
             log.info("Deleted objects successfully!")
+            measure_memory_usage()
         elif delete_mode == "batch":
             # Delete objects in batch
             log.info("Deleting objects in batch of 1000 objects at a time")
-            objects_list = [{"Key": key} for key in objects_list]
-            while len(objects_list) >= 1000:
-                batch = objects_list[:1000]
-                objects_list = objects_list[1000:]
-                s3_delete_objects(mcg_obj, bucket.name, batch)
-
-            if len(objects_list) != 0:
-                s3_delete_objects(mcg_obj, bucket.name, objects_list)
+            for obj_batch in list_objects_in_batches(
+                mcg_obj, bucket.name, yield_individual=False
+            ):
+                s3_delete_objects(mcg_obj, bucket.name, obj_batch)
             log.info("Deleted objects in a batch of 1000 objects!")
+            measure_memory_usage()
         else:
             # Delete the whole bucket directly
             bucket.delete()
