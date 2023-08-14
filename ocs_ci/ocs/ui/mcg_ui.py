@@ -274,3 +274,4 @@ class NamespaceStoreUI(ObjectService):
         self.do_send_keys(self.sc_loc["namespace_store_folder"], namespace_store_folder)
         self.take_screenshot()
         self.do_click(self.sc_loc["namespace_store_create_item"])
+        self.take_screenshot()
