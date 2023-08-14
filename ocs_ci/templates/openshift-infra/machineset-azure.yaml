@@ -26,14 +26,14 @@ spec:
           node-role.kubernetes.io/app: app-scale
       providerSpec:
         value:
-          apiVersion: azureproviderconfig.openshift.io/v1beta1
+          apiVersion: machine.openshift.io/v1beta1
           credentialsSecret:
             name: azure-cloud-credentials
             namespace: openshift-machine-api
           image:
             offer: ""
             publisher: ""
-            resourceID: /resourceGroups/clusterID-rg/providers/Microsoft.Compute/images/clusterID
+            resourceID: /resourceGroups/clusterID-rg/providers/Microsoft.Compute/galleries/gallery_clusterID/images/clusterID-gen2/versions/latest
             sku: ""
             version: ""
           internalLoadBalancer: ""
@@ -50,7 +50,7 @@ spec:
               storageAccountType: Premium_LRS
             osType: Linux
           publicIP: false
-          publicLoadBalancer: ""
+          publicLoadBalancer: clusterID
           resourceGroup: clusterID-rg
           sshPrivateKey: ""
           sshPublicKey: ""
