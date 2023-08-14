@@ -1246,12 +1246,13 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
         write_resource (str or dict): Resource dict or name to provide write access
 
     A resource dict should follow the following structure:
-        {
-            "resource": "resource-name",
-            "path": "path/in/target/bucket"
-        }
+    {
+        "resource": "resource-name",
+        "path": "path/in/target/bucket"
+    }
 
-    Example usages:
+    Example usage::
+
         namespace_bucket_update(
             mcg_obj,
             bucket_name="bucket",
@@ -1268,7 +1269,6 @@ def namespace_bucket_update(mcg_obj, bucket_name, read_resource, write_resource)
             ],
             write_resource={"resource": "write-nss", "path": "some/path"}
         )
-
     """
     read_resource = [
         {"resource": resource}
