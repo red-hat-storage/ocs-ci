@@ -7,6 +7,9 @@ import logging
 import os
 import shlex
 import time
+
+# import gc
+
 from uuid import uuid4
 
 import boto3
@@ -1784,6 +1787,7 @@ def s3_list_objects_v2(
     max_keys=1000,
     con_token="",
     fetch_owner=False,
+    start_after=None,
 ):
     """
     Boto3 client based list object version2
@@ -1796,7 +1800,7 @@ def s3_list_objects_v2(
         max_keys (int): Maximum number of keys returned in the response. Default 1,000 keys.
         con_token (str): Token used to continue the list
         fetch_owner (bool): Unique object Identifier
-
+        start_after (str): Name of the object after which you want to list
     Returns:
         dict : list object v2 response
 
@@ -1808,6 +1812,7 @@ def s3_list_objects_v2(
         MaxKeys=max_keys,
         ContinuationToken=con_token,
         FetchOwner=fetch_owner,
+        StartAfter=start_after,
     )
 
 
@@ -2668,3 +2673,43 @@ def delete_objects_from_source_and_wait_for_deletion_sync(
         target_bucket.name,
         timeout=timeout,
     ), f"Deletion sync failed to complete in {timeout} seconds"
+
+
+def list_objects_in_batches(
+    mcg_obj, bucket_name, batch_size=1000, yield_individual=True
+):
+    """
+    This method lists objects in a bucket either in batch of mentioned batch_size
+    or individually. This method is helpful when dealing with millions of objects
+    which maybe expensive in terms of typical list operations.
+
+    Args:
+        bucket_name (str): Name of the bucket
+        batch_size (int): Number of objects to list at a time, by default 1000
+        yield_individual (bool): If True, it will yield indviudal objects until all the
+        objects are listed. If False, batch of objects are yielded.
+
+    Returns:
+        yield: indvidual object key or list containing batch of objects
+
+    """
+
+    marker = ""
+
+    while True:
+        response = s3_list_objects_v2(
+            mcg_obj, bucket_name, max_keys=batch_size, start_after=marker
+        )
+        if yield_individual:
+            for obj in response.get("Contents", []):
+                yield obj["Key"]
+        else:
+            yield [{"Key": obj["Key"]} for obj in response.get("Contents", [])]
+
+        if not response.get("IsTruncated", False):
+            break
+
+        marker = response.get("Contents", [])[-1]["Key"]
+        del response
+
+
