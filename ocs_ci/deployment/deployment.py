@@ -60,7 +60,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
-from ocs_ci.ocs.node import get_worker_nodes, verify_all_nodes_created
+from ocs_ci.ocs.node import verify_all_nodes_created
 from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
@@ -863,15 +863,6 @@ class Deployment(object):
                 interfaces.add(config.ENV_DATA["multus_public_net_interface"])
             if create_cluster_net:
                 interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
-            worker_nodes = get_worker_nodes()
-            node_obj = ocp.OCP(kind="node")
-            platform = config.ENV_DATA.get("platform").lower()
-            if platform != constants.BAREMETAL_PLATFORM:
-                for node in worker_nodes:
-                    for interface in interfaces:
-                        ip_link_cmd = f"ip link set promisc on {interface}"
-                        node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
-
             if create_public_net:
                 logger.info("Creating Multus public network")
                 public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
