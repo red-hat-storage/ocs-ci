@@ -270,8 +270,10 @@ class NamespaceStoreUI(ObjectService):
             sleep(2)
             self.do_click(self.sc_loc["namespace_store_pvc_expand"])
             self.do_click(get_element_by_text(namespace_store_pvc_name))
+            self.do_send_keys(
+                self.sc_loc["namespace_store_folder"], namespace_store_folder
+            )
 
-        self.do_send_keys(self.sc_loc["namespace_store_folder"], namespace_store_folder)
         self.take_screenshot()
         self.do_click(self.sc_loc["namespace_store_create_item"])
         self.take_screenshot()
