@@ -334,6 +334,13 @@ def pytest_addoption(parser):
             set for installing lvmo operator and lvmo cluster
             """,
     )
+    parser.addoption(
+        "--disable-environment-checker",
+        dest="disable_environment_checker",
+        action="store_true",
+        default=False,
+        help="Disable environment checks for test cases.",
+    )
 
 
 def pytest_configure(config):
@@ -625,6 +632,8 @@ def process_cluster_cli_params(config):
         ocsci_config.RUN["re_trigger_failed_tests"] = os.path.expanduser(
             re_trigger_failed_tests
         )
+    disable_environment_checker = get_cli_param(config, "disable_environment_checker")
+    ocsci_config.RUN["disable_environment_checker"] = disable_environment_checker
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -736,6 +745,14 @@ def pytest_runtest_makereport(item, call):
             collect_performance_stats(test_case_name)
         except Exception:
             log.exception("Failed to collect performance stats")
+
+    if rep.failed:
+        test_name = item.nodeid
+        # Write the failure information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA["cluster_path"]}/failed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
 
 
 def set_log_level(config):

@@ -1801,6 +1801,9 @@ def cluster(
 
 @pytest.fixture(scope="class")
 def environment_checker(request):
+    if config.RUN["disable_environment_checker"]:
+        log.debug("Skipping environment checks")
+        return
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
