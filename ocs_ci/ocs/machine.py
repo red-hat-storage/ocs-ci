@@ -373,6 +373,7 @@ def create_custom_machineset(
                 .get("matchLabels")
                 .get("machine.openshift.io/cluster-api-cluster")
             )
+            cls_id_with_underscore = cls_id.replace("-", "_")
             if azure_zone == zone:
                 az_zone = f"{region}{zone}"
                 machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML_AZURE)
@@ -402,15 +403,19 @@ def create_custom_machineset(
                 ] = f"{cls_id}-{role}-{az_zone}"
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "image"
-                ][
-                    "resourceID"
-                ] = f"/resourceGroups/{cls_id}-rg/providers/Microsoft.Compute/images/{cls_id}"
+                ]["resourceID"] = (
+                    f"/resourceGroups/{cls_id}-rg/providers/Microsoft.Compute/galleries"
+                    f"/gallery_{cls_id_with_underscore}/images/{cls_id}-gen2/versions/latest"
+                )
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "location"
                 ] = region
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "managedIdentity"
                 ] = f"{cls_id}-identity"
+                machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
+                    "publicLoadBalancer"
+                ] = f"{cls_id}"
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "resourceGroup"
                 ] = f"{cls_id}-rg"

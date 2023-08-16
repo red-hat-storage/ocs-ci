@@ -900,7 +900,7 @@ def check_and_add_enough_worker(worker_count):
                         )
                     )
                 for ms in ms_name:
-                    machine.wait_for_new_node_to_be_ready(ms)
+                    machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             if len(ms_name) == 3:
                 exp_count = int(worker_count / 3)
             else:
