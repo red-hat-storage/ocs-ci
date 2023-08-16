@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import tempfile
+import yaml
 
 import requests
 
@@ -141,6 +142,13 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
     exec_cmd(cmd)
     if not os.path.exists(icsp_file_dest_location):
         return ""
+
+    # make icsp name unique - append run_id
+    with open(icsp_file_dest_location) as f:
+        icsp_content = yaml.safe_load(f)
+    icsp_content["metadata"]["name"] += f"-{config.RUN['run_id']}"
+    with open(icsp_file_dest_location, "w") as f:
+        yaml.dump(icsp_content, f)
 
     if apply and not config.DEPLOYMENT.get("disconnected"):
         exec_cmd(f"oc apply -f {icsp_file_dest_location}")
