@@ -1609,7 +1609,14 @@ def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
         }
         if first_bucket_object_set == second_bucket_object_set:
-            logger.info("Objects in both buckets are identical")
+            logger.info(
+                f"""Objects in both buckets are identical
+                {first_bucket_name} objects:
+                {first_bucket_object_set}
+                {second_bucket_name} objects:
+                {second_bucket_object_set}
+                """
+            )
             return True
         else:
             logger.warning(
@@ -1623,12 +1630,12 @@ def compare_bucket_object_list(mcg_obj, first_bucket_name, second_bucket_name):
             return False
 
     try:
-        for comparison_result in TimeoutSampler(600, 30, _comparison_logic):
+        for comparison_result in TimeoutSampler(2100, 30, _comparison_logic):
             if comparison_result:
                 return True
     except TimeoutExpiredError:
         logger.error(
-            "The compared buckets did not contain the same set of objects after ten minutes"
+            "The compared buckets did not contain the same set of objects after thirty five minutes"
         )
         return False
 

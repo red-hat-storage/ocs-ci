@@ -148,9 +148,9 @@ class TestReplication(MCGTest):
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
-        )
+        ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
@@ -219,9 +219,9 @@ class TestReplication(MCGTest):
             source_bucket_name
         )
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
-        )
+        ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         assert set(written_random_objects) == {
             obj.key for obj in listed_obejcts
@@ -284,9 +284,10 @@ class TestReplication(MCGTest):
             for obj in mcg_obj_session.s3_list_all_objects_in_bucket(first_bucket_name)
         }, "Needed uploaded objects could not be found"
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, first_bucket_name, second_bucket_name
-        )
+        ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
+
         written_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             second_bucket_name,
@@ -300,9 +301,9 @@ class TestReplication(MCGTest):
             obj.key
             for obj in mcg_obj_session.s3_list_all_objects_in_bucket(second_bucket_name)
         }, "Needed uploaded objects could not be found"
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, first_bucket_name, second_bucket_name
-        )
+        ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
 
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
@@ -408,9 +409,9 @@ class TestReplication(MCGTest):
             obj.key for obj in written_objects
         }, "Needed uploaded objects could not be found"
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
-        )
+        ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         replication_id = nb_db_pod.exec_cmd_on_pod(
             command=f"psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "
@@ -534,9 +535,9 @@ class TestReplication(MCGTest):
             source_bucket_name
         )
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
-        )
+        ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         assert set(written_random_objects) == {
             obj.key for obj in listed_obejcts
@@ -578,9 +579,9 @@ class TestReplication(MCGTest):
             mcg_obj=mcg_obj_session,
         )
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
-        )
+        ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         awscli_pod_session.exec_cmd_on_pod(command=f"rm -rf {target_dir}")
 
