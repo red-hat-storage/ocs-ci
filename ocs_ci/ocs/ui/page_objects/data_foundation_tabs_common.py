@@ -463,39 +463,6 @@ class DataFoundationTabBar(PageNavigator):
 
         return OverviewTab()
 
-    def nav_backing_store_tab(self):
-        """
-        Navigate to Backing Store tab. Accessible from any Data Foundation tabs
-        """
-        logger.info("Navigate to Data Foundation - Backing Store tab")
-        self.do_click(locator=self.validation_loc["osc_backing_store_tab"])
-
-        from ocs_ci.ocs.ui.page_objects.backing_store_tab import BackingStoreTab
-
-        return BackingStoreTab()
-
-    def nav_bucket_class_tab(self):
-        """
-        Navigate to Bucket class tab. Accessible from any Data Foundation tabs
-        """
-        logger.info("Navigate to Data Foundation - Bucket class tab")
-        self.do_click(locator=self.validation_loc["osc_bucket_class_tab"])
-
-        from ocs_ci.ocs.ui.page_objects.bucket_class_tab import BucketClassTab
-
-        return BucketClassTab()
-
-    def nav_namespace_store_tab(self):
-        """
-        Navigate to Namespace Store tab. Accessible from any Data Foundation tabs
-        """
-        logger.info("Navigate to Data Foundation - Namespace Store tab")
-        self.do_click(locator=self.validation_loc["namespacestore_page"])
-
-        from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
-
-        return NameSpaceStoreTab()
-
     # noinspection PyUnreachableCode
     def nav_topology_tab(self):
         """

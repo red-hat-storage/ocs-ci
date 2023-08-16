@@ -19,7 +19,10 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI
-from ocs_ci.ocs.ui.page_objects.object_bucket_claim import ObcUI, ObUI
+from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
+    ObjectBucketClaimsTab,
+)
+from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +295,7 @@ class TestObcUserInterface(object):
             resource_description="ui", resource_type="obc"
         )
 
-        obc_ui_obj = ObcUI()
+        obc_ui_obj = ObjectBucketClaimsTab()
 
         if (
             config.DEPLOYMENT["external_mode"]
@@ -329,7 +332,7 @@ class TestObcUserInterface(object):
 
         # covers BZ 2097772
         if verify_ob_removal:
-            ObUI().delete_object_bucket_ui(
+            ObjectBucketsTab().delete_object_bucket_ui(
                 delete_via="three_dots", expect_fail=True, resource_name=obc_name
             )
 

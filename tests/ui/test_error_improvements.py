@@ -32,9 +32,7 @@ class TestErrorMessageImprovements(ManageTest):
             Only lowercase letters, numbers, non-consecutive periods, or hyphens
             A unique name for the BackingStore within the project
         """
-        backing_store_tab = (
-            PageNavigator().nav_odf_default_page().nav_backing_store_tab()
-        )
+        backing_store_tab = PageNavigator().nav_object_storage().nav_backing_store_tab()
         backing_store_tab.proceed_resource_creation()
         backing_store_tab.check_error_messages()
 
@@ -49,7 +47,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
         object_bucket_claim_create_tab = (
-            PageNavigator().nav_odf_default_page().navigate_object_bucket_claims_page()
+            PageNavigator().nav_object_storage().nav_object_buckets_claims_tab()
         )
         object_bucket_claim_create_tab.proceed_resource_creation()
         object_bucket_claim_create_tab.check_error_messages()
@@ -66,7 +64,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
         bucket_class_create_tab = (
-            PageNavigator().nav_odf_default_page().nav_bucket_class_tab()
+            PageNavigator().nav_object_storage().nav_bucket_class_tab()
         )
         bucket_class_create_tab.proceed_resource_creation()
         bucket_class_create_tab.check_error_messages()
@@ -95,7 +93,7 @@ class TestErrorMessageImprovements(ManageTest):
             namespace_store_factory(*nss_tup)
 
         namespace_store_tab = (
-            PageNavigator().nav_odf_default_page().nav_namespace_store_tab()
+            PageNavigator().nav_object_storage().nav_namespace_store_tab()
         )
         namespace_store_tab.proceed_resource_creation()
         namespace_store_tab.check_error_messages()

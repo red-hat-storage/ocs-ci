@@ -1,15 +1,14 @@
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
-    DataFoundationDefaultTab,
     CreateResourceForm,
-    DataFoundationTabBar,
 )
+from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
 
 
-class NameSpaceStoreTab(DataFoundationDefaultTab, CreateResourceForm):
+class NameSpaceStoreTab(ObjectService, CreateResourceForm):
     def __init__(self):
-        DataFoundationTabBar.__init__(self)
+        ObjectService.__init__(self)
         CreateResourceForm.__init__(self)
         self.rules = {
             constants.UI_INPUT_RULES_NAMESPACE_STORE[
