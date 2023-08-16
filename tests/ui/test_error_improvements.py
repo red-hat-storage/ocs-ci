@@ -100,16 +100,22 @@ class TestErrorMessageImprovements(ManageTest):
         namespace_store_tab.proceed_resource_creation()
         namespace_store_tab.check_error_messages()
 
+    @bugzilla("2215910")
     @bugzilla("2193109")
     @polarion_id("OCS-4873")
-    def test_blocking_pool_creation_rules(self, setup_ui_class):
+    def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
         """
-        Test to verify error rules for the name when creating a new blocking pool
+        Test to verify
+        * edit Block Pool label warnings
+        * error rules for the name when creating a new blocking pool
             No more than 253 characters
             Starts and ends with a lowercase letter or number
             Only lowercase letters, numbers, non-consecutive periods, or hyphens
             Cannot be used before
         """
+
+        block_pool_obj = cephblockpool_factory_ui_class()
+
         blocking_pool_tab = (
             PageNavigator()
             .nav_odf_default_page()
@@ -117,6 +123,9 @@ class TestErrorMessageImprovements(ManageTest):
             .nav_storagecluster_storagesystem_details()
             .nav_ceph_blockpool()
         )
+
+        blocking_pool_tab.check_edit_labels(block_pool_obj.name)
+
         blocking_pool_tab.proceed_resource_creation()
         blocking_pool_tab.check_error_messages()
 

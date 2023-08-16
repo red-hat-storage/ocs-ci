@@ -44,7 +44,7 @@ class BlockPoolUI(PageNavigator):
             self.do_click(self.bp_loc["conpression_checkbox"])
         self.do_click(self.bp_loc["pool_confirm_create"])
         wait_for_text_result = self.wait_until_expected_text_is_found(
-            self.bp_loc["pool_state_inside_pool"], "Ready", timeout=15
+            self.bp_loc["pool_state_inside_pool"], "Ready", timeout=30
         )
         if wait_for_text_result is True:
             logger.info(f"Pool {pool_name} was created and it is in Ready state")

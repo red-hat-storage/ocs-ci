@@ -7,7 +7,6 @@ import time
 import zipfile
 import traceback
 from functools import reduce
-
 from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
