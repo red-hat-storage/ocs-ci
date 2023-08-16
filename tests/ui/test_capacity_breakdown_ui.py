@@ -130,11 +130,11 @@ class TestCapacityBreakdownUI(ManageTest):
         1. create a number of PVC's using different storage classes and access modes
         2. deploy applications and attach PVC's to them
         3. run IO on PVC's filling them with data
-        4. verify the capacity breakdown
+        4. verify the capacity breakdown card on UI
         5. delete the PVCs
-        6. verify the capacity breakdown
+        6. verify the capacity breakdown card on UI
         7. delete all mgr pods
-        8. verify the capacity breakdown
+        8. verify the capacity breakdown card on UI
         """
         test_results = dict()
 

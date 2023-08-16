@@ -7,7 +7,7 @@ import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnableUpgradeConnectionException
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.deployment import Deployment
@@ -325,8 +325,8 @@ class PvcCapacityDeploymentList(list, metaclass=SingletonMeta):
         for pvc_capacity_deployment in self:
             if pvc_capacity_deployment.pvc_obj == pvc:
                 pv_obj = pvc.backed_pv_obj
-                pv_name = pvc.get_pv_volume_handle_name
                 pvc.delete(force=True, wait=False)
+
                 # remove finalizers from the pvc to be able to delete mounted pvc
                 params = '{"metadata": {"finalizers":null}}'
                 try:
@@ -340,7 +340,8 @@ class PvcCapacityDeploymentList(list, metaclass=SingletonMeta):
                     logger.info(
                         f"PVC deletion did not delete PV on cluster. Delete pv {pv_obj.name}"
                     )
-                    OCP().delete(wait=False, force=True, resource_name=pv_name)
+                    pv_obj.delete(wait=False)
+
                 self._delete_pvc_capacity_deployment_from_list(
                     pvc_capacity_deployment.deployment.name
                 )
@@ -411,6 +412,7 @@ def wait_for_container_status_ready(pod: Pod):
     )(pod)
 
 
+@retry(UnableUpgradeConnectionException, tries=3, delay=10, backoff=1)
 def fill_attached_pv(data_struct: PvcCapacityDeployment, pod: Pod) -> bool:
     """
     Fill the attached PV with data until it is full or disc quota is exceeded.
@@ -447,7 +449,7 @@ def fill_attached_pv(data_struct: PvcCapacityDeployment, pod: Pod) -> bool:
             return True
         elif "error: unable to upgrade connection: container not found" in str(ex):
             logger.info("Container not found")
-            return False
+            raise UnableUpgradeConnectionException
         else:
             raise
 
