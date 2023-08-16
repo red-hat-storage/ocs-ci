@@ -3,12 +3,13 @@ from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import logger
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import CreateResourceForm
+from ocs_ci.ocs.ui.page_objects.edit_label_form import EditLabelForm
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
 
 
-class BlockPools(StorageSystemDetails, CreateResourceForm):
-    def __init__(self):
+class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm):
+    def __init__(self, block_pool_existed: list = None):
         StorageSystemTab.__init__(self)
         CreateResourceForm.__init__(self)
         self.name_input_loc = self.validation_loc["blockpool_name"]
@@ -26,6 +27,7 @@ class BlockPools(StorageSystemDetails, CreateResourceForm):
                 "rule4"
             ]: self._check_blockpool_not_used_before_rule,
         }
+        self.block_pool_existed = block_pool_existed
 
     def _check_blockpool_not_used_before_rule(self, rule_exp) -> bool:
         """
