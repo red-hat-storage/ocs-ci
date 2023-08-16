@@ -1112,7 +1112,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
         sc_name (str): SC name for pvc creation
         pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
                 If None, random size pvc will be created
-        max_pvc_size (int): The max size of the pvc. It should be greater than 10
+        max_pvc_size (int): The max size of the pvc. It should be greater than 9
 
     Returns:
          pvc_dict_list (list): List of all PVC.yaml dicts
@@ -1121,9 +1121,9 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
 
     # Construct PVC.yaml for the no_of_required_pvc count
     # append all the pvc.yaml dict to pvc_dict_list and return the list
-    if max_pvc_size <= 10:
+    if max_pvc_size <= 9:
         raise ValueError(
-            f"The max pvc size is {max_pvc_size}, and it should be greater than 10"
+            f"The max pvc size is {max_pvc_size}, and it should be greater than 9"
         )
     pvc_dict_list = list()
     for i in range(no_of_pvc):
@@ -1390,6 +1390,8 @@ def attach_multiple_pvc_to_pod_dict(
     """
 
     pods_list, temp_list = ([], [])
+    if raw_block_pv:
+        pod_yaml = constants.PERF_BLOCK_POD_YAML
     for pvc_name in pvc_list:
         temp_list.append(pvc_name)
         if len(temp_list) == pvcs_per_pod:
