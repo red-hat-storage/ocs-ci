@@ -1538,7 +1538,8 @@ class Deployment(object):
         enable_console_plugin()
 
         # validate PDB creation of MON, MDS, OSD pods
-        validate_pdb_creation()
+        if not config.DEPLOYMENT["external_mode"]:
+            validate_pdb_creation()
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
