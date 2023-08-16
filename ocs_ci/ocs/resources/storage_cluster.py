@@ -314,10 +314,28 @@ def ocs_install_verification(
     log.info("Verifying storage classes")
     storage_class = OCP(kind=constants.STORAGECLASS, namespace=namespace)
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    required_storage_classes = {
-        f"{storage_cluster_name}-cephfs",
-        f"{storage_cluster_name}-ceph-rbd",
-    }
+    if config.ENV_DATA.get("custom_default_storageclass_names"):
+        custom_sc = get_storageclass_names_from_storagecluster_spec()
+        if not all(
+            sc in custom_sc
+            for sc in [
+                constants.OCS_COMPONENTS_MAP["blockpools"],
+                constants.OCS_COMPONENTS_MAP["cephfs"],
+            ]
+        ):
+            raise ValueError(
+                "Custom StorageClass are not defined in Storagecluster Spec."
+            )
+
+        required_storage_classes = {
+            custom_sc[constants.OCS_COMPONENTS_MAP["cephfs"]],
+            custom_sc[constants.OCS_COMPONENTS_MAP["blockpools"]],
+        }
+    else:
+        required_storage_classes = {
+            f"{storage_cluster_name}-cephfs",
+            f"{storage_cluster_name}-ceph-rbd",
+        }
     skip_storage_classes = set()
     if disable_cephfs or provider_cluster:
         skip_storage_classes.update(
@@ -379,7 +397,15 @@ def ocs_install_verification(
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
     cluster_name = config.ENV_DATA["cluster_name"]
-    if config.DEPLOYMENT["external_mode"]:
+    if config.ENV_DATA.get("custom_default_storageclass_names"):
+        sc_rbd = storage_class.get(
+            resource_name=custom_sc[constants.OCS_COMPONENTS_MAP["blockpools"]]
+        )
+        sc_cephfs = storage_class.get(
+            resource_name=custom_sc[constants.OCS_COMPONENTS_MAP["cephfs"]]
+        )
+
+    elif config.DEPLOYMENT["external_mode"]:
         sc_rbd = storage_class.get(
             resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         )
@@ -690,6 +716,12 @@ def ocs_install_verification(
     # Verify in-transit encryption is enabled.
     if config.ENV_DATA.get("in_transit_encryption"):
         in_transit_encryption_verification()
+
+    # Verify Custome Storageclass Names
+    if config.ENV_DATA.get("custom_default_storageclass_names"):
+        assert (
+            check_custom_storageclass_presence()
+        ), "Custom Storageclass Verification Failed."
 
     # Verify olm.maxOpenShiftVersion property
     # check ODF version due to upgrades
@@ -2213,3 +2245,85 @@ def wait_for_consumer_storage_provider_endpoint_in_provider_wnodes(
         func=check_consumer_storage_provider_endpoint_in_provider_wnodes,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def get_storageclass_names_from_storagecluster_spec():
+    """
+    Retrieve storage class names from the storage cluster's spec.
+
+    This function queries the storage cluster's specification and returns a dictionary containing
+    the storage class names for various resources, such as cephFilesystems, cephObjectStores,
+    cephBlockPools, cephNonResilientPools, nfs, and encryption.
+
+    Returns:
+        dict: A dictionary containing the storage class names for various resources.
+            The keys are the names of the resources, and the values are the respective storage
+            class names. If a resource does not have a storage class name, it will be set to None.
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    keys_to_search = [
+        constants.OCS_COMPONENTS_MAP["cephfs"],
+        constants.OCS_COMPONENTS_MAP["rgw"],
+        constants.OCS_COMPONENTS_MAP["blockpools"],
+    ]
+
+    spec_data = sc_obj.get()["items"][0]["spec"]  # Get the "spec" data once
+
+    data = {
+        key: value.get("storageClassName")
+        for key, value in spec_data.get("managedResources", {}).items()
+        if key in keys_to_search and value.get("storageClassName")
+    }
+
+    # get custom storageclass name for nonresilientPools
+    nonresilientpool_key = constants.OCS_COMPONENTS_MAP["cephnonresilentpools"]
+    nonresilientpool_data = spec_data["managedResources"].get(nonresilientpool_key, {})
+    storage_class_name = nonresilientpool_data.get("storageClassName")
+
+    if nonresilientpool_data.get("enable") and storage_class_name:
+        data[nonresilientpool_key] = storage_class_name
+
+    # Get custom storageclass name for 'nfs' service
+    if spec_data.get("nfs", {}).get("enable"):
+        nfs_storage_class_name = spec_data["nfs"].get("storageClassName")
+        if nfs_storage_class_name:
+            data["nfs"] = nfs_storage_class_name
+
+    # Get custom storageclass name for 'encryption' service
+    if spec_data.get("encryption", {}).get("enable"):
+        encryption_storage_class_name = spec_data["encryption"].get("storageClassName")
+        if encryption_storage_class_name:
+            data["encryption"] = encryption_storage_class_name
+
+    return data
+
+
+def check_custom_storageclass_presence():
+    """
+    Verify if the custom-defined storage class names are present in the `oc get sc` output.
+
+    Returns:
+        bool: Returns True if all custom-defined storage class names are present \
+            in the `oc get sc` output , otherwise False.
+    """
+    sc_from_spec = get_storageclass_names_from_storagecluster_spec()
+    if not sc_from_spec:
+        raise ValueError("No Custom Storageclass are defined in StorageCluster spec.")
+
+    sc_list = run_cmd("oc get sc -o jsonpath='{.items[*].metadata.name}'").split()
+
+    missing_sc = [value for value in sc_from_spec.values() if value not in sc_list]
+
+    if missing_sc:
+        missing_sc_str = ",".join(missing_sc)
+        log.error(
+            f"StorageClasses {missing_sc_str}' mentioned in the spec is not exist in the `oc get sc` output"
+        )
+        return False
+
+    log.info("Custom-defined storage classes are correctly present.")
+    return True
