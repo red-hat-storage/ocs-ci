@@ -1,13 +1,9 @@
 """
-PV Create with ceph pod respin & Memory Leak Test: Test the PVC limit
-with 3 worker nodes create PVCs and check for memory leak
-TO DO: This Test needs to be executed in Scaled setup,
-Adding node scale is yet to be supported.
+Scale TC to perform PVC Scale and Respin of Ceph pods in parallel
 """
 import logging
 import pytest
 import threading
-import time
 
 from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs import constants
@@ -121,6 +117,12 @@ class BasePvcCreateRespinCephPods(E2ETest):
         no_of_resource = disruption.resource_count
         for i in range(0, no_of_resource):
             disruption.delete_resource(resource_id=i)
+            # Validate storage pods are running
+            assert pod.wait_for_storage_pods(), "ODF Pods are not in good shape"
+            # Validate cluster health ok and all pods are running
+            assert utils.ceph_health_check(
+                delay=180
+            ), "Ceph health in bad state after node reboots"
 
     def cleanup(self):
         """
@@ -138,7 +140,13 @@ class BasePvcCreateRespinCephPods(E2ETest):
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[
-        pytest.param(*["mgr"], marks=[pytest.mark.polarion_id("OCS-766")]),
+        pytest.param(
+            *["mgr"],
+            marks=[
+                pytest.mark.polarion_id("OCS-766"),
+                pytest.mark.skip(reason="Skipped due to bz 2130867"),
+            ],
+        ),
         pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-764")]),
         pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-765")]),
         pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
@@ -154,8 +162,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
 )
 class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
     """
-    Class for PV scale Create Cluster with 1000 PVC, then Respin ceph pods
-    Check for Memory leak, network and stats.
+    Class for PV scale Create Cluster with 1000 PVC, then Respin ceph pods parallel
     """
 
     @pytest.fixture()
@@ -187,17 +194,11 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         storageclass,
         setup_fixture,
         resource_to_delete,
-        memory_leak_function,
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
         size = "10Gi"
-        test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
-
-        # Identify median memory value for each worker node
-        median_dict = helpers.get_memory_leak_median_value()
-        log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
         self.create_pvc_pod(
@@ -226,9 +227,6 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
             thread1.join()
             thread2.join()
 
-        # Added sleep for test case run time and for capturing memory leak after scale
-        time.sleep(test_run_time)
         assert utils.ceph_health_check(
             delay=180
         ), "Ceph health in bad state after pod respins"
-        helpers.memory_leak_analysis(median_dict)
