@@ -939,17 +939,10 @@ class MCG:
             f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
             " attempting to copy it from quay.io"
         )
-        semantic_version = version.get_semantic_ocs_version_from_config()
         remote_path = self.get_architecture_path()
         remote_mcg_cli_basename = os.path.basename(remote_path)
         local_mcg_cli_dir = os.path.dirname(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-        if (
-            config.DEPLOYMENT["live_deployment"]
-            and semantic_version >= version.VERSION_4_13
-        ):
-            image = f"registry.redhat.io/odf4/mcg-cli-rhel9:v{semantic_version}"
-        else:
-            image = f"quay.io/rhceph-dev/mcg-cli:{get_ocs_build_number()}"
+        image = f"quay.io/rhceph-dev/mcg-cli:{get_ocs_build_number()}"
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
         if not os.path.isfile(pull_secret_path):
