@@ -624,18 +624,41 @@ def default_storage_class(
         OCS: Existing StorageClass Instance
     """
     external = config.DEPLOYMENT["external_mode"]
+    custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
+    if custom_storage_class:
+        from ocs_ci.ocs.resources.storage_cluster import (
+            get_storageclass_names_from_storagecluster_spec,
+        )
+
+        resources = get_storageclass_names_from_storagecluster_spec()
+
     if interface_type == constants.CEPHBLOCKPOOL:
-        if external:
-            resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        if custom_storage_class:
+            try:
+                resource_name = resources[constants.OCS_COMPONENTS_MAP["blockpools"]]
+            except KeyError:
+                logger.error(
+                    f"StorageCluster spec doesn't have the custom name for '{constants.CEPHBLOCKPOOL}' storageclass"
+                )
         else:
-            resource_name = constants.DEFAULT_STORAGECLASS_RBD
-        base_sc = OCP(kind="storageclass", resource_name=resource_name)
+            if external:
+                resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            else:
+                resource_name = constants.DEFAULT_STORAGECLASS_RBD
     elif interface_type == constants.CEPHFILESYSTEM:
-        if external:
-            resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        if custom_storage_class:
+            try:
+                resource_name = resources[constants.OCS_COMPONENTS_MAP["cephfs"]]
+            except KeyError:
+                logger.error(
+                    f"StorageCluster spec doesn't have the custom name for '{constants.CEPHFILESYSTEM}' storageclass"
+                )
         else:
-            resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
-        base_sc = OCP(kind="storageclass", resource_name=resource_name)
+            if external:
+                resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            else:
+                resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+    base_sc = OCP(kind="storageclass", resource_name=resource_name)
     base_sc.wait_for_resource(
         condition=resource_name,
         column="NAME",
