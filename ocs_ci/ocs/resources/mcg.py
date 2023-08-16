@@ -8,7 +8,6 @@ import tempfile
 from time import sleep
 
 import boto3
-import requests
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
@@ -337,36 +336,19 @@ class MCG:
 
         """
 
-        logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
+        logger.info(f"Sending MCG RPC query via mcg-cli:\n{api} {method} {params}")
 
-        # This version comparison is a workaround to make sure we still cover
-        # the usage of the noobaa mgmt-endpoint via RPC calls
-        # Once the release-4.13 branch is created we should remove the unused logic per version
-        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_10:
-            payload = {
-                "api": api,
-                "method": method,
-                "params": params,
-                "auth_token": self.noobaa_token,
-            }
-            return requests.post(
-                url=self.mgmt_endpoint,
-                data=json.dumps(payload),
-                verify=retrieve_verification_mode(),
-            )
+        cli_output = self.exec_mcg_cmd(
+            f"api {api} {method} '{json.dumps(params)}' -ojson"
+        )
 
-        else:
-            cli_output = self.exec_mcg_cmd(
-                f"api {api} {method} '{json.dumps(params)}' -ojson"
-            )
+        # This class is needed to add a json method to the response dict
+        # which is needed to support existing usage
+        class CLIResponseDict(dict):
+            def json(self):
+                return self
 
-            # This class is needed to add a json method to the response dict
-            # which is needed to support existing usage
-            class CLIResponseDict(dict):
-                def json(self):
-                    return self
-
-            return CLIResponseDict({"reply": json.loads(cli_output.stdout)})
+        return CLIResponseDict({"reply": json.loads(cli_output.stdout)})
 
     def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
