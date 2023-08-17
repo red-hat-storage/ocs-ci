@@ -24,7 +24,6 @@ from ocs_ci.ocs.exceptions import (
     ArchitectureNotSupported,
     CommandFailed,
     CredReqSecretNotFound,
-    NoobaaCliChecksumFailedException,
     TimeoutExpiredError,
     UnsupportedPlatformError,
 )
@@ -91,6 +90,10 @@ class MCG:
             or self.get_mcg_cli_version().minor
             != version.get_semantic_ocs_version_from_config().minor
         ):
+            logger.info(
+                "The expected MCG CLI binary could not be found,"
+                " downloading the expected version"
+            )
             self.retrieve_noobaa_cli_binary()
 
         """
@@ -921,25 +924,19 @@ class MCG:
         return path
 
     @retry(
-        (NoobaaCliChecksumFailedException, CommandFailed, subprocess.TimeoutExpired),
+        (CommandFailed, subprocess.TimeoutExpired),
         tries=5,
         delay=15,
         backoff=1,
     )
     def retrieve_noobaa_cli_binary(self):
         """
-        Copy the NooBaa CLI binary from the operator pod
-        if it wasn't found locally.
+        Download the MCG-CLI binary and store it locally.
 
         Raises:
-            NoobaaCliChecksumFailedException: If checksum doesn't match.
-            AssertionError: In the case CLI binary doesn't exist.
+            AssertionError: In the case the CLI binary is not executable.
 
         """
-        logger.info(
-            f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
-            " attempting to copy it from the quay.io"
-        )
         semantic_version = version.get_semantic_ocs_version_from_config()
         remote_path = self.get_architecture_path()
         remote_mcg_cli_basename = os.path.basename(remote_path)
@@ -948,9 +945,9 @@ class MCG:
             config.DEPLOYMENT["live_deployment"]
             and semantic_version >= version.VERSION_4_13
         ):
-            image = f"registry.redhat.io/odf4/mcg-cli-rhel9:v{semantic_version}"
+            image = f"{constants.MCG_CLI_IMAGE}:v{semantic_version}"
         else:
-            image = f"quay.io/rhceph-dev/mcg-cli:{get_ocs_build_number()}"
+            image = f"{constants.MCG_CLI_IMAGE_PRE_4_13}:{get_ocs_build_number()}"
 
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
