@@ -67,7 +67,7 @@ class TestStoreUserInterface(object):
         self, setup_ui_class, cld_mgr, cloud_uls_factory, kind
     ):
         """
-        Test creation and deletion of MCG stores via the UI.
+        Test creation and deletion of MCG stores via the UI
 
         """
         uls_name = list(cloud_uls_factory({"aws": [(1, "us-east-2")]})["aws"])[0]
