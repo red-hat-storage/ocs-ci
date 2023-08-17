@@ -324,6 +324,22 @@ obc = {
         'li[id="Delete"] a[role="menuitem"]',
         By.CSS_SELECTOR,
     ),
+    "namespace_store_create": (
+        "button[id='yaml-create']",
+        By.CSS_SELECTOR,
+    ),
+    "namespace_store_name": ('input[id="ns-name"]', By.CSS_SELECTOR),
+    "namespace_store_provider": (
+        "//div[@data-test='namespacestore-provider']//button",
+        By.XPATH,
+    ),
+    "namespace_store_filesystem": ("//li[@id='Filesystem']", By.XPATH),
+    "namespace_store_pvc_expand": ("//div[@id='pvc-name']//button", By.XPATH),
+    "namespace_store_folder": ('input[id="folder-name"]', By.CSS_SELECTOR),
+    "namespace_store_create_item": (
+        'button[data-test="namespacestore-create-button"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 pvc = {
@@ -515,6 +531,10 @@ page_nav_4_6 = {
 
 page_nav_4_10 = {
     "odf_tab_new": ("Data Foundation", By.LINK_TEXT),
+}
+
+page_nav_4_14 = {
+    "object_storage_page": ("Object Storage", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -1501,7 +1521,7 @@ topology = {
 locators = {
     "4.14": {
         "login": {**login, **login_4_11, **login_4_14},
-        "page": {**page_nav, **page_nav_4_10},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
         "generic": generic_locators,
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "deployment": {
