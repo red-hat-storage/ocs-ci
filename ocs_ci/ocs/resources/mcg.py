@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import platform
+import re
 import stat
 import tempfile
 from time import sleep
@@ -85,7 +86,13 @@ class MCG:
         wait_for_resource_state(
             resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
         )
-        self.retrieve_noobaa_cli_binary()
+
+        if (
+            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            or self.get_mcg_cli_version().minor
+            != version.get_semantic_ocs_version_from_config().minor
+        ):
+            self.retrieve_noobaa_cli_binary()
 
         """
         The certificate will be copied on each mcg_obj instantiation since
@@ -947,48 +954,54 @@ class MCG:
             AssertionError: In the case CLI binary doesn't exist.
 
         """
-        if not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH):
-            logger.info(
-                f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
-                " attempting to copy it from the MCG operator pod"
-            )
-            semantic_version = version.get_semantic_ocs_version_from_config()
-            remote_path = self.get_architecture_path()
-            remote_mcg_cli_basename = os.path.basename(remote_path)
-            local_mcg_cli_dir = os.path.dirname(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            )
-            if (
-                config.DEPLOYMENT["live_deployment"]
-                and semantic_version >= version.VERSION_4_13
-            ):
-                image = f"registry.redhat.io/odf4/mcg-cli-rhel9:v{semantic_version}"
-            else:
-                image = f"quay.io/rhceph-dev/mcg-cli:{get_ocs_build_number()}"
-            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        logger.info(
+            f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
+            " attempting to copy it from quay.io"
+        )
+        semantic_version = version.get_semantic_ocs_version_from_config()
+        remote_path = self.get_architecture_path()
+        remote_mcg_cli_basename = os.path.basename(remote_path)
+        local_mcg_cli_dir = os.path.dirname(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+        if (
+            config.DEPLOYMENT["live_deployment"]
+            and semantic_version >= version.VERSION_4_13
+        ):
+            image = f"registry.redhat.io/odf4/mcg-cli-rhel9:v{semantic_version}"
+        else:
+            image = f"quay.io/rhceph-dev/mcg-cli:{get_ocs_build_number()}"
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
+        if not os.path.isfile(pull_secret_path):
+            logger.info(
+                f"Extracting pull-secret and placing it under {pull_secret_path}"
+            )
             exec_cmd(
-                f"oc image extract --registry-config {pull_secret_path} "
-                f"{image} --confirm "
-                f"--path {self.get_architecture_path()}:{local_mcg_cli_dir}"
+                f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+                f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+                shell=True,
             )
-            os.rename(
-                os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-            )
-            # Add an executable bit in order to allow usage of the binary
-            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            os.chmod(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                current_file_permissions.st_mode | stat.S_IEXEC,
-            )
-            # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            assert os.access(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
-            ), "The MCG CLI binary does not have execution permissions"
+        exec_cmd(
+            f"oc image extract --registry-config {pull_secret_path} "
+            f"{image} --confirm "
+            f"--path {self.get_architecture_path()}:{local_mcg_cli_dir}"
+        )
+        os.rename(
+            os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+        )
+        # Add an executable bit in order to allow usage of the binary
+        current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+        os.chmod(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+            current_file_permissions.st_mode | stat.S_IEXEC,
+        )
+        # Make sure the binary was copied properly and has the correct permissions
+        assert os.path.isfile(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+        ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+        assert os.access(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
+        ), "The MCG CLI binary does not have execution permissions"
 
     @property
     @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
@@ -1016,3 +1029,32 @@ class MCG:
             == get_default_bc["status"]["phase"]
             == STATUS_READY
         )
+
+    def get_mcg_cli_version(self):
+        """
+        Get the MCG CLI version by parsing the output of the `mcg-cli version` command.
+
+        Example output of the mcg-cli version command:
+
+            INFO[0000] CLI version: 5.12.0
+            INFO[0000] noobaa-image: noobaa/noobaa-core:master-20220913
+            INFO[0000] operator-image: noobaa/noobaa-operator:5.12.0
+
+        Returns:
+            semantic_version.base.Version: Object of semantic version.
+
+        """
+
+        # mcg-cli sends the output to stderr in this case
+        cmd_output = self.exec_mcg_cmd("version").stderr
+
+        # \s* captures any number of spaces
+        # \S+ captures any number of non-space characters
+        regular_expression = r"CLI version:\s*(\S+)"
+
+        # group(1) is the first capturing group, which is the version string
+        mcg_cli_version_str = re.search(
+            regular_expression, cmd_output, re.IGNORECASE
+        ).group(1)
+
+        return version.get_semantic_version(mcg_cli_version_str, only_major_minor=True)
