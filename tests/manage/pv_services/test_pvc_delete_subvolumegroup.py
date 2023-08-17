@@ -38,7 +38,8 @@ class TestPvcDeleteSubVolumeGroup(ManageTest):
         Args:
             project_factory: A fixture to create new project
         """
-        if registry.check_if_registry_stack_exists():
+        registry_exists = registry.check_if_registry_stack_exists()
+        if registry_exists:
             logger.info("Removing OCP registry from ODF")
             remove_ocp_registry_from_ocs(config.ENV_DATA["platform"])
             registry_pvc = get_all_pvc_objs(
@@ -46,10 +47,9 @@ class TestPvcDeleteSubVolumeGroup(ManageTest):
             )[0]
             registry_pvc.delete()
             registry_pvc.ocp.wait_for_delete(registry_pvc.name)
-            registry_removed = True
 
         def finalizer():
-            if registry_removed:
+            if registry_exists:
                 logger.info("Configuring OCP registry to use ODF")
                 registry.change_registry_backend_to_ocs()
 
