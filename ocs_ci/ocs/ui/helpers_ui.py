@@ -187,3 +187,13 @@ def get_element_type(element_name):
     """
 
     return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
+
+
+def get_element_by_text(text):
+    """
+    This function accepts a text as an argument and returns the element type by creating XPATH for it.
+    This is helpful when we are creating dynamic names for PVC's, Pod's, Namespaces's etc. and want to interact
+    with the same on UI.
+
+    """
+    return (f"//*[text()= '{text}']", By.XPATH)
