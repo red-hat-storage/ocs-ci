@@ -3427,6 +3427,10 @@ def mirror_image(image, cluster_config=None):
     """
     if not cluster_config:
         cluster_config = config
+    mirror_registry = cluster_config.DEPLOYMENT["mirror_registry"]
+    if image.startswith(mirror_registry):
+        log.debug(f"Skipping mirror of image {image}, it is already mirrored.")
+        return image
     with prepare_customized_pull_secret(image) as authfile_fo:
         # login to mirror registry
         login_to_mirror_registry(authfile_fo.name, cluster_config)
@@ -3439,7 +3443,6 @@ def mirror_image(image, cluster_config=None):
         else:
             orig_image_full = image_inspect[0]["RepoDigests"][0]
         # prepare mirrored image url
-        mirror_registry = cluster_config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
         log.info(
