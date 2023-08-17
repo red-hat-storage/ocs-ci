@@ -708,6 +708,7 @@ def create_storage_class(
     fs_name=None,
     volume_binding_mode="Immediate",
     allow_volume_expansion=True,
+    kernelMountOptions=None,
 ):
     """
     Create a storage class
@@ -771,6 +772,8 @@ def create_storage_class(
         if sc_name
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
+    if kernelMountOptions:
+        sc_data["parameters"]["kernelMountOptions"] = kernelMountOptions
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name

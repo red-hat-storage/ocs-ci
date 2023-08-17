@@ -819,6 +819,7 @@ def storageclass_factory_fixture(
         encryption_kms_id=None,
         volume_binding_mode="Immediate",
         allow_volume_expansion=True,
+        kernelMountOptions=None,
     ):
         """
         Args:
@@ -880,6 +881,7 @@ def storageclass_factory_fixture(
                 encryption_kms_id=encryption_kms_id,
                 volume_binding_mode=volume_binding_mode,
                 allow_volume_expansion=allow_volume_expansion,
+                kernelMountOptions=kernelMountOptions,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
