@@ -16,6 +16,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
@@ -153,27 +154,8 @@ class ObjectBucket(ABC):
         self.mcg = mcg
         self.rgw = rgw
         self.bucketclass = bucketclass
-        self.replication_policy = (
-            None
-            if replication_policy is None
-            else [
-                {
-                    "rule_id": replication_policy[0],
-                    "destination_bucket": replication_policy[1],
-                    "filter": {
-                        "prefix": replication_policy[2]
-                        if replication_policy[2] is not None
-                        else ""
-                    },
-                }
-            ]
-        )
-        # If a replication policy was set, and ODF >=4.12 is used, adjust the schema
-        if (
-            self.replication_policy is not None
-            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12
-        ):
-            self.replication_policy = {"rules": self.replication_policy}
+        self.replication_policy = self.__parse_replication_policy(replication_policy)
+
         self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
@@ -186,6 +168,30 @@ class ObjectBucket(ABC):
             return self.name == other
         elif isinstance(other, ObjectBucket):
             return self.name == other.name
+
+    def __parse_replication_policy(self, replication_policy):
+        if isinstance(replication_policy, McgReplicationPolicy):
+            replication_policy = replication_policy.to_dict()
+
+        elif replication_policy is None:
+            replication_policy = None
+
+        else:
+            replication_policy = {
+                "rules": [
+                    {
+                        "rule_id": replication_policy[0],
+                        "destination_bucket": replication_policy[1],
+                        "filter": {
+                            "prefix": replication_policy[2]
+                            if replication_policy[2] is not None
+                            else ""
+                        },
+                    }
+                ]
+            }
+
+        return replication_policy
 
     def delete(self, verify=True):
         """

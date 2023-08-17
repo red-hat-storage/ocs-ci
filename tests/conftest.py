@@ -6,6 +6,7 @@ import random
 import time
 import tempfile
 import threading
+import json
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
@@ -6506,3 +6507,105 @@ def change_the_noobaa_log_level(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="class")
+def add_env_vars_to_noobaa_core_class(request, mcg_obj_session):
+    """
+    Class-scoped fixture for adding env vars to the noobaa-core sts
+
+    """
+    return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
+
+
+def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
+    """
+    Add env vars to the noobaa-core sts
+
+    """
+    sts_obj = OCP(kind="StatefulSet", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
+    op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
+
+    added_env_vars = []
+
+    def add_env_vars_to_noobaa_core_implementation(new_env_vars_touples):
+        """
+        Implementation of add_env_vars_to_noobaa_core_fixture()
+
+        Args:
+            new_env_vars_touples (list): A list of touples, each containing the env var name and
+                value to be added to the noobaa-core sts
+                i.e. [("env_var_name_1", "env_var_value_1"), ("env_var_name_2", "env_var_value_2")]
+
+        """
+
+        nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+        sts_env_vars = nb_core_sts["spec"]["template"]["spec"]["containers"][0]["env"]
+        sts_env_vars = [env_var_in_sts["name"] for env_var_in_sts in sts_env_vars]
+
+        patch_ops = []
+
+        for env_var, value in new_env_vars_touples:
+            if env_var in sts_env_vars:
+                log.warning(f"Env var {env_var} already exists in the noobaa-core sts")
+                continue
+
+            # Copy and modify the template to create the required dict for the first addition
+            add_env_var_op = copy.deepcopy(op_template_dict)
+            add_env_var_op["op"] = "add"
+            add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
+            add_env_var_op["value"] = {"name": env_var, "value": str(value)}
+
+            patch_ops.append(copy.deepcopy(add_env_var_op))
+            added_env_vars.append(env_var)
+
+        log.info(
+            f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
+        )
+        sts_obj.patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=json.dumps(patch_ops),
+            format_type="json",
+        )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    def finalizer():
+        """
+        Remove any env vars that were added to the noobaa-core sts
+
+        """
+        log.info("Removing the added env vars from the noobaa-core statefulset:")
+
+        # Adjust the template for removal ops
+        remove_env_var_op = copy.deepcopy(op_template_dict)
+        remove_env_var_op["op"] = "remove"
+        remove_env_var_op["path"] = ""
+        del remove_env_var_op["value"]
+
+        for target_env_var in added_env_vars:
+            # Fetch the target's index from the noobaa-core statefulset
+            nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+            env_vars_in_sts = nb_core_sts["spec"]["template"]["spec"]["containers"][0][
+                "env"
+            ]
+            env_vars_names_in_sts = [
+                env_var_in_sts["name"] for env_var_in_sts in env_vars_in_sts
+            ]
+            target_index = env_vars_names_in_sts.index(target_env_var)
+            remove_env_var_op["path"] = f"{yaml_path_to_env_variables}/{target_index}"
+
+            # Patch the noobaa-core sts to remove the env var
+            sts_obj.patch(
+                resource_name=constants.NOOBAA_CORE_STATEFULSET,
+                params=json.dumps([remove_env_var_op]),
+                format_type="json",
+            )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    request.addfinalizer(finalizer)
+    return add_env_vars_to_noobaa_core_implementation

@@ -1038,3 +1038,15 @@ class MCG:
         ).group(1)
 
         return version.get_semantic_version(mcg_cli_version_str, only_major_minor=True)
+
+    def reset_core_pod(self):
+        """
+        Delete the noobaa-core pod and wait for it to come up again
+
+        """
+
+        self.core_pod.delete(wait=True)
+        self.core_pod = Pod(
+            **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
+        )
+        wait_for_resource_state(self.core_pod, constants.STATUS_RUNNING)

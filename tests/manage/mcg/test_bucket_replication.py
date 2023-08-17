@@ -36,6 +36,8 @@ class TestReplication(MCGTest):
 
     """
 
+    TIMEOUT = 2100
+
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
@@ -149,7 +151,10 @@ class TestReplication(MCGTest):
         }, "Needed uploaded objects could not be found"
 
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session,
+            source_bucket_name,
+            target_bucket_name,
+            timeout=self.TIMEOUT,
         ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
     @pytest.mark.parametrize(
@@ -220,7 +225,10 @@ class TestReplication(MCGTest):
         )
 
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session,
+            source_bucket_name,
+            target_bucket_name,
+            timeout=self.TIMEOUT,
         ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         assert set(written_random_objects) == {
@@ -285,7 +293,7 @@ class TestReplication(MCGTest):
         }, "Needed uploaded objects could not be found"
 
         assert compare_bucket_object_list(
-            mcg_obj_session, first_bucket_name, second_bucket_name
+            mcg_obj_session, first_bucket_name, second_bucket_name, timeout=self.TIMEOUT
         ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
 
         written_objects = write_random_test_objects_to_bucket(
@@ -302,7 +310,7 @@ class TestReplication(MCGTest):
             for obj in mcg_obj_session.s3_list_all_objects_in_bucket(second_bucket_name)
         }, "Needed uploaded objects could not be found"
         assert compare_bucket_object_list(
-            mcg_obj_session, first_bucket_name, second_bucket_name
+            mcg_obj_session, first_bucket_name, second_bucket_name, timeout=self.TIMEOUT
         ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
 
     @pytest.mark.parametrize(
@@ -410,7 +418,7 @@ class TestReplication(MCGTest):
         }, "Needed uploaded objects could not be found"
 
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session, source_bucket_name, target_bucket_name, self.TIMEOUT
         ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         replication_id = nb_db_pod.exec_cmd_on_pod(
@@ -536,7 +544,7 @@ class TestReplication(MCGTest):
         )
 
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session, source_bucket_name, target_bucket_name, self.TIMEOUT
         ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         assert set(written_random_objects) == {
@@ -580,7 +588,10 @@ class TestReplication(MCGTest):
         )
 
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session,
+            source_bucket_name,
+            target_bucket_name,
+            timeout=self.TIMEOUT,
         ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
         awscli_pod_session.exec_cmd_on_pod(command=f"rm -rf {target_dir}")
