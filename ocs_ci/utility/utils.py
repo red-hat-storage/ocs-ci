@@ -14,6 +14,7 @@ import string
 import subprocess
 import time
 import traceback
+from typing import Match
 import stat
 import shutil
 from copy import deepcopy
@@ -651,7 +652,7 @@ def exec_cmd(
         log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
-        masked_stderr = filter_out_emojis(masked_stderr)
+        masked_stderr = bin_xml_escape(filter_out_emojis(masked_stderr))
         if (
             "grep" in masked_cmd
             and b"command terminated with exit code 1" in completed_process.stderr
@@ -663,6 +664,36 @@ def exec_cmd(
                 f"\nError is {masked_stderr}"
             )
     return completed_process
+
+
+def bin_xml_escape(arg):
+    """
+    Visually escape invalid XML characters.
+
+    For example, transforms 'hello\aworld\b' into 'hello#x07world#x08'
+
+    Args:
+        arg (object) Object on top of which the invalid XML characters will be escaped
+
+    Returns:
+        str: string with escaped invalid characters
+
+    """
+
+    def repl(matchobj: Match[str]) -> str:
+        i = ord(matchobj.group())
+        if i <= 0xFF:
+            return "#x%02X" % i
+        else:
+            return "#x%04X" % i
+
+    # The spec range of valid chars is:
+    # Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+    # For an unknown(?) reason, we disallow #x7F (DEL) as well.
+    illegal_xml_re = (
+        "[^\u0009\u000A\u000D\u0020-\u007E\u0080-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
+    )
+    return re.sub(illegal_xml_re, repl, str(arg))
 
 
 def download_file(url, filename, **kwargs):
