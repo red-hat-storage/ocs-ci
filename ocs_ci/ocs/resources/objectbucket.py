@@ -254,7 +254,7 @@ class ObjectBucket(ABC):
             for health_check in TimeoutSampler(
                 timeout, interval, self.internal_verify_health
             ):
-                if health_check:
+                if health_check and self.mcg.s3_verify_bucket_exists(self.name):
                     logger.info(f"{self.name} is healthy")
                     break
                 else:
