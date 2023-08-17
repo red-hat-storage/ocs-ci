@@ -80,3 +80,10 @@ class ObjectService(PageNavigator):
         )
 
         return ObjectBucketClaimsTab()
+
+    def navigate_namespace_store_tab(self):
+        logger.info("Navigate to Namespace Store Tab")
+        self.do_click(locator=self.validation_loc["namespacestore_page"])
+        from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
+
+        return NameSpaceStoreTab()
