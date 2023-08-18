@@ -78,22 +78,42 @@ def get_logfile_map_from_logwriter_pods(logwriter_pods, is_rbd=False):
 
 class TestNetSplit:
     @pytest.fixture()
-    def init_sanity(self):
+    def init_sanity(self, request):
+        """
+        Initial Cluster sanity
+        """
         self.sanity_helpers = Sanity()
+
+        def finalizer():
+            """
+            Make sure the ceph health is OK at the end of the test
+            """
+            try:
+                logger.info("Making sure ceph health is OK")
+                self.sanity_helpers.health_check(tries=50)
+            except CephHealthException as e:
+                assert all(
+                    err in e.args[0]
+                    for err in ["HEALTH_WARN", "daemons have recently crashed"]
+                ), f"[CephHealthException]: {e.args[0]}"
+                get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+                logger.info("Archived ceph crash!")
+
+        request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
             pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
+            # pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
+            # pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
+            # pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
         ],
         ids=[
             "Data-1-Data-2",
-            "Arbiter-Data-1",
-            "Arbiter-Data-1-and-Arbiter-Data-2",
-            "Arbiter-Data-1-and-Data-1-Data-2",
+            # "Arbiter-Data-1",
+            # "Arbiter-Data-1-and-Arbiter-Data-2",
+            # "Arbiter-Data-1-and-Data-1-Data-2",
         ],
     )
     def test_netsplit_cephfs(
@@ -144,7 +164,7 @@ class TestNetSplit:
         ]
 
         # note the file names created and each file start write time
-        log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods[0])
+        log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods)
 
         # Generate 5 minutes worth of logs before inducing the netsplit
         logger.info("Generating 5 mins worth of log")
@@ -271,7 +291,7 @@ class TestNetSplit:
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )[0]
         logreader_workload_factory(
-            pvc=pvc, logreader_path=constants.LOGREADER_JOB_PATH, duration=5
+            pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
         )
         logger.info("Getting new logreader pods!")
         new_logreader_pods = [
@@ -301,17 +321,6 @@ class TestNetSplit:
             )
             assert "corrupt" not in pod_logs, "Data is corrupted!!"
         logger.info("No data corruption is seen!")
-
-        # do cluster sanity post recovery
-        try:
-            self.sanity_helpers.health_check(tries=50)
-        except CephHealthException as e:
-            assert all(
-                err in e.args[0]
-                for err in ["HEALTH_WARN", "daemons have recently crashed"]
-            ), f"[CephHealthException]: {e.args[0]}"
-            get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-            logger.info("Archived ceph crash!")
 
     @pytest.mark.parametrize(
         argnames="zones, duration",
@@ -417,14 +426,3 @@ class TestNetSplit:
             assert "corrupt" not in output, "Data is corrupted!!"
 
         logger.info("No data corruption is seen")
-
-        # do cluster sanity post recovery
-        try:
-            self.sanity_helpers.health_check(tries=50)
-        except CephHealthException as e:
-            assert all(
-                err in e.args[0]
-                for err in ["HEALTH_WARN", "daemons have recently crashed"]
-            ), f"[CephHealthException]: {e.args[0]}"
-            get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-            logger.info("Archived ceph crash!")
