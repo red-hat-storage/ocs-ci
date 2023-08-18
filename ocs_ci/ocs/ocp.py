@@ -482,8 +482,12 @@ class OCP(object):
         """
         ocp = OCP(kind="namespace")
         command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(
-            f"{command}", threading_lock=self.threading_lock
+        if any(
+            output in run_cmd(f"{command}", threading_lock=self.threading_lock)
+            for output in [
+                f'Now using project "{project_name}"',
+                f'Already on project "{project_name}"',
+            ]
         ):
             if version.get_semantic_ocp_running_version() >= version.VERSION_4_12:
                 label = (
