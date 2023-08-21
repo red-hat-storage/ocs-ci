@@ -2327,3 +2327,68 @@ def check_custom_storageclass_presence():
 
     log.info("Custom-defined storage classes are correctly present.")
     return True
+
+
+def patch_storage_cluster_for_custom_storage_class(
+    storage_class_type, storage_class_name=None, action="add"
+):
+    """
+    Patch the storage cluster for a custom storage class.
+
+    This function updates the storage cluster's storage class settings based on the provided storage class type.
+
+    Args:
+        storage_class_type (str): The type of storage class ("nfs", "encryption", etc.).
+        storage_class_name (str, optional): The name of the custom storage class to be set.
+                                            If None, a default name will be generated.
+        action (str, optional): The action to perform ("add" or "remove").
+
+    Returns:
+        bool: Result of the patch operation.
+    """
+    if storage_class_name is None:
+        storage_class_name = f"custom-{storage_class_type}"
+
+    sc_obj = get_storage_cluster()
+    resource_name = (
+        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+        if config.DEPLOYMENT["external_mode"]
+        else constants.DEFAULT_CLUSTERNAME
+    )
+
+    if storage_class_type in ["nfs", "encryption"]:
+        path = f"/spec/{storage_class_type}/storageClassName"
+    else:
+        path = f"/spec/managedResources/{storage_class_type}/storageClassName"
+
+    patch_data = []
+
+    if action == "add":
+        patch_data.append(
+            {
+                "op": "add",
+                "path": path,
+                "value": storage_class_name,
+            }
+        )
+        log.info(
+            f"Added storage class '{storage_class_name}' of type '{storage_class_type}'."
+        )
+    elif action == "remove":
+        patch_data.append(
+            {
+                "op": "remove",
+                "path": path,
+            }
+        )
+        log.info(f"Removed storage class of type '{storage_class_type}'.")
+
+    try:
+        return sc_obj.patch(
+            resource_name=resource_name,
+            params=patch_data,
+            format_type="json",
+        )
+    except CommandFailed as err:
+        log.error(f"Command Failed with an error :{err}")
+        return False
