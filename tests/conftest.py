@@ -27,6 +27,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
 )
+from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -2292,6 +2293,7 @@ def awscli_pod_fixture(request, scope_name):
     ] = service_ca_configmap_name
 
     update_container_with_mirrored_image(awscli_sts_dict)
+    update_container_with_proxy_env(awscli_sts_dict)
 
     s3cli_sts_obj = helpers.create_resource(**awscli_sts_dict)
     assert s3cli_sts_obj, "Failed to create S3CLI STS"
