@@ -13,7 +13,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: web-server
-      image: quay.io/ocsci/nginx:latest
+      image: quay.io/ocsci/perf:latest
       command: ["/bin/sleep", "infinity"]
       volumeMounts:
         - name: mypvc
