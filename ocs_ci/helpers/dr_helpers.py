@@ -628,10 +628,9 @@ def wait_for_all_resources_deletion(
         sample.wait_for_func_value(0)
     else:
         logger.info("Verify all PVs are in Available state")
-        all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
             pvc_status = get_pv_status(pvc_obj)
-            if not pvc_status == "Released":
+            if not pvc_status == constants.STATUS_RELEASED:
                 raise Exception(f"{pvc_obj} is not Released state")
 
 
