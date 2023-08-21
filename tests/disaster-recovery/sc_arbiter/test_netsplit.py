@@ -105,15 +105,15 @@ class TestNetSplit:
         argnames="zones, duration",
         argvalues=[
             pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 15),
-            # pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
-            # pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
-            # pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
         ],
         ids=[
             "Data-1-Data-2",
-            # "Arbiter-Data-1",
-            # "Arbiter-Data-1-and-Arbiter-Data-2",
-            # "Arbiter-Data-1-and-Data-1-Data-2",
+            "Arbiter-Data-1",
+            "Arbiter-Data-1-and-Arbiter-Data-2",
+            "Arbiter-Data-1-and-Data-1-Data-2",
         ],
     )
     def test_netsplit_cephfs(
