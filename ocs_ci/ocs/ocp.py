@@ -481,10 +481,12 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        command = f"oc new-project {project_name}"
+        exec_output = run_cmd(
+            f"oc new-project {project_name}", threading_lock=self.threading_lock
+        )
         if any(
-            output in run_cmd(f"{command}", threading_lock=self.threading_lock)
-            for output in [
+            pattern in exec_output
+            for pattern in [
                 f'Now using project "{project_name}"',
                 f'Already on project "{project_name}"',
             ]
