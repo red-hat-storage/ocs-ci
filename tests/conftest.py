@@ -6385,6 +6385,7 @@ def fedora_pod_fixture(request, scope_name):
     fedora_pod_dict["metadata"]["name"] = fedora_pod_name
 
     update_container_with_mirrored_image(fedora_pod_dict)
+    update_container_with_proxy_env(fedora_pod_dict)
 
     fedora_pod_obj = Pod(**fedora_pod_dict)
     assert fedora_pod_obj.create(
