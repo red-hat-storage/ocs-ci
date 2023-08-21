@@ -241,6 +241,24 @@ generic_locators = {
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
     "text_input_popup_rules": ("//*[@class='pf-c-helper-text__item-text']", By.XPATH),
+    "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
+    "searchbar_select_name": ("NAME-link", By.ID),
+    "searchbar_select_label": ("LABEL-link", By.ID),
+    "searchbar_input": ("//input[@data-test-id='item-filter']", By.XPATH),
+    "resource_from_list_by_name": (
+        "//td[@id='name']//a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "actions_of_resource_from_list": (
+        "//td[@id='name']//a[contains(text(), '{}')]"
+        "/../../..//button[@aria-label='Actions']",
+        By.XPATH,
+    ),
+    "delete_resource": (
+        'li[id="Delete"] a[role="menuitem"]',
+        By.CSS_SELECTOR,
+    ),
+    "close_modal_btn": ("//button[@id='modal-close-action']", By.XPATH),
 }
 
 ocs_operator_locators = {
@@ -952,6 +970,10 @@ block_pool = {
     ),
     "save_pool_edit": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "pool_cannot_be_deleted_warning": (
+        "//p[@data-test='pool-bound-message']",
+        By.XPATH,
+    ),
 }
 
 storageclass = {

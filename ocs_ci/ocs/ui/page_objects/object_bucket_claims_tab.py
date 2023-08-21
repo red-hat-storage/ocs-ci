@@ -49,11 +49,17 @@ class BucketsUI(PageNavigator):
         self.page_has_loaded()
         self.do_send_keys(self.generic_locators["search_resource_field"], resource)
 
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
         if delete_via == "Actions":
             logger.info(f"Go to {resource} Page")
             # delete specific resource by its dynamic name. Works both for OBC and OB
+
+            resource_from_list = format_locator(
+                self.generic_locators["resource_from_list_by_name"], resource
+            )
             self.do_click(
-                (f"//td[@id='name']//a[contains(text(),'{resource}')]", By.XPATH),
+                resource_from_list,
                 enable_screenshot=True,
             )
 
@@ -62,18 +68,14 @@ class BucketsUI(PageNavigator):
         else:
             logger.info(f"Click on '{delete_via}'")
             # delete specific resource by its dynamic name. Works both for OBC and OB
-            self.do_click(
-                (
-                    f"//td[@id='name']//a[contains(text(), '{resource}')]"
-                    "/../../..//button[@aria-label='Actions']",
-                    By.XPATH,
-                ),
-                enable_screenshot=True,
+            resource_actions_loc = format_locator(
+                self.generic_locators["actions_of_resource_from_list"], resource
             )
+            self.do_click(resource_actions_loc, enable_screenshot=True)
 
         logger.info(f"Click on 'Delete {resource}'")
         # works both for OBC and OB, both from three_dots icon and Actions dropdown list
-        self.do_click(self.obc_loc["delete_resource"], enable_screenshot=True)
+        self.do_click(self.generic_locators["delete_resource"], enable_screenshot=True)
 
         logger.info(f"Confirm {resource} Deletion")
         # same PopUp both for OBC and OB

@@ -26,6 +26,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier_marks,
     ignore_leftover_label,
     upgrade_marks,
+    ignore_resource_not_found_error_label,
 )
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
@@ -608,8 +609,24 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
         """
         Delete the Ceph block pool
         """
+        skip_resource_not_found_error = None
+        node = request.node
+        for mark in node.iter_markers():
+            if mark.name == ignore_resource_not_found_error_label.name:
+                skip_resource_not_found_error = True
+
         for instance in instances:
-            instance.delete()
+            try:
+                instance.delete()
+            except CommandFailed as ex:
+                if "NotFound" in str(ex) and skip_resource_not_found_error:
+                    log.info(
+                        f"Resource {instance.kind} {instance.name} not found in "
+                        f"namespace {instance.namespace}, ignore_resource_not_found_error_label applied. "
+                        "Skipping deletion"
+                    )
+                else:
+                    raise
             instance.ocp.wait_for_delete(instance.name)
 
     request.addfinalizer(finalizer)

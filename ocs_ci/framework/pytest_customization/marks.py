@@ -139,6 +139,12 @@ ignore_leftovers = pytest.mark.ignore_leftovers
 # the app labels specified
 ignore_leftover_label = pytest.mark.ignore_leftover_label
 
+# ignore resource_not_found error such as when deleting a resource that was already deleted
+# useful for cleanup in teardown when resource might be deleted during the test
+ignore_resource_not_found_error_label = (
+    pytest.mark.ignore_resource_not_found_error_label
+)
+
 # testing marker this is just for testing purpose if you want to run some test
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
