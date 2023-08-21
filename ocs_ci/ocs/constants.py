@@ -1188,6 +1188,7 @@ OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-st
 # well known topologies
 ZONE_LABEL = "topology.kubernetes.io/zone"
 REGION_LABEL = "topology.kubernetes.io/region"
+RACK_LABEL = "topology.rook.io/rack"
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5

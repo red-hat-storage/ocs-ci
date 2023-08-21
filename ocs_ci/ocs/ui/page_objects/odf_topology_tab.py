@@ -10,6 +10,7 @@ from selenium.webdriver.remote.errorhandler import ErrorHandler
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import ON_PREM_PLATFORMS, CLOUD_PLATFORMS
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.node import get_node_names
 from ocs_ci.ocs.ocp import OCP
@@ -1000,6 +1001,16 @@ class OdfTopologyNodesView(TopologyTab):
                     details_dict[
                         detail_name.split("details_sidebar_node_", 1)[-1].strip()
                     ] = addresses_txt
+                elif (
+                    detail_name == "details_sidebar_node_zone"
+                    and config.ENV_DATA["platform"].lower() in ON_PREM_PLATFORMS
+                ):
+                    continue
+                elif (
+                    detail_name == "details_sidebar_node_rack"
+                    and config.ENV_DATA["platform"].lower() in CLOUD_PLATFORMS
+                ):
+                    continue
                 else:
                     details_dict[
                         detail_name.split("details_sidebar_node_", 1)[-1].strip()

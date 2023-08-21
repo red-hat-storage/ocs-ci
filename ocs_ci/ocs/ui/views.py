@@ -1403,6 +1403,10 @@ topology = {
         "(//dt[normalize-space()='Zone']/following::dd)[1]",
         By.XPATH,
     ),
+    "details_sidebar_node_rack": (
+        "(//dt[normalize-space()='Rack']/following::dd)[1]",
+        By.XPATH,
+    ),
     "details_sidebar_node_OS_image": (
         "(//dt[normalize-space()='OS image']/following::dd)[1]",
         By.XPATH,
@@ -1528,10 +1532,12 @@ locators = {
             **validation_4_10,
             **validation_4_11,
             **validation_4_12,
+            **validation_4_13,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
         "bucketclass": bucketclass,
+        "topology": topology,
     },
     "4.13": {
         "login": {**login, **login_4_11},

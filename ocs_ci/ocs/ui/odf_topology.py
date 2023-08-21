@@ -9,6 +9,12 @@ import pandas as pd
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import (
+    ON_PREM_PLATFORMS,
+    CLOUD_PLATFORMS,
+    ZONE_LABEL,
+    RACK_LABEL,
+)
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.ocs.resources.pod import Pod
@@ -144,6 +150,10 @@ def get_node_details_cli(node_name) -> dict:
     ] = f"{len(node_metadata.get('annotations'))} annotation"
     node_details["external_id"] = "-"
     node_details["created"] = get_creation_ts_with_offset(node_metadata)
+    if config.ENV_DATA["platform"].lower() in ON_PREM_PLATFORMS:
+        node_details["rack"] = node_metadata.get("labels").get(RACK_LABEL)
+    elif config.ENV_DATA["platform"].lower() in CLOUD_PLATFORMS:
+        node_details["zone"] = node_metadata.get("labels").get(ZONE_LABEL)
 
     return node_details
 
@@ -174,6 +184,12 @@ def get_deployment_details_cli(deployment_name) -> dict:
     deployment_details = dict()
     deployment_details["name"] = node_metadata.get("name")
     deployment_details["namespace"] = node_metadata.get("namespace")
+    if (
+        isinstance(node_metadata.get("labels"), str)
+        and node_metadata.get("labels").isspace()
+        or node_metadata.get("labels") is None
+    ):
+        deployment_details["labels"] = ""
     deployment_details["labels"] = node_metadata.get("labels")
     deployment_details[
         "annotation"

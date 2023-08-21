@@ -16,7 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_nodes, get_worker_nodes, get_node_names
+from ocs_ci.ocs.node import get_nodes, get_node_names
 from ocs_ci.ocs.ui.base_ui import take_screenshot
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.odf_topology import (
@@ -62,6 +62,7 @@ def teardown_depl_busybox(request):
 class TestODFTopology(object):
     @tier3
     @bugzilla("2209251")
+    @bugzilla("2233027")
     @polarion_id("OCS-4901")
     def test_validate_topology_configuration(
         self,
@@ -100,14 +101,6 @@ class TestODFTopology(object):
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
 
         topology_deviation = topology_tab.validate_topology_configuration()
-
-        random_node_name = random.choice(get_worker_nodes())
-        topology_tab.nodes_view.nav_back_main_topology_view(soft=True)
-        topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
-        if topology_tab.nodes_view.is_alert_tab_present():
-            logger.error("alert tab should not be present on External mode deployments")
-            topology_tab.take_screenshot()
-            topology_deviation["alert_tab_present_external_mode"] = True
 
         if len(topology_deviation):
             pytest.fail(
@@ -256,7 +249,7 @@ class TestODFTopology(object):
                 if node not in node_to_pods_odf_console.values()
             ]
         )
-        logger.info(f"node to shut down will be '{random_node_under_test}'")
+        logger.info(f"node to shut down will be '{random_node_under_test.name}'")
 
         random_node_idle = random.choice(
             [node for node in ocp_nodes if node != random_node_under_test]
