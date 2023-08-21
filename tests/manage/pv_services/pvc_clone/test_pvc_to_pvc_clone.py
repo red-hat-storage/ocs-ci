@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @acceptance
-@skipif_ocs_version("<4.6")
-@skipif_ocp_version("<4.6")
+@skipif_ocs_version("<4.9")
+@skipif_ocp_version("<4.9")
 class TestClone(ManageTest):
     """
     Tests to verify PVC to PVC clone feature
