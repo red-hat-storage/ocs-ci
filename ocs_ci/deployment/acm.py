@@ -112,6 +112,8 @@ class Submariner(object):
             tempf.write(resp.content)
 
             # Actual submariner binary download
+            if config.ENV_DATA.get("submariner_upstream_version_tag"):
+                os.environ["VERSION"] = config.ENV_DATA.get('submariner_upstream_version_tag')
             cmd = f"bash {tempf.name}"
             try:
                 run_cmd(cmd)
