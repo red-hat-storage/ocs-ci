@@ -6618,6 +6618,7 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
     return add_env_vars_to_noobaa_core_implementation
 
 
+<<<<<<< HEAD
 @pytest.fixture()
 def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
     def factory(project_name):
@@ -6748,3 +6749,33 @@ def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_fact
     )
 
     return logwriter_sts
+# Initialize a global variable for the logger
+global_test_logger = None
+
+
+@pytest.fixture(scope="function", autouse=True)
+def setup_test_logger(request):
+    global global_test_logger
+
+    # Get the name of the test function
+    test_name = request.node.name
+
+    # Configure the logger for the test
+    logger = logging.getLogger(test_name)
+    logger.setLevel(logging.DEBUG)
+
+    # Create a handler for this logger, which will output to a separate log file
+    file_handler = logging.FileHandler(f"/tmp/{test_name}.log")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Set the global logger to the logger for this test
+    global_test_logger = logger
+
+    yield
+
+    # Clean up: close the file handler
+    file_handler.close()
