@@ -6,12 +6,24 @@ import time
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import wait_for_pv_delete, wait_for_resource_state
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import (
+    STATUS_BOUND,
+    STATUS_RELEASED,
+    STATUS_FAILED,
+    STATUS_COMPLETED,
+    STATUS_RUNNING,
+    STATUS_AVAILABLE,
+    STATUS_PENDING,
+    STATUS_READY,
+)
 from ocs_ci.ocs.exceptions import CommandFailed, UnableUpgradeConnectionException
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.pod import Pod
+from ocs_ci.ocs.resources.pv import get_pv_status
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.retry import retry
 
@@ -318,36 +330,56 @@ class PvcCapacityDeploymentList(list, metaclass=SingletonMeta):
 
     def delete_pvc(self, pvc: PVC):
         """
-        Delete the PVC and remove the PvcCapacityDeployment object
-        :param pvc:
+        Delete the PVC with or without data
+        and remove the PvcCapacityDeployment object from list,
+        make sure that PV is deleted as well.
+
+        It is designed to delete mounted PVC with mounted PV as we want to test the behavior of management-console
+        :param pvc: PVC object
         """
         logger.info(f"Delete pvc {pvc.name}")
+        ocp = OCP()
         for pvc_capacity_deployment in self:
             if pvc_capacity_deployment.pvc_obj == pvc:
-                pv_obj = pvc.backed_pv_obj
-                pvc.delete(force=True, wait=False)
 
+                pv_obj = pvc.backed_pv_obj
+                # pvc will stack in terminating state because it is mounted
+                pvc.delete(wait=False, force=True)
                 # remove finalizers from the pvc to be able to delete mounted pvc
                 params = '{"metadata": {"finalizers":null}}'
                 try:
-                    OCP().exec_oc_cmd(
+                    ocp.exec_oc_cmd(
                         f"patch pvc {pvc.name} -p '{params}' -n {pvc.namespace}"
                     )
+                    logger.info(
+                        "sleep 2 min to allow pvc to be deleted after patching finalizers"
+                    )
+                    time.sleep(60 * 2)
                 except CommandFailed as ex:
                     if "not found" in str(ex):
                         logger.info(f"pvc '{pvc.name}' already deleted")
-                if not pv_obj.is_deleted:
+
+                out = ""
+                try:
+                    out = ocp.exec_oc_cmd(f"get pv {pv_obj.name}", silent=True)
+                    logger.info(out)
+                except CommandFailed as ex:
+                    if "not found" in str(ex):
+                        logger.info(f"pv '{pv_obj.name}' already deleted")
+                if pv_obj.name in out:
+                    pv_status = get_pv_status(pv_obj.get())
                     logger.info(
-                        f"PVC deletion did not delete PV on cluster. Delete pv {pv_obj.name}"
+                        f"PVC deletion did not delete PV {pv_obj.name} on cluster. PV status {pv_status}"
                     )
-                    pv_obj.delete(wait=False)
+                    pv_obj.delete(wait=False, force=True)
+                    wait_for_pv_delete([pv_obj])
 
                 self._delete_pvc_capacity_deployment_from_list(
                     pvc_capacity_deployment.deployment.name
                 )
                 break
         else:
-            raise ValueError(f"PvcCapacityDeployment with pvc {pvc.name} not found.")
+            raise ValueError(f"PVC with name {pvc.name} not found.")
 
 
 def compare_mem_usage(

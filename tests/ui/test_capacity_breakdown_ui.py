@@ -12,7 +12,11 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ui,
 )
-from ocs_ci.framework.pytest_customization.marks import green_squad, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    polarion_id,
+    tier3,
+)
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -120,7 +124,7 @@ class TestCapacityBreakdownUI(ManageTest):
         ), "The Project/Pod not created on Capacity Breakdown"
 
     @ui
-    @tier2
+    @tier3
     @bugzilla("2225223")
     @polarion_id("OCS-5122")
     def test_requested_capacity_breakdown(
@@ -252,7 +256,8 @@ class TestCapacityBreakdownUI(ManageTest):
         )
         mgr_pods = get_mgr_pods()
         for mgr_pods in mgr_pods:
-            mgr_pods.delete()
+            # pods should redeploy automatically
+            mgr_pods.delete(wait=True)
         logger.info(
             "finished delete mgr pods, wait 180 sec to update the UI of the management-console"
         )

@@ -109,7 +109,7 @@ class BlockAndFile(StorageSystemDetails):
     def check_pvc_to_namespace_ui_card(self, namespace, check_name: str):
         self.select_capacity_resource("PersistentVolumeClaims", namespace)
         pvc_to_size_dict = self.read_capacity_breakdown()
-
+        self.take_screenshot()
         if not all(
             [
                 pvc_to_size_dict.get(pvc_name)
