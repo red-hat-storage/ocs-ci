@@ -2349,7 +2349,6 @@ def patch_storage_cluster_for_custom_storage_class(
     if storage_class_name is None:
         storage_class_name = f"custom-{storage_class_type}"
 
-    sc_obj = get_storage_cluster()
     resource_name = (
         constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
         if config.DEPLOYMENT["external_mode"]
@@ -2382,13 +2381,42 @@ def patch_storage_cluster_for_custom_storage_class(
             }
         )
         log.info(f"Removed storage class of type '{storage_class_type}'.")
+    else:
+        log.error(f"Not supported action '{action}' to patch StorageCluster spec.")
+        return False
 
     try:
-        return sc_obj.patch(
+        sc_obj = get_storage_cluster()
+        sc_obj.patch(
             resource_name=resource_name,
             params=patch_data,
             format_type="json",
         )
     except CommandFailed as err:
         log.error(f"Command Failed with an error :{err}")
+        return False
+
+    # Verify the patch operation has created/deleted the storageClass from the cluster.
+    storageclass_list = run_cmd(
+        "oc get sc -o jsonpath='{.items[*].metadata.name}'"
+    ).split()
+    if action == "remove":
+        if storage_class_name in storageclass_list:
+            log.error(
+                f" StorageClass '{storage_class_name}' not removed from the cluster."
+            )
+            return False
+        else:
+            log.info(f"StorageClass {storage_class_name} removed from the cluster.")
+    elif action == "add":
+        if storage_class_name not in storageclass_list:
+            log.error(
+                f" StorageClass '{storage_class_name}' not created on the cluster."
+            )
+            return False
+        else:
+            log.info(f"StorageClass '{storage_class_name}' created on the cluster.")
+            return True
+    else:
+        log.error(f"Invalid action: '{action}'")
         return False

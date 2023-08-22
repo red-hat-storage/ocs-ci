@@ -30,6 +30,15 @@ class TestCustomStorageClassNames:
         Fixture to restore custom storage class names after testing.
         """
 
+        def cleanup_resources():
+            for sc_type in self.sc_type_list:
+                patch_storage_cluster_for_custom_storage_class(sc_type, action="remove")
+
+            for sc in self.custom_sc_list:
+                run_cmd(f"oc delete sc {sc}")
+
+        request.addfinalizer(cleanup_resources)
+
         def restore_custom_storage_class_names():
             if config.ENV_DATA.get("custom_default_storageclass_names"):
                 for sc_type, sc_name in config.ENV_DATA.get(
@@ -57,13 +66,13 @@ class TestCustomStorageClassNames:
             5. Delete the storage class mentioned in the storage cluster spec.
 
         """
-        custom_sc_list = []
-        sc_type_list = [
+        self.custom_sc_list = []
+        self.sc_type_list = [
             OCS_COMPONENTS_MAP["cephfs"],
             OCS_COMPONENTS_MAP["rgw"],
             OCS_COMPONENTS_MAP["blockpools"],
         ]
-        for sc_type in sc_type_list:
+        for sc_type in self.sc_type_list:
             random_sc_name = f"custom-{sc_type}-{gen_alpha()}".lower()
             log.info(
                 f"Adding custom storageclass '{random_sc_name}' of type '{sc_type}' in storagecluster spec."
@@ -71,20 +80,11 @@ class TestCustomStorageClassNames:
             assert patch_storage_cluster_for_custom_storage_class(
                 sc_type, storage_class_name=random_sc_name
             ), f"Failed to add custom storageclass '{random_sc_name}' of type '{sc_type}' in storagecluster spec."
-            custom_sc_list.append(random_sc_name)
+            self.custom_sc_list.append(random_sc_name)
 
         assert (
             check_custom_storageclass_presence()
         ), "Error validating the created storage classes."
-
-        def teardown():
-            for sc_type in sc_type_list:
-                patch_storage_cluster_for_custom_storage_class(sc_type, action="remove")
-
-            for sc in custom_sc_list:
-                run_cmd(f"oc delete sc {sc}")
-
-        request.addfinalizer(teardown)
 
 
 @pytest.mark.polarion_id("OCS-5149")
