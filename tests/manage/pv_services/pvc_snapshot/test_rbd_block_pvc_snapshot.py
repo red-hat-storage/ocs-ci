@@ -76,6 +76,7 @@ class TestRbdBlockPvcSnapshot(ManageTest):
                 size=f"{self.pvc_size - 1}G",
                 io_direction="write",
                 runtime=60,
+                direct=1,
             )
         log.info("IO started on all pods")
 
@@ -203,7 +204,7 @@ class TestRbdBlockPvcSnapshot(ManageTest):
         # Run IO on new pods
         log.info("Starting IO on new pods")
         for pod_obj in restore_pod_objs:
-            pod_obj.run_io(storage_type="block", size="500M", runtime=15)
+            pod_obj.run_io(storage_type="block", size="500M", runtime=15, direct=1)
 
         # Wait for IO completion on new pods
         log.info("Waiting for IO completion on new pods")
