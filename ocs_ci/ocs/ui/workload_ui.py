@@ -6,18 +6,8 @@ import time
 import yaml
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import wait_for_pv_delete, wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_pv_delete
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.constants import (
-    STATUS_BOUND,
-    STATUS_RELEASED,
-    STATUS_FAILED,
-    STATUS_COMPLETED,
-    STATUS_RUNNING,
-    STATUS_AVAILABLE,
-    STATUS_PENDING,
-    STATUS_READY,
-)
 from ocs_ci.ocs.exceptions import CommandFailed, UnableUpgradeConnectionException
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
