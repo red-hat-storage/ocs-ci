@@ -5,7 +5,6 @@ import psutil
 from datetime import datetime
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
-    s3_delete_object,
     s3_delete_objects,
     list_objects_in_batches,
 )
@@ -41,9 +40,8 @@ class TestDeleteObjects:
     @pytest.mark.parametrize(
         argnames=["delete_mode"],
         argvalues=[
-            pytest.param("single"),
-            # pytest.param("batch"),
-            # pytest.param("whole"),
+            pytest.param("batch"),
+            pytest.param("whole"),
         ],
     )
     def test_delete_objects(
@@ -95,18 +93,18 @@ class TestDeleteObjects:
             f" Time taken to generate and upload objects: {(time_2-time_1).total_seconds()}"
         )
 
-        if delete_mode == "single":
-            for obj_key in list_objects_in_batches(
-                mcg_obj, bucket.name, batch_size=10000
-            ):
-                s3_delete_object(mcg_obj, bucket.name, obj_key)
-            log.info("Deleted objects successfully!")
-            measure_memory_usage()
-        elif delete_mode == "batch":
+        # if delete_mode == "single":
+        #     for obj_key in list_objects_in_batches(
+        #         mcg_obj, bucket.name, batch_size=10000
+        #     ):
+        #         s3_delete_object(mcg_obj, bucket.name, obj_key)
+        #     log.info("Deleted objects successfully!")
+        #     measure_memory_usage()
+        if delete_mode == "batch":
             # Delete objects in batch
             log.info("Deleting objects in batch of 1000 objects at a time")
             for obj_batch in list_objects_in_batches(
-                mcg_obj, bucket.name, yield_individual=False
+                mcg_obj, bucket.name, batch_size=10000, yield_individual=False
             ):
                 s3_delete_objects(mcg_obj, bucket.name, obj_batch)
             log.info("Deleted objects in a batch of 1000 objects!")
