@@ -152,6 +152,11 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
 
     if apply and not config.DEPLOYMENT.get("disconnected"):
         exec_cmd(f"oc apply -f {icsp_file_dest_location}")
-        wait_for_machineconfigpool_status("all")
+        managed_ibmcloud = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if not managed_ibmcloud:
+            wait_for_machineconfigpool_status("all")
 
     return icsp_file_dest_location
