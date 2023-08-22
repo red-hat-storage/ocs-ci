@@ -1,6 +1,7 @@
 import re
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import tier3, polarion_id, bugzilla
 from ocs_ci.ocs.constants import NOOBAA_REGIONS_CODE_URL, AWS_REGIONS_DOC_URL
 from ocs_ci.ocs.ui.views import locate_aws_regions, locate_noobaa_regions
 from ocs_ci.ocs.ui.base_ui import BaseUI
@@ -46,6 +47,9 @@ class NavigateWebURL(BaseUI):
         ).text
 
 
+@tier3
+@bugzilla("2183480")
+@polarion_id("OCS-5153")
 def test_verify_aws_regions_list():
     # Fetch all the regions list from the official aws documentation
     navigate_aws_doc = NavigateWebURL()
