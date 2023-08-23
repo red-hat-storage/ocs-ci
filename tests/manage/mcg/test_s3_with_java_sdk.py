@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_ocs_version,
     skipif_disconnected_cluster,
+    skipif_proxy_cluster,
     tier1,
 )
 from ocs_ci.ocs.bucket_utils import upload_objects_with_javasdk
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 @skipif_ocs_version("<4.9")
 @skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestS3WithJavaSDK:
     @bugzilla("2064304")
     @pytest.mark.parametrize(
