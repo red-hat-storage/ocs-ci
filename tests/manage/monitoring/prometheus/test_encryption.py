@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4c, skipif_managed_service, skipif_no_kms
+from ocs_ci.framework.testlib import tier4a, skipif_managed_service, skipif_no_kms
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -10,7 +10,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
-@tier4c
+@tier4a
 @pytest.mark.polarion_id("OCS-5154")
 @skipif_no_kms
 @skipif_managed_service
