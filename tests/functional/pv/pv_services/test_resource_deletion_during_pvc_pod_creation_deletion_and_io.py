@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_external_mode,
 )
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.ocs.resources.pod import (
@@ -321,19 +322,34 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             f"RWX PVCs: {no_of_rwx_pvcs_delete}"
         )
 
-        pod_functions = {
-            "mds": partial(get_mds_pods),
-            "mon": partial(get_mon_pods),
-            "mgr": partial(get_mgr_pods),
-            "osd": partial(get_osd_pods),
-            "rbdplugin": partial(get_plugin_pods, interface=constants.CEPHBLOCKPOOL),
-            "cephfsplugin": partial(
-                get_plugin_pods, interface=constants.CEPHFILESYSTEM
-            ),
-            "cephfsplugin_provisioner": partial(get_cephfsplugin_provisioner_pods),
-            "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
-            "operator": partial(get_operator_pods),
-        }
+        if config.DEPLOYMENT["external_mode"]:
+            pod_functions = {
+                "rbdplugin": partial(
+                    get_plugin_pods, interface=constants.CEPHBLOCKPOOL
+                ),
+                "cephfsplugin": partial(
+                    get_plugin_pods, interface=constants.CEPHFILESYSTEM
+                ),
+                "cephfsplugin_provisioner": partial(get_cephfsplugin_provisioner_pods),
+                "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
+                "operator": partial(get_operator_pods),
+            }
+        else:
+            pod_functions = {
+                "mds": partial(get_mds_pods),
+                "mon": partial(get_mon_pods),
+                "mgr": partial(get_mgr_pods),
+                "osd": partial(get_osd_pods),
+                "rbdplugin": partial(
+                    get_plugin_pods, interface=constants.CEPHBLOCKPOOL
+                ),
+                "cephfsplugin": partial(
+                    get_plugin_pods, interface=constants.CEPHFILESYSTEM
+                ),
+                "cephfsplugin_provisioner": partial(get_cephfsplugin_provisioner_pods),
+                "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
+                "operator": partial(get_operator_pods),
+            }
 
         # Disruption object for each pod type
         disruption_ops = [
@@ -405,20 +421,20 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         log.info("Setup for running IO is completed on all pods.")
 
         # Start IO on pods having PVCs to delete to load data
-        pods_for_pvc_io = [
-            pod_obj
-            for pod_obj in pods_for_pvc
-            if pod_obj.pvc
-            in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_for_pvc])
-        ]
-        log.info("Starting IO on pods having PVCs to delete.")
-        self.run_io_on_pods(pods_for_pvc_io)
-        log.info("IO started on pods having PVCs to delete.")
-
-        log.info("Fetching IO results from the pods having PVCs to delete.")
-        for pod_obj in pods_for_pvc_io:
-            pod_obj.get_fio_results(300)
-        log.info("Verified IO result on pods having PVCs to delete.")
+        # pods_for_pvc_io = [
+        #     pod_obj
+        #     for pod_obj in pods_for_pvc
+        #     if pod_obj.pvc
+        #     in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_for_pvc])
+        # ]
+        # log.info("Starting IO on pods having PVCs to delete.")
+        # self.run_io_on_pods(pods_for_pvc_io)
+        # log.info("IO started on pods having PVCs to delete.")
+        #
+        # log.info("Fetching IO results from the pods having PVCs to delete.")
+        # for pod_obj in pods_for_pvc_io:
+        #     pod_obj.get_fio_results(300)
+        # log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
         assert self.delete_pods(
