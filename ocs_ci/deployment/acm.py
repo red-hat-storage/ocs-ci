@@ -206,8 +206,11 @@ class Submariner(object):
         try:
             run_subctl_cmd(connct_check)
         except Exception:
-            logger.error("Submariner verification has issues")
-            raise
+            if not config.ENV_DATA["submariner_ignore_connectivity_test"]:
+                logger.error("Submariner verification has issues")
+                raise
+            else:
+                logger.warning("Submariner verification has issues but ignored for now")
 
     def get_subctl_version(self):
         """
