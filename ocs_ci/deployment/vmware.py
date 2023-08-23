@@ -1973,6 +1973,9 @@ def create_terraform_var_file(terraform_var_template):
     """
     _templating = Templating()
     terraform_var_template_path = os.path.join("ocp-deployment", terraform_var_template)
+    if "\\" in config.ENV_DATA["vsphere_user"]:
+        vsphere_user = config.ENV_DATA["vsphere_user"]
+        config.ENV_DATA["vsphere_user"] = vsphere_user.replace("\\", "\\\\")
     terraform_config_str = _templating.render_template(
         terraform_var_template_path, config.ENV_DATA
     )
