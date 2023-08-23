@@ -1000,7 +1000,7 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
 
 
 @pytest.fixture
-def measure_rewrite_kms_endpoint(measurement_dir, threading_lock):
+def measure_rewrite_kms_endpoint(request, measurement_dir, threading_lock):
     """
     Change kms endpoint address to invalid value, measure the time when it was
     rewritten and alerts that were triggered during this event.
@@ -1011,14 +1011,17 @@ def measure_rewrite_kms_endpoint(measurement_dir, threading_lock):
     """
     original_endpoint = get_kms_endpoint()
     logger.debug(f"Original kms endpoint is {original_endpoint}")
+
     def change_kms_endpoint():
         """
         Change value of KMS configuration for 3 minutes.
         """
         # run_time of operation
         run_time = 60 * 3
-        invalid_endpoint = "https://example.org"
-        logger.info(f"Changing value of kms endpoint in cluster configuration to (invalid_endpoint)")
+        invalid_endpoint = original_endpoint[0:-1]
+        logger.info(
+            f"Changing value of kms endpoint in cluster configuration to (invalid_endpoint)"
+        )
         set_kms_endpoint(invalid_endpoint)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
@@ -1027,7 +1030,7 @@ def measure_rewrite_kms_endpoint(measurement_dir, threading_lock):
     def teardown():
         logger.info(f"Restoring KMS endpoint to {original_endpoint}")
         set_kms_endpoint(original_endpoint)
-        logger.info(f"KMS endpoint restored")
+        logger.info("KMS endpoint restored")
 
     request.addfinalizer(teardown)
 

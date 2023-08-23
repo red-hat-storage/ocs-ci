@@ -1,7 +1,7 @@
 import logging
+import pytest
 
-from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4c, skipif_managed_service
+from ocs_ci.framework.testlib import tier4c, skipif_managed_service, skipif_no_kms
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -11,6 +11,8 @@ log = logging.getLogger(__name__)
 
 
 @tier4c
+@pytest.mark.polarion_id("OCS-5154")
+@skipif_no_kms
 @skipif_managed_service
 def test_kms_unavailable(measure_rewrite_kms_endpoint):
     """
@@ -34,7 +36,9 @@ def test_kms_unavailable(measure_rewrite_kms_endpoint):
         severity="error",
     )
     api.check_alert_cleared(
-        label=target_label, measure_end_time=measure_rewrite_kms_endpoint.get("stop"), time_min=300
+        label=target_label,
+        measure_end_time=measure_rewrite_kms_endpoint.get("stop"),
+        time_min=300,
     )
 
 
