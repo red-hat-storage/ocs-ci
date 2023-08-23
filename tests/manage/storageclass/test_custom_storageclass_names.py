@@ -113,7 +113,7 @@ def test_custom_storageclass_names_character_limit(sc_name, str_length, expect_t
     if sc_name == "alpha":
         sc_custom_name = gen_alpha(str_length).lower()
     elif sc_name == "special":
-        sc_custom_name = gen_special(str_length).lower()
+        sc_custom_name = f"{gen_special(str_length).lower()}"
 
     log.info(
         f"Creating Custom Storageclass Name using '{sc_name}'"
