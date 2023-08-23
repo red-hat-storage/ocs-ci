@@ -2022,9 +2022,7 @@ def get_kms_endpoint():
         resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
         namespace=config.ENV_DATA["cluster_namespace"],
     )
-    return ocs_kms_configmap.get().get("data")[
-        "VAULT_ADDR"
-    ]
+    return ocs_kms_configmap.get().get("data")["VAULT_ADDR"]
 
 
 def set_kms_endpoint(address):
@@ -2042,6 +2040,4 @@ def set_kms_endpoint(address):
     )
     params = f'{{"data": {{"VAULT_ADDR": "{address}"}}}}'
     ocs_kms_configmap.patch(params=params, format_type="merge")
-    return ocs_kms_configmap.get().get("data")[
-        "VAULT_ADDR"
-    ]
+    return ocs_kms_configmap.get().get("data")["VAULT_ADDR"]
