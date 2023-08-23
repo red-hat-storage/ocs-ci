@@ -2009,39 +2009,39 @@ def get_ksctl_cli(bin_dir=None):
     logger.info(f"ksctl cli version: {ksctl_ver}")
 
 
-    def get_kms_endpoint():
-        """
-        Fetch VAULT_ADDR from ocs-kms-connection-details configmap
+def get_kms_endpoint():
+    """
+    Fetch VAULT_ADDR from ocs-kms-connection-details configmap
 
-        Returns:
-            str: KMS endpoint address
+    Returns:
+        str: KMS endpoint address
 
-        """
-        ocs_kms_configmap = ocp.OCP(
-            kind="ConfigMap",
-            resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        return ocs_kms_configmap.get().get("data")[
-            "VAULT_ADDR"
-        ]
+    """
+    ocs_kms_configmap = ocp.OCP(
+        kind="ConfigMap",
+        resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    return ocs_kms_configmap.get().get("data")[
+        "VAULT_ADDR"
+    ]
 
 
-    def set_kms_endpoint(address):
-        """
-        Set VAULT_ADDR in ocs-kms-connection-details configmap to provided value
+def set_kms_endpoint(address):
+    """
+    Set VAULT_ADDR in ocs-kms-connection-details configmap to provided value
 
-        Args:
-            address (str): Address to be set in KMS configuration
+    Args:
+        address (str): Address to be set in KMS configuration
 
-        """
-        ocs_kms_configmap = ocp.OCP(
-            kind="ConfigMap",
-            resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        params = f'{{"data": {{"VAULT_ADDR": "{address}"}}}}'
-        ocs_kms_configmap.patch(params=params, format_type="merge")
-        return ocs_kms_configmap.get().get("data")[
-            "VAULT_ADDR"
-        ]
+    """
+    ocs_kms_configmap = ocp.OCP(
+        kind="ConfigMap",
+        resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    params = f'{{"data": {{"VAULT_ADDR": "{address}"}}}}'
+    ocs_kms_configmap.patch(params=params, format_type="merge")
+    return ocs_kms_configmap.get().get("data")[
+        "VAULT_ADDR"
+    ]

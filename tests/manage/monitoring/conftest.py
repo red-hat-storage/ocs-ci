@@ -1020,7 +1020,7 @@ def measure_rewrite_kms_endpoint(request, measurement_dir, threading_lock):
         run_time = 60 * 3
         invalid_endpoint = original_endpoint[0:-1]
         logger.info(
-            f"Changing value of kms endpoint in cluster configuration to (invalid_endpoint)"
+            f"Changing value of kms endpoint in cluster configuration to {invalid_endpoint}"
         )
         set_kms_endpoint(invalid_endpoint)
         logger.info(f"Waiting for {run_time} seconds")
