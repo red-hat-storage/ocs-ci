@@ -634,6 +634,20 @@ class Pod(OCS):
         else:
             return self.pod_data["spec"]["nodeName"]
 
+    def wait_for_pod_delete(self, resource_name=None, timeout=60):
+        """
+        Waits for the pod delete
+
+        Args:
+            resource_name(str): name of the pod
+            timeout(int): time to wait in seconds
+        Returns:
+            bool: True
+
+        """
+        resource_name = resource_name if resource_name else self.name
+        return self.ocp.wait_for_delete(resource_name, timeout=timeout)
+
 
 # Helper functions for Pods
 

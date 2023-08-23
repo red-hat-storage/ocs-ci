@@ -53,6 +53,8 @@ from ocs_ci.ocs.utils import (
     collect_ocs_logs,
     collect_pod_container_rpm_package,
 )
+from ocs_ci.ocs.resources.deployment import Deployment
+from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
@@ -6609,3 +6611,135 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
 
     request.addfinalizer(finalizer)
     return add_env_vars_to_noobaa_core_implementation
+
+
+@pytest.fixture()
+def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
+    def factory(project_name):
+        return pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project_name,
+            size="10",
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def logwriter_workload_factory(request, teardown_factory):
+    def factory(pvc, logwriter_path):
+
+        dc_data = templating.load_yaml(logwriter_path)
+        dc_data["metadata"]["namespace"] = pvc.namespace
+        dc_data["spec"]["replicas"] = 4
+        dc_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = "quay.io/ocsci/logwriter:latest"
+        dc_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+            "claimName"
+        ] = pvc.name
+        logwriter_dc = helpers.create_resource(**dc_data)
+        teardown_factory(logwriter_dc)
+
+        logwriter_dc_obj = Deployment(
+            **get_deployments_having_label(
+                label="app=logwriter-cephfs", namespace=pvc.namespace
+            )[0]
+        )
+        logwriter_dc_pods = [
+            pod["metadata"]["name"]
+            for pod in get_pods_having_label(
+                label="app=logwriter-cephfs", namespace=pvc.namespace
+            )
+        ]
+        wait_for_pods_to_be_running(
+            namespace=pvc.namespace, pod_names=logwriter_dc_pods
+        )
+
+        return logwriter_dc_obj
+
+    return factory
+
+
+@pytest.fixture()
+def logreader_workload_factory(request, teardown_factory):
+    def factory(pvc, logreader_path, duration=30):
+
+        job_data = templating.load_yaml(logreader_path)
+        job_data["metadata"]["namespace"] = pvc.namespace
+        job_data["spec"]["completions"] = 4
+        job_data["spec"]["parallelism"] = 4
+        job_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+            "claimName"
+        ] = pvc.name
+        job_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = "quay.io/ocsci/logwriter:latest"
+        job_data["spec"]["template"]["spec"]["containers"][0]["command"][
+            2
+        ] = f"/opt/logreader.py -t {duration} *.log -d"
+        logreader_job = helpers.create_resource(**job_data)
+        teardown_factory(logreader_job)
+
+        logreader_job_obj = get_job_obj(
+            name="logreader-cephfs", namespace=pvc.namespace
+        )
+        logreader_job_pods = [
+            pod["metadata"]["name"]
+            for pod in get_pods_having_label(
+                label="app=logreader-cephfs", namespace=pvc.namespace
+            )
+        ]
+        wait_for_pods_to_be_running(
+            namespace=pvc.namespace, pod_names=logreader_job_pods
+        )
+
+        return logreader_job_obj
+
+    return factory
+
+
+@pytest.fixture()
+def setup_logwriter_cephfs_workload_factory(
+    request,
+    project_factory,
+    pvc_factory,
+    logwriter_cephfs_many_pvc_factory,
+    logwriter_workload_factory,
+    logreader_workload_factory,
+):
+    logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
+    logreader_path = constants.LOGWRITER_CEPHFS_READER
+    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
+    pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
+    logwriter_workload = logwriter_workload_factory(
+        pvc=pvc, logwriter_path=logwriter_path
+    )
+    logreader_workload = logreader_workload_factory(
+        pvc=pvc, logreader_path=logreader_path
+    )
+
+    return logwriter_workload, logreader_workload
+
+
+@pytest.fixture()
+def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_factory):
+
+    logwriter_sts_path = constants.LOGWRITER_STS_PATH
+    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
+    sts_data = templating.load_yaml(logwriter_sts_path)
+    sts_data["metadata"]["namespace"] = project.namespace
+    logwriter_sts = helpers.create_resource(**sts_data)
+    teardown_factory(logwriter_sts)
+    logwriter_sts_pods = [
+        pod["metadata"]["name"]
+        for pod in get_pods_having_label(
+            label="app=logwriter-rbd", namespace=project.namespace
+        )
+    ]
+    wait_for_pods_to_be_running(
+        namespace=project.namespace, pod_names=logwriter_sts_pods
+    )
+
+    return logwriter_sts
