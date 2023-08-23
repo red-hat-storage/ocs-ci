@@ -908,19 +908,23 @@ def verify_storage_device_class():
 
     # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
     # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
-    if not storage_device_sets.get(constants.DEVICECLASS):
-        log.info("Verifying crushDeviceClass for storageClassDeviceSets")
-        cephcluster = OCP(
-            kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        cephcluster_data = cephcluster.get()
-        storage_class_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
-            "storageClassDeviceSets"
-        ]
+    device_class = storage_device_sets.get(constants.DEVICECLASS)
+    if not device_class:
+        device_class = defaults.CRUSH_DEVICE_CLASS
 
-        for each_devise_set in storage_class_device_sets:
-            # check tuneFastDeviceClass
-            device_set_name = each_devise_set["name"]
+    log.info("Verifying crushDeviceClass for storageClassDeviceSets")
+    cephcluster = OCP(
+        kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    cephcluster_data = cephcluster.get()
+    storage_class_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
+        "storageClassDeviceSets"
+    ]
+
+    for each_devise_set in storage_class_device_sets:
+        # check tuneFastDeviceClass
+        device_set_name = each_devise_set["name"]
+        if not storage_device_sets.get(constants.DEVICECLASS):
             tune_fast_device_class = each_devise_set["tuneFastDeviceClass"]
             msg = f"tuneFastDeviceClass for {device_set_name} is set to {tune_fast_device_class}"
             log.debug(msg)
@@ -928,29 +932,26 @@ def verify_storage_device_class():
                 tune_fast_device_class
             ), f"{msg} when {constants.DEVICECLASS} is not selected explicitly"
 
-            # check crushDeviceClass
-            crush_device_class = each_devise_set["volumeClaimTemplates"][0]["metadata"][
-                "annotations"
-            ]["crushDeviceClass"]
-            crush_device_class_msg = (
-                f"crushDeviceClass for {device_set_name} is set to {crush_device_class}"
-            )
-            log.debug(crush_device_class_msg)
-            assert crush_device_class == defaults.CRUSH_DEVICE_CLASS, (
-                f"{crush_device_class_msg} but it should be set to {defaults.CRUSH_DEVICE_CLASS} when "
-                f"{constants.DEVICECLASS} is not selected explicitly"
-            )
+        # check crushDeviceClass
+        crush_device_class = each_devise_set["volumeClaimTemplates"][0]["metadata"][
+            "annotations"
+        ]["crushDeviceClass"]
+        crush_device_class_msg = (
+            f"crushDeviceClass for {device_set_name} is set to {crush_device_class}"
+        )
+        log.debug(crush_device_class_msg)
+        assert (
+            crush_device_class == device_class
+        ), f"{crush_device_class_msg} but it should be set to {device_class}"
 
-        # get deviceClasses for overall storage
-        device_classes = cephcluster_data["items"][0]["status"]["storage"][
-            "deviceClasses"
-        ]
-        for each_device_class in device_classes:
-            device_class_name = each_device_class["name"]
-            assert device_class_name == defaults.CRUSH_DEVICE_CLASS, (
-                f"deviceClass is set to {device_class_name} but it should be set to {defaults.CRUSH_DEVICE_CLASS} "
-                f"when {constants.DEVICECLASS} is not selected explicitly"
-            )
+    # get deviceClasses for overall storage
+    device_classes = cephcluster_data["items"][0]["status"]["storage"]["deviceClasses"]
+    log.debug(f"deviceClasses are {device_classes}")
+    for each_device_class in device_classes:
+        device_class_name = each_device_class["name"]
+        assert (
+            device_class_name == device_class
+        ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
 
 
 def verify_noobaa_endpoint_count():
