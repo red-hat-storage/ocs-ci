@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 polarion_id_primary_up = "OCS-4430"
 polarion_id_primary_down = "OCS-4427"
+polarion_id_primary_down_appset = "OCS-5009"
+polarion_id_primary_up_appset = "OCS-5010"
+
 if config.RUN.get("rdr_failover_via_ui"):
     polarion_id_primary_down = "OCS-4744"
 # TODO: Specify polarion id when available for test case where primary is up when failedover and relocate back.
@@ -55,17 +58,13 @@ class TestFailoverAndRelocate:
             pytest.param(
                 constants.APPLICATION_SET,
                 False,
-                marks=pytest.mark.polarion_id(
-                    polarion_id_primary_up
-                ),  # TODO change polarion id
+                marks=pytest.mark.polarion_id(polarion_id_primary_up_appset),
                 id="primary_up_appset",
             ),
             pytest.param(
                 constants.APPLICATION_SET,
                 True,
-                marks=pytest.mark.polarion_id(
-                    polarion_id_primary_down
-                ),  # TODO change polarion id
+                marks=pytest.mark.polarion_id(polarion_id_primary_down_appset),
                 id="primary_down_appset",
             ),
         ],
