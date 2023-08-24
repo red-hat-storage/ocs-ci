@@ -732,7 +732,9 @@ def ocs_install_verification(
             or config.UPGRADE.get("upgrade_ocs_version")
             or config.UPGRADE.get("upgrade_ocs_registry_image")
         ):
-            verify_storage_device_class()
+            device_class = get_device_class()
+            verify_storage_device_class(device_class)
+            verify_device_class_in_osd_tree(ct_pod, device_class)
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
@@ -891,27 +893,20 @@ def verify_storage_cluster():
         ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
 
 
-def verify_storage_device_class():
+def verify_storage_device_class(device_class):
     """
     Verifies the parameters of storageClassDeviceSets in CephCluster.
 
     For internal deployments, if user is not specified any DeviceClass in the StorageDeviceSet, then
     tunefastDeviceClass will be true and
     crushDeviceClass will set to "ssd"
-    """
-    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    storage_cluster = StorageCluster(
-        resource_name=storage_cluster_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    storage_device_sets = storage_cluster.get()["spec"]["storageDeviceSets"][0]
 
+    Args:
+        device_class (str): Name of the device class
+
+    """
     # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
     # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
-    device_class = storage_device_sets.get(constants.DEVICECLASS)
-    if not device_class:
-        device_class = defaults.CRUSH_DEVICE_CLASS
-
     log.info("Verifying crushDeviceClass for storageClassDeviceSets")
     cephcluster = OCP(
         kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
@@ -924,7 +919,7 @@ def verify_storage_device_class():
     for each_devise_set in storage_class_device_sets:
         # check tuneFastDeviceClass
         device_set_name = each_devise_set["name"]
-        if not storage_device_sets.get(constants.DEVICECLASS):
+        if config.ENV_DATA.get("tune_fast_device_class"):
             tune_fast_device_class = each_devise_set["tuneFastDeviceClass"]
             msg = f"tuneFastDeviceClass for {device_set_name} is set to {tune_fast_device_class}"
             log.debug(msg)
@@ -952,6 +947,51 @@ def verify_storage_device_class():
         assert (
             device_class_name == device_class
         ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
+
+
+def verify_device_class_in_osd_tree(ct_pod, device_class):
+    """
+    Verifies device class in ceph osd tree output
+
+    Args:
+        ct_pod (:obj:`OCP`):  Object of the Ceph tools pod
+        device_class (str): Name of the device class
+
+    """
+    log.info("Verifying DeviceClass in ceph osd tree")
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    for each in osd_tree["nodes"]:
+        if each["type"] == "osd":
+            osd_name = each["name"]
+            device_class_in_osd_tree = each["device_class"]
+            log.debug(f"DeviceClass for {osd_name} is {device_class_in_osd_tree}")
+            assert (
+                device_class_in_osd_tree == device_class
+            ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {device_class}"
+
+
+def get_device_class():
+    """
+    Fetches the device class from storage cluster
+
+    Returns:
+        str: Device class name
+
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    storage_device_sets = storage_cluster.get()["spec"]["storageDeviceSets"][0]
+
+    # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
+    # DeviceClass will set to "ssd"
+    device_class = storage_device_sets.get(constants.DEVICECLASS)
+    if not device_class:
+        device_class = defaults.CRUSH_DEVICE_CLASS
+        config.ENV_DATA["tune_fast_device_class"] = True
+    return device_class
 
 
 def verify_noobaa_endpoint_count():
