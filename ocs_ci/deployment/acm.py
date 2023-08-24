@@ -8,6 +8,8 @@ import tempfile
 import shutil
 import requests
 
+import semantic_version
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
@@ -112,6 +114,10 @@ class Submariner(object):
             tempf.write(resp.content)
 
             # Actual submariner binary download
+            if config.ENV_DATA.get("submariner_upstream_version_tag"):
+                os.environ["VERSION"] = config.ENV_DATA.get(
+                    "submariner_upstream_version_tag"
+                )
             cmd = f"bash {tempf.name}"
             try:
                 run_cmd(cmd)
@@ -185,14 +191,39 @@ class Submariner(object):
         kubeconf_list = []
         for i in self.dr_only_list:
             kubeconf_list.append(config.clusters[i].RUN["kubeconfig"])
-        connct_check = f"verify {' '.join(kubeconf_list)} --only connectivity"
+
+        connct_check = None
+        if config.ENV_DATA.get("submariner_upstream_version_tag") != "devel":
+            subctl_vers = self.get_subctl_version()
+            if subctl_vers.minor <= 15:
+                connct_check = f"verify {' '.join(kubeconf_list)} --only connectivity"
+        if not connct_check:
+            # New cmd format
+            connct_check = f"verify --kubeconfig {kubeconf_list[0]} --toconfig {kubeconf_list[1]} --only connectivity"
+
         # Workaround for now, ignoring verify faliures
         # need to be fixed once pod security issue is fixed
         try:
             run_subctl_cmd(connct_check)
         except Exception:
-            logger.error("Submariner verification has issues")
-            raise
+            if not config.ENV_DATA["submariner_ignore_connectivity_test"]:
+                logger.error("Submariner verification has issues")
+                raise
+            else:
+                logger.warning("Submariner verification has issues but ignored for now")
+
+    def get_subctl_version(self):
+        """
+        Run 'subctl version ' command and return a Version object
+
+        Returns:
+            vers (Version): semanctic version object
+
+        """
+        out = run_cmd("subctl version")
+        vstr = out.split(":")[1].rstrip().lstrip()[1:]
+        vers = semantic_version.Version(vstr)
+        return vers
 
     def get_primary_cluster_index(self):
         """
