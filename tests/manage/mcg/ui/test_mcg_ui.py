@@ -262,24 +262,24 @@ class TestObcUserInterface(object):
                 ],
                 marks=pytest.mark.polarion_id("OCS-4698"),
             ),
-            # pytest.param(
-            #     *[
-            #         "openshift-storage.noobaa.io",
-            #         "noobaa-default-bucket-class",
-            #         "Actions",
-            #         True,
-            #     ],
-            #     marks=pytest.mark.polarion_id("OCS-2542"),
-            # ),
-            # pytest.param(
-            #     *[
-            #         "ocs-storagecluster-ceph-rgw",
-            #         None,
-            #         "three_dots",
-            #         True,
-            #     ],
-            #     marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
-            # ),
+            pytest.param(
+                *[
+                    "openshift-storage.noobaa.io",
+                    "noobaa-default-bucket-class",
+                    "Actions",
+                    True,
+                ],
+                marks=pytest.mark.polarion_id("OCS-2542"),
+            ),
+            pytest.param(
+                *[
+                    "ocs-storagecluster-ceph-rgw",
+                    None,
+                    "three_dots",
+                    True,
+                ],
+                marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
+            ),
         ],
     )
     def test_obc_creation_and_deletion(

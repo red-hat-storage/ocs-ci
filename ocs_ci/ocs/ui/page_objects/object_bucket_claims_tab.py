@@ -1,7 +1,6 @@
 import random
 import string
 
-from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
