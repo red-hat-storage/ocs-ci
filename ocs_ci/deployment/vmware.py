@@ -28,7 +28,6 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
-from ocs_ci.deployment.disconnected import get_ocp_release_image
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, exceptions
 from ocs_ci.ocs.exceptions import (
@@ -889,11 +888,6 @@ class VSPHEREUPI(VSPHEREBASE):
                 )
                 # set DNS server accessible from the disconnected env
                 config.ENV_DATA["dns"] = config.DEPLOYMENT["disconnected_dns_server"]
-                ocp_relase_image = get_ocp_release_image()
-                if constants.SHA_SEPARATOR in ocp_relase_image:
-                    ocp_image_path, _ = ocp_relase_image.split("@")
-                else:
-                    ocp_image_path, _ = ocp_relase_image.split(":")
 
                 install_config_obj.update(
                     yaml.safe_load(config.RUN["imageContentSources"])
