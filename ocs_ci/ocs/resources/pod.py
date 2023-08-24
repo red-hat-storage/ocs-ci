@@ -1470,7 +1470,7 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
     return used_percentage
 
 
-def get_pods_having_label(label, namespace, cluster_config=None):
+def get_pods_having_label(label, namespace, cluster_config=None, statuses=None):
     """
     Fetches pod resources with given label in given namespace
 
@@ -1479,13 +1479,18 @@ def get_pods_having_label(label, namespace, cluster_config=None):
         namespace (str): Namespace in which to be looked up
         cluster_config (MultiClusterConfig): In case of multicluster, this object will hold
             specif cluster config
-
+        statuses (list): List of pod statuses. Fetch only pods in any of the status mentioned
+            in the statuses list
     Return:
         list: of pods info
 
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
+    if statuses:
+        for pod in pods:
+            if pod["status"]["phase"] not in statuses:
+                pods.remove(pod)
     return pods
 
 

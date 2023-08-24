@@ -23,6 +23,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.helpers.stretchcluster_helpers import (
     check_for_write_pause,
     check_for_read_pause,
+    get_logfile_map_from_logwriter_pods,
 )
 
 logger = logging.getLogger(__name__)
