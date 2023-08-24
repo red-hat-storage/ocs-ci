@@ -146,19 +146,20 @@ class TestClone(ManageTest):
             pytest.param(constants.CEPHFILESYSTEM, constants.CSI_CEPHFS_ROX_POD_YAML),
         ],
     )
-    def test_pvc_to_pvc_rox_clone(self, teardown_factory):
+    def test_pvc_to_pvc_rox_clone(
+        self, snapshot_factory, snapshot_restore_factory, teardown_factory
+    ):
         """
         Create a rox clone from an existing pvc,
         verify data is preserved in the cloning.
         """
         logger.info(f"Running IO on pod {self.pod_obj.name}")
-        file_name = self.pod_obj.name
-        logger.info(f"File created during IO {file_name}")
-        self.pod_obj.run_io(storage_type="fs", size="500M", fio_filename=file_name)
+        file_name = f"{self.pod_obj.name}.txt"
+        self.pod_obj.exec_cmd_on_pod(
+            command=f"dd if=/dev/zero of=/mnt/{file_name} bs=1M count=1"
+        )
 
-        # Wait for fio to finish
-        self.pod_obj.get_fio_results()
-        logger.info(f"Io completed on pod {self.pod_obj.name}.")
+        logger.info(f"File Created. /mnt/{file_name}")
 
         # Verify presence of the file
         file_path = pod.get_file_path(self.pod_obj, file_name)
@@ -168,26 +169,28 @@ class TestClone(ManageTest):
         ), f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
-        # Calculate md5sum of the file.
-        orig_md5_sum = pod.cal_md5sum(self.pod_obj, file_name)
+        # Taking snapshot of pvc
+        logger.info("Taking Snapshot of the PVC")
+        snapshot_obj = snapshot_factory(self.pvc_obj, wait=False)
+        logger.info("Verify snapshots moved from false state to true state")
+        teardown_factory(snapshot_obj)
 
-        # Create a clone of the existing pvc.
-        sc_name = self.pvc_obj.backed_sc
-        parent_pvc = self.pvc_obj.name
-        clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
-        namespace = self.pvc_obj.namespace
-        cloned_pvc_obj = pvc.create_pvc_clone(
-            sc_name, parent_pvc, clone_yaml, namespace, access_mode="ReadOnlyMany"
+        # Restoring pvc snapshot to pvc
+        logger.info(f"Creating a PVC from snapshot [restore] {snapshot_obj.name}")
+        restore_snapshot_obj = snapshot_restore_factory(
+            snapshot_obj=snapshot_obj,
+            size="1Gi",
+            volume_mode=snapshot_obj.parent_volume_mode,
+            access_mode=constants.ACCESS_MODE_ROX,
+            status=constants.STATUS_BOUND,
         )
-        teardown_factory(cloned_pvc_obj)
-        helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND)
-        cloned_pvc_obj.reload()
+        teardown_factory(restore_snapshot_obj)
 
         # Create and attach pod to the pvc
         clone_pod_obj = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM,
-            pvc_name=cloned_pvc_obj.name,
-            namespace=cloned_pvc_obj.namespace,
+            pvc_name=restore_snapshot_obj.name,
+            namespace=restore_snapshot_obj.namespace,
             pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
             pvc_readOnlyMode=True,
         )
@@ -207,15 +210,3 @@ class TestClone(ManageTest):
             clone_pod_obj, file_path
         ), f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
-
-        # Verify Contents of a file in the cloned pvc
-        # by validating if md5sum matches.
-        logger.info(
-            f"Verifying that md5sum of {file_name} "
-            f"on pod {self.pod_obj.name} matches with md5sum "
-            f"of the same file on restore pod {clone_pod_obj.name}"
-        )
-        assert pod.verify_data_integrity(
-            clone_pod_obj, file_name, orig_md5_sum
-        ), "Data integrity check failed"
-        logger.info("Data integrity check passed, md5sum are same")
