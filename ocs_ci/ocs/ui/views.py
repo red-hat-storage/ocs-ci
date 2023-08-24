@@ -33,9 +33,9 @@ login_4_11 = {
     "ocp_page": f"Overview · {azure_managed}Red Hat OpenShift",
     "login_page_title": "Log in · Red Hat OpenShift",
 }
-# Bug opened in Jira https://issues.redhat.com/browse/OCPBUGS-15419. Tmp solution to check locators
+# Bug opened in Jira https://issues.redhat.com/browse/OCPBUGS-15419. Titles frequently change.
 login_4_14 = {
-    "ocp_page": "Cluster · Red Hat OpenShift",
+    "ocp_page": "Overview · Cluster · Red Hat OpenShift",
 }
 
 deployment = {
