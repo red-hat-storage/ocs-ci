@@ -912,7 +912,6 @@ class VSPHEREUPI(VSPHEREBASE):
                 with open(get_root_ca_cert(), "r") as fd:
                     install_config_obj["additionalTrustBundle"] = fd.read()
             install_config_str = yaml.safe_dump(install_config_obj)
-            logger.warning(f"INSTALL-CONFIG: {install_config_str}")
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             with open(install_config, "w") as f:
                 f.write(install_config_str)
