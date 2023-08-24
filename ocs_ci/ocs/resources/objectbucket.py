@@ -260,11 +260,15 @@ class ObjectBucket(ABC):
             for health_check in TimeoutSampler(
                 timeout, interval, self.internal_verify_health
             ):
-                if health_check and self.mcg.s3_verify_bucket_exists(self.name):
+                if not health_check:
+                    logger.info(f"{self.name} is unhealthy. Rechecking.")
+                elif self.mcg and not self.mcg.s3_verify_bucket_exists(self.name):
+                    logger.info(
+                        f"{self.name} is healthy, but not found in S3. Rechecking."
+                    )
+                else:
                     logger.info(f"{self.name} is healthy")
                     break
-                else:
-                    logger.info(f"{self.name} is unhealthy. Rechecking.")
         except TimeoutExpiredError:
             logger.error(
                 f"{self.name} did not reach a healthy state within {timeout} seconds."
