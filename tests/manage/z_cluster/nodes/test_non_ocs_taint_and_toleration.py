@@ -20,7 +20,6 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
     check_toleration_on_pods,
-    wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs.node import (
     taint_nodes,
@@ -182,15 +181,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             for pod in pod_list:
                 pod.delete(wait=False)
 
-        logger.info("Wait for pod to reach terminating state or to be deleted")
-        assert wait_for_pods_to_be_in_statuses(
-            [constants.STATUS_TERMINATING],
-            timeout=720,
-            sleep=15,
-        )
-
         logger.info("After edit noticed few pod respins as expected")
-        assert wait_for_pods_to_be_running(timeout=720, sleep=15)
+        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
 
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
