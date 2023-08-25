@@ -6919,18 +6919,20 @@ def setup_logwriter_cephfs_workload_factory(
     logwriter_workload_factory,
     logreader_workload_factory,
 ):
-    logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
-    logreader_path = constants.LOGWRITER_CEPHFS_READER
-    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
-    pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
-    logwriter_workload = logwriter_workload_factory(
-        pvc=pvc, logwriter_path=logwriter_path
-    )
-    logreader_workload = logreader_workload_factory(
-        pvc=pvc, logreader_path=logreader_path
-    )
+    def factory(read_duration=30):
+        logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
+        logreader_path = constants.LOGWRITER_CEPHFS_READER
+        project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
+        pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
+        logwriter_workload = logwriter_workload_factory(
+            pvc=pvc, logwriter_path=logwriter_path
+        )
+        logreader_workload = logreader_workload_factory(
+            pvc=pvc, logreader_path=logreader_path, duration=read_duration
+        )
+        return logwriter_workload, logreader_workload
 
-    return logwriter_workload, logreader_workload
+    return factory
 
 
 @pytest.fixture()

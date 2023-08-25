@@ -32,6 +32,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     TimeoutException,
 )
+
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
@@ -3399,3 +3400,28 @@ def get_mon_pod_by_pvc_name(pvc_name: str):
         .get("items")[0]
     )
     return Pod(**mon_pod_ocp)
+
+
+def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    """
+    Get debug pods created for the nodes in debug
+
+    Args:
+        debug_nodes (list): List of nodes in debug mode
+        namespace (str): By default 'openshift-storage' namespace
+
+    Returns:
+        List of Pod objects
+    """
+
+    debug_pods = []
+    for node_name in debug_nodes:
+        debug_pods.extend(
+            get_pod_obj(pod, namespace=namespace)
+            for pod in get_pod_name_by_pattern(
+                f"{node_name}-debug", namespace=namespace
+            )
+        )
+
+    return debug_pods
+
