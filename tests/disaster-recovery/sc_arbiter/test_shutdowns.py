@@ -35,6 +35,7 @@ from ocs_ci.helpers.stretchcluster_helpers import (
     validate_conn_score,
     check_ceph_accessibility,
     check_for_data_corruption,
+    get_logwriter_reader_pods,
 )
 
 log = logging.getLogger(__name__)
@@ -48,22 +49,28 @@ def get_nodes_having_label(label):
 
 class TestZoneShutdowns:
     def post_failure_checks(
-        self, zones, logreader_pods, logwriter_pods, log_file_map, start_time, end_time
+        self,
+        zones,
+        logreader_pods,
+        logwriter_pods,
+        log_file_map,
+        start_time,
+        end_time,
+        wait_for_read_completion=True,
     ):
         """
         This method is for the post failure checks
         """
 
-        # wait for the logreader workload to finish
-        statuses = ["Completed"]
-
-        wait_for_pods_to_be_in_statuses(
-            expected_statuses=statuses,
-            pod_names=[pod.name for pod in logreader_pods],
-            timeout=900,
-            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-        )
-        log.info("Logreader job pods have reached 'Completed' state!")
+        # wait for the logreader workload to finish if expected
+        if wait_for_read_completion:
+            wait_for_pods_to_be_in_statuses(
+                expected_statuses=["Completed"],
+                pod_names=[pod.name for pod in logreader_pods],
+                timeout=900,
+                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+            )
+            log.info("Logreader job pods have reached 'Completed' state!")
 
         # check if all the read operations are successful during the failure window, check for every minute
         if check_for_read_pause(logreader_pods, start_time, end_time):
@@ -172,24 +179,8 @@ class TestZoneShutdowns:
         log.info("Generating 5 mins worth of log")
         time.sleep(300)
 
-        # Note all the workload pod names
-        logwriter_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logwriter-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running"],
-            )
-        ]
-
-        logreader_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running", "Completed"],
-            )
-        ]
+        # Fetch all the workload pod objects
+        logwriter_pods, logreader_pods = get_logwriter_reader_pods()
 
         # note the file names created and each file start write time
         log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods)
@@ -246,23 +237,7 @@ class TestZoneShutdowns:
                 delay=15,
             )(wait_for_nodes_status(timeout=1800))
 
-            logreader_pods = [
-                Pod(**pod)
-                for pod in get_pods_having_label(
-                    label="app=logreader-cephfs",
-                    namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                    statuses=["Running", "Completed"],
-                )
-            ]
-
-            logwriter_pods = [
-                Pod(**pod)
-                for pod in get_pods_having_label(
-                    label="app=logwriter-cephfs",
-                    namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                    statuses=["Running"],
-                )
-            ]
+            logwriter_pods, logreader_pods = get_logwriter_reader_pods()
 
             if not immediate:
                 end_time = datetime.now(timezone.utc)
@@ -274,6 +249,7 @@ class TestZoneShutdowns:
                     start_time,
                     end_time,
                 )
+            # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
@@ -353,10 +329,10 @@ class TestZoneShutdowns:
         validate_conn_score(mon_conn_score_map, mon_quorum_ranks)
 
     @pytest.mark.parametrize(
-        argnames="zones, iteration, delay",
+        argnames="workload, iteration, delay",
         argvalues=[
-            pytest.param("data-1", 2, 5),
-            # pytest.param("data-2", 9, 3),
+            pytest.param("cephfs", 2, 5),
+            # pytest.param("rbd", 9, 3),
         ],
         ids=[
             "Datazone-1",
@@ -367,10 +343,10 @@ class TestZoneShutdowns:
         self,
         init_sanity,
         reset_conn_score,
-        zones,
         iteration,
         delay,
         setup_logwriter_cephfs_workload_factory,
+        setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
     ):
         """
@@ -381,36 +357,27 @@ class TestZoneShutdowns:
         * make sure connection scores are clean post recovery
 
         """
+        average_crash_time = 15  # in minutes
+        zones = constants.DATA_ZONE_1
 
         # Run the logwriter cephFs workloads
         log.info("Running logwriter cephFS workloads")
         (
             logwriter_workload,
             logreader_workload,
-        ) = setup_logwriter_cephfs_workload_factory(read_duration=15)
+        ) = setup_logwriter_cephfs_workload_factory(
+            read_duration=(iteration * average_crash_time)
+        )
 
         # Generate 5 minutes worth of logs before inducing the netsplit
         log.info("Generating 5 mins worth of log")
         time.sleep(300)
 
-        # Note all the workload pod names
-        logwriter_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logwriter-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running"],
-            )
-        ]
-
-        logreader_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running", "Completed"],
-            )
-        ]
+        # Fetch all the workload pod objects
+        logwriter_pods, logreader_pods = get_logwriter_reader_pods(
+            logwriter_pods_tup=(True, constants.LOGWRITER_CEPHFS_LABEL, 4),
+            logreader_pods_tup=(True, constants.LOGWRITER_RBD_LABEL, 4),
+        )
 
         # note the file names created and each file start write time
         log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods)
@@ -476,25 +443,7 @@ class TestZoneShutdowns:
             end_time = datetime.now(timezone.utc)
             log.info(f"Start time : {start_time} & End time : {end_time}")
 
-            logreader_pods = [
-                Pod(**pod)
-                for pod in get_pods_having_label(
-                    label="app=logreader-cephfs",
-                    namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                    statuses=["Running", "Completed"],
-                )
-            ]
-            log.info(
-                f"These are the log reader pods running/completed : {[pod.name for pod in logreader_pods]}"
-            )
-            logwriter_pods = [
-                Pod(**pod)
-                for pod in get_pods_having_label(
-                    label="app=logwriter-cephfs",
-                    namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                    statuses=["Running"],
-                )
-            ]
+            logwriter_pods, logreader_pods = get_logwriter_reader_pods()
 
             # check the ceph access again after the nodes are completely up
             self.post_failure_checks(
@@ -504,7 +453,10 @@ class TestZoneShutdowns:
                 log_file_map,
                 start_time,
                 end_time,
+                wait_for_read_completion=False,
             )
+
+            # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
@@ -543,7 +495,7 @@ class TestZoneShutdowns:
             for pod in get_pods_having_label(
                 label="app=logreader-cephfs",
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running", "Completed"],
+                statuses=["Running", "Succeeded"],
             )
         ]
         for pod in logreader_pods:
@@ -574,3 +526,10 @@ class TestZoneShutdowns:
 
         # check the connection score if it's clean
         validate_conn_score(mon_conn_score_map, mon_quorum_ranks)
+
+    def test_sample(self, setup_logwriter_cephfs_workload_factory):
+
+        logwriter_pods, logreader_pods = get_logwriter_reader_pods(
+            logwriter_pods_tup=(True, constants.LOGWRITER_CEPHFS_LABEL, 4),
+            logreader_pods_tup=(True, constants.LOGWRITER_RBD_LABEL, 4),
+        )

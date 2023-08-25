@@ -28,6 +28,7 @@ from ocs_ci.helpers.stretchcluster_helpers import (
     validate_conn_score,
     get_mon_quorum_ranks,
     check_for_data_corruption,
+    get_logwriter_reader_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -158,21 +159,7 @@ class TestNetSplit:
         time.sleep(300)
 
         # note all the pod names
-        logwriter_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logwriter-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
-        ]
-
-        logreader_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
-        ]
+        logwriter_pods, logreader_pods = get_logwriter_reader_pods()
 
         # note the file names created and each file start write time
         log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods)
@@ -198,17 +185,7 @@ class TestNetSplit:
         logger.info(f"Ended netsplit at {end_time}")
 
         # wait for the logreader workload to finish
-        logreader_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Completed", "Running"],
-            )
-        ]
-        assert (
-            len(logreader_pods) == 4
-        ), "Unexpected, there is no expected replicas of logreader pods either Running or Completed"
+        logwriter_pods, logreader_pods = get_logwriter_reader_pods()
         wait_for_pods_to_be_in_statuses(
             expected_statuses=["Completed"],
             pod_names=[pod.name for pod in logreader_pods],
@@ -224,14 +201,6 @@ class TestNetSplit:
             logger.info("All the read operations are successful!!")
 
         # check if all the write operations are successful during the failure window, check for every minute
-        logwriter_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logwriter-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running"],
-            )
-        ]
         for i in range(len(logwriter_pods)):
             try:
                 if check_for_write_pause(
@@ -253,6 +222,8 @@ class TestNetSplit:
                     assert (
                         False
                     ), f"{logwriter_pods[i].name} pod failed to exec command with the following eror: {e.args[0]}"
+
+        # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
 
         # reboot the nodes where the pods are not running
         pods_not_running = [
@@ -415,7 +386,9 @@ class TestNetSplit:
         )
         logger.info(f"Netsplit induced at {start_time} for zones {zones}")
 
-        # note the end time (UTC)
+        # TODO: Run the read script in each of the logwriter pods
+
+        # Note the end time (UTC)
         time.sleep((duration + 5) * 60)
         end_time = datetime.now(timezone.utc)
         logger.info(f"Ended netsplit at {end_time}")
@@ -435,6 +408,8 @@ class TestNetSplit:
             logger.info(f"Write operations paused during {zones} netsplit window")
         else:
             logger.info("All the write operations are successful!!")
+
+        # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
 
         # check if all the already written data and files before netsplit started is intact
         log_files_after = []

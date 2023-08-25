@@ -2363,6 +2363,12 @@ NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
     f"{ARBITER_ZONE}{DATA_ZONE_1}-{DATA_ZONE_1}{DATA_ZONE_2}"
 )
 
+# Logwriter workload labels
+
+LOGWRITER_CEPHFS_LABEL = "app=logwriter-cephfs"
+LOGWRITER_RBD_LABEL = "app=logwriter-rbd"
+
+
 # prometheus metrics queries
 PVC_NAMESPACES_BY_USED = (
     "sum by (namespace, persistentvolumeclaim) "

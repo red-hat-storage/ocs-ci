@@ -4,7 +4,7 @@ import re
 import time
 
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from datetime import timedelta
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -12,6 +12,8 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     get_mon_pod_id,
     wait_for_pods_to_be_running,
+    Pod,
+    get_pods_having_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -232,3 +234,64 @@ def check_for_data_corruption(logreader_pods):
         if "corrupt" in pod_logs:
             return False
     return True
+
+
+@retry(UnexpectedBehaviour, tries=20, delay=10)
+def get_logwriter_reader_pods(
+    logwriter_pods_tup=(None, None, 4),
+    logreader_pods_tup=(None, None, 4),
+    namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+):
+    """
+    This function helps to fetch the pod info of logwriter and logreader workloads
+
+    Args:
+        logwriter_pods_tup (tuple): (True if want to fetch Logwriter pods info,
+                                    labels of Logwriter pods app,
+                                    expected number of replicas)
+        logreader_pods_tup (tuple): (True if want to fetch Logreader pods info,
+                                    labels of Logreader pods app,
+                                    expected number of replicas)
+        namespace (str): namespace
+
+    Returns:
+        List, List: Lists containing logwriter pods and logreader pods info
+
+    Raises:
+        UnexpectedBehaviour: If expected replicas of pods are not found UnexpectedBehaviour excpetion is thrown
+    """
+    logwriter_pods = []
+    logreader_pods = []
+    if logwriter_pods_tup[0] is not None:
+        logwriter_pods = [
+            Pod(**pod)
+            for pod in get_pods_having_label(
+                label="app=logwriter-cephfs",
+                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+                statuses=["Running"],
+            )
+        ]
+        logger.info(f"Logwriter: {[pod.name for pod in logwriter_pods]}")
+        if len(logwriter_pods) != logwriter_pods_tup[1]:
+            logger.warning(
+                "Seems like some of the logwriter pods are not stabilized yet"
+            )
+            raise UnexpectedBehaviour
+
+    if logreader_pods_tup[0] is not None:
+        logreader_pods = [
+            Pod(**pod)
+            for pod in get_pods_having_label(
+                label="app=logreader-cephfs",
+                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+                statuses=["Running", "Succeeded"],
+            )
+        ]
+        logger.info(f"Logreader: {[pod.name for pod in logreader_pods]}")
+        if len(logreader_pods) != logreader_pods_tup[1]:
+            logger.warning(
+                "Seems like some of the logreader pods are not stabilized yet"
+            )
+            raise UnexpectedBehaviour
+
+    return logwriter_pods, logreader_pods
