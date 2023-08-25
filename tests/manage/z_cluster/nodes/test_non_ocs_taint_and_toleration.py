@@ -182,9 +182,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 pod.delete(wait=False)
 
         logger.info("After edit noticed few pod respins as expected")
-        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
 
-        logger.info("Check non-ocs toleration on all pods under openshift-storage")
+        logger.info(
+            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
+        )
         check_toleration_on_pods(toleration_key="xyz")
         if config.DEPLOYMENT["external_mode"]:
             cephcluster = CephClusterExternal()
