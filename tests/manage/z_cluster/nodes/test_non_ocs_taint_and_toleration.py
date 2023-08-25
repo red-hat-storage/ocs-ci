@@ -182,15 +182,15 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             for pod in pod_list:
                 pod.delete(wait=False)
 
-        logger.info("After edit noticed few pod respins as expected")
-        assert wait_for_pods_to_be_running(timeout=720, sleep=15)
-
         logger.info("Wait for pod to reach terminating state or to be deleted")
         assert wait_for_pods_to_be_in_statuses(
             [constants.STATUS_TERMINATING],
-            timeout=600,
+            timeout=720,
             sleep=15,
         )
+
+        logger.info("After edit noticed few pod respins as expected")
+        assert wait_for_pods_to_be_running(timeout=720, sleep=15)
 
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
