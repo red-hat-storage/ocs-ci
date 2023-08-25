@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.ocs.cluster import (
@@ -153,8 +154,26 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # After edit noticed few pod respins as expected
         assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        if config.ENV_DATA["mcg_only_deployment"]:
+            logger.info("Wait some time after adding toleration for pods respin")
+            waiting_time = 60
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+            logger.info("Force delete all pods")
+            pod_list = get_all_pods(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                exclude_selector=True,
+            )
+            for pod in pod_list:
+                pod.delete(wait=False)
+
+        logger.info("After edit noticed few pod respins as expected")
+        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
 
         # Check non ocs toleration on all pods under openshift-storage
+        logger.info(
+            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
+        )
         check_toleration_on_pods(toleration_key="xyz")
         self.sanity_helpers.health_check()
 
