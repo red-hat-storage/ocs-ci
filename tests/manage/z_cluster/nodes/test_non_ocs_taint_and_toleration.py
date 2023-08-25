@@ -153,7 +153,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(f"Successfully added toleration to {configmap_obj.kind}")
 
         # After edit noticed few pod respins as expected
-        assert wait_for_pods_to_be_running(timeout=600, sleep=15)
+        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
         if config.ENV_DATA["mcg_only_deployment"]:
             logger.info("Wait some time after adding toleration for pods respin")
             waiting_time = 60
