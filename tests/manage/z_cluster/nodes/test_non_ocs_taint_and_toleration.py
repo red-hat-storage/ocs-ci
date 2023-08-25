@@ -177,6 +177,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
         )
+        logger.info(
+            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
+        )
         check_toleration_on_pods(toleration_key="xyz")
         self.sanity_helpers.health_check()
 
