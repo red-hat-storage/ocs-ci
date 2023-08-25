@@ -94,6 +94,8 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_pod_count,
     wait_for_pods_by_label_count,
+    get_mon_pods,
+    get_mon_pod_id,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -6976,3 +6978,14 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
         )
 
     return factory
+
+
+@pytest.fixture()
+def reset_conn_score():
+    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for pod in mon_pods:
+        mon_pod_id = get_mon_pod_id(pod)
+        cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
+        pod.exec_cmd_on_pod(command=cmd)
+    return mon_pods
+

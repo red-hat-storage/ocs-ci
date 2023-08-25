@@ -10,7 +10,6 @@ from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
-    get_mon_pods,
     get_mon_pod_id,
     get_ceph_tools_pod,
     get_pods_having_label,
@@ -45,16 +44,6 @@ def get_nodes_having_label(label):
     ocp_node_obj = OCP(kind=constants.NODE)
     nodes = ocp_node_obj.get(selector=label).get("items")
     return nodes
-
-
-@pytest.fixture()
-def reset_conn_score():
-    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-    for pod in mon_pods:
-        mon_pod_id = get_mon_pod_id(pod)
-        cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
-        pod.exec_cmd_on_pod(command=cmd)
-    return mon_pods
 
 
 class TestZoneShutdowns:
@@ -495,7 +484,9 @@ class TestZoneShutdowns:
                     statuses=["Running", "Completed"],
                 )
             ]
-
+            log.info(
+                f"These are the log reader pods running/completed : {[pod.name for pod in logreader_pods]}"
+            )
             logwriter_pods = [
                 Pod(**pod)
                 for pod in get_pods_having_label(
