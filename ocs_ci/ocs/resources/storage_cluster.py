@@ -1484,8 +1484,9 @@ def add_capacity_lso(ui_flag=False):
         num_available_pv = 2
         set_count = deviceset_count + 2
     else:
-        add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
-        num_available_pv = 3
+        num_available_pv = get_replica_count()
+        for num in range(num_available_pv):
+            add_disk_to_node(node_objs[num])
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
     if ui_add_capacity_conditions() and ui_flag:
@@ -1600,6 +1601,20 @@ def get_deviceset_count():
     sc = get_storage_cluster()
     return int(
         sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("count")
+    )
+
+
+def get_replica_count():
+    """
+    Get replica count from storagecluster
+
+    Returns:
+        int: replica count
+
+    """
+    sc = get_storage_cluster()
+    return int(
+        sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("replica")
     )
 
 
