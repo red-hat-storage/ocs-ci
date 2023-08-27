@@ -25,7 +25,7 @@ networking:
     hostPrefix: {{ cluster_host_prefix | default(23) }}
   machineNetwork:
   - cidr: 10.0.0.0/16
-  networkType: OpenShiftSDN
+  networkType: {{ network_type | default('OVNKubernetes') }}
   serviceNetwork:
   - {{ service_network_cidr | default('172.30.0.0/16') }}
 platform:
