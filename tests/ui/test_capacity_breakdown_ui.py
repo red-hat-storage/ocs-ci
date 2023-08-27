@@ -30,6 +30,7 @@ from ocs_ci.ocs.ui.workload_ui import (
     fill_attached_pv,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -192,17 +193,25 @@ class TestCapacityBreakdownUI(ManageTest):
                 pvc_name=data_struct.pvc_obj.name,
                 depl_name=f"busybox-{data_struct.capacity_size}gi-{time.time_ns() // 1_000_000}",
             )
-            logger.info(
-                f"deployed {data_struct.deployment.name}. Wait 5 sec to deploy another image"
-            )
 
         # fill attached PVC's with data
         for data_struct in PvcCapacityDeploymentList():
 
-            pod_name = get_pod_name_by_pattern(
-                pattern=f"{data_struct.deployment.name}",
+            pod_name = None
+            sample = TimeoutSampler(
+                300,
+                10,
+                func=get_pod_name_by_pattern,
                 namespace=data_struct.deployment.namespace,
-            )[0]
+                pattern=f"{data_struct.deployment.name}",
+            )
+            for sample in sample:
+                if sample:
+                    pod_name = sample[0]
+                    break
+                else:
+                    logger.info("Waiting for pod to be created")
+
             pod = get_pod_obj(pod_name)
 
             wait_for_container_status_ready(pod=pod)

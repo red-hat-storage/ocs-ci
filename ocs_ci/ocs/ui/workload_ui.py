@@ -8,7 +8,11 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import wait_for_pv_delete
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, UnableUpgradeConnectionException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    UnableUpgradeConnectionException,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.deployment import Deployment
@@ -16,7 +20,7 @@ from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.resources.pv import get_pv_status
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.retry import retry
-
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -144,14 +148,19 @@ class WorkloadUi(metaclass=SingletonMeta):
             namespace=namespace,
             resource_name=depl_name,
         )
-        start_time = time.perf_counter()
-        while time.perf_counter() - start_time < timeout:
-            time.sleep(1)
-            if busy_box_ocp_inst.get().get("spec").get("replicas") > 0:
-                logger.info(f"deployment '{depl_name}' " f"successfully deployed")
-                return True
-        else:
-            logger.error(f"failed to deploy and scale up '{depl_name}' deployment")
+
+        try:
+            sample = TimeoutSampler(
+                timeout=timeout, sleep=1, func=busy_box_ocp_inst.get
+            )
+            for sample in sample:
+                if sample.get("spec").get("replicas") > 0:
+                    logger.info(f"deployment '{depl_name}' " f"successfully deployed")
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"deployment '{depl_name}' failed to deploy and scale up after {timeout} seconds"
+            )
             return False
 
     def delete_busybox(self, depl_name: str, force: bool = False):
