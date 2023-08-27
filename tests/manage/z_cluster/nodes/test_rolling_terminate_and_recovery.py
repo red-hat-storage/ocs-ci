@@ -96,13 +96,10 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
         4. Terminate the worker node.
         5. If we use an MS cluster, we will wait for the new worker node associated with the old node machine set
         to come up automatically.
-        If we use a non-MS cluster, the recovery process does not always happen automatically, so we will perform
-        the following steps:
-            5.1. Ensure that the ready replica count of the old machine set is decreased by 1.
-            5.2. Set the current replica count of the old machine set to the new ready replica count(reducing
-            it by one also).
-            5.3. Add a new worker node for the old machine set(which means we increase the
-            current replica count again by 1), and label it with the OCS label.
+        If we use a non-MS cluster, we will perform the following steps:
+            5.1. Delete the machine associated with the terminated worker node.
+            5.2. Wait for the new worker node associated with the old node machine set to come up automatically.
+            5.3. Label the new worker node with the OCS label.
         6. Wait for the OCS pods to be running and Ceph health to be OK before the next iteration.
 
         Args:
@@ -142,7 +139,7 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                     condition=constants.STATUS_FAILED,
                     resource_name=machine_name,
                     column="PHASE",
-                    timeout=120,
+                    timeout=240,
                     sleep=10,
                 )
                 delete_machine(machine_name)
