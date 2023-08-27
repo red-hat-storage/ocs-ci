@@ -180,6 +180,8 @@ class TestDeleteRbdPool(ManageTest):
                 "cephblockpool deletion should fail if referenced by storageclass"
             )
 
+    @tier1
+    @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
         argvalues=[
