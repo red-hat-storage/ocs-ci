@@ -1,7 +1,6 @@
 import logging
 import pytest
 import random
-import time
 
 
 from ocs_ci.framework.testlib import (
@@ -16,9 +15,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.machine import (
     get_machine_from_node_name,
     get_machineset_from_machine_name,
-    get_ready_replica_count,
-    wait_for_ready_replica_count_to_reach_expected_value,
-    set_replica_count,
+    delete_machine,
 )
 from ocs_ci.ocs.node import (
     get_ocs_nodes,
@@ -28,7 +25,7 @@ from ocs_ci.ocs.node import (
     generate_nodes_for_provider_worker_node_tests,
     wait_for_new_worker_node_ipi,
     get_worker_nodes,
-    add_new_node_and_label_it,
+    label_nodes,
 )
 from ocs_ci.ocs.resources.pod import (
     check_pods_after_node_replacement,
@@ -38,6 +35,8 @@ from ocs_ci.ocs.cluster import is_ms_provider_cluster, is_managed_service_cluste
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import MS_PROVIDER_TYPE, MS_CONSUMER_TYPE
 from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 
 
 log = logging.getLogger(__name__)
@@ -118,6 +117,10 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             ocs_node_objs = random.sample(get_ocs_nodes(), k=2)
         log.info(f"Generated ocs worker nodes: {[n.name for n in ocs_node_objs]}")
 
+        machine_obj = OCP(
+            kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        )
+
         log.info("Start rolling terminate and recovery of the OCS worker nodes")
         for node_obj in ocs_node_objs:
             old_wnodes = get_worker_nodes()
@@ -126,26 +129,25 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             log.info(f"Machine name: {machine_name}")
             machineset = get_machineset_from_machine_name(machine_name)
             log.info(f"machineset name: {machineset}")
-            old_ready_rc = get_ready_replica_count(machineset)
 
             nodes.terminate_nodes(nodes=[node_obj], wait=True)
             log.info(f"Successfully terminated the node: {node_obj.name}")
             if is_managed_service_cluster():
                 new_ocs_node = wait_for_new_worker_node_ipi(machineset, old_wnodes)
             else:
-                expected_ready_rc = old_ready_rc - 1
-                wait_for_ready_replica_count_to_reach_expected_value(
-                    machineset, expected_ready_rc
-                )
                 log.info(
-                    "Change the current replica count to the expected ready replica count"
+                    "Wait for the machine associated with the terminated node to reach the status Failed"
                 )
-                set_replica_count(machineset, expected_ready_rc)
-                timeout = 20
-                log.info(f"Wait {timeout} seconds before adding a new node")
-                time.sleep(timeout)
-                new_ocs_node_names = add_new_node_and_label_it(machineset)
-                new_ocs_node = get_node_objs(new_ocs_node_names)[0]
+                machine_obj.wait_for_resource(
+                    condition=constants.STATUS_FAILED,
+                    resource_name=machine_name,
+                    column="PHASE",
+                    timeout=120,
+                    sleep=10,
+                )
+                delete_machine(machine_name)
+                new_ocs_node = wait_for_new_worker_node_ipi(machineset, old_wnodes)
+                label_nodes([new_ocs_node])
 
             log.info(f"The new ocs node is: {new_ocs_node.name}")
             log.info("Waiting for all the pods to be running")
