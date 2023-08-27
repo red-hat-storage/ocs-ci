@@ -197,10 +197,11 @@ class TestCephOSDSlowOps(object):
 
         ceph_cluster = CephCluster()
 
-        self.full_ratio = get_full_ratio_from_osd_dump()
+        self.full_osd_ratio = round(get_full_ratio_from_osd_dump(), 2)
+        self.full_osd_threshold = self.full_osd_ratio * 100
 
         # max possible cap to reach CephOSDSlowOps is to fill storage up to threshold; alert should appear much earlier
-        pvc_size = ceph_cluster.get_ceph_free_capacity() * self.full_ratio
+        pvc_size = ceph_cluster.get_ceph_free_capacity() * self.full_osd_ratio
 
         # assuming storageutilization speed reduced to less than 1, estimation timeout to fill the storage
         # will be reduced by number of osds. That should be more than enough to trigger an alert,
@@ -278,7 +279,7 @@ class TestCephOSDSlowOps(object):
 
         api = PrometheusAPI()
 
-        while get_percent_used_capacity() < self.full_ratio:
+        while get_percent_used_capacity() < self.full_osd_ratio:
             time_passed_sec = time.perf_counter() - self.start_workload_time
             if time_passed_sec > self.timeout_sec:
                 pytest.fail("failed to fill the storage in calculated time")
@@ -323,5 +324,5 @@ class TestCephOSDSlowOps(object):
         else:
             # if test got to this point, the alert was found, test PASS
             pytest.fail(
-                "failed to get 'CephOSDSlowOps' while workload filled up the storage to 90 percents"
+                f"failed to get 'CephOSDSlowOps' while workload filled up the storage to {self.full_osd_ratio} percents"
             )
