@@ -3241,3 +3241,22 @@ def get_ceph_daemon_id(pod_obj):
         str: ceph_daemon_id
     """
     return pod_obj.get("labels").get("metadata").get("labels").get("ceph_daemon_id")
+
+
+def get_mon_pod_by_pvc_name(pvc_name: str):
+    """
+    Function to get monitor pod by pvc_name label
+
+    Args:
+        pvc_name (str): name of the pvc the monitor pod is related to
+    """
+    mon_pod_ocp = (
+        ocp.OCP(
+            kind=constants.POD,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=f"pvc_name={pvc_name}",
+        )
+        .get()
+        .get("items")[0]
+    )
+    return Pod(**mon_pod_ocp)
