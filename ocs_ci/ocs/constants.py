@@ -2354,6 +2354,8 @@ ARBITER_ZONE = "a"
 DATA_ZONE_1 = "b"
 DATA_ZONE_2 = "c"
 
+ZONES_LABELS = ["data-1", "data-2", "arbiter"]
+
 NETSPLIT_DATA_1_DATA_2 = f"{DATA_ZONE_1}{DATA_ZONE_2}"
 NETSPLIT_ARBITER_DATA_1 = f"{ARBITER_ZONE}{DATA_ZONE_1}"
 NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
@@ -2366,6 +2368,7 @@ NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
 # Logwriter workload labels
 
 LOGWRITER_CEPHFS_LABEL = "app=logwriter-cephfs"
+LOGREADER_CEPHFS_LABEL = "app=logreader-cephfs"
 LOGWRITER_RBD_LABEL = "app=logwriter-rbd"
 
 

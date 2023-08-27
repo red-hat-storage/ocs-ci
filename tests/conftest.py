@@ -6840,6 +6840,11 @@ def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
     return factory
 
 
+@pytest.fixture(scope="session")
+def setup_stretch_cluster_project(request, project_factory_session):
+    return project_factory_session(constants.STRETCH_CLUSTER_NAMESPACE)
+
+
 @pytest.fixture()
 def logwriter_workload_factory(request, teardown_factory):
     def factory(pvc, logwriter_path):
@@ -6915,7 +6920,7 @@ def logreader_workload_factory(request, teardown_factory):
 @pytest.fixture()
 def setup_logwriter_cephfs_workload_factory(
     request,
-    project_factory,
+    setup_stretch_cluster_project,
     pvc_factory,
     logwriter_cephfs_many_pvc_factory,
     logwriter_workload_factory,
@@ -6924,8 +6929,9 @@ def setup_logwriter_cephfs_workload_factory(
     def factory(read_duration=30):
         logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
         logreader_path = constants.LOGWRITER_CEPHFS_READER
-        project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
-        pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
+        pvc = logwriter_cephfs_many_pvc_factory(
+            project_name=setup_stretch_cluster_project
+        )
         logwriter_workload = logwriter_workload_factory(
             pvc=pvc, logwriter_path=logwriter_path
         )
@@ -6938,21 +6944,22 @@ def setup_logwriter_cephfs_workload_factory(
 
 
 @pytest.fixture()
-def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_factory):
+def setup_logwriter_rbd_workload_factory(
+    request, setup_stretch_cluster_project, teardown_factory
+):
     logwriter_sts_path = constants.LOGWRITER_STS_PATH
-    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
     sts_data = templating.load_yaml(logwriter_sts_path)
-    sts_data["metadata"]["namespace"] = project.namespace
+    sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
     logwriter_sts = helpers.create_resource(**sts_data)
     teardown_factory(logwriter_sts)
     logwriter_sts_pods = [
         pod["metadata"]["name"]
         for pod in get_pods_having_label(
-            label="app=logwriter-rbd", namespace=project.namespace
+            label="app=logwriter-rbd", namespace=setup_stretch_cluster_project.namespace
         )
     ]
     wait_for_pods_to_be_running(
-        namespace=project.namespace, pod_names=logwriter_sts_pods
+        namespace=setup_stretch_cluster_project.namespace, pod_names=logwriter_sts_pods
     )
 
     return logwriter_sts

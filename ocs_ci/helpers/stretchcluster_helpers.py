@@ -34,7 +34,7 @@ def check_for_read_pause(logreader_pods, start_time, end_time):
          Boolean : True if the pouase has occured else False
 
     """
-    paused = False
+    paused = 0
     for pod in logreader_pods:
         pause_count = 0
         time_var = start_time
@@ -51,11 +51,11 @@ def check_for_read_pause(logreader_pods, start_time, end_time):
                 logger.info(f"Read success: {t_time}")
             time_var = time_var + timedelta(minutes=1)
         if pause_count > 5:
-            paused = True
-            break
+            paused += 1
     return paused
 
 
+@retry(CommandFailed, tries=10, delay=10)
 def check_for_write_pause(logwriter_pod, log_files, start_time, end_time):
     """
     This checks for any read pause has occurred during the given
@@ -71,7 +71,7 @@ def check_for_write_pause(logwriter_pod, log_files, start_time, end_time):
          Boolean : True if the pouase has occured else False
 
     """
-    paused = False
+    paused = 0
     for file_name in log_files:
         pause_count = 0
         file_log = logwriter_pod.exec_sh_cmd_on_pod(command=f"cat {file_name}")
@@ -86,8 +86,7 @@ def check_for_write_pause(logwriter_pod, log_files, start_time, end_time):
                 logger.info(f"Write success: {t_time}")
             time_var = time_var + timedelta(minutes=1)
         if pause_count > 5:
-            paused = True
-            break
+            paused += 1
     return paused
 
 
@@ -193,7 +192,7 @@ def validate_conn_score(conn_score_map, quorum_ranks):
         logger.info("Connection score is valid")
 
 
-@retry(CommandFailed, tries=10, delay=10)
+@retry(CommandFailed, tries=15, delay=5)
 def check_ceph_accessibility(timeout=30, delay=5, grace=15):
     command = (
         f"SECONDS=0;while true;do ceph -s;sleep {delay};duration=$SECONDS;"
@@ -218,6 +217,10 @@ def check_ceph_accessibility(timeout=30, delay=5, grace=15):
             return False
         return True
     except Exception as err:
+        # if "connect: no route to host" in err.args[0]:
+        #     logger.warning("Spinning new ceph tools pod in the available zone")
+        #     ceph_tools_pod.delete()
+        #     raise
         if "TimeoutExpired" in err.args[0]:
             logger.error("Ceph status check got timed out. maybe ceph is hung.")
             return False
@@ -226,13 +229,27 @@ def check_ceph_accessibility(timeout=30, delay=5, grace=15):
 
 
 @retry(CommandFailed, tries=10, delay=10)
-def check_for_data_corruption(logreader_pods):
-    for pod_name in logreader_pods:
-        pod_logs = get_pod_logs(
-            pod_name=pod_name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
-        )
-        if "corrupt" in pod_logs:
-            return False
+def check_for_data_corruption(
+    logreader_pods=None, logwriter_rbd_pods=None, rbd_logfile_map=None
+):
+    if logreader_pods:
+        for pod_name in logreader_pods:
+            pod_logs = get_pod_logs(
+                pod_name=pod_name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
+            )
+            return "corrupt" not in pod_logs
+
+    if logwriter_rbd_pods and rbd_logfile_map:
+        for logwriter_pod in logwriter_rbd_pods:
+            output = logwriter_pod.exec_cmd_on_pod(
+                command=f"/opt/logreader.py -t 5 {list(rbd_logfile_map[logwriter_pod.name].keys())[0]} -d",
+                out_yaml_format=False,
+            )
+            return "corrupt" not in output
+    else:
+        assert (
+            False
+        ), "Couldn't check for data corruption in RBD workloads, some arguments are None maybe"
     return True
 
 
@@ -266,13 +283,13 @@ def get_logwriter_reader_pods(
         logwriter_pods = [
             Pod(**pod)
             for pod in get_pods_having_label(
-                label="app=logwriter-cephfs",
+                label=logwriter_pods_tup[1],
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running"],
+                statuses=["Running", "Creating", "Pending"],
             )
         ]
         logger.info(f"Logwriter: {[pod.name for pod in logwriter_pods]}")
-        if len(logwriter_pods) != logwriter_pods_tup[1]:
+        if len(logwriter_pods) != logwriter_pods_tup[2]:
             logger.warning(
                 "Seems like some of the logwriter pods are not stabilized yet"
             )
@@ -282,13 +299,13 @@ def get_logwriter_reader_pods(
         logreader_pods = [
             Pod(**pod)
             for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
+                label=logreader_pods_tup[1],
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running", "Succeeded"],
+                statuses=["Running", "Succeeded", "Creating", "Pending"],
             )
         ]
         logger.info(f"Logreader: {[pod.name for pod in logreader_pods]}")
-        if len(logreader_pods) != logreader_pods_tup[1]:
+        if len(logreader_pods) != logreader_pods_tup[2]:
             logger.warning(
                 "Seems like some of the logreader pods are not stabilized yet"
             )
