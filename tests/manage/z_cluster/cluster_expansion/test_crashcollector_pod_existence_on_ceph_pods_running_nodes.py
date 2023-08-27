@@ -53,18 +53,19 @@ class TestAddNodeCrashCollector(ManageTest):
 
     """
 
-    def is_node_rack_or_zone_exist(self, failure_domain, node_obj):
+    def is_node_rack_or_zone_exist(self, failure_domain, node_name):
         """
         Check if the node rack/zone exist
 
         Args:
             failure_domain (str): The failure domain
-            node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+            node_name (str): The node name
 
         Returns:
             bool: True if the node rack/zone exist. False otherwise
 
         """
+        node_obj = get_node_objs([node_name])[0]
         return get_node_rack_or_zone(failure_domain, node_obj) is not None
 
     def test_crashcollector_pod_existence_on_ceph_pods_running_nodes(
@@ -96,7 +97,7 @@ class TestAddNodeCrashCollector(ManageTest):
             timeout=timeout,
             sleep=10,
             func=self.is_node_rack_or_zone_exist,
-            node_obj=get_node_objs([new_node_name])[0],
+            node_name=new_node_name,
             failure_domain=failure_domain,
         )
         assert sample.wait_for_func_status(
