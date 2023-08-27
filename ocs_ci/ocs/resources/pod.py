@@ -3014,3 +3014,21 @@ def check_ceph_cmd_execute_successfully():
 
         logger.warning(f"Failed to execute the ceph command due to the error {str(ex)}")
         return False
+
+def get_mon_pod_by_pvc_name(pvc_name: str):
+    """
+    Function to get monitor pod by pvc_name label
+
+    Args:
+        pvc_name (str): name of the pvc the monitor pod is related to
+    """
+    mon_pod_ocp = (
+        ocp.OCP(
+            kind=constants.POD,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=f"pvc_name={pvc_name}",
+        )
+        .get()
+        .get("items")[0]
+    )
+    return Pod(**mon_pod_ocp)
