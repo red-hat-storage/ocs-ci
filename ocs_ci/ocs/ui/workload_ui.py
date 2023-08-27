@@ -6,7 +6,7 @@ import time
 import yaml
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import wait_for_pv_delete
+from ocs_ci.helpers.helpers import wait_for_pv_delete, get_pv_names
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -358,20 +358,16 @@ class PvcCapacityDeploymentList(list, metaclass=SingletonMeta):
                     if "not found" in str(ex):
                         logger.info(f"pvc '{pvc.name}' already deleted")
 
-                out = ""
-                try:
-                    out = ocp.exec_oc_cmd(f"get pv {pv_obj.name}", silent=True)
-                    logger.info(out)
-                except CommandFailed as ex:
-                    if "not found" in str(ex):
-                        logger.info(f"pv '{pv_obj.name}' already deleted")
-                if pv_obj.name in out:
+                pv_names = get_pv_names()
+                if pv_obj.name in pv_names:
                     pv_status = get_pv_status(pv_obj.get())
                     logger.info(
                         f"PVC deletion did not delete PV {pv_obj.name} on cluster. PV status {pv_status}"
                     )
                     pv_obj.delete(wait=False, force=True)
                     wait_for_pv_delete([pv_obj])
+                else:
+                    logger.info(f"PV {pv_obj.name} is already deleted")
 
                 self._delete_pvc_capacity_deployment_from_list(
                     pvc_capacity_deployment.deployment.name
