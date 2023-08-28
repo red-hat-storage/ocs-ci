@@ -1470,6 +1470,7 @@ RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjec
 
 # Routes
 RGW_ROUTE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_ROUTE_INTERNAL_MODE_SECURE = "ocs-storagecluster-cephobjectstore-secure"
 RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
 
 # Miscellaneous
