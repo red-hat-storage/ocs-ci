@@ -27,6 +27,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
 )
+from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -2294,6 +2295,7 @@ def awscli_pod_fixture(request, scope_name):
     ] = service_ca_configmap_name
 
     update_container_with_mirrored_image(awscli_sts_dict)
+    update_container_with_proxy_env(awscli_sts_dict)
 
     s3cli_sts_obj = helpers.create_resource(**awscli_sts_dict)
     assert s3cli_sts_obj, "Failed to create S3CLI STS"
@@ -2359,6 +2361,7 @@ def scale_cli_fixture(request, scope_name):
     scalecli_pod_dict["metadata"]["name"] = scalecli_pod_name
 
     update_container_with_mirrored_image(scalecli_pod_dict)
+    update_container_with_proxy_env(scalecli_pod_dict)
 
     scalecli_pod_obj = Pod(**scalecli_pod_dict)
     assert scalecli_pod_obj.create(
@@ -2393,6 +2396,7 @@ def javasdk_pod_fixture(request, scope_name):
     javas3_pod_name = create_unique_resource_name(constants.JAVAS3_POD_NAME, scope_name)
     javas3_pod_dict["metadata"]["name"] = javas3_pod_name
     update_container_with_mirrored_image(javas3_pod_dict)
+    update_container_with_proxy_env(javas3_pod_dict)
     javas3_pod_obj = Pod(**javas3_pod_dict)
 
     assert javas3_pod_obj.create(do_reload=True), f"Failed to create {javas3_pod_name}"
@@ -6383,6 +6387,7 @@ def fedora_pod_fixture(request, scope_name):
     fedora_pod_dict["metadata"]["name"] = fedora_pod_name
 
     update_container_with_mirrored_image(fedora_pod_dict)
+    update_container_with_proxy_env(fedora_pod_dict)
 
     fedora_pod_obj = Pod(**fedora_pod_dict)
     assert fedora_pod_obj.create(
