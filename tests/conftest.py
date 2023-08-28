@@ -5361,6 +5361,17 @@ def nsfs_bucket_factory_fixture(
             )[0]
         )
         wait_for_pods_to_be_running(pod_names=[nsfs_interface_pod.name])
+
+        # Wait for the nooba-endpoint pods to reset and mount the PVC
+        nb_endpoint_pods = [
+            Pod(**pod_dict)
+            for pod_dict in get_pods_having_label(
+                constants.NOOBAA_ENDPOINT_POD_LABEL,
+                config.ENV_DATA["cluster_namespace"],
+            )
+        ]
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in nb_endpoint_pods])
+
         # Apply the necessary permissions on the filesystem
         nsfs_interface_pod.exec_cmd_on_pod(f"chmod -R 777 {nsfs_obj.mount_path}")
         nsfs_interface_pod.exec_cmd_on_pod(f"groupadd -g {nsfs_obj.gid} nsfs-group")
@@ -5457,6 +5468,93 @@ def nsfs_bucket_factory_fixture(
 
     request.addfinalizer(nsfs_bucket_factory_cleanup)
     return nsfs_bucket_factory_implementation
+
+
+@pytest.fixture(scope="class")
+def revert_noobaa_endpoint_scc_class(request):
+    """
+    This fixture reverts the noobaa-endpoint SCC back to the way it was before ODF 4.12.
+    See https://url.corp.redhat.com/b92fd1d for details.
+
+    """
+    return revert_noobaa_endpoint_scc_fixture(request)
+
+
+def revert_noobaa_endpoint_scc_fixture(request):
+    """
+    This fixture reverts the noobaa-endpoint SCC back to the way it was before ODF 4.12.
+    See https://url.corp.redhat.com/b92fd1d for details.
+
+    """
+
+    ocp_scc = ocp.OCP(
+        kind=constants.SCC, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    nb_endpoint_scc_name = constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT_NAME
+    nb_endpoint_sa = constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT
+
+    # Abort if the noobaa-endpoint SCC has already been modified
+    scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+    if scc_dict["seLinuxContext"]["type"] == "MustRunAs" or scc_dict["users"]:
+        return
+
+    def revert_endpoint_scc_implementation():
+        """
+        1. Modify the noobaa-endpoint scc via oc patch
+        2. Verify that the changes were not reconciled
+
+        """
+        # Modify the noobaa-endpoint SCC
+        json_payload = [
+            {"op": "replace", "path": "/seLinuxContext/type", "value": "MustRunAs"},
+            {"op": "add", "path": "/users/0", "value": f"{nb_endpoint_sa}"},
+        ]
+
+        ocp_scc.patch(
+            resource_name=nb_endpoint_scc_name,
+            params=json_payload,
+            format_type="json",
+        )
+
+        # Verify the changes
+        scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+        assert (
+            scc_dict["seLinuxContext"]["type"] == "MustRunAs"
+        ), "Failed to modify the noobaa-db SCC seLinuxContext type"
+        assert (
+            constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT in scc_dict["users"]
+        ), "The noobaa-endpoint SA wasn't added to the noobaa-endpoint SCC"
+
+    def finalizer():
+        """
+        1. Restore the noobaa-endpoint SCC back to its default values
+        2. Verify that the changes were not reconciled
+
+        """
+
+        # Restore the noobaa-endpoint SCC back to it's default state
+        json_payload = [
+            {"op": "replace", "path": "/seLinuxContext/type", "value": "RunAsAny"},
+            {"op": "remove", "path": "/users/0", "value": f"{nb_endpoint_sa}"},
+        ]
+
+        ocp_scc.patch(
+            resource_name=nb_endpoint_scc_name,
+            params=json_payload,
+            format_type="json",
+        )
+
+        # Verify the changes
+        scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+        assert (
+            scc_dict["seLinuxContext"]["type"] == "RunAsAny"
+        ), "Failed to restore the default noobaa-endpoint SCC seLinuxContext type"
+        assert (
+            constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT not in scc_dict["users"]
+        ), "Failed to restore the default noobaa-endpoint SA status"
+
+    request.addfinalizer(finalizer)
+    revert_endpoint_scc_implementation()
 
 
 @pytest.fixture(scope="session", autouse=True)
