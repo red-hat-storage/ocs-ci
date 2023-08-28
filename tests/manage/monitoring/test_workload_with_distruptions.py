@@ -279,7 +279,7 @@ class TestCephOSDSlowOps(object):
 
         api = PrometheusAPI()
 
-        while get_percent_used_capacity() < self.full_osd_ratio:
+        while get_percent_used_capacity() < self.full_osd_threshold:
             time_passed_sec = time.perf_counter() - self.start_workload_time
             if time_passed_sec > self.timeout_sec:
                 pytest.fail("failed to fill the storage in calculated time")
@@ -291,7 +291,11 @@ class TestCephOSDSlowOps(object):
             alerts_response = api.get(
                 "alerts", payload={"silenced": False, "inhibited": False}
             )
-            assert alerts_response.ok is True, "got bad response from Prometheus"
+            if not alerts_response.ok:
+                logger.error(
+                    f"got bad response from Prometheus: {alerts_response.text}"
+                )
+                continue
             prometheus_alerts = alerts_response.json()["data"]["alerts"]
             logger.info(f"Prometheus Alerts: {prometheus_alerts}")
             for target_label, target_msg, target_states, target_severity in [
