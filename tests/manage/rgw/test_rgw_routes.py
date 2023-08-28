@@ -3,6 +3,7 @@ import logging
 import boto3
 
 from ocs_ci.ocs import ocp, constants
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.framework.pytest_customization.marks import (
@@ -37,7 +38,9 @@ class TestRGWRoutes:
         3. Test basic I.O functionality using both endpoints
 
         """
-        route_obj = ocp.OCP(kind="Route", namespace=self.namespace)
+        route_obj = ocp.OCP(
+            kind="Route", namespace=config.ENV_DATA["cluster_namespace"]
+        )
 
         log.info("Getting RGW's HTTP and HTTPS routes")
         try:
@@ -58,9 +61,7 @@ class TestRGWRoutes:
             "Asserting that RGW's service is exposed by both http and https routes"
         )
         assert http_route["spec"]["to"]["name"] == constants.RGW_SERVICE_INTERNAL_MODE
-        assert (
-            https_route[["spec"]["to"]["name"]] == constants.RGW_SERVICE_INTERNAL_MODE
-        )
+        assert https_route["spec"]["to"]["name"] == constants.RGW_SERVICE_INTERNAL_MODE
         assert http_route["spec"]["port"]["targetPort"] == "http"
         assert https_route["spec"]["port"]["targetPort"] == "https"
 
@@ -79,6 +80,7 @@ class TestRGWRoutes:
             current_route_endpoint_url = f"{url_prefix}://{route['spec']['host']}"
             rgw_obc.s3_resource = boto3.resource(
                 "s3",
+                verify=False,
                 endpoint_url=current_route_endpoint_url,
                 aws_access_key_id=rgw_obc.access_key_id,
                 aws_secret_access_key=rgw_obc.access_key,
@@ -90,7 +92,7 @@ class TestRGWRoutes:
                 s3_obj=rgw_obc,
                 bucketname=rgw_bucket_name,
                 object_key=f"test-route-{route_name}",
-                object_data="A simple test object string",
+                data="A simple test object string",
                 content_type="text/html",
             ), f"s3_put_object failed via route {route_name}!"
 
