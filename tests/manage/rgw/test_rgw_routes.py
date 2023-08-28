@@ -8,6 +8,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_external_mode,
+    on_prem_platform_required,
 )
 from ocs_ci.ocs.bucket_utils import (
     s3_put_object,
@@ -18,6 +19,7 @@ from ocs_ci.ocs.bucket_utils import (
 log = logging.getLogger(__name__)
 
 
+@on_prem_platform_required
 class TestRGWRoutes:
     """
     Test the RGW routes in an ODF cluster
