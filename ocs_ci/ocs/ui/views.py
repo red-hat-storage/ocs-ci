@@ -241,6 +241,16 @@ generic_locators = {
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
     "text_input_popup_rules": ("//*[@class='pf-c-helper-text__item-text']", By.XPATH),
+    # project name in the dropdown header
+    "project_selected": (
+        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project: {}')]",
+        By.XPATH,
+    ),
+    # project name in the dropdown list
+    "test-project-link": (
+        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
 }
 
 ocs_operator_locators = {
@@ -479,7 +489,11 @@ pvc_4_9 = {
 }
 
 pvc_4_10 = {
-    "test-project-link": ("(//*[contains(text(),'{}')])[1]", By.XPATH),
+    # similar to generic["test-project-link"]
+    "test-project-link": (
+        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
 }
 
 pvc_4_12 = {

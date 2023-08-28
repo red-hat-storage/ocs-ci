@@ -507,33 +507,19 @@ class BaseUI:
         element = self.driver.find_element(locator[1], locator[0])
         actions.move_to_element(element).perform()
 
-    def take_screenshot(self):
+    def take_screenshot(self, name_suffix: str = ""):
         """
         Take screenshot using python code
 
         """
-        time.sleep(1)
-        filename = os.path.join(
-            self.screenshots_folder,
-            f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
-        )
-        logger.debug(f"Creating screenshot: {filename}")
-        self.driver.save_screenshot(filename)
-        time.sleep(0.5)
+        take_screenshot(self.screenshots_folder, name_suffix)
 
-    def copy_dom(self):
+    def copy_dom(self, name_suffix: str = ""):
         """
         Get page source of the webpage
 
         """
-        filename = os.path.join(
-            self.dom_folder,
-            f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
-        )
-        logger.info(f"Copy DOM file: {filename}")
-        html = self.driver.page_source
-        with open(filename, "w") as f:
-            f.write(html)
+        copy_dom(self.dom_folder, name_suffix)
 
     def do_clear(self, locator, timeout=30):
         """
@@ -656,14 +642,16 @@ def screenshot_dom_location(type_loc="screenshot"):
         )
 
 
-def copy_dom(name_suffix: str = ""):
+def copy_dom(dom_folder=None, name_suffix: str = ""):
     """
     Copy DOM using python code
 
     Args:
+        dom_folder (str): path to folder where dom text file will be saved
         name_suffix (str): name suffix, will be added before extension. Optional argument
     """
-    dom_folder = screenshot_dom_location(type_loc="dom")
+    if dom_folder is None:
+        dom_folder = screenshot_dom_location(type_loc="dom")
     if not os.path.isdir(dom_folder):
         Path(dom_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)
@@ -680,14 +668,16 @@ def copy_dom(name_suffix: str = ""):
     time.sleep(0.5)
 
 
-def take_screenshot(name_suffix: str = ""):
+def take_screenshot(screenshots_folder=None, name_suffix: str = ""):
     """
     Take screenshot using python code
 
     Args:
+        screenshots_folder (str): path to folder where screenshot will be saved
         name_suffix (str): name suffix, will be added before extension. Optional argument
     """
-    screenshots_folder = screenshot_dom_location(type_loc="screenshot")
+    if screenshots_folder is None:
+        screenshots_folder = screenshot_dom_location(type_loc="screenshot")
     if not os.path.isdir(screenshots_folder):
         Path(screenshots_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)
