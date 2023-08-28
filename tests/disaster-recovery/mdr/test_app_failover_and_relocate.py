@@ -60,17 +60,31 @@ class TestApplicationFailoverAndRelocate:
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["workload_type", "primary_cluster_down"],
         argvalues=[
             pytest.param(
+                constants.SUBSCRIPTION,
                 False,
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
-                id="primary_up",
+                id="primary_up_subscription",
             ),
             pytest.param(
+                constants.SUBSCRIPTION,
                 True,
                 marks=pytest.mark.polarion_id(polarion_id_primary_down),
-                id="primary_down",
+                id="primary_down_subscription",
+            ),
+            pytest.param(
+                constants.APPLICATION_SET,
+                False,
+                marks=pytest.mark.polarion_id(polarion_id_primary_up),
+                id="primary_up_appset",
+            ),
+            pytest.param(
+                constants.APPLICATION_SET,
+                True,
+                marks=pytest.mark.polarion_id(polarion_id_primary_down),
+                id="primary_down_appset",
             ),
         ],
     )
@@ -80,6 +94,7 @@ class TestApplicationFailoverAndRelocate:
         primary_cluster_down,
         nodes_multicluster,
         dr_workload,
+        workload_type,
         node_restart_teardown,
     ):
         """
@@ -102,15 +117,18 @@ class TestApplicationFailoverAndRelocate:
                 raise NotImplementedError
 
         acm_obj = AcmAddClusters()
-        workload = dr_workload(num_of_subscription=1)[0]
+        if workload_type == constants.SUBSCRIPTION:
+            workload = dr_workload(num_of_subscription=1)[0]
+        else:
+            workload = dr_workload(num_of_subscription=0, num_of_appset=1)[0]
         self.namespace = workload.workload_namespace
 
         # Create application on Primary managed cluster
-        set_current_primary_cluster_context(workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         primary_cluster_index = config.cur_index
         node_objs = get_node_objs()
         self.primary_cluster_name = get_current_primary_cluster_name(
-            namespace=workload.workload_namespace
+            namespace=workload.workload_namespace, workload_type=workload_type
         )
 
         # Stop primary cluster nodes
@@ -134,9 +152,12 @@ class TestApplicationFailoverAndRelocate:
 
         # Application Failover to Secondary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
-            workload.workload_namespace
+            workload.workload_namespace, workload_type
         )
-        if config.RUN.get("mdr_failover_via_ui"):
+        if (
+            config.RUN.get("mdr_failover_via_ui")
+            and workload_type == constants.SUBSCRIPTION
+        ):
             logger.info("Start the process of Failover from ACM UI")
             config.switch_acm_ctx()
             failover_relocate_ui(
@@ -146,14 +167,19 @@ class TestApplicationFailoverAndRelocate:
                 failover_or_preferred_cluster=secondary_cluster_name,
             )
         else:
+            # TODO: Failover appset based apps via UI
             failover(
                 failover_cluster=secondary_cluster_name,
                 namespace=workload.workload_namespace,
+                workload_type=workload_type,
+                workload_placement_name=workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None,
             )
 
         # Verify application are running in other managedcluster
         # And not in previous cluster
-        set_current_primary_cluster_context(workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         wait_for_all_resources_creation(
             workload.workload_pvc_count,
             workload.workload_pod_count,
@@ -186,26 +212,31 @@ class TestApplicationFailoverAndRelocate:
             ), "Not all the pods reached running state"
 
         # Verify application are deleted from old cluster
-        set_current_secondary_cluster_context(workload.workload_namespace)
+        set_current_secondary_cluster_context(
+            workload.workload_namespace, workload_type
+        )
         wait_for_all_resources_deletion(workload.workload_namespace)
 
         # Validate data integrity
-        set_current_primary_cluster_context(workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
 
-        # Unfenced the managed cluster which was Fenced earlier
+        # Un-fence the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.primary_cluster_name)
 
         # Reboot the nodes which unfenced
         gracefully_reboot_ocp_nodes(
-            workload.workload_namespace, self.primary_cluster_name
+            workload.workload_namespace, self.primary_cluster_name, workload_type
         )
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
-            workload.workload_namespace
+            workload.workload_namespace, workload_type
         )
-        if config.RUN.get("mdr_relocate_via_ui"):
+        if (
+            config.RUN.get("mdr_relocate_via_ui")
+            and workload_type == constants.SUBSCRIPTION
+        ):
             logger.info("Start the process of Relocate from ACM UI")
             # Relocate via ACM UI
             check_cluster_status_on_acm_console(acm_obj)
@@ -217,14 +248,24 @@ class TestApplicationFailoverAndRelocate:
                 action=constants.ACTION_RELOCATE,
             )
         else:
-            relocate(secondary_cluster_name, workload.workload_namespace)
+            # TODO: Relocate appset based apps via UI
+            relocate(
+                preferred_cluster=secondary_cluster_name,
+                namespace=workload.workload_namespace,
+                workload_type=workload_type,
+                workload_placement_name=workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None,
+            )
 
         # Verify resources deletion from previous primary or current secondary cluster
-        set_current_secondary_cluster_context(workload.workload_namespace)
+        set_current_secondary_cluster_context(
+            workload.workload_namespace, workload_type
+        )
         wait_for_all_resources_deletion(workload.workload_namespace)
 
         # Verify resources creation on preferredCluster
-        set_current_primary_cluster_context(workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         wait_for_all_resources_creation(
             workload.workload_pvc_count,
             workload.workload_pod_count,
@@ -239,5 +280,5 @@ class TestApplicationFailoverAndRelocate:
             )
 
         # Validate data integrity
-        set_current_primary_cluster_context(workload.workload_namespace)
+        set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
