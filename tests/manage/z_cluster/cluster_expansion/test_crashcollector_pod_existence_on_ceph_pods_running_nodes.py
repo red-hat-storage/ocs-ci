@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_bm,
 )
-from ocs_ci.ocs.node import drain_nodes, schedule_nodes
+from ocs_ci.ocs.node import drain_nodes, schedule_nodes, is_node_rack_or_zone_exist
 from ocs_ci.helpers.helpers import get_failure_domin
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -53,20 +53,6 @@ class TestAddNodeCrashCollector(ManageTest):
 
     """
 
-    def is_node_rack_or_zone_exist(self, failure_domain, node_obj):
-        """
-        Check if the node rack/zone exist
-
-        Args:
-            failure_domain (str): The failure domain
-            node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
-
-        Returns:
-            bool: True if the node rack/zone exist. False otherwise
-
-        """
-        return get_node_rack_or_zone(failure_domain, node_obj) is not None
-
     def test_crashcollector_pod_existence_on_ceph_pods_running_nodes(
         self, add_nodes, node_drain_teardown
     ):
@@ -95,8 +81,8 @@ class TestAddNodeCrashCollector(ManageTest):
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=10,
-            func=self.is_node_rack_or_zone_exist,
-            node_obj=get_node_objs([new_node_name])[0],
+            func=is_node_rack_or_zone_exist,
+            node_name=new_node_name,
             failure_domain=failure_domain,
         )
         assert sample.wait_for_func_status(
