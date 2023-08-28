@@ -31,7 +31,11 @@ from ocs_ci.ocs.resources.pod import (
     check_pods_after_node_replacement,
 )
 from ocs_ci.helpers.sanity_helpers import SanityManagedService, Sanity
-from ocs_ci.ocs.cluster import is_ms_provider_cluster, is_managed_service_cluster
+from ocs_ci.ocs.cluster import (
+    is_ms_provider_cluster,
+    is_managed_service_cluster,
+    is_vsphere_ipi_cluster,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import MS_PROVIDER_TYPE, MS_CONSUMER_TYPE
 from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
@@ -143,7 +147,10 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                     sleep=10,
                 )
                 delete_machine(machine_name)
-                new_ocs_node = wait_for_new_worker_node_ipi(machineset, old_wnodes)
+                timeout = 1500 if is_vsphere_ipi_cluster() else 900
+                new_ocs_node = wait_for_new_worker_node_ipi(
+                    machineset, old_wnodes, timeout
+                )
                 label_nodes([new_ocs_node])
 
             log.info(f"The new ocs node is: {new_ocs_node.name}")
