@@ -512,14 +512,16 @@ class BaseUI:
         Take screenshot using python code
 
         """
-        take_screenshot(self.screenshots_folder, name_suffix)
+        take_screenshot(
+            screenshots_folder=self.screenshots_folder, name_suffix=name_suffix
+        )
 
     def copy_dom(self, name_suffix: str = ""):
         """
         Get page source of the webpage
 
         """
-        copy_dom(self.dom_folder, name_suffix)
+        copy_dom(dom_folder=self.dom_folder, name_suffix=name_suffix)
 
     def do_clear(self, locator, timeout=30):
         """
@@ -642,13 +644,13 @@ def screenshot_dom_location(type_loc="screenshot"):
         )
 
 
-def copy_dom(dom_folder=None, name_suffix: str = ""):
+def copy_dom(name_suffix: str = "", dom_folder=None):
     """
     Copy DOM using python code
 
     Args:
-        dom_folder (str): path to folder where dom text file will be saved
         name_suffix (str): name suffix, will be added before extension. Optional argument
+        dom_folder (str): path to folder where dom text file will be saved
     """
     if dom_folder is None:
         dom_folder = screenshot_dom_location(type_loc="dom")
@@ -668,13 +670,13 @@ def copy_dom(dom_folder=None, name_suffix: str = ""):
     time.sleep(0.5)
 
 
-def take_screenshot(screenshots_folder=None, name_suffix: str = ""):
+def take_screenshot(name_suffix: str = "", screenshots_folder=None):
     """
     Take screenshot using python code
 
     Args:
-        screenshots_folder (str): path to folder where screenshot will be saved
         name_suffix (str): name suffix, will be added before extension. Optional argument
+        screenshots_folder (str): path to folder where screenshot will be saved
     """
     if screenshots_folder is None:
         screenshots_folder = screenshot_dom_location(type_loc="screenshot")
