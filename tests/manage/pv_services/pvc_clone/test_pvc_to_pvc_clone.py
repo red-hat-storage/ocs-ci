@@ -140,6 +140,7 @@ class TestClone(ManageTest):
         clone_pod_obj.get_fio_results()
         logger.info(f"IO completed on pod {clone_pod_obj.name}")
 
+    @pytest.mark.polarion_id("OCS-5162")
     @pytest.mark.parametrize(
         argnames=["interface_type", "pod_dict_path"],
         argvalues=[
