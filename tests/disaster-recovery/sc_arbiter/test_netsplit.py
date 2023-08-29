@@ -6,6 +6,11 @@ import ocpnetsplit
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
+
+
+from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+from ocs_ci.ocs.exceptions import CephHealthException
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.node import get_all_nodes, wait_for_nodes_status
@@ -19,16 +24,11 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_ceph_tools_pod,
     get_mon_pod_id,
+    get_mon_pods,
 )
 from ocs_ci.helpers.stretchcluster_helpers import (
-    check_for_write_pause,
-    check_for_read_pause,
-    get_logfile_map_from_logwriter_pods,
     fetch_connection_scores_for_mon,
-    validate_conn_score,
     get_mon_quorum_ranks,
-    check_for_data_corruption,
-    get_logwriter_reader_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,7 @@ class TestNetSplit:
     def test_netsplit_cephfs(
         self,
         setup_logwriter_cephfs_workload_factory,
+        setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
         nodes,
         zones,
@@ -150,8 +151,13 @@ class TestNetSplit:
 
         """
 
+        sc_obj = StretchCluster()
+
         # run cephfs workload for both logwriter and logreader
-        logwriter_workload, logreader_workload = setup_logwriter_cephfs_workload_factory
+        (
+            sc_obj.cephfs_logwriter_dep,
+            sc_obj.cephfs_logreader_job,
+        ) = setup_logwriter_cephfs_workload_factory(read_duration=(duration + 5))
         logger.info("Workloads are running")
 
         # Generate 5 minutes worth of logs before inducing the netsplit
@@ -159,14 +165,16 @@ class TestNetSplit:
         time.sleep(300)
 
         # note all the pod names
-        logwriter_pods, logreader_pods = get_logwriter_reader_pods()
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
+        )
 
         # note the file names created and each file start write time
-        log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods)
-
-        # Reset connection scores and fetch connection scores for reach mons
-        mon_pods = reset_conn_score
-        logger.info("Connection scores are reset!")
+        # note the file names created
+        sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
+        sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
         # note the start time (UTC)
         target_time = datetime.now() + timedelta(minutes=5)
@@ -180,55 +188,30 @@ class TestNetSplit:
         logger.info(f"Netsplit induced at {start_time} for zones {zones}")
 
         # note the end time (UTC)
-        time.sleep((duration + 5) * 60)
+        assert sc_obj.check_ceph_accessibility(
+            timeout=((duration + 5) * 60)
+        ), "Something went wrong. not expected. please check rook-ceph logs"
         end_time = datetime.now(timezone.utc)
         logger.info(f"Ended netsplit at {end_time}")
 
         # wait for the logreader workload to finish
-        logwriter_pods, logreader_pods = get_logwriter_reader_pods()
-        wait_for_pods_to_be_in_statuses(
-            expected_statuses=["Completed"],
-            pod_names=[pod.name for pod in logreader_pods],
-            timeout=900,
-            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
         )
-        logger.info("Logreader job pods have reached 'Completed' state!")
 
         # check if all the read operations are successful during the failure window, check for every minute
-        if check_for_read_pause(logreader_pods, start_time, end_time):
-            logger.info(f"Read operations are paused during {zones} netsplit window")
-        else:
-            logger.info("All the read operations are successful!!")
-
-        # check if all the write operations are successful during the failure window, check for every minute
-        for i in range(len(logwriter_pods)):
-            try:
-                if check_for_write_pause(
-                    logwriter_pods[i], log_file_map.keys(), start_time, end_time
-                ):
-                    logger.info(
-                        f"Write operations paused during {zones} netsplit window"
-                    )
-                else:
-                    logger.info("All the write operations are successful!!")
-                    break
-            except CommandFailed as e:
-                if (
-                    "Permission Denied" in e.args[0]
-                    or "unable to upgrade connection" in e.args[0]
-                ) and zones in ["bc", "ab-bc"]:
-                    continue
-                else:
-                    assert (
-                        False
-                    ), f"{logwriter_pods[i].name} pod failed to exec command with the following eror: {e.args[0]}"
-
-        # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
+        sc_obj.post_failure_checks(
+            start_time,
+            end_time,
+        )
 
         # reboot the nodes where the pods are not running
+        # TODO: Improve the below piece of code
         pods_not_running = [
             pod
-            for pod in logwriter_pods
+            for pod in sc_obj.cephfs_logwriter_pods
             if OCP(
                 kind="Pod", namespace=constants.STRETCH_CLUSTER_NAMESPACE
             ).get_resource_status(pod.name)
@@ -249,35 +232,33 @@ class TestNetSplit:
 
         wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_RUNNING,
-            pod_names=[pod.name for pod in logwriter_pods],
+            pod_names=[pod.name for pod in sc_obj.cephfs_logwriter_pods],
             timeout=900,
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )
 
-        # check if all the already written data and files before netsplit started is intact
-        log_files_after = [
-            file_name
-            for file_name in logwriter_pods[0]
-            .exec_sh_cmd_on_pod(command="ls -l | awk 'NR>1' | awk '{print $9}'")
-            .split("\n")
-            if file_name != ""
-        ]
+        sc_obj.cephfs_logreader_job.delete()
+        logger.info(sc_obj.cephfs_logreader_pods)
+        for pod in sc_obj.cephfs_logreader_pods:
+            pod.wait_for_pod_delete(timeout=120)
+        logger.info("All old CephFS logreader pods are deleted")
 
-        assert set([file for file in log_file_map.keys()]).issubset(
-            log_files_after
-        ), f"Log files mismatch before and after the netsplit {zones} failure"
+        # check for any data loss
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_CEPHFS_LABEL
+        ), "[CephFS] Data is lost"
+        logger.info("[CephFS] No data loss is seen")
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_RBD_LABEL
+        ), "[RBD] Data is lost"
+        logger.info("[RBD] No data loss is seen")
 
         # check for data corruption
-
-        logreader_workload.delete()
-        for pod in logreader_pods:
-            pod.wait_for_pod_delete(timeout=120)
-        logger.info("All old logreader pods are deleted")
         pvc = get_pvc_objs(
             pvc_names=[
-                logwriter_workload.get()["spec"]["template"]["spec"]["volumes"][0][
-                    "persistentVolumeClaim"
-                ]["claimName"]
+                sc_obj.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
+                    "volumes"
+                ][0]["persistentVolumeClaim"]["claimName"]
             ],
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )[0]
@@ -293,10 +274,11 @@ class TestNetSplit:
                 statuses=["Running", "Completed"],
             )
         ]
-        for pod in logreader_pods:
+        for pod in sc_obj.cephfs_logreader_pods:
             if pod.name in new_logreader_pods:
                 new_logreader_pods.remove(pod.name)
 
+        sc_obj.cephfs_logreader_pods = new_logreader_pods
         logger.info(f"New logreader pods: {new_logreader_pods}")
 
         wait_for_pods_to_be_in_statuses(
@@ -307,141 +289,26 @@ class TestNetSplit:
         )
         logger.info("Logreader job pods have reached 'Completed' state!")
 
-        assert check_for_data_corruption(new_logreader_pods), "Data is corrupted"
-        logger.info("No data corruption is seen!")
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGREADER_CEPHFS_LABEL
+        ), "Data is corrupted for cephFS workloads"
+        logger.info("No data corruption is seen in CephFS workloads")
+
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGWRITER_RBD_LABEL
+        ), "Data is corrupted for RBD workloads"
+        logger.info("No data corruption is seen in RBD workloads")
 
         # check the connection scores if its clean
         mon_conn_score_map = {}
+        mon_pods = get_mon_pods()
         for pod in mon_pods:
             mon_conn_score_map[get_mon_pod_id(pod)] = fetch_connection_scores_for_mon(
                 pod
             )
-
+        logger.info("Fetched connection scores for all the mons!!")
         mon_quorum_ranks = get_mon_quorum_ranks()
-        validate_conn_score(mon_conn_score_map, mon_quorum_ranks)
+        logger.info(f"Current mon_quorum ranks : {mon_quorum_ranks}")
 
-    @pytest.mark.parametrize(
-        argnames="zones, duration",
-        argvalues=[
-            pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
-        ],
-        ids=[
-            "Data-1-Data-2",
-            "Arbiter-Data-1",
-            "Arbiter-Data-1-and-Arbiter-Data-2",
-            "Arbiter-Data-1-and-Data-1-Data-2",
-        ],
-    )
-    def test_netsplit_rbd(
-        self,
-        setup_logwriter_rbd_workload_factory,
-        zones,
-        duration,
-        init_sanity,
-        reset_conn_score,
-    ):
-        """
-        This test will test the netsplit scenarios for the active-active RBD workloads
-        Steps:
-            1) Run a logwriter RBD workload with RWO volumes
-            2) Check for write pause and fail when neccessary
-            3) Run logreader script inside the logwriter pods
-               and make sure no data corruption is seen
-            4) Make sure no data loss seen
-            5) Perfrom the complete cluste sanity and
-            make sure no issues post recovery
-
-        """
-
-        # Generate 5 minutes worth of logs before inducing the netsplit
-        logger.info("Generating 5 mins worth of log")
-        time.sleep(300)
-
-        # note all the pod names
-        logwriter_pods = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
-                label="app=logwriter-rbd", namespace=constants.STRETCH_CLUSTER_NAMESPACE
-            )
-        ]
-
-        # note the start time and files
-        log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods, is_rbd=True)
-
-        # Reset connection scores and fetch connection scores for reach mons
-        mon_pods = reset_conn_score
-        logger.info("Connection scores are reset!")
-
-        # note the start time (UTC)
-        target_time = datetime.now() + timedelta(minutes=5)
-        start_time = target_time.astimezone(timezone.utc)
-        ocpnetsplit.main.schedule_split(
-            nodes=get_all_nodes(),
-            split_name=zones,
-            target_dt=target_time,
-            target_length=duration,
-        )
-        logger.info(f"Netsplit induced at {start_time} for zones {zones}")
-
-        # TODO: Run the read script in each of the logwriter pods
-
-        # Note the end time (UTC)
-        time.sleep((duration + 5) * 60)
-        end_time = datetime.now(timezone.utc)
-        logger.info(f"Ended netsplit at {end_time}")
-
-        # check if all the write operations are successful during the failure window, check for every minute
-        if check_for_write_pause(
-            logwriter_pods[0],
-            list(log_file_map[logwriter_pods[0].name].keys()),
-            start_time,
-            end_time,
-        ) or check_for_write_pause(
-            logwriter_pods[1],
-            list(log_file_map[logwriter_pods[1].name].keys()),
-            start_time,
-            end_time,
-        ):
-            logger.info(f"Write operations paused during {zones} netsplit window")
-        else:
-            logger.info("All the write operations are successful!!")
-
-        # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
-
-        # check if all the already written data and files before netsplit started is intact
-        log_files_after = []
-        for logwriter_pod in logwriter_pods:
-            for file_name in logwriter_pod.exec_sh_cmd_on_pod(
-                command="ls -l | awk 'NR>1' | awk '{print $9}'"
-            ).split("\n"):
-                if file_name != "":
-                    log_files_after.append(file_name)
-
-        for logwriter_pod in log_file_map.keys():
-            for file_name in log_file_map[logwriter_pod].keys():
-                assert (
-                    file_name in log_files_after
-                ), f"{file_name} is missing after the netsplit failure"
-
-        # run logreader script inside logrwriter pods and make sure no corruption is seen
-        for logwriter_pod in logwriter_pods:
-            output = logwriter_pod.exec_cmd_on_pod(
-                command=f"/opt/logreader.py -t 5 {list(log_file_map[logwriter_pod.name].keys())[0]} -d",
-                out_yaml_format=False,
-            )
-            assert "corrupt" not in output, "Data is corrupted!!"
-
-        logger.info("No data corruption is seen")
-
-        # check the connection scores if its clean
-        mon_conn_score_map = {}
-        for pod in mon_pods:
-            mon_conn_score_map[get_mon_pod_id(pod)] = fetch_connection_scores_for_mon(
-                pod
-            )
-
-        mon_quorum_ranks = get_mon_quorum_ranks()
-        validate_conn_score(mon_conn_score_map, mon_quorum_ranks)
+        # check the connection score if it's clean
+        sc_obj.validate_conn_score(mon_conn_score_map, mon_quorum_ranks)

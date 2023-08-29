@@ -5,10 +5,10 @@ import random
 import concurrent.futures as futures
 from datetime import datetime, timezone
 
+from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes_having_label, get_nodes
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_mon_pod_id,
@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     wait_for_pods_to_be_in_statuses,
     get_debug_pods,
+    get_mon_pods,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import (
@@ -26,143 +27,12 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
 )
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.helpers.stretchcluster_helpers import (
-    get_logfile_map_from_logwriter_pods,
-    check_for_read_pause,
-    check_for_write_pause,
-    fetch_connection_scores_for_mon,
-    get_mon_quorum_ranks,
-    validate_conn_score,
-    check_ceph_accessibility,
-    check_for_data_corruption,
-    get_logwriter_reader_pods,
-)
+from ocs_ci.ocs.cluster import get_mon_quorum_ranks, fetch_connection_scores_for_mon
 
 log = logging.getLogger(__name__)
 
 
 class TestZoneShutdowns:
-    def cephfs_failure_checks(
-        self,
-        logwriter_pods,
-        logreader_pods,
-        start_time,
-        end_time,
-        cephfs_log_file_map,
-        wait_for_read_completion=True,
-    ):
-
-        # wait for the logreader workload to finish if expected
-        if wait_for_read_completion:
-            wait_for_pods_to_be_in_statuses(
-                expected_statuses=["Completed"],
-                pod_names=[pod.name for pod in logreader_pods],
-                timeout=900,
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
-            log.info("Logreader job pods have reached 'Completed' state!")
-
-        # check if all the read operations are successful during the failure window, check for every minute
-        if check_for_read_pause(logreader_pods, start_time, end_time) > 2:
-            log.error(
-                f"Read operations are paused for CephFS workloads even for the ones in available zones"
-            )
-        else:
-            log.info("All or some read operations are successful!!")
-
-        # check if all the write operations are successful during the failure window, check for every minute
-        for i in range(len(logwriter_pods)):
-            try:
-                if (
-                    check_for_write_pause(
-                        logwriter_pods[i],
-                        cephfs_log_file_map.keys(),
-                        start_time,
-                        end_time,
-                    )
-                    > 2
-                ):
-                    log.error(
-                        f"Write operations paused for CephFS workloads even for the ones in available zones"
-                    )
-                else:
-                    log.info("All or some write operations are successful!!")
-                    break
-            except CommandFailed as e:
-                if (
-                    "Permission Denied" in e.args[0]
-                    or "unable to upgrade connection" in e.args[0]
-                ):
-                    continue
-                else:
-                    assert (
-                        False
-                    ), f"{logwriter_pods[i].name} pod failed to exec command with the following eror: {e.args[0]}"
-
-    def rbd_failure_checks(
-        self, logwriter_pods, rbd_log_file_map, start_time, end_time
-    ):
-
-        if (
-            check_for_write_pause(
-                logwriter_pods[0],
-                list(rbd_log_file_map[logwriter_pods[0].name].keys()),
-                start_time,
-                end_time,
-            )
-            != 0
-            and check_for_write_pause(
-                logwriter_pods[1],
-                list(rbd_log_file_map[logwriter_pods[1].name].keys()),
-                start_time,
-                end_time,
-            )
-            != 0
-        ):
-            log.error(
-                f"Write operations paused for RBD workloads even for the ones in available zone"
-            )
-        else:
-            log.info("All or some write operations are successful for RBD workloads!!")
-
-    def post_failure_checks(
-        self,
-        start_time,
-        end_time,
-        cephfs_workloads_tup=(None, None, None, True),
-        rbd_workloads_tup=(None, None),
-    ):
-        """
-        This method is for the post failure checks
-        """
-
-        if cephfs_workloads_tup[0] is not None:
-            self.cephfs_failure_checks(
-                cephfs_workloads_tup[0],
-                cephfs_workloads_tup[1],
-                start_time,
-                end_time,
-                cephfs_workloads_tup[2],
-                wait_for_read_completion=cephfs_workloads_tup[3],
-            )
-
-        if rbd_workloads_tup[0] is not None:
-            self.rbd_failure_checks(
-                rbd_workloads_tup[0], rbd_workloads_tup[1], start_time, end_time
-            )
-
-        # make sure ceph is accessible
-        try:
-            assert ceph_health_check(), "Ceph health is not OK"
-        except CephHealthException as e:
-            assert all(
-                err in e.args[0]
-                for err in ["HEALTH_WARN", "daemons have recently crashed"]
-            ), f"[CephHealthException]: {e.args[0]}"
-            get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-            log.info("Archived ceph crash!")
-
     @pytest.fixture()
     def init_sanity(self, request, nodes):
         """
@@ -252,35 +122,27 @@ class TestZoneShutdowns:
         * see if there is any data loss if any IO's performed
         * make sure connection score is clean
         """
-        duration = 5
-        if not immediate:
-            duration = 600
+        sc_obj = StretchCluster()
+
+        if immediate:
+            sc_obj.default_shutdown_durarion = 5
 
         # Run the logwriter cephFs workloads
-        log.info("Running logwriter cephFS and RBD workloads")
         (
-            logwriter_workload,
-            logreader_workload,
+            sc_obj.cephfs_logwriter_dep,
+            sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
         # Generate 5 minutes worth of logs before inducing the netsplit
         log.info("Generating 5 mins worth of log")
         time.sleep(10)
 
-        # Reset connection scores and fetch connection scores for reach mons
-        mon_pods = reset_conn_score
-        log.info("Connection scores are reset!")
-
-        logwriter_pods, logreader_pods = get_logwriter_reader_pods(
-            logwriter_pods_tup=(True, constants.LOGWRITER_CEPHFS_LABEL, 4),
-            logreader_pods_tup=(True, constants.LOGREADER_CEPHFS_LABEL, 4),
-        )
-        logwriter_rbd_pods, _ = get_logwriter_reader_pods(
-            logwriter_pods_tup=(True, constants.LOGWRITER_RBD_LABEL, 2)
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
         )
 
-        cephfs_log_file_map = {}
-        rbd_log_file_map = {}
         zones = constants.ZONES_LABELS
         zones.remove("arbiter")
 
@@ -290,18 +152,13 @@ class TestZoneShutdowns:
             if not immediate:
                 start_time = datetime.now(timezone.utc)
 
-            # note the file names created and each file start write time
-            cephfs_log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods)
-            rbd_log_file_map = get_logfile_map_from_logwriter_pods(
-                logwriter_rbd_pods, is_rbd=True
-            )
+            # note the file names created
+            sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
+            sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
             # Fetch the nodes in zone that needs to be crashed
             zone = random.choice(zones)
-            label = f"topology.kubernetes.io/zone={zone}"
-            nodes_to_shutdown = [
-                OCS(**node_info) for node_info in get_nodes_having_label(label)
-            ]
+            nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
 
             assert (
                 len(nodes_to_shutdown) != 0
@@ -318,8 +175,8 @@ class TestZoneShutdowns:
                 log.error("Seems like some nodes didnt shutdown properly!")
 
             # check ceph accessibility while the nodes are down
-            assert check_ceph_accessibility(
-                timeout=duration
+            assert sc_obj.check_ceph_accessibility(
+                timeout=sc_obj.default_shutdown_durarion
             ), "Something went wrong. not expected. please check rook-ceph logs"
 
             # start the nodes
@@ -340,27 +197,16 @@ class TestZoneShutdowns:
                 delay=15,
             )(wait_for_nodes_status(timeout=1800))
 
-            logwriter_pods, logreader_pods = get_logwriter_reader_pods(
-                logwriter_pods_tup=(True, constants.LOGWRITER_CEPHFS_LABEL, 4),
-                logreader_pods_tup=(True, constants.LOGREADER_CEPHFS_LABEL, 4),
-            )
-
-            logwriter_rbd_pods, _ = get_logwriter_reader_pods(
-                logwriter_pods_tup=(True, constants.LOGWRITER_RBD_LABEL, 2)
+            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+            sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
             )
 
             if not immediate:
                 end_time = datetime.now(timezone.utc)
-                self.post_failure_checks(
-                    start_time,
-                    end_time,
-                    cephfs_workloads_tup=(
-                        logwriter_pods,
-                        logreader_pods,
-                        cephfs_log_file_map,
-                        False,
-                    ),
-                    rbd_workloads_tup=(logwriter_rbd_pods, rbd_log_file_map),
+                sc_obj.post_failure_checks(
+                    start_time, end_time, wait_for_read_completion=False
                 )
 
             # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
@@ -370,56 +216,32 @@ class TestZoneShutdowns:
 
         if immediate:
             end_time = datetime.now(timezone.utc)
-            self.post_failure_checks(
-                start_time,
-                end_time,
-                cephfs_workloads_tup=(
-                    logwriter_pods,
-                    logreader_pods,
-                    cephfs_log_file_map,
-                    False,
-                ),
-                rbd_workloads_tup=(logwriter_rbd_pods, rbd_log_file_map),
+            sc_obj.post_failure_checks(
+                start_time, end_time, wait_for_read_completion=False
             )
 
-        logreader_workload.delete()
-        for pod in logreader_pods:
+        sc_obj.cephfs_logreader_job.delete()
+        log.info(sc_obj.cephfs_logreader_pods)
+        for pod in sc_obj.cephfs_logreader_pods:
             pod.wait_for_pod_delete(timeout=120)
         log.info("All old CephFS logreader pods are deleted")
 
         # check for any data loss
-        log_files_after = [
-            file_name
-            for file_name in logwriter_pods[0]
-            .exec_sh_cmd_on_pod(command="ls -l | awk 'NR>1' | awk '{print $9}'")
-            .split("\n")
-            if file_name != ""
-        ]
-
-        assert set([file for file in cephfs_log_file_map.keys()]).issubset(
-            log_files_after
-        ), f"[CephFS] Log files mismatch before and after the shutdown"
-
-        rbd_log_files_after = []
-        for logwriter_pod in logwriter_rbd_pods:
-            for file_name in logwriter_pod.exec_sh_cmd_on_pod(
-                command="ls -l | awk 'NR>1' | awk '{print $9}'"
-            ).split("\n"):
-                if file_name != "":
-                    rbd_log_files_after.append(file_name)
-
-        for logwriter_pod in rbd_log_file_map.keys():
-            for file_name in rbd_log_file_map[logwriter_pod].keys():
-                assert (
-                    file_name in rbd_log_files_after
-                ), f"[RBD] {file_name} is missing after the crash"
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_CEPHFS_LABEL
+        ), "[CephFS] Data is lost"
+        log.info("[CephFS] No data loss is seen")
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_RBD_LABEL
+        ), "[RBD] Data is lost"
+        log.info("[RBD] No data loss is seen")
 
         # check for data corruption
         pvc = get_pvc_objs(
             pvc_names=[
-                logwriter_workload.get()["spec"]["template"]["spec"]["volumes"][0][
-                    "persistentVolumeClaim"
-                ]["claimName"]
+                sc_obj.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
+                    "volumes"
+                ][0]["persistentVolumeClaim"]["claimName"]
             ],
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )[0]
@@ -434,39 +256,44 @@ class TestZoneShutdowns:
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             )
         ]
-        for pod in logreader_pods:
+        for pod in sc_obj.cephfs_logreader_pods:
             if pod.name in new_logreader_pods:
                 new_logreader_pods.remove(pod.name)
 
         log.info(f"New logreader pods: {new_logreader_pods}")
+        sc_obj.cephfs_logreader_pods = new_logreader_pods
 
         wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_COMPLETED,
-            pod_names=new_logreader_pods,
+            pod_names=sc_obj.cephfs_logreader_pods,
             timeout=900,
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )
         log.info("[CephFS] Logreader job pods have reached 'Completed' state!")
 
-        assert check_for_data_corruption(
-            logreader_pods=new_logreader_pods,
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGREADER_CEPHFS_LABEL
         ), "Data is corrupted for cephFS workloads"
         log.info("No data corruption is seen in CephFS workloads")
 
-        assert check_for_data_corruption(
-            logwriter_rbd_pods=logwriter_rbd_pods, rbd_logfile_map=rbd_log_file_map
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGWRITER_RBD_LABEL
         ), "Data is corrupted for RBD workloads"
         log.info("No data corruption is seen in RBD workloads")
 
         # check the connection scores if its clean
         mon_conn_score_map = {}
+        mon_pods = get_mon_pods()
         for pod in mon_pods:
             mon_conn_score_map[get_mon_pod_id(pod)] = fetch_connection_scores_for_mon(
                 pod
             )
-
+        log.info("Fetched connection scores for all the mons!!")
         mon_quorum_ranks = get_mon_quorum_ranks()
-        validate_conn_score(mon_conn_score_map, mon_quorum_ranks)
+        log.info(f"Current mon_quorum ranks : {mon_quorum_ranks}")
+
+        # check the connection score if it's clean
+        sc_obj.validate_conn_score(mon_conn_score_map, mon_quorum_ranks)
 
     @pytest.mark.parametrize(
         argnames="iteration, delay",
@@ -493,52 +320,38 @@ class TestZoneShutdowns:
 
         """
 
-        average_crash_time = 15  # in minutes
+        sc_obj = StretchCluster()
 
         # Run the logwriter cephFs workloads
         log.info("Running logwriter cephFS and RBD workloads")
         (
-            logwriter_workload,
-            logreader_workload,
-        ) = setup_logwriter_cephfs_workload_factory(
-            read_duration=(iteration * average_crash_time)
-        )
+            sc_obj.cephfs_logwriter_dep,
+            sc_obj.cephfs_logreader_job,
+        ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
         # Generate 5 minutes worth of logs before inducing the netsplit
         log.info("Generating 5 mins worth of log")
         time.sleep(300)
 
-        # Reset connection scores and fetch connection scores for reach mons
-        mon_pods = reset_conn_score
-        log.info("Connection scores are reset!")
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
+        )
 
-        logwriter_pods, logreader_pods = get_logwriter_reader_pods(
-            logwriter_pods_tup=(True, constants.LOGWRITER_CEPHFS_LABEL, 4),
-            logreader_pods_tup=(True, constants.LOGREADER_CEPHFS_LABEL, 4),
-        )
-        logwriter_rbd_pods, _ = get_logwriter_reader_pods(
-            logwriter_pods_tup=(True, constants.LOGWRITER_RBD_LABEL, 2)
-        )
-        cephfs_log_file_map = {}
-        rbd_log_file_map = {}
         zones = constants.ZONES_LABELS
         zones.remove("arbiter")
 
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
 
-            # note the file names created and each file start write time
-            cephfs_log_file_map = get_logfile_map_from_logwriter_pods(logwriter_pods)
-            rbd_log_file_map = get_logfile_map_from_logwriter_pods(
-                logwriter_rbd_pods, is_rbd=True
-            )
+            # note the file names created
+            sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
+            sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
             # Fetch the nodes in zone that needs to be crashed
             zone = random.choice(zones)
-            label = f"topology.kubernetes.io/zone={zone}"
-            nodes_to_shutdown = [
-                OCS(**node_info) for node_info in get_nodes_having_label(label)
-            ]
+            nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
 
             assert (
                 len(nodes_to_shutdown) != 0
@@ -588,71 +401,41 @@ class TestZoneShutdowns:
             end_time = datetime.now(timezone.utc)
             log.info(f"Start time : {start_time} & End time : {end_time}")
 
-            logwriter_pods, logreader_pods = get_logwriter_reader_pods(
-                logwriter_pods_tup=(True, constants.LOGWRITER_CEPHFS_LABEL, 4),
-                logreader_pods_tup=(True, constants.LOGREADER_CEPHFS_LABEL, 4),
-            )
-
-            logwriter_rbd_pods, _ = get_logwriter_reader_pods(
-                logwriter_pods_tup=(True, constants.LOGWRITER_RBD_LABEL, 2)
+            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+            sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
             )
 
             # check the ceph access again after the nodes are completely up
-            self.post_failure_checks(
-                start_time,
-                end_time,
-                cephfs_workloads_tup=(
-                    logwriter_pods,
-                    logreader_pods,
-                    cephfs_log_file_map,
-                    False,
-                ),
-                rbd_workloads_tup=(logwriter_rbd_pods, rbd_log_file_map),
+            sc_obj.post_failure_checks(
+                start_time, end_time, wait_for_read_completion=False
             )
-
-            # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
 
-        logreader_workload.delete()
-        for pod in logreader_pods:
+        sc_obj.cephfs_logreader_job.delete()
+        for pod in sc_obj.cephfs_logreader_pods:
             pod.wait_for_pod_delete(timeout=120)
         log.info("All old logreader pods are deleted")
 
-        # make sure all the older files still exists
-        cephfs_log_files_after = [
-            file_name
-            for file_name in logwriter_pods[0]
-            .exec_sh_cmd_on_pod(command="ls -l | awk 'NR>1' | awk '{print $9}'")
-            .split("\n")
-            if file_name != ""
-        ]
-
-        assert set([file for file in cephfs_log_file_map.keys()]).issubset(
-            cephfs_log_files_after
-        ), f"Log files mismatch before and after the crash"
-
-        rbd_log_files_after = []
-        for logwriter_pod in logwriter_rbd_pods:
-            for file_name in logwriter_pod.exec_sh_cmd_on_pod(
-                command="ls -l | awk 'NR>1' | awk '{print $9}'"
-            ).split("\n"):
-                if file_name != "":
-                    rbd_log_files_after.append(file_name)
-
-        for logwriter_pod in rbd_log_file_map.keys():
-            for file_name in rbd_log_file_map[logwriter_pod].keys():
-                assert (
-                    file_name in rbd_log_files_after
-                ), f"{file_name} is missing after the crash"
+        # check for any data loss
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_CEPHFS_LABEL
+        ), "[CephFS] Data is lost"
+        log.info("[CephFS] No data loss is seen")
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_RBD_LABEL
+        ), "[RBD] Data is lost"
+        log.info("[RBD] No data loss is seen")
 
         # check for data corruption
         pvc = get_pvc_objs(
             pvc_names=[
-                logwriter_workload.get()["spec"]["template"]["spec"]["volumes"][0][
-                    "persistentVolumeClaim"
-                ]["claimName"]
+                sc_obj.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
+                    "volumes"
+                ][0]["persistentVolumeClaim"]["claimName"]
             ],
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )[0]
@@ -668,11 +451,12 @@ class TestZoneShutdowns:
                 statuses=["Running", "Succeeded"],
             )
         ]
-        for pod in logreader_pods:
+        for pod in sc_obj.cephfs_logreader_pods:
             if pod.name in new_logreader_pods:
                 new_logreader_pods.remove(pod.name)
 
-        log.info(f"New logreader pods: {new_logreader_pods}")
+        log.info(f"New cephfs logreader pods: {new_logreader_pods}")
+        sc_obj.cephfs_logreader_pods = new_logreader_pods
 
         wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_COMPLETED,
@@ -682,19 +466,18 @@ class TestZoneShutdowns:
         )
         log.info("Logreader job pods have reached 'Completed' state!")
 
-        assert check_for_data_corruption(
-            logreader_pods=new_logreader_pods
-        ), "Data is corrupted"
-        log.info("No data corruption is seen in CephFS workloads!")
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGREADER_CEPHFS_LABEL
+        ), "Data is corrupted for cephFS workloads"
+        log.info("No data corruption is seen in CephFS workloads")
 
-        assert check_for_data_corruption(
-            logwriter_rbd_pods=logwriter_rbd_pods, rbd_logfile_map=rbd_log_file_map
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGWRITER_RBD_LABEL
         ), "Data is corrupted for RBD workloads"
         log.info("No data corruption is seen in RBD workloads")
 
-        log.info("No data corruption is seen in RBD workloads")
-
         mon_conn_score_map = {}
+        mon_pods = get_mon_pods()
         for pod in mon_pods:
             mon_conn_score_map[get_mon_pod_id(pod)] = fetch_connection_scores_for_mon(
                 pod
@@ -704,4 +487,4 @@ class TestZoneShutdowns:
         log.info(f"Current mon_quorum ranks : {mon_quorum_ranks}")
 
         # check the connection score if it's clean
-        validate_conn_score(mon_conn_score_map, mon_quorum_ranks)
+        sc_obj.validate_conn_score(mon_conn_score_map, mon_quorum_ranks)

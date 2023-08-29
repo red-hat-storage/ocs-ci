@@ -6995,4 +6995,3 @@ def reset_conn_score():
         cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
         pod.exec_cmd_on_pod(command=cmd)
     return mon_pods
-

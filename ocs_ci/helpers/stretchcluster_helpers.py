@@ -217,10 +217,6 @@ def check_ceph_accessibility(timeout=30, delay=5, grace=15):
             return False
         return True
     except Exception as err:
-        # if "connect: no route to host" in err.args[0]:
-        #     logger.warning("Spinning new ceph tools pod in the available zone")
-        #     ceph_tools_pod.delete()
-        #     raise
         if "TimeoutExpired" in err.args[0]:
             logger.error("Ceph status check got timed out. maybe ceph is hung.")
             return False
