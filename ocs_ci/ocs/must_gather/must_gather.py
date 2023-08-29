@@ -139,9 +139,10 @@ class MustGather(object):
     def print_must_gather_debug(self) -> None:
         try:
             with open(os.path.join(self.root, GATHER_COMMANDS_LOG), "r") as f:
+                logger.info("Printing must-gather internal log file")
                 logger.info(f.readlines())
         except FileNotFoundError:
-            logger.error("File not found")
+            logger.error("must-gather internal log file not found")
 
     def compare_running_pods(self):
         """
