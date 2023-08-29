@@ -126,6 +126,8 @@ anywhere else.
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
+* `disconnected_dns_server` - DNS server accessible from disconnected cluster (should be on the same network)
+* `disconnected_false_gateway` - false gateway used to make cluster effectively disconnected
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
 * `in_transit_encryption` - Enable in-transit encryption.

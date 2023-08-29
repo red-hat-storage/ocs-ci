@@ -480,36 +480,89 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
 
     Args:
         ocp_image_path (str): OCP release image path
-        ocp_version (str): OCP release image version
+        ocp_version (str): OCP release image version or checksum (starting with sha256:)
 
     Returns:
         tuple (str, str): tuple with two strings: mirrored image path and tag
             or checksum
     """
-    ocp_image = f"{ocp_image_path}:{ocp_version}"
+    dest_image_repo = (
+        f"{config.DEPLOYMENT['mirror_registry']}/"
+        f"{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}"
+    )
+    if ocp_version.startswith("sha256"):
+        ocp_image = f"{ocp_image_path}@{ocp_version}"
+        dest_ocp_image = f"{dest_image_repo}@{ocp_version}"
+    else:
+        ocp_image = f"{ocp_image_path}:{ocp_version}"
+        dest_ocp_image = f"{dest_image_repo}:{ocp_version}"
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
 
     # mirror OCP release images (this might take very long time)
     logger.info(f"Mirror images related to OCP release image: {ocp_image}")
-    dest_image_repo = (
-        f"{config.DEPLOYMENT['mirror_registry']}/"
-        f"{constants.FLEXY_OCP_RELEASE_IMAGE_MIRROR_PATH}"
-    )
     cmd = (
         f"oc adm release mirror -a {pull_secret_path} --insecure "
         f"--max-per-registry=2 --from={ocp_image} "
         f"--to={dest_image_repo} "
-        f"--to-release-image={dest_image_repo}:{ocp_version} "
+        f"--to-release-image={dest_ocp_image} "
         # following two arguments leads to failure of this command, we have to
         # investigate it more to see, if they are required or not
         # f"--release-image-signature-to-dir {config.ENV_DATA['cluster_path']} "
         # "--apply-release-image-signature"
     )
-    exec_cmd(cmd, timeout=7200)
+    result = exec_cmd(cmd, timeout=7200)
+    # parse imageContentSources and ImageContentSourcePolicy from oc adm release mirror command output
+    stdout_lines = result.stdout.decode().splitlines()
+    ics_index = (
+        stdout_lines.index(
+            "To use the new mirrored repository to install, add the following section to the install-config.yaml:"
+        )
+        + 2
+    )
+    icsp_index = (
+        stdout_lines.index(
+            "To use the new mirrored repository for upgrades, use the following to create an ImageContentSourcePolicy:"
+        )
+        + 2
+    )
+    ics = "\n".join(stdout_lines[ics_index : stdout_lines.index("", ics_index)])
+    icsp = "\n".join(stdout_lines[icsp_index:])
+
+    # parse haproxy-router image from the oc adm release mirror command output
+    haproxy_router_line = [
+        line
+        for line in stdout_lines
+        if "haproxy-router" in line and config.DEPLOYMENT["mirror_registry"] in line
+    ][0]
+    config.DEPLOYMENT["haproxy_router_image"] = haproxy_router_line.split()[1]
 
     return (
-        f"{config.DEPLOYMENT['mirror_registry']}/{constants.FLEXY_OCP_RELEASE_IMAGE_MIRROR_PATH}",
+        f"{config.DEPLOYMENT['mirror_registry']}/{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}",
         ocp_version,
+        ics,
+        icsp,
     )
+
+
+def get_ocp_release_image():
+    """
+    Get the url of ocp release image
+    * from DEPLOYMENT["custom_ocp_image"] or
+    * from openshift-install version command output
+    """
+    if not config.DEPLOYMENT.get("ocp_image"):
+        if config.DEPLOYMENT.get("custom_ocp_image"):
+            config.DEPLOYMENT["ocp_image"] = config.DEPLOYMENT.get("custom_ocp_image")
+        else:
+            installer_version_str = exec_cmd(
+                f"{config.RUN['bin_dir']}/openshift-install version"
+            ).stdout.decode()
+            release_image_line = [
+                line
+                for line in installer_version_str.splitlines()
+                if "release image" in line
+            ][0]
+            config.DEPLOYMENT["ocp_image"] = release_image_line.split()[2]
+    return config.DEPLOYMENT["ocp_image"]
