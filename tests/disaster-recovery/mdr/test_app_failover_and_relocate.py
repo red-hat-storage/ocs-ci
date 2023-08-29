@@ -77,13 +77,19 @@ class TestApplicationFailoverAndRelocate:
             pytest.param(
                 constants.APPLICATION_SET,
                 False,
-                marks=pytest.mark.polarion_id(polarion_id_primary_up),
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_up),
+                    pytest.mark.skipif_ocs_version("<4.13"),
+                ],
                 id="primary_up_appset",
             ),
             pytest.param(
                 constants.APPLICATION_SET,
                 True,
-                marks=pytest.mark.polarion_id(polarion_id_primary_down),
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_down),
+                    pytest.mark.skipif_ocs_version("<4.13"),
+                ],
                 id="primary_down_appset",
             ),
         ],
