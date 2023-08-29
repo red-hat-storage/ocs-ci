@@ -13,6 +13,7 @@ from selenium.common.exceptions import (
     WebDriverException,
     NoSuchElementException,
     StaleElementReferenceException,
+    ElementClickInterceptedException,
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
@@ -217,6 +218,12 @@ class BaseUI:
                 _do_click(locator, timeout, enable_screenshot, copy_dom)
             else:
                 raise
+        except ElementClickInterceptedException:
+            # appears due to JS graphics on the page: one element overlapping another, or dynamic graphics in progress
+            logger.info("ElementClickInterceptedException, try click again")
+            take_screenshot("ElementClickInterceptedException")
+            time.sleep(5)
+            _do_click(locator, timeout, enable_screenshot, copy_dom)
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
