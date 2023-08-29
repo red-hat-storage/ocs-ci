@@ -987,7 +987,7 @@ def pvc_factory_fixture(request, project_factory):
         # If they have ReclaimPolicy set to Retain then delete them manually
         for pv_obj in pv_objs:
             if (
-                pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
+                pv_obj.data.get("spec", {}).get("persistentVolumeReclaimPolicy")
                 == constants.RECLAIM_POLICY_RETAIN
                 and pv_obj is not None
             ):
