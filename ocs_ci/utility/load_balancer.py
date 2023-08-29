@@ -35,7 +35,16 @@ class LoadBalancer(object):
         self.private_key = private_key or os.path.expanduser(
             config.DEPLOYMENT["ssh_key_private"]
         )
-        self.lb = Connection(self.host, self.user, self.private_key)
+        jump_host = (
+            config.DEPLOYMENT.get("ssh_jump_host")
+            if config.DEPLOYMENT.get("disconnected")
+            else None
+        )
+        if jump_host:
+            jump_host["private_key"] = self.private_key
+        self.lb = Connection(
+            self.host, self.user, self.private_key, jump_host=jump_host
+        )
 
     def _get_host(self):
         """

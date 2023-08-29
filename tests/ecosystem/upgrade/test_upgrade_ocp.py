@@ -106,7 +106,7 @@ class TestUpgradeOCP(ManageTest):
             # disconnected environment prerequisites
             if config.DEPLOYMENT.get("disconnected"):
                 # mirror OCP release images to mirror registry
-                image_path, target_image = mirror_ocp_release_images(
+                image_path, target_image, _, _ = mirror_ocp_release_images(
                     image_path, target_image
                 )
 

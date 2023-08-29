@@ -41,7 +41,9 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility import templating, version
+from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
@@ -878,6 +880,37 @@ class VSPHEREUPI(VSPHEREBASE):
                 ]
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
+            # prepare configuration for disconnected deployment
+            if config.DEPLOYMENT.get("disconnected"):
+                # set non-existing gateway, to make the cluster disconnected
+                config.ENV_DATA["gateway"] = config.DEPLOYMENT.get(
+                    "disconnected_false_gateway", "${cidrhost(var.machine_cidr, 1)}"
+                )
+                # set DNS server accessible from the disconnected env
+                config.ENV_DATA["dns"] = config.DEPLOYMENT["disconnected_dns_server"]
+
+                install_config_obj.update(
+                    yaml.safe_load(config.RUN["imageContentSources"])
+                )
+                cluster_domain = (
+                    f"{config.ENV_DATA.get('cluster_name')}."
+                    f"{config.ENV_DATA.get('base_domain')}"
+                )
+                install_config_obj["proxy"] = {
+                    "httpProxy": config.DEPLOYMENT["disconnected_http_proxy"],
+                    "httpsProxy": config.DEPLOYMENT.get(
+                        "disconnected_https_proxy",
+                        config.DEPLOYMENT["disconnected_http_proxy"],
+                    ),
+                    "noProxy": ",".join(
+                        [
+                            cluster_domain,
+                            config.DEPLOYMENT.get("disconnected_no_proxy", ""),
+                        ],
+                    ),
+                }
+                with open(get_root_ca_cert(), "r") as fd:
+                    install_config_obj["additionalTrustBundle"] = fd.read()
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             with open(install_config, "w") as f:
@@ -1012,6 +1045,9 @@ class VSPHEREUPI(VSPHEREBASE):
                     # comment bootstrap module
                     comment_bootstrap_in_lb_module()
 
+                    logger.debug(
+                        "Remove bootstrap IP from load balancer and restart haproxy"
+                    )
                     # remove bootstrap IP in load balancer and
                     # restart haproxy
                     lb = LoadBalancer()
@@ -1068,6 +1104,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 # Approving CSRs here in-case if any exists
                 approve_pending_csr()
 
+            # Update kubeconfig with proxy-url (if client_http_proxy
+            # configured) to redirect client access through proxy server.
+            update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
@@ -2062,6 +2101,24 @@ def modify_haproxyservice():
     execstop = f"{to_change}\nExecStop=/bin/podman rm -f haproxy"
 
     replace_content_in_file(constants.TERRAFORM_HAPROXY_SERVICE, to_change, execstop)
+
+    if config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
+        "haproxy_router_image"
+    ):
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "quay.io/openshift/origin-haproxy-router",
+            config.DEPLOYMENT["haproxy_router_image"],
+        )
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "podman pull",
+            (
+                "podman pull --tls-verify=false "
+                f"--creds {config.DEPLOYMENT['mirror_registry_user']}:"
+                f"{config.DEPLOYMENT['mirror_registry_password']}"
+            ),
+        )
 
 
 def assign_ips(num_of_vips):
