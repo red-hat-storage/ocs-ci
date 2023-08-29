@@ -370,6 +370,9 @@ class PageNavigator(BaseUI):
         ):
             self.take_screenshot("namespace_selected")
             logger.info("Project already selected")
+            self.do_click(
+                format_locator(self.generic_locators["project_selected"], project_name)
+            )
             return True
 
         default_projects_is_checked = self.driver.find_element_by_css_selector(
