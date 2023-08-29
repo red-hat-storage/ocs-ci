@@ -193,7 +193,7 @@ class TestClone(ManageTest):
             pvc_name=restore_snapshot_obj.name,
             namespace=restore_snapshot_obj.namespace,
             pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
-            pvc_readOnlyMode=True,
+            pvc_read_only_mode=True,
         )
         # Confirm that the pod is running
         helpers.wait_for_resource_state(
