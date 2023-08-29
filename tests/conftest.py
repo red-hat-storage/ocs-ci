@@ -163,15 +163,6 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 log = logging.getLogger(__name__)
 
 
-class OCSLogFormatter(logging.Formatter):
-    def __init__(self):
-        fmt = (
-            "%(asctime)s - %(threadName)s - %(levelname)s -"
-            " %(name)s.%(funcName)s.%(lineno)d - %(message)s"
-        )
-        super(OCSLogFormatter, self).__init__(fmt)
-
-
 def pytest_assertrepr_compare(config, op, left, right):
     """
     Log error message for a failed assert, so that it's possible to locate a
@@ -179,13 +170,6 @@ def pytest_assertrepr_compare(config, op, left, right):
     change assert explanation.
     """
     log.error("'assert %s %s %s' failed", left, op, right)
-
-
-def pytest_logger_config(logger_config):
-    logger_config.add_loggers([""], stdout_level="info")
-    logger_config.set_log_option_default("")
-    logger_config.split_by_outcome()
-    logger_config.set_formatter_class(OCSLogFormatter)
 
 
 def verify_squad_owners(items):

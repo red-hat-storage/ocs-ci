@@ -2145,8 +2145,31 @@ def ocsci_log_path():
         str: full path for ocs-ci log directory
 
     """
+    additional_info = ""
+    deployment = config.RUN["cli_params"].get("deploy")
+    markers = config.RUN["cli_params"].get("-m", [])
+    upgrade_markers = ["ocs_upgrade", "ocp_upgrade"]
+    upgrade = any(item in markers for item in upgrade_markers)
+    if deployment:
+        additional_info += "-deployment"
+        if config.ENV_DATA.get("skip_ocs_deployment"):
+            additional_info += "-ocp"
+        if config.ENV_DATA.get("skip_ocp_deployment"):
+            additional_info += "-odf"
+    else:
+        if upgrade:
+            additional_info += "-upgrade"
+        else:
+            additional_info += "-test"
+
+    jenkins_job_build = os.environ.get("BUILD_NUMBER")
+    if jenkins_job_build:
+        additional_info += f"-{jenkins_job_build}"
     return os.path.expanduser(
-        os.path.join(config.RUN["log_dir"], f"ocs-ci-logs-{config.RUN['run_id']}")
+        os.path.join(
+            config.RUN["log_dir"],
+            f"ocs-ci-logs{additional_info}-{config.RUN['run_id']}",
+        )
     )
 
 

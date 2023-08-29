@@ -166,6 +166,7 @@ Reporting related config. (Do not store secret data in the repository!).
 * `save_mem_report` - If True, test run memory report CSV file will be saved in `RUN["log_dir"]/stats_log_dir_<run_id>`
   directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
   exporting env variable: export SAVE_MEM_REPORT=true
+* `log_all` - If True, we will log all to console output, expect logs from file.logger
 
 #### ENV_DATA
 

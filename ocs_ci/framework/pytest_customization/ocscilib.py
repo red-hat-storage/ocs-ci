@@ -42,7 +42,6 @@ from ocs_ci.utility.utils import (
     load_config_file,
     create_stats_dir,
 )
-
 from ocs_ci.utility.memory import (
     get_consumed_ram,
     start_monitor_memory,
@@ -282,6 +281,13 @@ def pytest_addoption(parser):
             "Runs in development mode. It skips few checks like collecting "
             "versions, collecting logs, etc"
         ),
+    )
+    parser.addoption(
+        "--log-all",
+        dest="log_all",
+        action="store_true",
+        default=False,
+        help=("Print all logs to console output without filtering test only logs."),
     )
     parser.addoption(
         "--ceph-debug",
@@ -527,7 +533,9 @@ def process_cluster_cli_params(config):
         config, "live_deploy", default=False
     ) or ocsci_config.DEPLOYMENT.get("live_deployment", False)
     ocsci_config.DEPLOYMENT["live_deployment"] = live_deployment
-
+    log_all = get_cli_param(config, "log_all")
+    if log_all:
+        ocsci_config.REPORTING["log_all"] = True
     io_in_bg = get_cli_param(config, "io_in_bg")
     if io_in_bg:
         ocsci_config.RUN["io_in_bg"] = True
