@@ -36,6 +36,7 @@ from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
+    change_expiration_query_interval,
 )
 from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
 from ocs_ci.ocs.exceptions import (
@@ -94,7 +95,7 @@ from ocs_ci.ocs.resources.pod import (
     verify_data_integrity_for_multi_pvc_objs,
     get_noobaa_pods,
     get_pod_count,
-    wait_for_pods_by_label_count,
+    get_noobaa_core_pod, wait_for_pods_by_label_count,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -7131,7 +7132,6 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
 
     return factory
 
-
 @pytest.fixture()
 def reset_conn_score():
     """
@@ -7296,3 +7296,25 @@ def override_default_backingstore_fixture(
 
     request.addfinalizer(finalizer)
     return _override_nb_default_backingstore_implementation
+
+def change_noobaa_lifecycle_interval(request):
+    nb_core_pod = get_noobaa_core_pod()
+    env_var = "CONFIG_JS_LIFECYCLE_INTERVAL"
+
+    def factory(interval):
+        change_expiration_query_interval(new_interval=interval)
+
+    def finalizer():
+        params = f'[{{"op": "remove", "path": "/spec/template/spec/containers/0/env/name:{env_var}"}}]'
+        OCP(kind="statefulset", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=params,
+            format_type="json",
+        )
+        nb_core_pod.delete()
+        wait_for_pods_to_be_running(pod_names=[nb_core_pod.name], timeout=300)
+        log.info("Switched back to default lifecycle interval")
+
+    request.addfinalizer(finalizer)
+    return factory
+

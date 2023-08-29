@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import boto3
 from botocore.handlers import disable_signing
-
+from datetime import date
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
@@ -24,6 +24,7 @@ from ocs_ci.utility.utils import (
     exec_nb_db_query,
 )
 from ocs_ci.helpers.helpers import create_resource
+
 
 logger = logging.getLogger(__name__)
 
@@ -2175,6 +2176,45 @@ def create_aws_bs_using_cli(
     )
 
 
+def upload_bulk_buckets(s3_obj, buckets, object_key="obj-key-0", prefix=None):
+    """
+    Upload object to the buckets
+    """
+    for bucket in buckets:
+        s3_put_object(s3_obj, bucket.name, f"{prefix}/{object_key}", object_key)
+
+
+def change_expiration_query_interval(new_interval):
+    """
+    Change how often noobaa should check for object expiration
+    By default it will be 8 hours
+
+    Args:
+        new_interval (int): New interval in minutes
+
+    """
+
+    from ocs_ci.ocs.resources.pod import (
+        get_noobaa_core_pod,
+        wait_for_pods_to_be_running,
+    )
+
+    nb_core_pod = get_noobaa_core_pod()
+    new_interval = new_interval * 60 * 1000
+    params = (
+        '[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", '
+        f'"value": {{ "name": "CONFIG_JS_LIFECYCLE_INTERVAL", "value": "{new_interval}" }}}}]'
+    )
+    OCP(kind="statefulset", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).patch(
+        resource_name=constants.NOOBAA_CORE_STATEFULSET,
+        params=params,
+        format_type="json",
+    )
+    logger.info(f"Updated the expiration query interval to {new_interval} ms")
+    nb_core_pod.delete()
+    wait_for_pods_to_be_running(pod_names=[nb_core_pod.name], timeout=300)
+
+
 def change_objects_creation_date_in_noobaa_db(
     bucket_name, object_keys=[], new_creation_time=0
 ):
@@ -2204,7 +2244,6 @@ def change_objects_creation_date_in_noobaa_db(
     if object_keys:
         psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
     psql_query += ";"
-
     exec_nb_db_query(psql_query)
 
 
@@ -2542,3 +2581,4 @@ def delete_object_tags(
             ),
             out_yaml_format=False,
         )
+

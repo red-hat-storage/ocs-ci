@@ -972,6 +972,28 @@ def get_noobaa_core_pod():
     return noobaa_core_pod
 
 
+def get_noobaa_db_pod():
+    """
+    Get noobaa db pod obj
+
+    Returns:
+        Pod object: Noobaa db pod object
+
+    """
+    if version.get_semantic_ocs_version_from_config() > version.VERSION_4_6:
+        nb_db = get_pods_having_label(
+            label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+    else:
+        nb_db = get_pods_having_label(
+            label=constants.NOOBAA_DB_LABEL_46_AND_UNDER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+    nb_db_pod = Pod(**nb_db[0])
+    return nb_db_pod
+
+
 def get_noobaa_endpoint_pods():
     """
     Fetches noobaa endpoint pod details

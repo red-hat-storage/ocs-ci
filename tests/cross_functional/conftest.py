@@ -1297,3 +1297,9 @@ def setup_mcg_bg_features(
         return feature_setup_map
 
     return factory
+
+def multi_obc_setup_factory(request, bucket_factory, mcg_obj):
+
+    from tests.e2e.helpers import multi_obc_factory
+
+    return multi_obc_factory(bucket_factory, mcg_obj)
