@@ -153,8 +153,8 @@ class WorkloadUi(metaclass=SingletonMeta):
             sample = TimeoutSampler(
                 timeout=timeout, sleep=1, func=busy_box_ocp_inst.get
             )
-            for sample in sample:
-                if sample.get("spec").get("replicas") > 0:
+            for busy_box_data in sample:
+                if busy_box_data.get("spec").get("replicas") > 0:
                     logger.info(f"deployment '{depl_name}' " f"successfully deployed")
                     return True
         except TimeoutExpiredError:
