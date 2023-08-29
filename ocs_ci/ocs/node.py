@@ -390,7 +390,7 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
 
 
 def add_new_node_and_label_upi(
-    node_type, num_nodes, mark_for_ocs_label=True, node_conf=None
+    node_type, num_nodes, mark_for_ocs_label=True, node_conf=None, other_labels=None
 ):
     """
     Add a new node for aws/vmware upi platform and label it
@@ -430,11 +430,15 @@ def add_new_node_and_label_upi(
         set_selinux_permissions(workers=new_spun_nodes)
 
     if mark_for_ocs_label:
+        if other_labels is not None and isinstance(other_labels, list):
+            other_labels.append(constants.OPERATOR_NODE_LABEL)
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
-            node_obj.add_label(
-                resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
-            )
+            for label in other_labels:
+                node_obj.add_label(
+                    resource_name=new_spun_node,
+                    label=label,
+                )
             log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
     return new_spun_nodes
 
@@ -1610,7 +1614,7 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=600):
         return None
 
 
-def add_disk_to_node(node_obj, disk_size=None):
+def add_disk_to_node(node_obj, disk_size=None, num_of_disk=1):
     """
     Add a new disk to a node
 
@@ -1618,6 +1622,7 @@ def add_disk_to_node(node_obj, disk_size=None):
         node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
         disk_size (int): The size of the new disk to attach. If not specified,
             the disk size will be equal to the size of the previous disk.
+        num_of_disk (int): Number of disks to add
 
     """
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
@@ -1628,8 +1633,8 @@ def add_disk_to_node(node_obj, disk_size=None):
     if not disk_size:
         pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
         disk_size = get_pv_size(pv_objs[-1])
-
-    node_util.create_and_attach_volume(node=node_obj, size=disk_size)
+    for i in range(num_of_disk):
+        node_util.create_and_attach_volume(node=node_obj, size=disk_size)
 
 
 def verify_all_nodes_created():
@@ -1744,6 +1749,8 @@ def add_new_nodes_and_label_upi_lso(
     node_conf=None,
     add_disks=True,
     add_nodes_to_lvs_and_lvd=True,
+    num_of_disk=None,
+    other_labels=None,
 ):
     """
     Add a new node for aws/vmware upi lso platform and label it
@@ -1762,13 +1769,13 @@ def add_new_nodes_and_label_upi_lso(
 
     """
     new_node_names = add_new_node_and_label_upi(
-        node_type, num_nodes, mark_for_ocs_label, node_conf
+        node_type, num_nodes, mark_for_ocs_label, node_conf, other_labels=other_labels
     )
     new_nodes = get_node_objs(new_node_names)
 
     if add_disks:
         for node_obj in new_nodes:
-            add_disk_to_node(node_obj)
+            add_disk_to_node(node_obj, num_of_disk=num_of_disk)
 
     if add_nodes_to_lvs_and_lvd:
         for node_obj in new_nodes:
@@ -2833,3 +2840,16 @@ def is_node_rack_or_zone_exist(failure_domain, node_name):
     """
     node_obj = get_node_objs([node_name])[0]
     return get_node_rack_or_zone(failure_domain, node_obj) is not None
+
+
+def get_nodes_having_label(label):
+    """
+    Gets nodes with particular label
+    Args:
+        label (str): Label
+    Return:
+        Dict representing nodes info
+    """
+    ocp_node_obj = OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get("items")
+    return nodes

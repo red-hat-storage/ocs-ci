@@ -270,6 +270,7 @@ class VMWareNodes(NodesBase):
             list: vSphere volumes
 
         """
+        logger.info(f"Pvs: {pvs}")
         if not pvs:
             pvs = get_deviceset_pvs()
         return [

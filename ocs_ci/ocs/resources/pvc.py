@@ -417,6 +417,7 @@ def get_deviceset_pvs():
 
     """
     deviceset_pvcs = get_deviceset_pvcs()
+    log.info(f"Device PVCs: {deviceset_pvcs}")
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
 
 

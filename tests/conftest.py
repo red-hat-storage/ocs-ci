@@ -19,6 +19,7 @@ from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
 
+from ocs_ci.ocs import machine as machine_utils
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -48,9 +49,18 @@ from ocs_ci.ocs.exceptions import (
     MissingSquadDecoratorError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
-from ocs_ci.ocs.node import get_node_objs, schedule_nodes
+from ocs_ci.ocs.node import (
+    get_node_objs,
+    schedule_nodes,
+    add_new_node_and_label_upi,
+    add_new_nodes_and_label_upi_lso,
+    taint_nodes,
+    add_new_node_and_label_it,
+    get_worker_nodes,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -6914,3 +6924,113 @@ def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_fact
     )
 
     return logwriter_sts
+
+
+@pytest.fixture()
+def add_nodes():
+    """
+    Test for adding worker nodes to the cluster while IOs
+    """
+
+    def factory(
+        ocs_nodes=False,
+        node_count=3,
+        taint_label=None,
+        num_of_disk=None,
+        other_labels=None,
+    ):
+        """
+        Args:
+            ocs_nodes (bool): True if new nodes are OCS, False otherwise
+            node_count (int): Number of nodes to be added
+            taint_label (str): Taint label to be added
+            num_of_disk (int): num of disk to add
+            other_labels (str): Option to add any other labels to the node
+        """
+
+        new_nodes = []
+        if config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
+            dt = config.ENV_DATA["deployment_type"]
+            if dt == "ipi":
+                machines = machine_utils.get_machinesets()
+                log.info(
+                    f"The worker nodes number before expansion {len(get_worker_nodes())}"
+                )
+                for machine in machines:
+                    new_nodes.append(
+                        add_new_node_and_label_it(machine, mark_for_ocs_label=ocs_nodes)
+                    )
+
+                log.info(
+                    f"The worker nodes number after expansion {len(get_worker_nodes())}"
+                )
+
+            else:
+                log.info(
+                    f"The worker nodes number before expansion {len(get_worker_nodes())}"
+                )
+                if config.ENV_DATA.get("rhel_workers"):
+                    node_type = constants.RHEL_OS
+                else:
+                    node_type = constants.RHCOS
+
+                new_nodes.append(
+                    add_new_node_and_label_upi(
+                        node_type, node_count, mark_for_ocs_label=ocs_nodes
+                    )
+                )
+                log.info(
+                    f"The worker nodes number after expansion {len(get_worker_nodes())}"
+                )
+
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            log.info(
+                f"The worker nodes number before expansion {len(get_worker_nodes())}"
+            )
+            dt = config.ENV_DATA["deployment_type"]
+            if dt == "ipi":
+                machines = machine_utils.get_machinesets()
+                for machine in machines:
+                    new_nodes.append(
+                        add_new_node_and_label_it(machine, mark_for_ocs_label=ocs_nodes)
+                    )
+
+            else:
+                if config.ENV_DATA.get("rhel_user"):
+                    node_type = constants.RHEL_OS
+                else:
+                    node_type = constants.RHCOS
+
+                if config.DEPLOYMENT.get("local_storage"):
+                    num_of_disk = (
+                        num_of_disk
+                        if num_of_disk is not None
+                        else get_deviceset_count()
+                    )
+                    new_nodes.append(
+                        add_new_nodes_and_label_upi_lso(
+                            node_type,
+                            node_count,
+                            mark_for_ocs_label=ocs_nodes,
+                            num_of_disk=num_of_disk,
+                            other_labels=other_labels,
+                        )
+                    )
+                else:
+                    new_nodes.append(
+                        add_new_node_and_label_upi(
+                            node_type, node_count, mark_for_ocs_label=ocs_nodes
+                        )
+                    )
+
+            log.info(
+                f"The worker nodes number after expansion {len(get_worker_nodes())}"
+            )
+
+        nodes = [node for sublist in new_nodes for node in sublist]
+
+        if taint_label:
+            taint_nodes(nodes=nodes, taint_label=taint_label), "Failed to taint nodes"
+        log.info(f"Successfully Tainted nodes {new_nodes} with {taint_label}")
+
+    return factory

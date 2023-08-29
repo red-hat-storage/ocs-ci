@@ -17,6 +17,8 @@ from ocs_ci.ocs.resources.pod import (
     run_osd_removal_job,
     verify_osd_removal_job_completed_successfully,
     delete_osd_removal_job,
+    get_osd_removal_pod_name,
+    get_pod_obj,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -32,6 +34,7 @@ def osd_device_replacement(nodes):
     """
     logger.info("Picking a PV which to be deleted from the platform side")
     osd_pvs = get_deviceset_pvs()
+    logger.info(f"Device set pvs: {osd_pvs}")
     osd_pv = random.choice(osd_pvs)
     osd_pv_name = osd_pv.name
     # get the claim name
@@ -40,7 +43,10 @@ def osd_device_replacement(nodes):
 
     # Get the backing volume name
     logger.info(f"Getting the backing volume name for PV {osd_pv_name}")
-    backing_volume = nodes.get_data_volumes(pvs=[osd_pv])[0]
+    # if cluster.is_lso_cluster():
+    backing_volume = osd_pv.get().get("spec").get("local").get("path")
+    # else:
+    #     backing_volume = nodes.get_data_volumes(pvs=[osd_pv])[0]
 
     # Get the corresponding PVC
     logger.info(f"Getting the corresponding PVC of PV {osd_pv_name}")
@@ -121,6 +127,10 @@ def osd_device_replacement(nodes):
     # Run ocs-osd-removal job
     osd_removal_job = run_osd_removal_job([osd_id])
     assert osd_removal_job, "ocs-osd-removal failed to create"
+    osd_removal_pod_obj = get_pod_obj(
+        get_osd_removal_pod_name(int(osd_id)),
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
     is_completed = verify_osd_removal_job_completed_successfully(osd_id)
     assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     logger.info("ocs-osd-removal-job completed successfully")
@@ -181,9 +191,11 @@ def osd_device_replacement(nodes):
 
     # Delete the OSD removal job
     logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
-    is_deleted = delete_osd_removal_job(osd_id)
+    is_deleted = delete_osd_removal_job(osd_id, dont_raise=True)
     assert is_deleted, "Failed to delete ocs-osd-removal-job"
     logger.info("ocs-osd-removal-job deleted successfully")
+    if osd_removal_pod_obj.get(dont_raise=True) is not None:
+        osd_removal_pod_obj.delete()
 
     timeout = 600
     # Wait for OSD PVC to get created and reach Bound state

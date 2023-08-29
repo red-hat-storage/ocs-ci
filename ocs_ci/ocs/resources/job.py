@@ -10,22 +10,26 @@ from ocs_ci.utility.utils import TimeoutIterator
 log = logging.getLogger(__name__)
 
 
-def get_job_obj(name, namespace=None):
+def get_job_obj(name, namespace=None, dont_raise=False, **kwargs):
     """
     Get OCS instance for job of given job name.
 
     Args:
         name (str): The name of the job
         namespace (str): The namespace to look in
-
+        dont_raise (bool): True if you dont want to
+            raise exception when job not found
     Returns:
         OCS: A job OCS instance
+        None: if dont_raise and no job is found
     """
     if namespace is None:
         namespace = config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
-    ocp_dict = ocp_obj.get(resource_name=name)
-    return OCS(**ocp_dict)
+    ocp_dict = ocp_obj.get(resource_name=name, dont_raise=dont_raise, **kwargs)
+    if ocp_dict is not None:
+        return OCS(**ocp_dict)
+    return None
 
 
 def get_all_jobs(namespace=None):

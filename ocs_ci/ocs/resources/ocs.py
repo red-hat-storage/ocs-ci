@@ -100,8 +100,10 @@ class OCS(object):
         self.__init__(**self.data)
         self.ocp.cluster_kubeconfig = cluster_kubeconfig
 
-    def get(self, out_yaml_format=True):
-        return self.ocp.get(resource_name=self.name, out_yaml_format=out_yaml_format)
+    def get(self, out_yaml_format=True, **kwargs):
+        return self.ocp.get(
+            resource_name=self.name, out_yaml_format=out_yaml_format, **kwargs
+        )
 
     def status(self):
         return self.ocp.get_resource(self.name, "STATUS")

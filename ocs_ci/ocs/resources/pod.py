@@ -2337,18 +2337,15 @@ def get_osd_removal_pod_name(osd_id, timeout=60):
         str: The osd removal pod name
 
     """
-    ocs_version_pattern_dict = {
-        "4.6": f"ocs-osd-removal-{osd_id}",
-        "4.7": "ocs-osd-removal-job",
-        "4.8": "ocs-osd-removal-",
-        "4.9": "ocs-osd-removal-job",
-        "4.10": "ocs-osd-removal-job",
-        "4.11": "ocs-osd-removal-job",
-        "4.12": "ocs-osd-removal-job",
-    }
 
-    ocs_version = config.ENV_DATA["ocs_version"]
-    pattern = ocs_version_pattern_dict.get(ocs_version)
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version > version.VERSION_4_6:
+        pattern = "ocs-osd-removal-job"
+    elif ocs_version == version.VERSION_4_7:
+        pattern = "ocs-osd-removal-"
+    else:
+        pattern = f"ocs-osd-removal-{osd_id}"
+
     if not pattern:
         logger.warning(
             f"ocs version {ocs_version} didn't match any of the known versions"
@@ -2550,12 +2547,14 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     return True
 
 
-def delete_osd_removal_job(osd_id):
+def delete_osd_removal_job(osd_id, dont_raise=False):
     """
     Delete the ocs-osd-removal job.
 
     Args:
         osd_id (str): The osd id
+        dont_raise (bool): True if you dont want to
+            raise exception when job not found
 
     Returns:
         bool: True, if the ocs-osd-removal job deleted successfully. False, otherwise
@@ -2568,8 +2567,13 @@ def delete_osd_removal_job(osd_id):
         job_name = f"ocs-osd-removal-{osd_id}"
 
     osd_removal_job = get_job_obj(
-        job_name, namespace=config.ENV_DATA["cluster_namespace"]
+        job_name, namespace=config.ENV_DATA["cluster_namespace"], dont_raise=dont_raise
     )
+
+    # check if the osd removal job is already deleted
+    if osd_removal_job is None:
+        return True
+
     osd_removal_job.delete()
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
