@@ -42,11 +42,15 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import fiojob
-from ocs_ci.ocs.cluster import CephCluster, get_percent_used_capacity
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    get_percent_used_capacity,
+    set_osd_op_complaint_time,
+    get_full_ratio_from_osd_dump,
+)
 from ocs_ci.ocs.fiojob import get_timeout
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.ocs.resources.pod import get_osd_pods, Pod
+from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.utility import prometheus
 from ocs_ci.utility.prometheus import PrometheusAPI
 
@@ -180,25 +184,6 @@ def test_workload_with_checksum_verify(
     logger.info("sha1sum output: %s", sha1sum_output)
 
 
-def get_mon_pod_by_pvc_name(pvc_name: str):
-    """
-    Function to get monitor pod by pvc_name label
-
-    Args:
-        pvc_name (str): name of the pvc the monitor pod is related to
-    """
-    mon_pod_ocp = (
-        ocp.OCP(
-            kind=constants.POD,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            selector=f"pvc_name={pvc_name}",
-        )
-        .get()
-        .get("items")[0]
-    )
-    return Pod(**mon_pod_ocp)
-
-
 class TestCephOSDSlowOps(object):
     @pytest.fixture(scope="function")
     def setup(self, request, pod_factory, multi_pvc_factory):
@@ -208,18 +193,15 @@ class TestCephOSDSlowOps(object):
         self.test_pass = None
         reduced_osd_complaint_time = 0.1
 
-        def set_osd_op_complaint_time(osd_op_complaint_time_val: float):
-            self.ct_pod = pod.get_ceph_tools_pod()
-            self.ct_pod.exec_ceph_cmd(
-                f"ceph config set osd osd_op_complaint_time {osd_op_complaint_time_val}"
-            )
-
         set_osd_op_complaint_time(reduced_osd_complaint_time)
 
         ceph_cluster = CephCluster()
 
-        # max possible cap to get CephOSDSlowOps is 90 %; alert should appear much earlier
-        pvc_size = ceph_cluster.get_ceph_free_capacity() * 0.90
+        self.full_osd_ratio = round(get_full_ratio_from_osd_dump(), 2)
+        self.full_osd_threshold = self.full_osd_ratio * 100
+
+        # max possible cap to reach CephOSDSlowOps is to fill storage up to threshold; alert should appear much earlier
+        pvc_size = ceph_cluster.get_ceph_free_capacity() * self.full_osd_ratio
 
         # assuming storageutilization speed reduced to less than 1, estimation timeout to fill the storage
         # will be reduced by number of osds. That should be more than enough to trigger an alert,
@@ -277,8 +259,9 @@ class TestCephOSDSlowOps(object):
         request.addfinalizer(finalizer)
 
     @tier3
+    @pytest.mark.polarion_id("OCS-5158")
     @blue_squad
-    def test_ceph_osd_low_ops_alert(self, setup):
+    def test_ceph_osd_slow_ops_alert(self, setup):
         """
         Test to verify bz #1966139, more info about Prometheus alert - #1885441
 
@@ -288,15 +271,15 @@ class TestCephOSDSlowOps(object):
 
         1. As precondition test setup is to reduce osd_op_complaint_time to 0.1 to prepare condition
         to get CephOSDSlowOps
-        2. Run workload_fio_storageutilization gradually filling up the storage up to 90% in a background
-        2.1 Validate the CephOSDSlowOps fired if so check an alert message and finish the test
-        2.2 If CephOSDSlowOps has not been fired while the storage filled up to 90% or time to fill up the storage ends
-        - fail the test
+        2. Run workload_fio_storageutilization gradually filling up the storage up to full_ratio % in a background
+        2.1 Validate the CephOSDSlowOps fired, if so check an alert message and finish the test
+        2.2 If CephOSDSlowOps has not been fired while the storage filled up to full_ratio % or time to fill up the
+        storage ends - fail the test
         """
 
         api = PrometheusAPI()
 
-        while get_percent_used_capacity() < 89:
+        while get_percent_used_capacity() < self.full_osd_threshold:
             time_passed_sec = time.perf_counter() - self.start_workload_time
             if time_passed_sec > self.timeout_sec:
                 pytest.fail("failed to fill the storage in calculated time")
@@ -308,7 +291,11 @@ class TestCephOSDSlowOps(object):
             alerts_response = api.get(
                 "alerts", payload={"silenced": False, "inhibited": False}
             )
-            assert alerts_response.ok is True, "got bad response from Prometheus"
+            if not alerts_response.ok:
+                logger.error(
+                    f"got bad response from Prometheus: {alerts_response.text}"
+                )
+                continue
             prometheus_alerts = alerts_response.json()["data"]["alerts"]
             logger.info(f"Prometheus Alerts: {prometheus_alerts}")
             for target_label, target_msg, target_states, target_severity in [
@@ -341,5 +328,5 @@ class TestCephOSDSlowOps(object):
         else:
             # if test got to this point, the alert was found, test PASS
             pytest.fail(
-                "failed to get 'CephOSDSlowOps' while workload filled up the storage to 90 percents"
+                f"failed to get 'CephOSDSlowOps' while workload filled up the storage to {self.full_osd_ratio} percents"
             )
