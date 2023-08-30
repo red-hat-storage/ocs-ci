@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 def measure_memory_usage():
     process = psutil.Process()
     memory_info = process.memory_info()
-    print(f"Memory used: {memory_info.rss / 1024 / 1024} MB")
+    log.info(f"Memory used: {memory_info.rss / 1024 / 1024} MB")
 
 
 @pytest.fixture(scope="class")
@@ -47,7 +47,7 @@ class TestDeleteObjects:
     def test_delete_objects(
         self,
         scale_noobaa_db_pod_pv_size,
-        scale_noobaa_resources_session,
+        scale_noobaa_pods_resources_session,
         bucket_factory,
         s3bench,
         mcg_obj,

@@ -7257,6 +7257,15 @@ def setup_logwriter_rbd_workload_factory(
 
     return logwriter_sts
 
+
+@pytest.fixture(scope="session")
+def scale_noobaa_pods_resources_session(request):
+    """
+    Session scoped fixture to scale the noobaa resources
+    """
+    return scale_noobaa_pods_resources()
+
+
 @pytest.fixture()
 def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
     """
@@ -7436,6 +7445,7 @@ def override_default_backingstore_fixture(
 
 @pytest.fixture(scope="session")
 def scale_noobaa_resources_session(request):
+
     """
     Session scoped fixture to scale noobaa resources
 
@@ -7479,17 +7489,6 @@ def scale_noobaa_resources(request):
     storagecluster_obj.patch(params=scale_noobaa_resources_param, format_type="merge")
     log.info("Scaled noobaa pod resources")
     time.sleep(60)
-
-    def finalizer():
-        params = (
-            '[{"op": "remove", "path": "/spec/multiCloudGateway"}, '
-            '{"op": "remove", "path": "/spec/resources/noobaa-core"}, '
-            '{"op": "remove", "path": "/spec/resources/noobaa-db"}, '
-            '{"op": "remove", "path": "/spec/resources/noobaa-endpoint"}]'
-        )
-        storagecluster_obj.patch(params=params, format_type="json")
-
-    request.addfinalizer(finalizer)
 
 
 @pytest.fixture(scope="function")
