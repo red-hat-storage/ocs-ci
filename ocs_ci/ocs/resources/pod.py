@@ -728,7 +728,8 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
 
     if (
         config.multicluster
-        and config.ENV_DATA.get("platform", "").lower() == constants.FUSIONAAS_PLATFORM
+        and config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
         and config.ENV_DATA.get("cluster_type", "").lower()
         == constants.MS_CONSUMER_TYPE
     ):
