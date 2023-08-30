@@ -31,6 +31,7 @@ from ocs_ci.ocs.node import (
     get_another_osd_node_in_same_rack_or_zone,
     get_node_pods,
     wait_for_nodes_racks_or_zones,
+    wait_for_nodes_status,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -341,7 +342,8 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
         nodes.start_nodes(nodes=[self.osd_worker_node], wait=True)
         log.info(f"Successfully powered on node: {self.osd_worker_node.name}")
-        wait_for_resource_state(new_osd, constants.STATUS_RUNNING, timeout=180)
+        wait_for_nodes_status(timeout=600)
+        wait_for_resource_state(new_osd, constants.STATUS_RUNNING, timeout=360)
         if additional_node:
             new_osd_node = get_pod_node(new_osd)
             assert (
