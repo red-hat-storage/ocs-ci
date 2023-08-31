@@ -20,6 +20,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
     DataFoundationTabBar,
 )
+from ocs_ci.ocs.ui.workload_ui import WorkloadUi
 from ocs_ci.utility.retry import retry
 
 
@@ -580,6 +581,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
         self.__topology_df: pd.DataFrame = pd.DataFrame()
         self.__topology_str: TopologyUiStr
         self.topology_helper = OdfTopologyHelper()
+        self.workload_ui = WorkloadUi()
 
     def read_all_topology(self):
         """
@@ -649,7 +651,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                   and the values are booleans indicating whether the deviation was detected or not.
         """
 
-        node_with_busybox = self.topology_helper.deploy_busybox()
+        node_with_busybox, _ = self.workload_ui.deploy_busybox()
         sleep_time = 30
         logger.info(f"give {sleep_time}sec to render on ODF Topology view")
         time.sleep(sleep_time)
@@ -761,6 +763,8 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
             if not sorted(deployments_names_list_cli) == sorted(
                 deployments_names_list_ui
             ):
+                self.take_screenshot()
+                self.copy_dom()
                 logger.error(
                     f"deployments of the node '{node_name}' from UI do not match deployments from CLI\n"
                     f"deployments_list_cli = '{sorted(deployments_names_list_cli)}'\n"
@@ -768,10 +772,12 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                 )
                 topology_deviation[f"{node_name}__deployments_not_equal"] = True
 
-            busybox_depl_name = self.topology_helper.get_busybox_depl_name()
+            busybox_depl_name = self.workload_ui.get_busybox_depl_name()
             if node_name == node_with_busybox and (
                 busybox_depl_name not in deployments_names_list_ui
             ):
+                self.take_screenshot()
+                self.copy_dom()
                 logger.error(
                     f"busybox deployment '{busybox_depl_name}' deployed on the node '{node_with_busybox}' "
                     f"during the test was not found in UI"
@@ -780,7 +786,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
             elif node_name == node_with_busybox and (
                 busybox_depl_name in deployments_names_list_ui
             ):
-                self.topology_helper.delete_busybox()
+                self.workload_ui.delete_busybox(busybox_depl_name)
                 sleep_time = 30
                 logger.info(
                     f"delete '{busybox_depl_name}' deployment from cluster, give {sleep_time}sec to update ODF "
@@ -803,15 +809,17 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                     self.zoom_out_view()
 
                 # check deployed during the test deployment is present
-                if deployment_topology.is_entity_present(busybox_depl_name):
+                if not deployment_topology.is_entity_present(busybox_depl_name):
                     logger.info(
                         f"Deployment '{busybox_depl_name}' was successfully removed from ODF Topology view"
                     )
                 else:
                     logger.error(
                         f"busybox deployment '{busybox_depl_name}' deployed on the node '{node_with_busybox}' "
-                        f"during the test was not rempoved from ODF Topology"
+                        f"during the test was not removed from ODF Topology"
                     )
+                    self.take_screenshot()
+                    self.copy_dom()
                     topology_deviation[f"{busybox_depl_name}__not_removed"] = True
                 deployment_topology.nav_back_main_topology_view()
         return topology_deviation
