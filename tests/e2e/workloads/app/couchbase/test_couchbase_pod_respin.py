@@ -14,7 +14,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 log = logging.getLogger(__name__)
 
 
-@skipif_ocp_version(">=4.12")
+@skipif_ocp_version(">=4.13")
 @workloads
 @ignore_leftovers
 class TestCouchBasePodRespin(E2ETest):
