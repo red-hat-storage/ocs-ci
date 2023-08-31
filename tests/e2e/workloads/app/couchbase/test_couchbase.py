@@ -19,7 +19,7 @@ def couchbase(request):
     return couchbase
 
 
-@skipif_ocp_version(">=4.12")
+@skipif_ocp_version(">=4.13")
 @workloads
 @pytest.mark.polarion_id("OCS-785")
 class TestCouchBaseWorkload(E2ETest):
