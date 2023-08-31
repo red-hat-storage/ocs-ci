@@ -11,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
 )
-from ocs_ci.framework.testlib import MCGTest, version
+from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
 
@@ -41,17 +41,6 @@ class TestObjectExpiration(MCGTest):
         bucket = bucket_factory()[0].name
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         obj_data = "Random data" + str(uuid.uuid4().hex)
-        # 4.10 dict to be removed once BZ 2091509 is fixed
-        expire_rule_4_10 = {
-            "Rules": [
-                {
-                    "Expiration": {"Days": 1, "ExpiredObjectDeleteMarker": False},
-                    "ID": "data-expire",
-                    "Prefix": "",
-                    "Status": "Enabled",
-                }
-            ]
-        }
         expire_rule = {
             "Rules": [
                 {
@@ -64,14 +53,9 @@ class TestObjectExpiration(MCGTest):
         }
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
-        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_11:
-            mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-                Bucket=bucket, LifecycleConfiguration=expire_rule_4_10
-            )
-        else:
-            mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-                Bucket=bucket, LifecycleConfiguration=expire_rule
-            )
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=expire_rule
+        )
 
         logger.info(f"Getting object expiration configuration from bucket: {bucket}")
         logger.info(
