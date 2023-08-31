@@ -586,14 +586,14 @@ class AWSNodes(NodesBase):
         assert nodes, f"Failed to find the OCS object for EC2 instance {instance_id}"
         return nodes[0]
 
-    def stop_nodes(self, nodes, wait=True):
+    def stop_nodes(self, nodes, wait=True, force=False):
         """
         Stop EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to stop, False otherwise
-
+            force (bool): True for force stopping the instances, False otherwise
 
         """
 
@@ -601,7 +601,7 @@ class AWSNodes(NodesBase):
         assert (
             instances
         ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
-        self.aws.stop_ec2_instances(instances=instances, wait=wait)
+        self.aws.stop_ec2_instances(instances=instances, wait=wait, force=force)
 
     def start_nodes(self, instances=None, nodes=None, wait=True):
         """
