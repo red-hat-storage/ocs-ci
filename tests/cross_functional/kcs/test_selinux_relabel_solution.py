@@ -225,7 +225,8 @@ class TestSelinuxrelabel(E2ETest):
         # Get random files
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         num_of_files = random.randint(3, 9)
-        random_files = res_pod.exec_oc_cmd(
+        ocp_obj = ocp.OCP(kind=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        random_files = ocp_obj.exec_oc_cmd(
             f"exec -it {pod_obj.name} -- /bin/bash"
             f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
             timeout=300,
@@ -366,6 +367,7 @@ class TestSelinuxrelabel(E2ETest):
         service_account_factory,
         storageclass_factory,
         copies,
+        teardown_factory,
     ):
         """
         Steps:
@@ -401,6 +403,7 @@ class TestSelinuxrelabel(E2ETest):
             size="20",
         )
         log.info(f"PVC {self.pvc_obj.name} created")
+        teardown_factory(self.pvc_obj)
 
         # Create service_account to get privilege for deployment pods
         self.service_account_obj = service_account_factory(
