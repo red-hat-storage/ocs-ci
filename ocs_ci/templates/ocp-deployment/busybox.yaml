@@ -4,7 +4,7 @@ kind: Deployment
 metadata:
   annotations:
     deployment.kubernetes.io/revision: '1'
-  name: test-deployment-topology-test
+  name: busybox-ui-test
   namespace: {}
 spec:
   selector:
@@ -18,5 +18,5 @@ spec:
       nodeName: {}
       containers:
         - name: busybox
-          image: busybox
+          image: quay.io/quay/busybox
           command: ["sleep", "360000"]

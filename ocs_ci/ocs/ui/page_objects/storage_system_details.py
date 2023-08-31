@@ -52,6 +52,10 @@ class StorageSystemDetails(StorageSystemTab):
         else:
             self.do_click(self.validation_loc["blockandfile"], enable_screenshot=True)
 
+        from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
+
+        return BlockAndFile()
+
     def nav_cephblockpool_verify_statusready(self):
         """
         Initial page - Data Foundation / Storage Systems tab / StorageSystem details

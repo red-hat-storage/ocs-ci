@@ -633,3 +633,7 @@ class ArchitectureNotSupported(Exception):
 
 class PDBNotCreatedException(Exception):
     pass
+
+
+class UnableUpgradeConnectionException(Exception):
+    pass

@@ -2258,3 +2258,28 @@ NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
 NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
     f"{ARBITER_ZONE}{DATA_ZONE_1}-{DATA_ZONE_1}{DATA_ZONE_2}"
 )
+
+# prometheus metrics queries
+PVC_NAMESPACES_BY_USED = (
+    "sum by (namespace, persistentvolumeclaim) "
+    "(kubelet_volume_stats_used_bytes{namespace='${namespace}'} * "
+    "on (namespace, persistentvolumeclaim) "
+    "group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * on (storageclass) "
+    "group_left(provisioner) kube_storageclass_info "
+    "{provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))"
+)
+STORAGE_CLASSES_BY_USED = (
+    "sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
+    "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
+    "on (storageclass) group_left(provisioner) "
+    "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
+    "by (storageclass, provisioner)"
+)
+PODS_BY_USED = (
+    "sum by(namespace,pod) (((max by(namespace,persistentvolumeclaim) (kubelet_volume_stats_used_bytes)) * "
+    "on (namespace,persistentvolumeclaim) group_right() ((kube_running_pod_ready*0+1) * "
+    "on(namespace, pod)  group_right() kube_pod_spec_volumes_persistentvolumeclaims_info)) * "
+    "on(namespace,persistentvolumeclaim) group_left(provisioner) (kube_persistentvolumeclaim_info * "
+    "on (storageclass)  group_left(provisioner) "
+    "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))"
+)

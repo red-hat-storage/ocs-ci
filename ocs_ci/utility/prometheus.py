@@ -361,6 +361,7 @@ class PrometheusAPI(object):
             kind=constants.ROUTE,
             namespace=defaults.OCS_MONITORING_NAMESPACE,
             threading_lock=self._threading_lock,
+            cluster_kubeconfig=os.getenv("KUBECONFIG"),
         )
         kubeconfig = os.getenv("KUBECONFIG")
         kube_data = ""
@@ -413,7 +414,7 @@ class PrometheusAPI(object):
                 get available if it is not available
 
         Returns:
-            dict: Response from Prometheus alerts api
+            requests.models.Response: Response from Prometheus alerts api
         """
         pattern = f"/api/v1/{resource}"
         headers = {"Authorization": f"Bearer {self._token}"}
