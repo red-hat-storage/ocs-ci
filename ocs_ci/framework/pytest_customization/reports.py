@@ -4,6 +4,7 @@ import logging
 from py.xml import html
 from ocs_ci.utility.utils import email_reports, save_reports
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.framework import globalVariables as globalVariables
 
 
 @pytest.mark.optionalhook
@@ -80,7 +81,7 @@ def pytest_sessionfinish(session, exitstatus):
         email_reports(session)
 
     # creating report of test cases with total time in ascending order
-    data = ocsci_config.TIMEREPORT_DICT
+    data = globalVariables.TIMEREPORT_DICT
     sorted_data = dict(sorted(data.items(), key=lambda item: item[1]["total"]))
     with open("time_report.txt", "a") as f:
         f.write("testName\tsetup\tcall\tteardown\ttotal\n")
@@ -103,23 +104,29 @@ def pytest_report_teststatus(report, config):
     call : when the test case is run
     teardown: when the teardown of the test case happens.
     """
-    ocsci_config.TIMEREPORT_DICT[report.nodeid] = ocsci_config.TIMEREPORT_DICT.get(
-        report.nodeid, {}
-    )
+    globalVariables.TIMEREPORT_DICT[
+        report.nodeid
+    ] = globalVariables.TIMEREPORT_DICT.get(report.nodeid, {})
 
     if report.when == "setup":
         print(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
-        ocsci_config.TIMEREPORT_DICT[report.nodeid]["setup"] = round(report.duration, 2)
-        ocsci_config.TIMEREPORT_DICT[report.nodeid]["total"] = round(report.duration, 2)
+        globalVariables.TIMEREPORT_DICT[report.nodeid]["setup"] = round(
+            report.duration, 2
+        )
+        globalVariables.TIMEREPORT_DICT[report.nodeid]["total"] = round(
+            report.duration, 2
+        )
 
     if report.when == "call":
         print(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
-        ocsci_config.TIMEREPORT_DICT[report.nodeid]["call"] = round(report.duration, 2)
-        ocsci_config.TIMEREPORT_DICT[report.nodeid]["total"] += round(
+        globalVariables.TIMEREPORT_DICT[report.nodeid]["call"] = round(
+            report.duration, 2
+        )
+        globalVariables.TIMEREPORT_DICT[report.nodeid]["total"] += round(
             report.duration, 2
         )
 
@@ -127,9 +134,9 @@ def pytest_report_teststatus(report, config):
         print(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
-        ocsci_config.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(
+        globalVariables.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(
             report.duration, 2
         )
-        ocsci_config.TIMEREPORT_DICT[report.nodeid]["total"] += round(
+        globalVariables.TIMEREPORT_DICT[report.nodeid]["total"] += round(
             report.duration, 2
         )
