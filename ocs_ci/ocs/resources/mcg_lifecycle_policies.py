@@ -18,8 +18,11 @@ class LifecycleConfig:
         """
         self._rules = rules or []
 
+    def to_dict(self):
+        return {"Rules": [rule._policy_dict for rule in self._rules]}
+
     def __str__(self):
-        return {"Rules": [str(rule) for rule in self._rules]}
+        return self.to_dict().__str__()
 
 
 class LifecycleRule(ABC):
