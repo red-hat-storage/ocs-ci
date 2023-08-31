@@ -78,3 +78,58 @@ def pytest_sessionfinish(session, exitstatus):
         save_reports()
     if ocsci_config.RUN["cli_params"].get("email"):
         email_reports(session)
+
+    # creating report of test cases with total time in ascending order
+    data = ocsci_config.TIMEREPORT_DICT
+    sorted_data = dict(sorted(data.items(), key=lambda item: item[1]["total"]))
+    with open("time_report.txt", "a") as f:
+        f.write("testName\tsetup\tcall\tteardown\ttotal\n")
+        for test, values in sorted_data.items():
+            row = (
+                f"{test}\t{values.get('setup', 'NA')}\t"
+                f"{values.get('call', 'NA')}\t"
+                f"{values.get('teardown', 'NA')}\t"
+                f"{values.get('total', 'NA'):.2f}\n"
+            )
+            f.write(row)
+
+
+def pytest_report_teststatus(report, config):
+    """
+    This function checks the status of the test at which stage it is at an calculates
+    the time take by each stage to complete it.
+    There are three stages:
+    setup : when the test case is setup
+    call : when the test case is run
+    teardown: when the teardown of the test case happens.
+    """
+    ocsci_config.TIMEREPORT_DICT[report.nodeid] = ocsci_config.TIMEREPORT_DICT.get(
+        report.nodeid, {}
+    )
+
+    if report.when == "setup":
+        print(
+            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+        )
+        ocsci_config.TIMEREPORT_DICT[report.nodeid]["setup"] = round(report.duration, 2)
+        ocsci_config.TIMEREPORT_DICT[report.nodeid]["total"] = round(report.duration, 2)
+
+    if report.when == "call":
+        print(
+            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+        )
+        ocsci_config.TIMEREPORT_DICT[report.nodeid]["call"] = round(report.duration, 2)
+        ocsci_config.TIMEREPORT_DICT[report.nodeid]["total"] += round(
+            report.duration, 2
+        )
+
+    if report.when == "teardown":
+        print(
+            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+        )
+        ocsci_config.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(
+            report.duration, 2
+        )
+        ocsci_config.TIMEREPORT_DICT[report.nodeid]["total"] += round(
+            report.duration, 2
+        )

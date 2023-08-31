@@ -36,6 +36,8 @@ class Config:
     COMPONENTS: dict = field(default_factory=dict)
     # Used for multicluster only
     MULTICLUSTER: dict = field(default_factory=dict)
+    # Test time report
+    TIMEREPORT_DICT: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
