@@ -107,6 +107,22 @@ class BlockAndFile(StorageSystemDetails):
         return card_to_size
 
     def check_pvc_to_namespace_ui_card(self, namespace, check_name: str):
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / ocs-storagecluster-cephblockpool
+
+        Method to check that the pvc's from the UI are the same as the expected pvc's.
+        For each pvc, initially added, filled and saved in PvcCapacityDeploymentList the method checks
+        that the pvc is displayed in the UI, and the value under each PVC name matches to expected.
+
+        Important that the method is called after the pvc's are created and filled in PvcCapacityDeploymentList.
+
+        Args:
+            namespace (str): Namespace name to select
+            check_name (str): Name of the check to be displayed in the report
+
+        Returns:
+            dict: Dictionary of the check results or None if all checks passed
+        """
         self.select_capacity_resource("PersistentVolumeClaims", namespace)
         pvc_to_size_dict = self.read_capacity_breakdown()
         self.take_screenshot()

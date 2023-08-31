@@ -336,21 +336,11 @@ def get_pvc_namespace_metrics():
     # use get_prometheus_response to store the response text to a dict
     pvc_namespace["PVC_NAMESPACES_BY_USED"] = get_prometheus_response(
         api,
-        "sum by (namespace, persistentvolumeclaim) "
-        "(kubelet_volume_stats_used_bytes{namespace='${namespace}'} * "
-        "on (namespace, persistentvolumeclaim) "
-        "group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * on (storageclass) "
-        "group_left(provisioner) kube_storageclass_info "
-        "{provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))",
+        constants.PVC_NAMESPACES_BY_USED,
     )
     pvc_namespace["PVC_NAMESPACES_TOTAL_USED"] = get_prometheus_response(
         api,
-        "sum(sum by (namespace, persistentvolumeclaim) "
-        "(kubelet_volume_stats_used_bytes{namespace='${namespace}'} * "
-        "on (namespace, persistentvolumeclaim) "
-        "group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * on (storageclass) "
-        "group_left(provisioner) kube_storageclass_info "
-        "{provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})))",
+        f"sum({constants.PVC_NAMESPACES_BY_USED})",
     )
 
     # convert the values from string to dict
@@ -391,38 +381,16 @@ def get_ceph_capacity_metrics():
         "by (namespace))",
     )
     ceph_capacity["STORAGE_CLASSES_BY_USED"] = get_prometheus_response(
-        api,
-        "sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
-        "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
-        "on (storageclass) group_left(provisioner) "
-        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
-        "by (storageclass, provisioner)",
+        api, constants.STORAGE_CLASSES_BY_USED
     )
     ceph_capacity["STORAGE_CLASSES_TOTAL_USED"] = get_prometheus_response(
         api,
-        "sum(sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
-        "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
-        "on (storageclass) group_left(provisioner) "
-        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
-        "by (storageclass, provisioner))",
+        f"sum({constants.STORAGE_CLASSES_BY_USED})",
     )
-    ceph_capacity["PODS_BY_USED"] = get_prometheus_response(
-        api,
-        "sum by(namespace,pod) (((max by(namespace,persistentvolumeclaim) (kubelet_volume_stats_used_bytes)) * "
-        "on (namespace,persistentvolumeclaim) group_right() ((kube_running_pod_ready*0+1) * "
-        "on(namespace, pod)  group_right() kube_pod_spec_volumes_persistentvolumeclaims_info)) * "
-        "on(namespace,persistentvolumeclaim) group_left(provisioner) (kube_persistentvolumeclaim_info * "
-        "on (storageclass)  group_left(provisioner) "
-        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))",
-    )
+    ceph_capacity["PODS_BY_USED"] = get_prometheus_response(api, constants.PODS_BY_USED)
     ceph_capacity["PODS_TOTAL_USED"] = get_prometheus_response(
         api,
-        "sum(sum by(namespace,pod) (((max by(namespace,persistentvolumeclaim) (kubelet_volume_stats_used_bytes)) * "
-        "on (namespace,persistentvolumeclaim) group_right() ((kube_running_pod_ready*0+1) * "
-        "on(namespace, pod)  group_right() kube_pod_spec_volumes_persistentvolumeclaims_info)) * "
-        "on(namespace,persistentvolumeclaim) group_left(provisioner) (kube_persistentvolumeclaim_info * "
-        "on (storageclass)  group_left(provisioner) "
-        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})))",
+        f"sum({constants.PODS_BY_USED})",
     )
     ceph_capacity["CEPH_CAPACITY_TOTAL"] = get_prometheus_response(
         api, "ceph_cluster_total_bytes"
