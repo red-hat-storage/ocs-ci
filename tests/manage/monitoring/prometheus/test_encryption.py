@@ -25,7 +25,9 @@ def test_kms_unavailable(measure_rewrite_kms_endpoint):
     # get alerts from time when manager deployment was scaled down
     alerts = measure_rewrite_kms_endpoint.get("prometheus_alerts")
     target_label = constants.ALERT_KMSSERVERCONNECTIONALERT
-    target_msg = "Storage Cluster KMS Server is in un-connected state for more than 5s. Please check KMS config."
+    target_msg = (
+        "Storage Cluster KMS Server is in un-connected state. Please check KMS config."
+    )
     states = ["pending", "firing"]
 
     prometheus.check_alert_list(
