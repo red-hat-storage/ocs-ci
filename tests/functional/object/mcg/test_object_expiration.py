@@ -19,6 +19,7 @@ from ocs_ci.ocs.bucket_utils import (
     change_objects_creation_date,
     s3_put_object,
     s3_get_object,
+    write_random_test_objects_to_bucket,
     write_random_test_objects_to_s3_path,
     wait_for_object_count_in_bucket,
 )
@@ -47,6 +48,7 @@ class TestObjectExpiration(MCGTest):
             [(constants.LIFECYCLE_INTERVAL_PARAM, new_interval_in_miliseconds)]
         )
 
+    @tier1
     def test_object_expiration(
         self, mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
     ):
@@ -56,8 +58,9 @@ class TestObjectExpiration(MCGTest):
         1. Set S3 expiration policy on an MCG bucket
         2. Upload random objects under a prefix that is set to expire
         3. Upload random objects under a prefix that is not set to expire
-        4. Wait and verify the deletion of the objects that were set to expire
-        5. Verify that objects that were not set to expire were not deleted
+        4. Manually expire the objects under the prefix that is set to expire
+        5. Wait and verify the deletion of the objects that were set to expire
+        6. Verify that objects that were not set to expire were not deleted
 
         """
 
@@ -88,6 +91,8 @@ class TestObjectExpiration(MCGTest):
         objs_to_expire = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {test_directory_setup.origin_dir}"
         ).split(" ")
+
+        # 3. Upload random objects under a prefix that is not set to expire
         logger.info("Uploading random objects to the bucket for non-expiration")
         write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
@@ -97,6 +102,7 @@ class TestObjectExpiration(MCGTest):
             mcg_obj=mcg_obj,
         )
 
+        # 4. Manually expire the objects under the prefix that is set to expire
         logger.info(
             "Manually expiring the objects by setting back their creation date to 1 year ago"
         )
@@ -109,6 +115,7 @@ class TestObjectExpiration(MCGTest):
         objs_to_expire = objs_to_expire[1:]
         change_objects_creation_date(bucket, objs_to_expire, new_creation_date)
 
+        # 5. Wait and verify the deletion of the objects that were set to expire
         logger.info(f"Waiting for the expiration of s3://{bucket}/to_expire/")
         assert wait_for_object_count_in_bucket(
             io_pod=awscli_pod_session,
@@ -120,6 +127,7 @@ class TestObjectExpiration(MCGTest):
             sleep=30,
         ), "Objects were not expired in time!"
 
+        # 6. Verify that objects that were not set to expire were not deleted
         logger.info(f"Verifying that s3://{bucket}/not-to-expire/ still exists")
         assert wait_for_object_count_in_bucket(
             io_pod=awscli_pod_session,
@@ -129,6 +137,75 @@ class TestObjectExpiration(MCGTest):
             s3_obj=mcg_obj,
             timeout=60,
             sleep=10,
+        ), "Objects were expired when they shouldn't have been!"
+
+    @tier1
+    def test_disabled_object_expiration(
+        self, mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
+    ):
+        """
+        Test that objects are not deleted when expiration is disabled
+
+        1. Set S3 expiration policy on an MCG bucket
+        2. Edit the expiration policy to disable it
+        3. Upload random objects
+        4. Expire the objects manually
+        5. Wait and verify that the objects were not deleted
+
+        """
+        objects_amount = 3
+
+        # 1. Set S3 expiration policy on an MCG bucket
+        logger.info("Creating S3 bucket")
+        bucket = bucket_factory()[0].name
+
+        logger.info(f"Setting object expiration on bucket: {bucket}")
+        lifecycle_config = LifecycleConfig(
+            rules=[ExpirationRule(days=1, prefix="to_expire/")]
+        )
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=lifecycle_config.to_dict()
+        )
+
+        # 2. Edit the expiration policy to disable it
+        logger.info("Disabling the expiration policy")
+        lifecycle_config.rules[0].status = "Disabled"
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=lifecycle_config.to_dict()
+        )
+
+        # 3. Upload random objects
+        logger.info("Uploading random objects to the bucket for expiration")
+        write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            bucket_to_write=bucket,
+            file_dir=test_directory_setup.origin_dir,
+            amount=objects_amount,
+            mcg_obj=mcg_obj,
+        )
+
+        # 4. Expire the objects manually
+        logger.info(
+            "Manually expiring the objects by setting back their creation date to 1 year ago"
+        )
+        new_creation_date = int(
+            (datetime.datetime.now() - datetime.timedelta(days=365)).timestamp()
+        )
+        objs_to_expire = awscli_pod_session.exec_cmd_on_pod(
+            f"ls -A1 {test_directory_setup.origin_dir}"
+        ).split(" ")
+        objs_to_expire = ["to_expire/" + obj for obj in objs_to_expire]
+        change_objects_creation_date(bucket, objs_to_expire, new_creation_date)
+
+        # 5. Wait and verify that the objects were not deleted
+        logger.info("Verifying that the uploaded objects still exists")
+        assert not wait_for_object_count_in_bucket(
+            io_pod=awscli_pod_session,
+            expected_count=0,
+            bucket_name=bucket,
+            s3_obj=mcg_obj,
+            timeout=300,
+            sleep=30,
         ), "Objects were expired when they shouldn't have been!"
 
     @skipif_ocs_version("<4.10")

@@ -16,10 +16,10 @@ class LifecycleConfig:
             rules (list): List of LifecycleRule objects
 
         """
-        self._rules = rules or []
+        self.rules = rules or []
 
     def to_dict(self):
-        return {"Rules": [rule._policy_dict for rule in self._rules]}
+        return {"Rules": [rule._policy_dict for rule in self.rules]}
 
     def __str__(self):
         return self.to_dict().__str__()
@@ -65,6 +65,10 @@ class LifecycleRule(ABC):
     @property
     def status(self):
         return self._policy_dict["Status"]
+
+    @status.setter
+    def status(self, status):
+        self._policy_dict["Status"] = status
 
 
 class ExpirationRule(LifecycleRule):
