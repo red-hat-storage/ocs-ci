@@ -18,26 +18,15 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @acceptance
-@skipif_ocs_version("<4.6")
-@skipif_ocp_version("<4.6")
-@pytest.mark.parametrize(
-    argnames=["interface_type"],
-    argvalues=[
-        pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2284")
-        ),
-        pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-256")
-        ),
-    ],
-)
+@skipif_ocs_version("<4.9")
+@skipif_ocp_version("<4.9")
 class TestClone(ManageTest):
     """
     Tests to verify PVC to PVC clone feature
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, interface_type, pvc_factory, pod_factory):
+    def setup(self, interface_type, pvc_factory, pod_factory, pod_dict_path):
         """
         create resources for the test
 
@@ -52,9 +41,23 @@ class TestClone(ManageTest):
             interface=interface_type, size=1, status=constants.STATUS_BOUND
         )
         self.pod_obj = pod_factory(
-            interface=interface_type, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
+            interface=interface_type,
+            pvc=self.pvc_obj,
+            status=constants.STATUS_RUNNING,
+            pod_dict_path=pod_dict_path,
         )
 
+    @pytest.mark.parametrize(
+        argnames=["interface_type", "pod_dict_path"],
+        argvalues=[
+            pytest.param(
+                constants.CEPHBLOCKPOOL, None, marks=pytest.mark.polarion_id("OCS-2284")
+            ),
+            pytest.param(
+                constants.CEPHFILESYSTEM, None, marks=pytest.mark.polarion_id("OCS-256")
+            ),
+        ],
+    )
     def test_pvc_to_pvc_clone(self, interface_type, teardown_factory):
         """
         Create a clone from an existing pvc,
@@ -136,3 +139,75 @@ class TestClone(ManageTest):
         # Wait for IO to finish on the new pod
         clone_pod_obj.get_fio_results()
         logger.info(f"IO completed on pod {clone_pod_obj.name}")
+
+    @pytest.mark.polarion_id("OCS-5162")
+    @pytest.mark.parametrize(
+        argnames=["interface_type", "pod_dict_path"],
+        argvalues=[
+            pytest.param(constants.CEPHFILESYSTEM, constants.CSI_CEPHFS_ROX_POD_YAML),
+        ],
+    )
+    def test_pvc_to_pvc_rox_clone(
+        self, snapshot_factory, snapshot_restore_factory, teardown_factory
+    ):
+        """
+        Create a rox clone from an existing pvc,
+        verify data is preserved in the cloning.
+        """
+        logger.info(f"Running IO on pod {self.pod_obj.name}")
+        file_name = f"{self.pod_obj.name}.txt"
+        self.pod_obj.exec_cmd_on_pod(
+            command=f"dd if=/dev/zero of=/mnt/{file_name} bs=1M count=1"
+        )
+
+        logger.info(f"File Created. /mnt/{file_name}")
+
+        # Verify presence of the file
+        file_path = pod.get_file_path(self.pod_obj, file_name)
+        logger.info(f"Actual file path on the pod {file_path}")
+        assert pod.check_file_existence(
+            self.pod_obj, file_path
+        ), f"File {file_name} does not exist"
+        logger.info(f"File {file_name} exists in {self.pod_obj.name}")
+
+        # Taking snapshot of pvc
+        logger.info("Taking Snapshot of the PVC")
+        snapshot_obj = snapshot_factory(self.pvc_obj, wait=False)
+        logger.info("Verify snapshots moved from false state to true state")
+        teardown_factory(snapshot_obj)
+
+        # Restoring pvc snapshot to pvc
+        logger.info(f"Creating a PVC from snapshot [restore] {snapshot_obj.name}")
+        restore_snapshot_obj = snapshot_restore_factory(
+            snapshot_obj=snapshot_obj,
+            size="1Gi",
+            volume_mode=snapshot_obj.parent_volume_mode,
+            access_mode=constants.ACCESS_MODE_ROX,
+            status=constants.STATUS_BOUND,
+        )
+        teardown_factory(restore_snapshot_obj)
+
+        # Create and attach pod to the pvc
+        clone_pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHFILESYSTEM,
+            pvc_name=restore_snapshot_obj.name,
+            namespace=restore_snapshot_obj.namespace,
+            pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
+            pvc_read_only_mode=True,
+        )
+        # Confirm that the pod is running
+        helpers.wait_for_resource_state(
+            resource=clone_pod_obj, state=constants.STATUS_RUNNING
+        )
+        clone_pod_obj.reload()
+        teardown_factory(clone_pod_obj)
+
+        # Verify file's presence on the new pod
+        logger.info(
+            f"Checking the existence of {file_name} on cloned pod "
+            f"{clone_pod_obj.name}"
+        )
+        assert pod.check_file_existence(
+            clone_pod_obj, file_path
+        ), f"File {file_path} does not exist"
+        logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
