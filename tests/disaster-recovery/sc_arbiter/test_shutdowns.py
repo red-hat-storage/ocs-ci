@@ -13,8 +13,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_mon_pod_id,
     get_ceph_tools_pod,
-    get_pods_having_label,
-    Pod,
     wait_for_pods_to_be_in_statuses,
     get_debug_pods,
     get_mon_pods,
@@ -28,6 +26,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.cluster import get_mon_quorum_ranks, fetch_connection_scores_for_mon
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -88,6 +87,7 @@ class TestZoneShutdowns:
                 ), f"[CephHealthException]: {e.args[0]}"
                 get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
                 log.info("Archived ceph crash!")
+                ceph_health_check(constants.OPENSHIFT_STORAGE_NAMESPACE, tries=5)
 
         request.addfinalizer(finalizer)
 
@@ -115,12 +115,25 @@ class TestZoneShutdowns:
         logreader_workload_factory,
     ):
         """
-        * fetch connection scores for all the mons
-        * shutdown zone ac/b
-        * see how the odf components behave,
-        check the mon_quorum & ceph accessibility
-        * see if there is any data loss if any IO's performed
-        * make sure connection score is clean
+        This test will test the shutdown scenarios when active-active CephFS and RBD workloads
+        is running.
+        Steps:
+            1) Run both the logwriter and logreader CephFS and RBD workloads
+               CephFS workload uses RWX volume and RBD workload uses RWO volumes
+            2) Reset the connection scores for the mons
+            3) Induce the shutdown
+               In case of normal shutdown we shut-down and wait for about 15 mins
+               before start of nodes whereas immediate shutdown would involve starting
+               nodes immediately just after 5 mins
+            4) Make sure ceph is accessible during the crash duration
+            5) Repeat the shutdown process as many times as number of iterations
+            6) Make sure logreader job pods have Completed state.
+               Check if there is any write or read pause. Fail only when neccessary.
+            7) Delete the old logreader job and create new logreader job to verify the data corruption
+            8) Make sure there is no data loss
+            9) Validate the connection scores
+            10) Do a complete cluster sanity and make sure there is no issue post recovery
+
         """
         sc_obj = StretchCluster()
 
@@ -248,24 +261,11 @@ class TestZoneShutdowns:
         logreader_workload_factory(
             pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
         )
-        log.info("Getting new CephFS logreader pods!")
-        new_logreader_pods = [
-            Pod(**pod).name
-            for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
-        ]
-        for pod in sc_obj.cephfs_logreader_pods:
-            if pod.name in new_logreader_pods:
-                new_logreader_pods.remove(pod.name)
-
-        log.info(f"New logreader pods: {new_logreader_pods}")
-        sc_obj.cephfs_logreader_pods = new_logreader_pods
+        sc_obj.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
 
         wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_COMPLETED,
-            pod_names=sc_obj.cephfs_logreader_pods,
+            pod_names=[pod.name for pod in sc_obj.cephfs_logreader_pods],
             timeout=900,
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )
@@ -312,11 +312,21 @@ class TestZoneShutdowns:
         logreader_workload_factory,
     ):
         """
-        * fetch the connection scores for all the mons
-        * crash data zone
-        * see how the odf components behave, check ceph accessibilty and mon_quorum
-        * see if there is any data loss if IO's performed
-        * make sure connection scores are clean post recovery
+        This test will test the crash scenarios when active-active CephFS and RBD workloads
+        is running.
+        Steps:
+            1) Run both the logwriter and logreader CephFS and RBD workloads
+               CephFS workload uses RWX volume and RBD workload uses RWO volumes
+            2) Reset the connection scores for the mons
+            3) Crash the zone nodes
+            4) Repeat the crash process as many times as number of iterations
+            5) Make sure ceph is accessible during the crash duration
+            6) Make sure logreader job pods have Completed state.
+               Check if there is any write or read pause. Fail only when neccessary.
+            7) Delete the old logreader job and create new logreader job to verify the data corruption
+            8) Make sure there is no data loss
+            9) Validate the connection scores
+            10) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
 
@@ -442,25 +452,12 @@ class TestZoneShutdowns:
         logreader_workload_factory(
             pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
         )
-        log.info("Getting new logreader pods!")
-        new_logreader_pods = [
-            Pod(**pod).name
-            for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running", "Succeeded"],
-            )
-        ]
-        for pod in sc_obj.cephfs_logreader_pods:
-            if pod.name in new_logreader_pods:
-                new_logreader_pods.remove(pod.name)
 
-        log.info(f"New cephfs logreader pods: {new_logreader_pods}")
-        sc_obj.cephfs_logreader_pods = new_logreader_pods
+        sc_obj.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
 
         wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_COMPLETED,
-            pod_names=new_logreader_pods,
+            pod_names=[pod.name for pod in sc_obj.cephfs_logreader_pods],
             timeout=900,
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )

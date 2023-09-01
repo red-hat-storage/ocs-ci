@@ -33,43 +33,77 @@ class StretchCluster(OCS):
         self.cephfs_logwriter_dep = None
         self.cephfs_logreader_job = None
         self.rbd_logwriter_sts = None
-        self.cephfs_log_file_map = list()
-        self.rbd_log_file_map = list()
-        self.cephfs_logwriter_pods = None
-        self.cephfs_logreader_pods = None
-        self.rbd_logwriter_pods = None
         self.rbd_read_logs = None
         self.cephfs_read_logs = None
         self.default_shutdown_durarion = 600
-        self.cephfs_old_log = list()
-        self.rbd_old_log = list()
         self.workload_map = {
             f"{constants.LOGWRITER_CEPHFS_LABEL}": [
-                self.cephfs_logwriter_pods,
+                None,
                 ["Running", "Creating", "Pending"],
+                4,
             ],
             f"{constants.LOGWRITER_RBD_LABEL}": [
-                self.rbd_logwriter_pods,
+                None,
                 ["Running", "Creating", "Pending"],
+                2,
             ],
             f"{constants.LOGREADER_CEPHFS_LABEL}": [
-                self.cephfs_logreader_pods,
+                None,
                 ["Running", "Succeeded", "Creating", "Pending"],
+                4,
             ],
         }
 
         self.logfile_map = {
             f"{constants.LOGWRITER_CEPHFS_LABEL}": [
-                self.cephfs_log_file_map,
+                list(),
                 4,
-                self.cephfs_old_log,
+                list(),
             ],
             f"{constants.LOGWRITER_RBD_LABEL}": [
-                self.rbd_log_file_map,
+                list(),
                 1,
-                self.rbd_old_log,
+                list(),
             ],
         }
+
+    @property
+    def cephfs_logwriter_pods(self):
+        if self.workload_map[constants.LOGWRITER_CEPHFS_LABEL][0] is None:
+            self.get_logwriter_reader_pods(constants.LOGWRITER_CEPHFS_LABEL)
+        return self.workload_map[constants.LOGWRITER_CEPHFS_LABEL][0]
+
+    @property
+    def cephfs_logreader_pods(self):
+        if self.workload_map[constants.LOGREADER_CEPHFS_LABEL][0] is None:
+            self.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
+        return self.workload_map[constants.LOGREADER_CEPHFS_LABEL][0]
+
+    @property
+    def rbd_logwriter_pods(self):
+        if self.workload_map[constants.LOGWRITER_RBD_LABEL][0] is None:
+            self.get_logwriter_reader_pods(constants.LOGWRITER_RBD_LABEL)
+        return self.workload_map[constants.LOGWRITER_RBD_LABEL][0]
+
+    @property
+    def cephfs_log_file_map(self):
+        if self.logfile_map[constants.LOGWRITER_CEPHFS_LABEL][0] is None:
+            self.get_logfile_map(constants.LOGWRITER_CEPHFS_LABEL)
+        return self.logfile_map[constants.LOGWRITER_CEPHFS_LABEL][0]
+
+    @property
+    def rbd_log_file_map(self):
+        if self.logfile_map[constants.LOGWRITER_RBD_LABEL][0] is None:
+            self.get_logfile_map(constants.LOGWRITER_RBD_LABEL)
+        return self.logfile_map[constants.LOGWRITER_RBD_LABEL][0]
+
+    @property
+    def cephfs_old_log(self):
+        return self.logfile_map[constants.LOGWRITER_CEPHFS_LABEL][2]
+
+    @property
+    def rbd_old_log(self):
+        return self.logfile_map[constants.LOGWRITER_RBD_LABEL][2]
 
     def get_nodes_in_zone(self, zone):
         """
@@ -93,7 +127,7 @@ class StretchCluster(OCS):
         window of start_time and end_time
 
         Args:
-            logreader_pods (list): List of logreader pod objects
+            label (str): label for the workload (RBD or CephFS)
             start_time (datetime): datetime object representing the start time
             end_time (datetime): datetime object representing the end time
 
@@ -123,6 +157,18 @@ class StretchCluster(OCS):
 
     @retry(CommandFailed, tries=10, delay=10)
     def check_for_write_pause(self, label, start_time, end_time):
+        """
+        Checks for write pause between start time and end time
+
+        Args:
+            label (str): Label for the workload
+            start_time (datetime): datetime object representing the start time
+            end_time (datetime): datetime object representing the end time
+
+        Returns:
+             Int: number of instances has seen write pause
+
+        """
         paused = 0
         for pod in self.workload_map[label][0]:
             excepted = 0
@@ -156,6 +202,13 @@ class StretchCluster(OCS):
         return paused
 
     def get_logfile_map(self, label):
+        """
+        Update map of logfiles created by each workload types
+
+        Args:
+            label (str): Label for the workload
+
+        """
 
         logfiles = []
         for pod in self.workload_map[label][0]:
@@ -179,11 +232,25 @@ class StretchCluster(OCS):
     def get_logwriter_reader_pods(
         self,
         label,
-        exp_num_replicas=4,
+        exp_num_replicas=None,
         statuses=None,
         namespace=constants.STRETCH_CLUSTER_NAMESPACE,
     ):
+        """
+        Update logwriter and reader pods for the mentioned workload type
 
+        Args:
+            label (str): Label for the workload type
+            exp_num_replicas (int): Expected number of replicas
+            statuses (List): List of statuses that is expected
+            namespace (str): namespace
+
+        """
+        exp_num_replicas = (
+            self.workload_map[label][2]
+            if exp_num_replicas is None
+            else exp_num_replicas
+        )
         self.workload_map[label][0] = [
             Pod(**pod)
             for pod in get_pods_having_label(
@@ -194,6 +261,9 @@ class StretchCluster(OCS):
         ]
 
         if len(self.workload_map[label][0]) != exp_num_replicas:
+            logger.warning(
+                f"Expected replicas is {exp_num_replicas} but found {len(self.workload_map[label][0])}"
+            )
             raise UnexpectedBehaviour
 
         logger.info(self.workload_map[label][0])
@@ -202,27 +272,52 @@ class StretchCluster(OCS):
     def check_for_data_corruption(
         self, label, namespace=constants.STRETCH_CLUSTER_NAMESPACE
     ):
+        """
+        Check for data corruption
 
+        Args:
+            label (str): Label for workload type
+            namespace (str): namespace
+
+        Returns:
+            Bool: True if no data corruption else False
+
+        """
+        self.get_logwriter_reader_pods(
+            label,
+        )
         for pod in self.workload_map[label][0]:
-            if label == constants.LOGWRITER_CEPHFS_LABEL:
+            if label == constants.LOGREADER_CEPHFS_LABEL:
                 read_logs = get_pod_logs(pod_name=pod.name, namespace=namespace)
             else:
                 read_logs = pod.exec_sh_cmd_on_pod(
                     # command=f"/opt/logreader.py -t 5 {list(self.rbd_log_file_map[pod.name].keys())[0]} -d",
-                    command=f"/opt/logreader.py -t 5 *.log -d",
-                    out_yaml_format=False,
+                    command="/opt/logreader.py -t 5 *.log -d",
                 )
             return "corrupt" not in read_logs
         return False
 
     def check_for_data_loss(self, label):
+        """
+        Check for data loss
 
+        Args:
+            label (str): Label for workload type
+        Returns:
+            Bool: True if no data loss else False
+
+        """
         self.get_logfile_map(label)
-        log_files_now = []
+        log_files_now = list()
         for pod in self.workload_map[label][0]:
-            logfiles = pod.exec_sh_cmd_on_pod(
-                command="ls -lt *.log | awk 'NR>1' | awk '{print $9}'"
-            ).split("\n")
+            logfiles = list(
+                filter(
+                    lambda file_name: file_name != "",
+                    pod.exec_sh_cmd_on_pod(
+                        command="ls -lt *.log | awk '{print $9}'"
+                    ).split("\n"),
+                )
+            )
             if set(logfiles) == set(log_files_now):
                 continue
             log_files_now.extend(logfiles)
@@ -232,14 +327,30 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] + self.logfile_map[label][2]
         ):
             logger.error(
-                f"Logfiles now: {set(log_files_now)}\n"
-                f"Logfiles should present: {set(self.logfile_map[label][0]+self.logfile_map[label][2])}"
+                f"Existing log files: {set(log_files_now)}\n"
+                f"Expected log files: {set(self.logfile_map[label][0]+self.logfile_map[label][2])}"
             )
             return False
+        logger.info(
+            f"Expected log files:\n {set(self.logfile_map[label][0]+self.logfile_map[label][2])}"
+        )
+        logger.info(f"Existing log files:\n {set(log_files_now)}")
         return True
 
     @retry(CommandFailed, tries=15, delay=5)
     def check_ceph_accessibility(self, timeout, delay=5, grace=15):
+        """
+        Check for ceph access for the 'timeout' seconds
+
+        Args:
+            timeout (int): timeout in seconds
+            delay (int): how often ceph access should be checked in seconds
+            grace (int): grace time to wait for the ceph to respond in seconds
+
+        Returns:
+            Bool: True of no ceph accessibility issues else False
+
+        """
         command = (
             f"SECONDS=0;while true;do ceph -s;sleep {delay};duration=$SECONDS;"
             f"if [ $duration -ge {timeout} ];then break;fi;done"
@@ -270,6 +381,14 @@ class StretchCluster(OCS):
                 raise
 
     def validate_conn_score(self, conn_score_map, quorum_ranks):
+        """
+        Validate connection score of each mons from the connection score map
+
+        Args:
+            conn_score_map (dict): Dict map representing connection score for each mons
+            quorum_ranks (list): Expected mon quorum ranks at the moment
+
+        """
         for mon_id in quorum_ranks.keys():
             conn_score_str = conn_score_map[mon_id]
             conn_score = json.loads(conn_score_str)
@@ -312,7 +431,16 @@ class StretchCluster(OCS):
         end_time,
         wait_for_read_completion=True,
     ):
+        """
+        Checks cephFs workloads for write or read pause between start_time and end_time
 
+        Args:
+            start_time (datetime): Start time of the failure
+            end_time (datetime): End time of the failure
+            wait_for_read_completion (bool): True if needs to be waited for
+                the read operation to complete else False
+
+        """
         # wait for the logreader workload to finish if expected
         if wait_for_read_completion:
             wait_for_pods_to_be_in_statuses(
@@ -331,7 +459,7 @@ class StretchCluster(OCS):
             > 2
         ):
             logger.error(
-                f"Read operations are paused for CephFS workloads even for the ones in available zones"
+                "Read operations are paused for CephFS workloads even for the ones in available zones"
             )
         else:
             logger.info("All or some read operations are successful!!")
@@ -344,13 +472,20 @@ class StretchCluster(OCS):
             > 2
         ):
             logger.error(
-                f"Write operations paused for CephFS workloads even for the ones in available zones"
+                "Write operations paused for CephFS workloads even for the ones in available zones"
             )
         else:
             logger.info("All or some write operations are successful!!")
 
     def rbd_failure_checks(self, start_time, end_time, **kwargs):
+        """
+        Checks RBD workloads for write or read pause between start_time and end_time
 
+        Args:
+            start_time (datetime): Start time of the failure
+            end_time (datetime): End time of the failure
+
+        """
         if (
             self.check_for_write_pause(
                 constants.LOGWRITER_RBD_LABEL,
@@ -366,7 +501,7 @@ class StretchCluster(OCS):
             != 0
         ):
             logger.error(
-                f"Write operations paused for RBD workloads even for the ones in available zone"
+                "Write operations paused for RBD workloads even for the ones in available zone"
             )
         else:
             logger.info(
@@ -381,7 +516,16 @@ class StretchCluster(OCS):
         wait_for_read_completion=True,
     ):
         """
-        This method is for the post failure checks
+        Post failure checks that will check for any failure during
+        start_time and end_time
+
+        Args:
+            start_time (datetime): Start time of the failure
+            end_time (datetime): End time of the failure
+            types (list): List containing workload types, default., ["rbd", "cephfs"]
+            wait_for_read_completion (bool): True if needs to be waited for
+                the read operation to complete else False
+
         """
         failure_check_map = {
             "rbd": self.rbd_failure_checks,

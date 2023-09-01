@@ -3424,4 +3424,3 @@ def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         )
 
     return debug_pods
-

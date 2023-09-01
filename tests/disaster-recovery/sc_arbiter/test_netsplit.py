@@ -18,18 +18,14 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 from datetime import datetime, timedelta, timezone
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import (
-    Pod,
     wait_for_pods_to_be_in_statuses,
-    get_pods_having_label,
     get_pod_node,
     get_ceph_tools_pod,
     get_mon_pod_id,
     get_mon_pods,
 )
-from ocs_ci.helpers.stretchcluster_helpers import (
-    fetch_connection_scores_for_mon,
-    get_mon_quorum_ranks,
-)
+from ocs_ci.ocs.cluster import get_mon_quorum_ranks, fetch_connection_scores_for_mon
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +102,7 @@ class TestNetSplit:
                 ), f"[CephHealthException]: {e.args[0]}"
                 get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
                 logger.info("Archived ceph crash!")
+                ceph_health_check(constants.OPENSHIFT_STORAGE_NAMESPACE, tries=5)
 
         request.addfinalizer(finalizer)
 
@@ -136,17 +133,20 @@ class TestNetSplit:
         reset_conn_score,
     ):
         """
-        This test will test the netsplit scenarios when active-active CephFS workload
+        This test will test the netsplit scenarios when active-active CephFS and RBD workloads
         is running.
         Steps:
-            1) Run both the logwriter and logreader CephFS workload using single RWX volume
-            2) Induce the network split
-            3) Make sure logreader job pods have Completed state.
+            1) Run both the logwriter and logreader CephFS and RBD workloads
+               CephFS workload uses RWX volume and RBD workload uses RWO volumes
+            2) Reset the connection scores for the mons
+            3) Induce the network split
+            4) Make sure logreader job pods have Completed state.
                Check if there is any write or read pause. Fail only when neccessary.
-            4) For bc/ab-bc netsplit cases, it is expected for logreader/logwriter pods to go CLBO
+            5) For bc/ab-bc netsplit cases, it is expected for logreader/logwriter pods to go CLBO
                Make sure the above pods run fine after the nodes are restarted
-            5) Delete the old logreader job and create new logreader job to verify the data corruption
-            6) Make sure there is no data loss
+            6) Delete the old logreader job and create new logreader job to verify the data corruption
+            7) Make sure there is no data loss
+            8) Validate the connection scores
             7) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
@@ -265,25 +265,12 @@ class TestNetSplit:
         logreader_workload_factory(
             pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
         )
-        logger.info("Getting new logreader pods!")
-        new_logreader_pods = [
-            Pod(**pod).name
-            for pod in get_pods_having_label(
-                label="app=logreader-cephfs",
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                statuses=["Running", "Completed"],
-            )
-        ]
-        for pod in sc_obj.cephfs_logreader_pods:
-            if pod.name in new_logreader_pods:
-                new_logreader_pods.remove(pod.name)
 
-        sc_obj.cephfs_logreader_pods = new_logreader_pods
-        logger.info(f"New logreader pods: {new_logreader_pods}")
+        sc_obj.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
 
         wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_COMPLETED,
-            pod_names=[pod_name for pod_name in new_logreader_pods],
+            pod_names=[pod.name for pod in sc_obj.cephfs_logreader_pods],
             timeout=900,
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )
