@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import shlex
+import time
 from uuid import uuid4
 from datetime import date
 
@@ -2166,7 +2167,7 @@ def create_aws_bs_using_cli(
     )
 
 
-def expire_objects_in_bucket(bucket_name):
+def expire_objects_in_bucket_from_noobaa_db(bucket_name):
     """
     Manually expire the objects in a bucket
 
@@ -2300,7 +2301,72 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
     return list(stores)
 
 
-def change_objects_creation_date(bucket_name, object_keys, new_creation_time):
+def delete_all_noobaa_buckets(mcg_obj, request):
+    """
+    Deletes all the buckets in noobaa and restores the first.bucket after the current test
+
+    Args:
+        mcg_obj: MCG object
+        request: pytest request object
+    """
+
+    logger.info("Listing all buckets in the cluster")
+    buckets = mcg_obj.s3_client.list_buckets()
+
+    logger.info("Deleting all buckets and its objects")
+    for bucket in buckets["Buckets"]:
+        logger.info(f"Deleting {bucket} and its objects")
+        s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
+        s3_bucket.objects.all().delete()
+        s3_bucket.delete()
+
+    def finalizer():
+        if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
+            logger.info("Creating the default bucket: first.bucket")
+            mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
+        else:
+            logger.info("Skipping creation of first.bucket as it already exists")
+
+    request.addfinalizer(finalizer)
+
+
+def get_nb_bucket_stores(mcg_obj, bucket_name):
+    """
+    Query the noobaa-db for the backingstores/namespacestores
+    that a given bucket is using for its data placement
+
+    Args:
+        mcg_obj: MCG object
+        bucket_name: name of the bucket
+
+    Returns:
+        list: list of backingstores/namespacestores names
+
+    """
+    stores = set()
+    bucket_data = bucket_read_api(mcg_obj, bucket_name)
+
+    # Namespacestore bucket
+    if "namespace" in bucket_data:
+        read_srcs_list = [
+            d["resource"] for d in bucket_data["namespace"]["read_resources"]
+        ]
+        write_src = bucket_data["namespace"]["write_resource"]["resource"]
+        stores.update(read_srcs_list + [write_src])
+
+    # Data bucket
+    else:
+        tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
+        for tier in tiers:
+            tier_data = mcg_obj.send_rpc_query("tier_api", "read_tier", {"name": tier})
+            stores.update(tier_data["reply"]["attached_pools"])
+
+    return list(stores)
+
+
+def change_objects_creation_date_in_noobaa_db(
+    bucket_name, object_keys, new_creation_time
+):
     """
     Change the creation date of given objects one year back at the noobaa-db
 
@@ -2329,6 +2395,29 @@ def change_objects_creation_date(bucket_name, object_keys, new_creation_time):
     )
 
     exec_nb_db_query(psql_query)
+
+
+def expire_mcg_objects(bucket_name, object_keys, prefix=""):
+    """
+    Expire given objects in a bucket by changing their creation date to one year back
+
+    Note that this is a workaround for the fact that the shortest expiration
+    time that expiraiton policies allows is 1 day, which is too long for the tests to wait.
+
+    Args:
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list): A list of object keys to expire
+        prefix (str): The prefix of the objects to expire
+
+    """
+    logger.info(
+        f"Expiring objects in bucket {bucket_name} by changing their creation date"
+    )
+    object_keys = [prefix + key for key in object_keys]
+    SECONDS_IN_YEAR = 60 * 60 * 24 * 365
+    change_objects_creation_date_in_noobaa_db(
+        bucket_name, object_keys, time.time() - SECONDS_IN_YEAR
+    )
 
 
 def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):

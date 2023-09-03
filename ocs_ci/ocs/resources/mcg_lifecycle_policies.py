@@ -8,21 +8,27 @@ class LifecycleConfig:
 
     """
 
-    def __init__(self, rules=None):
+    def __init__(self, *args):
         """
         Constructor method for the class
 
         Args:
-            rules (list): List of LifecycleRule objects
-
+            *args: One or more LifecycleRule instances or a list of LifecycleRule instances
         """
-        self.rules = rules or []
+        if len(args) == 1 and isinstance(args[0], list):
+            self.rules = args[0]
+        else:
+            self.rules = args
 
-    def to_dict(self):
+        for rule in self.rules:
+            if not isinstance(rule, LifecycleRule):
+                raise TypeError(f"Rule {rule} is not of type LifecycleRule")
+
+    def as_dict(self):
         return {"Rules": [rule._policy_dict for rule in self.rules]}
 
     def __str__(self):
-        return self.to_dict().__str__()
+        return self.as_dict().__str__()
 
 
 class LifecycleRule(ABC):
