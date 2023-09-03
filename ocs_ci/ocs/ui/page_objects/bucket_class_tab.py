@@ -10,9 +10,10 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 
 
-class BucketClassTab(ObjectService, CreateResourceForm):
+class BucketClassTab(ObjectService, CreateResourceForm, ResourceList):
     def __init__(self):
         ObjectService.__init__(self)
         CreateResourceForm.__init__(self)
@@ -109,4 +110,43 @@ class BucketClassTab(ObjectService, CreateResourceForm):
         )
         return self._check_resource_name_not_exists_rule(
             existing_backingstore_names, rule_exp
+        )
+
+    def nav_to_bucket_class(self, bucket_class_name: str):
+        """
+        Navigate to bucket class with the given name.
+
+        Args:
+            bucket_class_name (str): bucket class name
+
+        """
+        logger.info(f"Navigate to bucket class {bucket_class_name}")
+        self.nav_to_resource(bucket_class_name)
+
+    def validate_bucket_class_ready(self) -> bool:
+        """
+        Validate the status of default bucket class is 'Ready'
+
+        Returns:
+            bool: True if the status of default bucket class is 'Ready', False otherwise.
+        """
+        logger.info("Verifying the status of default bucket class is 'Ready'")
+        backingstore_status = self.get_element_text(
+            self.validation_loc["backingstore-status"]
+        )
+        is_ready = backingstore_status == "Ready"
+        if not is_ready:
+            logger.warning(
+                f"Status of default bucket class is {backingstore_status}, not 'Ready'"
+            )
+        return is_ready
+
+    def nav_bucket_class_breadcrumb(self):
+        """
+        Navigate to bucket class breadcrumb
+
+        """
+        logger.info("Navigate to bucket class breadcrumb")
+        self.do_click(
+            (self.validation_loc["bucketclass-breadcrumb"]), enable_screenshot=True
         )

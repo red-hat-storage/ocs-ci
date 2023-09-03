@@ -4,9 +4,10 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList, logger
 
 
-class NameSpaceStoreTab(ObjectService, CreateResourceForm):
+class NameSpaceStoreTab(ObjectService, CreateResourceForm, ResourceList):
     def __init__(self):
         ObjectService.__init__(self)
         CreateResourceForm.__init__(self)
@@ -48,3 +49,18 @@ class NameSpaceStoreTab(ObjectService, CreateResourceForm):
         return self._check_resource_name_not_exists_rule(
             existing_namespace_store_names, rule_exp
         )
+
+    def is_namespace_store_tab_active(self):
+        """
+        Check if namespace store tab is selected
+
+        Returns:
+            bool: True if namespace store tab is selected, False otherwise
+        """
+        is_active = (
+            len(self.get_elements(self.validation_loc["namespace-store-tab-active"]))
+            == 1
+        )
+        if not is_active:
+            logger.warning("Namespace store tab is not selected")
+        return is_active

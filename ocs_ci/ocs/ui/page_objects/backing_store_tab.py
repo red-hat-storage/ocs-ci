@@ -5,9 +5,10 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList, logger
 
 
-class BackingStoreTab(ObjectService, CreateResourceForm):
+class BackingStoreTab(ObjectService, CreateResourceForm, ResourceList):
     def __init__(self):
         ObjectService.__init__(self)
         CreateResourceForm.__init__(self)
@@ -44,4 +45,42 @@ class BackingStoreTab(ObjectService, CreateResourceForm):
         )
         return self._check_resource_name_not_exists_rule(
             existing_backingstore_names, rule_exp
+        )
+
+    def nav_to_backing_store(self, backing_store_name: str):
+        """
+        Navigate to backing store page
+
+        Args:
+            backing_store_name (str): backing store name
+
+        """
+        logger.info(f"Navigate to backing store {backing_store_name}")
+        self.nav_to_resource(backing_store_name)
+
+    def validate_backing_store_ready(self) -> bool:
+        """
+        Validate backing store is Ready
+        Returns:
+            bool: True if backing store is Ready, False otherwise
+        """
+        logger.info("Verifying the status of noobaa backing store is Ready")
+        backingstore_status = self.get_element_text(
+            self.validation_loc["bucketclass-status"]
+        )
+        is_ready = backingstore_status == "Ready"
+        if not is_ready:
+            logger.warning(
+                f"Backing store status is {backingstore_status} and not Ready"
+            )
+        return is_ready
+
+    def nav_backing_store_breadcrumb(self):
+        """
+        Navigate to backing store breadcrumbs
+
+        """
+        logger.info("Click on backingstore breadcrumb")
+        self.do_click(
+            (self.validation_loc["backingstorage-breadcrumb"]), enable_screenshot=True
         )

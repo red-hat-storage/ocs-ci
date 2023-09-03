@@ -9,10 +9,11 @@ from ocs_ci.ocs.ui.mcg_ui import logger
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import CreateResourceForm
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from tests.conftest import delete_projects
 
 
-class BucketsUI(PageNavigator):
+class BucketsUI(PageNavigator, ResourceList):
     """
     A class representation for abstraction of OBC or OB-related OpenShift UI actions
 

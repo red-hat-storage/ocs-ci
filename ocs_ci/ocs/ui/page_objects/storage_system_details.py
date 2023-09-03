@@ -18,7 +18,7 @@ class StorageSystemDetails(StorageSystemTab):
                 self.validation_loc["overview_odf_4_10"], enable_screenshot=True
             )
         else:
-            self.do_click(self.validation_loc["overview"], enable_screenshot=True)
+            self.do_click(self.validation_loc["odf-overview"], enable_screenshot=True)
 
     def nav_details_object(self):
         """
@@ -118,3 +118,33 @@ class StorageSystemDetails(StorageSystemTab):
     def navigate_backward(self):
         BaseUI.navigate_backward(self)
         return StorageSystemTab()
+
+    def nav_storage_systems_via_breadcrumb(self):
+        """
+        Navigate to StorageSystems via breadcrumb
+        Returns:
+            StorageSystemTab: StorageSystemTab page object
+        """
+        logger.info("Click on StorageSystems breadcrumb")
+        self.do_click((self.validation_loc["storagesystems"]))
+        return StorageSystemTab()
+
+    def check_only_one_block_pools_tab(self):
+        """
+        Verify that only one BlockPools tab is present. BZ #2096513
+        """
+        logger.info("Verify that only one BlockPools tab is present. BZ #2096513")
+        blockpools_tabs = self.get_elements(self.validation_loc["blockpools"])
+        return len(blockpools_tabs) == 1
+
+    def is_storage_system_details_breadcrumb_present(self):
+        """
+        Verify that Storage System Details breadcrumb is present
+        """
+        logger.info("Verify that Storage System Details breadcrumb is present")
+        is_present = (
+            len(self.get_elements(self.validation_loc["storagesystem-details"])) == 1
+        )
+        if not is_present:
+            logger.warning("Storage System Details breadcrumb is not present")
+        return is_present
