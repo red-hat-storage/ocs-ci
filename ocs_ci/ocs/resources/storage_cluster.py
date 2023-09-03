@@ -897,6 +897,8 @@ def verify_storage_cluster():
                 config.ENV_DATA.get("platform", "").lower()
                 in constants.MANAGED_SERVICE_PLATFORMS
             ):
+                # This is a workaround. The issue for tracking is
+                # https://github.com/red-hat-storage/ocs-ci/issues/8390
                 log.warning(f"Can't get the sc version due to the error: {str(e)}")
             else:
                 raise e
