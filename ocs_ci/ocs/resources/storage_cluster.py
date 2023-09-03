@@ -2302,7 +2302,7 @@ def get_storageclass_names_from_storagecluster_spec():
     return data
 
 
-def check_custom_storageclass_presence():
+def check_custom_storageclass_presence(interface=None):
     """
     Verify if the custom-defined storage class names are present in the `oc get sc` output.
 
@@ -2310,7 +2310,11 @@ def check_custom_storageclass_presence():
         bool: Returns True if all custom-defined storage class names are present \
             in the `oc get sc` output , otherwise False.
     """
+
     sc_from_spec = get_storageclass_names_from_storagecluster_spec()
+    if interface:
+        sc_from_spec = {interface: sc_from_spec[interface]}
+
     if not sc_from_spec:
         raise ValueError("No Custom Storageclass are defined in StorageCluster spec.")
 
@@ -2395,6 +2399,8 @@ def patch_storage_cluster_for_custom_storage_class(
     except CommandFailed as err:
         log.error(f"Command Failed with an error :{err}")
         return False
+
+    # Wait for storagecluster status becom 'Ready'
 
     # Verify the patch operation has created/deleted the storageClass from the cluster.
     storageclass_list = run_cmd(
