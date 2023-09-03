@@ -2400,8 +2400,6 @@ def patch_storage_cluster_for_custom_storage_class(
         log.error(f"Command Failed with an error :{err}")
         return False
 
-    # Wait for storagecluster status becom 'Ready'
-
     # Verify the patch operation has created/deleted the storageClass from the cluster.
     storageclass_list = run_cmd(
         "oc get sc -o jsonpath='{.items[*].metadata.name}'"
