@@ -15,7 +15,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import templating
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
@@ -1757,16 +1757,9 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
         rule_id (str): The ID of the replication rule
         destination_bucket_name (str): The name of the replication destination bucket
     """
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
-        replication_policy = {
-            "rules": [
-                {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
-            ]
-        }
-    else:
-        replication_policy = [
-            {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
-        ]
+    replication_policy = {
+        "rules": [{"rule_id": rule_id, "destination_bucket": destination_bucket_name}]
+    }
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {"replicationPolicy": json.dumps(replication_policy)}
@@ -1799,6 +1792,31 @@ def update_replication_policy(bucket_name, replication_policy_dict):
         kind="obc",
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=bucket_name,
+    ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+
+
+def patch_replication_policy_to_bucketclass(
+    bucketclass_name, rule_id, destination_bucket_name
+):
+    """
+    Patches replication policy to a bucket
+
+    Args:
+        bucketclass_name (str): The name of the bucketclass to patch
+        rule_id (str): The ID of the replication rule
+        destination_bucket_name (str): The name of the replication destination bucket
+    """
+
+    replication_policy = {
+        "rules": [{"rule_id": rule_id, "destination_bucket": destination_bucket_name}]
+    }
+    replication_policy_patch_dict = {
+        "spec": {"replicationPolicy": json.dumps(replication_policy)}
+    }
+    OCP(
+        kind="bucketclass",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucketclass_name,
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
