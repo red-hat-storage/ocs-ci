@@ -2374,9 +2374,9 @@ def patch_storage_cluster_for_custom_storage_class(
                 "value": storage_class_name,
             }
         )
-        log.info(
-            f"Added storage class '{storage_class_name}' of type '{storage_class_type}'."
-        )
+
+        log_message = f"Added storage class '{storage_class_name}' of type '{storage_class_type}'."
+
     elif action == "remove":
         patch_data.append(
             {
@@ -2384,7 +2384,7 @@ def patch_storage_cluster_for_custom_storage_class(
                 "path": path,
             }
         )
-        log.info(f"Removed storage class of type '{storage_class_type}'.")
+        log_message = f"Removed storage class of type '{storage_class_type}'."
     else:
         log.error(f"Not supported action '{action}' to patch StorageCluster spec.")
         return False
@@ -2396,6 +2396,7 @@ def patch_storage_cluster_for_custom_storage_class(
             params=patch_data,
             format_type="json",
         )
+        log.info(log_message)
     except CommandFailed as err:
         log.error(f"Command Failed with an error :{err}")
         return False
@@ -2404,6 +2405,7 @@ def patch_storage_cluster_for_custom_storage_class(
     storageclass_list = run_cmd(
         "oc get sc -o jsonpath='{.items[*].metadata.name}'"
     ).split()
+    log.info(f"StorageClasses On the cluster : {','.join(storageclass_list)}")
     if action == "remove":
         if storage_class_name in storageclass_list:
             log.error(
