@@ -885,12 +885,23 @@ def verify_storage_cluster():
         "upgrade_ocs_version"
     ):
         log.info("Verifying storage cluster version")
-        storage_cluster_version = storage_cluster.get()["status"]["version"]
-        ocs_csv = get_ocs_csv()
-        csv_version = ocs_csv.data["spec"]["version"]
-        assert (
-            storage_cluster_version in csv_version
-        ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
+        try:
+            storage_cluster_version = storage_cluster.get()["status"]["version"]
+            ocs_csv = get_ocs_csv()
+            csv_version = ocs_csv.data["spec"]["version"]
+            assert (
+                storage_cluster_version in csv_version
+            ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
+        except KeyError as e:
+            if (
+                config.ENV_DATA.get("platform", "").lower()
+                in constants.MANAGED_SERVICE_PLATFORMS
+            ):
+                # This is a workaround. The issue for tracking is
+                # https://github.com/red-hat-storage/ocs-ci/issues/8390
+                log.warning(f"Can't get the sc version due to the error: {str(e)}")
+            else:
+                raise e
 
 
 def verify_storage_device_class(device_class):
