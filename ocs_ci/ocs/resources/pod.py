@@ -2698,7 +2698,7 @@ def check_pods_after_node_replacement():
             f"One of the '{pod_daemon_type}' pods is not running, "
             f"but all the other pods are running"
         )
-        timeout = 1800 if is_ms_provider_cluster() else 1500
+        timeout = 2400 if is_ms_provider_cluster() else 1500
         logger.info(
             f"waiting another {timeout} seconds for all the pods to be running..."
         )
