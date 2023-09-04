@@ -2402,10 +2402,11 @@ def patch_storage_cluster_for_custom_storage_class(
         return False
 
     # Verify the patch operation has created/deleted the storageClass from the cluster.
-    storageclass_list = run_cmd(
-        "oc get sc -o jsonpath='{.items[*].metadata.name}'"
-    ).split()
+    from ocs_ci.helpers.helpers import get_all_storageclass_names
+
+    storageclass_list = get_all_storageclass_names()
     log.info(f"StorageClasses On the cluster : {','.join(storageclass_list)}")
+
     if action == "remove":
         if storage_class_name in storageclass_list:
             log.error(
