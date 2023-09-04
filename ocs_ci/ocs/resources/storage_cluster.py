@@ -2318,7 +2318,9 @@ def check_custom_storageclass_presence(interface=None):
     if not sc_from_spec:
         raise ValueError("No Custom Storageclass are defined in StorageCluster spec.")
 
-    sc_list = run_cmd("oc get sc -o jsonpath='{.items[*].metadata.name}'").split()
+    from ocs_ci.helpers.helpers import get_all_storageclass_names
+
+    sc_list = get_all_storageclass_names()
 
     missing_sc = [value for value in sc_from_spec.values() if value not in sc_list]
 
