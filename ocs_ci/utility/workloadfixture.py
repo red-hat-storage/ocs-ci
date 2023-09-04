@@ -213,6 +213,7 @@ def measure_operation(
         for i in range(1, 3):
             try:
                 do_operation()
+                break
             except CommandFailed as ex:
                 # tmp solution
                 # Error is raised when the login command fails due to a race condition.
