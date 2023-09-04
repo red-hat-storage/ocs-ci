@@ -2401,6 +2401,11 @@ def patch_storage_cluster_for_custom_storage_class(
         log.error(f"Command Failed with an error :{err}")
         return False
 
+    # Sleeping for 4 seconds to allow the recent patch command to take effect.
+    from time import sleep
+
+    sleep(4)
+
     # Verify the patch operation has created/deleted the storageClass from the cluster.
     from ocs_ci.helpers.helpers import get_all_storageclass_names
 
