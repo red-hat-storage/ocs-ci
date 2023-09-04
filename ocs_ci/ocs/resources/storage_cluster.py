@@ -2352,7 +2352,7 @@ def get_storageclass_names_from_storagecluster_spec():
     return data
 
 
-def check_custom_storageclass_presence():
+def check_custom_storageclass_presence(interface=None):
     """
     Verify if the custom-defined storage class names are present in the `oc get sc` output.
 
@@ -2360,11 +2360,17 @@ def check_custom_storageclass_presence():
         bool: Returns True if all custom-defined storage class names are present \
             in the `oc get sc` output , otherwise False.
     """
+
     sc_from_spec = get_storageclass_names_from_storagecluster_spec()
+    if interface:
+        sc_from_spec = {interface: sc_from_spec[interface]}
+
     if not sc_from_spec:
         raise ValueError("No Custom Storageclass are defined in StorageCluster spec.")
 
-    sc_list = run_cmd("oc get sc -o jsonpath='{.items[*].metadata.name}'").split()
+    from ocs_ci.helpers.helpers import get_all_storageclass_names
+
+    sc_list = get_all_storageclass_names()
 
     missing_sc = [value for value in sc_from_spec.values() if value not in sc_list]
 
@@ -2377,3 +2383,104 @@ def check_custom_storageclass_presence():
 
     log.info("Custom-defined storage classes are correctly present.")
     return True
+
+
+def patch_storage_cluster_for_custom_storage_class(
+    storage_class_type, storage_class_name=None, action="add"
+):
+    """
+    Patch the storage cluster for a custom storage class.
+
+    This function updates the storage cluster's storage class settings based on the provided storage class type.
+
+    Args:
+        storage_class_type (str): The type of storage class ("nfs", "encryption", etc.).
+        storage_class_name (str, optional): The name of the custom storage class to be set.
+                                            If None, a default name will be generated.
+        action (str, optional): The action to perform ("add" or "remove").
+
+    Returns:
+        bool: Result of the patch operation.
+    """
+    if storage_class_name is None:
+        storage_class_name = f"custom-{storage_class_type}"
+
+    resource_name = (
+        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+        if config.DEPLOYMENT["external_mode"]
+        else constants.DEFAULT_CLUSTERNAME
+    )
+
+    if storage_class_type in ["nfs", "encryption"]:
+        path = f"/spec/{storage_class_type}/storageClassName"
+    else:
+        path = f"/spec/managedResources/{storage_class_type}/storageClassName"
+
+    patch_data = []
+
+    if action == "add":
+        patch_data.append(
+            {
+                "op": "add",
+                "path": path,
+                "value": storage_class_name,
+            }
+        )
+
+        log_message = f"Added storage class '{storage_class_name}' of type '{storage_class_type}'."
+
+    elif action == "remove":
+        patch_data.append(
+            {
+                "op": "remove",
+                "path": path,
+            }
+        )
+        log_message = f"Removed storage class of type '{storage_class_type}'."
+    else:
+        log.error(f"Not supported action '{action}' to patch StorageCluster spec.")
+        return False
+
+    try:
+        sc_obj = get_storage_cluster()
+        sc_obj.patch(
+            resource_name=resource_name,
+            params=patch_data,
+            format_type="json",
+        )
+        log.info(log_message)
+    except CommandFailed as err:
+        log.error(f"Command Failed with an error :{err}")
+        return False
+
+    # Sleeping for 4 seconds to allow the recent patch command to take effect.
+    from time import sleep
+
+    sleep(4)
+
+    # Verify the patch operation has created/deleted the storageClass from the cluster.
+    from ocs_ci.helpers.helpers import get_all_storageclass_names
+
+    storageclass_list = get_all_storageclass_names()
+    log.info(f"StorageClasses On the cluster : {','.join(storageclass_list)}")
+
+    if action == "remove":
+        if storage_class_name in storageclass_list:
+            log.error(
+                f" StorageClass '{storage_class_name}' not removed from the cluster."
+            )
+            return False
+        else:
+            log.info(f"StorageClass {storage_class_name} removed from the cluster.")
+    elif action == "add":
+        if storage_class_name not in storageclass_list:
+            log.error(
+                f" StorageClass '{storage_class_name}' not created on the cluster."
+            )
+            return False
+        else:
+            log.info(f"StorageClass '{storage_class_name}' created on the cluster.")
+            return True
+    else:
+        log.error(f"Invalid action: '{action}'")
+        return False
