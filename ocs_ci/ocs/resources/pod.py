@@ -2662,7 +2662,7 @@ def check_pods_after_node_replacement():
     # Import here to avoid circular loop
     from ocs_ci.ocs.cluster import is_ms_provider_cluster
 
-    are_pods_running = wait_for_pods_to_be_running(timeout=180)
+    are_pods_running = wait_for_pods_to_be_running(timeout=240)
     if are_pods_running:
         return True
 
