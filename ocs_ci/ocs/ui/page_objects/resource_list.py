@@ -16,7 +16,8 @@ class ResourceList(SearchBar):
 
     def nav_to_resource(self, resource_name: str = None, resource_label: str = None):
         """
-        Navigate to resource. Should be passed either resource_name or resource_label
+        Navigate to resource.
+        Important! Mandatory to pass either resource_name or resource_label
         Args:
             resource_name (str): Resource name - optional argument
             resource_label (str): Resource label - optional argument
@@ -50,13 +51,12 @@ class ResourceList(SearchBar):
 
     def delete_resource(self, delete_via, resource):
         """
-        Delete Object Bucket or Object bucket claim
+        Delete Object Bucket, Object Bucket Claim, PVC, PV, BucketClass, BackingStore, StorageClass, Namespace, etc.
 
         Args:
-            delete_via (str): delete using 'three dots' icon, from the Object Bucket page/Object Bucket Claims page
-                or click on specific Object Bucket/Object Bucket Claim and delete it using 'Actions' dropdown list
-            resource (str): resource name to delete. It may be Object Bucket Claim name both for OBC or OB,
-                and it may be Object Bucket Name. Object Bucket name consists from Object Bucket Claim and prefix
+            delete_via (str): delete using 'three dots' icon, from the Resource List page
+                or click on specific resource and delete it using 'Actions' dropdown list
+            resource (str): resource name to delete.
         """
         logger.info(f"Find resource by name '{resource}' using search-bar")
         self.page_has_loaded()
