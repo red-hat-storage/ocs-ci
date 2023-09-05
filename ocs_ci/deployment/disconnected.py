@@ -483,8 +483,11 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         ocp_version (str): OCP release image version or checksum (starting with sha256:)
 
     Returns:
-        tuple (str, str): tuple with two strings: mirrored image path and tag
-            or checksum
+        tuple (str, str, str, str): tuple with four strings:
+            - mirrored image path,
+            - tag or checksum
+            - imageContentSources (for install-config.yaml)
+            - ImageContentSourcePolicy (for running cluster)
     """
     dest_image_repo = (
         f"{config.DEPLOYMENT['mirror_registry']}/"

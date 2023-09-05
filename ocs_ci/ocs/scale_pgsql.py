@@ -9,6 +9,7 @@ from ocs_ci.ocs import constants, machine, node
 from ocs_ci.ocs.exceptions import UnsupportedPlatformError
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import update_container_with_mirrored_image
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class ScalePodPGSQL(Postgresql):
     def setup_postgresql(self, replicas, node_selector=None):
         # Node selector for postgresql
         pgsql_sset = templating.load_yaml(constants.PGSQL_STATEFULSET_YAML)
+        update_container_with_mirrored_image(pgsql_sset)
         if node_selector is not None:
             pgsql_sset["spec"]["template"]["spec"]["nodeSelector"] = node_selector
         if helpers.storagecluster_independent_check():

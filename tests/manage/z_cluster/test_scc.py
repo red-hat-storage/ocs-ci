@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from datetime import datetime
 from ocs_ci.ocs import constants
@@ -125,6 +125,9 @@ class TestSCC:
         simple_app_data["spec"]["template"]["spec"]["volumes"][0][
             "persistentVolumeClaim"
         ]["claimName"] = pvc.name
+
+        utils.update_container_with_mirrored_image(simple_app_data)
+
         simple_app_dc = helpers.create_resource(**simple_app_data)
         teardown_factory(simple_app_dc)
 
