@@ -13,7 +13,7 @@ spec:
                     cloud: 'openshift',
                     containers: [
                     containerTemplate(
-                        name: 'jnlp', image: 'quay.io/openshift/origin-jenkins-agent-maven:latest'
+                        name: 'jnlp', image: 'quay.io/ocsci/jenkins-agent-maven:latest'
                     )
                     ],
                     volumes: [persistentVolumeClaim(mountPath: '/home/jenkins/.m2', claimName: 'dependencies', readOnly: false) ]
