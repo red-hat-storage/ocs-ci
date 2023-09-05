@@ -24,6 +24,12 @@ def get_rgw_count(ocs_version, is_upgrade, version_before_upgrade):
         int: RGW Count
 
     """
+    from ocs_ci.framework import config
+
+    if config.DEPLOYMENT.get("arbiter_deployment") is True:
+        log.debug("RGW count: 2")
+        return 2
+
     semantic_ocs_version = version.get_semantic_version(
         ocs_version, only_major_minor=True
     )
