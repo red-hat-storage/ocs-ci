@@ -5,6 +5,7 @@ import git
 import tempfile
 from subprocess import run
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster
 from ocs_ci.ocs.resources.ocs import OCS
@@ -13,7 +14,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs import constants
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, mirror_image
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
 
@@ -121,8 +122,11 @@ class BenchmarkOperatorFIO(object):
 
         """
         log.info("Run make deploy command")
+        bo_image = "quay.io/ocsci/benchmark-operator:testing"
+        if config.DEPLOYMENT.get("disconnected"):
+            bo_image = mirror_image(bo_image)
         run(
-            "make deploy IMG=quay.io/ocsci/benchmark-operator:testing",
+            f"make deploy IMG={bo_image}",
             shell=True,
             check=True,
             cwd=self.local_repo,

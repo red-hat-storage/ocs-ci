@@ -82,6 +82,7 @@ class Postgresql(BenchmarkOperator):
                 pgsql_sset["spec"]["volumeClaimTemplates"][0]["spec"][
                     "storageClassName"
                 ] = sc_name
+            utils.update_container_with_mirrored_image(pgsql_sset)
             self.pgsql_service = OCS(**pgsql_service)
             self.pgsql_service.create()
             self.pgsql_cmap = OCS(**pgsql_cmap)
@@ -579,6 +580,7 @@ class Postgresql(BenchmarkOperator):
                         "persistentVolumeClaim": {"claimName": f"{pvc_obj.name}"},
                     }
                 ]
+                utils.update_container_with_mirrored_image(pgsql_sset)
                 pgsql_sset = OCS(**pgsql_sset)
                 pgsql_sset.create()
                 pgsql_obj_list.append(pgsql_sset)
