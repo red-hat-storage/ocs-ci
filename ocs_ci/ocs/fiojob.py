@@ -336,6 +336,7 @@ def workload_fio_storageutilization(
     with_checksum=False,
     keep_fio_data=False,
     minimal_time=480,
+    extra_time=40,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -380,6 +381,12 @@ def workload_fio_storageutilization(
             storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
             (See more details in the function 'measure_operation')
+        extra_time (int): Extra number of seconds to monitor a system, after
+            operation and minimal time ends. Useful for monitoring the system on
+            capacity tests, where estimated operation time is unknown.
+            e.g.
+            CephClusterNearFull is in firing if utilization is >75% for 40s.
+            CephClusterCriticallyFull is in firing if utilization is >80% for 40s
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -522,6 +529,7 @@ def workload_fio_storageutilization(
         test_file,
         measure_after=True,
         minimal_time=minimal_time,
+        extra_time=extra_time,
     )
 
     # we don't need to delete anything if this fixture has been already
