@@ -69,9 +69,12 @@ def check_node_replacement_verification_steps(
             f"of osd nodes. Wait for the new created worker node to appear in the osd nodes"
         )
         timeout = 1500
-        # In vSphere platform, we are creating new node with same name as deleted
+        # In vSphere UPI platform, we are creating new node with same name as deleted
         # node using terraform
-        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "upi"
+        ):
             new_osd_node_name = old_node_name
         else:
             new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
