@@ -3531,7 +3531,6 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
         pool_type="rbd",
         timeout=60,
     ):
-
         dict_modes = {
             "RWO": "ReadWriteOnce",
             "RWX": "ReadWriteMany",
@@ -5479,12 +5478,13 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
 
     def mcg_account_factory_implementation(
         name,
-        allowed_buckets,
-        default_resource,
-        uid=None,
-        gid=None,
-        new_buckets_path=None,
-        nsfs_only=None,
+        default_resource="",
+        nsfs_account_config=False,
+        uid=-1,
+        gid=-1,
+        new_buckets_path="/",
+        nsfs_only=False,
+        allow_bucket_create=True,
         ssl=True,
     ):
         """
@@ -5492,13 +5492,14 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
 
         Args:
             name (str): Name of the user; Has to be RFC 1123 compliant
-            allowed_buckets (str|dict): Comma separated list of allowed buckets,
-            or a dict stating {'full_permission': True}
             default_resource (str): Default resource for the user
+            new_buckets_path (str): The FS path in which new buckets will be created
+            nsfs_account_config (bool): Whether the user has an NSFS account config
             uid (str): UID of the user
             gid (str): GID of the user
-            new_buckets_path (str): The FS path in which new buckets will be created
             nsfs_only (bool): Whether the user has access to NSFS only
+            allow_bucket_create (bool): Whether the user is allowed to create buckets
+            ssl (bool): Whether to use SSL for the connection
 
         Returns:
             A dictionary containing the S3 credentials, with the following keys:
@@ -5510,28 +5511,15 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
         """
 
         # Build the mcg-cli command for creating an account
-        cli_cmd = "".join(
-            (
-                f"account create {name}",
-                " --allowed_buckets"
-                f" {','.join([bucketname for bucketname in allowed_buckets])}"
-                if type(allowed_buckets) in (list, tuple)
-                and version.get_semantic_ocs_version_from_config()
-                < version.VERSION_4_12
-                else "",
-                " --full_permission=True"
-                if type(allowed_buckets) is dict
-                and allowed_buckets.get("full_permission")
-                and version.get_semantic_ocs_version_from_config()
-                < version.VERSION_4_12
-                else "",
-                f" --default_resource {default_resource}" if default_resource else "",
-                f" --uid {uid}" if uid else "",
-                f" --gid {gid}" if gid else "",
-                f" --new_buckets_path {new_buckets_path}" if new_buckets_path else "",
-                f" --nsfs_only={nsfs_only}" if type(nsfs_only) is bool else "",
-                " --nsfs_account_config=" + "True" if uid else "False",
-            )
+        cli_cmd = (
+            f"account create {name} "
+            f"--allow_bucket_create={allow_bucket_create} "
+            f"--default_resource {default_resource} "
+            f"--gid {gid} "
+            f"--new_buckets_path {new_buckets_path} "
+            f"--nsfs_account_config={nsfs_account_config} "
+            f"--nsfs_only={nsfs_only} "
+            f"--uid {uid} "
         )
 
         # Create the account
@@ -5544,19 +5532,24 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             f" {str(acc_creation_process_output)}"
         )
 
+        # Prepare the credentials dict
         acc_secret_dict = OCP(
             kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
         ).get(f"noobaa-account-{name}")
-        return {
-            "access_key_id": base64.b64decode(
-                acc_secret_dict.get("data").get("AWS_ACCESS_KEY_ID")
-            ).decode("utf-8"),
-            "access_key": base64.b64decode(
-                acc_secret_dict.get("data").get("AWS_SECRET_ACCESS_KEY")
-            ).decode("utf-8"),
+        credentials_dict = {
+            "access_key_id": acc_secret_dict["data"]["AWS_ACCESS_KEY_ID"],
+            "access_key": acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"],
             "endpoint": mcg_obj_session.s3_endpoint,
             "ssl": ssl,
         }
+        credentials_dict["access_key_id"] = base64.b64decode(
+            credentials_dict["access_key_id"]
+        ).decode()
+        credentials_dict["access_key"] = base64.b64decode(
+            credentials_dict["access_key"]
+        ).decode()
+
+        return credentials_dict
 
     def mcg_account_factory_cleanup():
         for acc_name in created_accounts:
@@ -5646,21 +5639,19 @@ def nsfs_bucket_factory_fixture(
 
         # Apply the necessary permissions on the filesystem
         nsfs_interface_pod.exec_cmd_on_pod(f"chmod -R 777 {nsfs_obj.mount_path}")
-        nsfs_interface_pod.exec_cmd_on_pod(f"groupadd -g {nsfs_obj.gid} nsfs-group")
-        nsfs_interface_pod.exec_cmd_on_pod(
-            f"useradd -g {nsfs_obj.gid} -u {nsfs_obj.uid} nsfs-user"
-        )
+        # nsfs_interface_pod.exec_cmd_on_pod(f"groupadd -g {nsfs_obj.gid} nsfs-group")
+        # nsfs_interface_pod.exec_cmd_on_pod(
+        #     f"useradd -g {nsfs_obj.gid} -u {nsfs_obj.uid} nsfs-user"
+        # )
         nsfs_obj.interface_pod = nsfs_interface_pod
         # Create a new MCG account
         nsfs_obj.s3_creds = mcg_account_factory(
-            f"nsfs-integrity-test-{random.randrange(100)}",
-            {"full_permission": True},
-            nsfs_obj.nss.name,
-            nsfs_obj.uid,
-            nsfs_obj.gid,
-            "/",
-            False,
-            False,
+            name=f"nsfs-integrity-test-{random.randrange(100)}",
+            default_resource=nsfs_obj.nss.name,
+            nsfs_account_config=True,
+            gid=nsfs_obj.gid,
+            uid=nsfs_obj.uid,
+            ssl=False,
         )
         # Let the account propagate through the system
         time.sleep(15)
@@ -6800,7 +6791,6 @@ def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
 @pytest.fixture()
 def logwriter_workload_factory(request, teardown_factory):
     def factory(pvc, logwriter_path):
-
         dc_data = templating.load_yaml(logwriter_path)
         dc_data["metadata"]["namespace"] = pvc.namespace
         dc_data["spec"]["replicas"] = 4
@@ -6836,7 +6826,6 @@ def logwriter_workload_factory(request, teardown_factory):
 @pytest.fixture()
 def logreader_workload_factory(request, teardown_factory):
     def factory(pvc, logreader_path, duration=30):
-
         job_data = templating.load_yaml(logreader_path)
         job_data["metadata"]["namespace"] = pvc.namespace
         job_data["spec"]["completions"] = 4
@@ -6896,7 +6885,6 @@ def setup_logwriter_cephfs_workload_factory(
 
 @pytest.fixture()
 def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_factory):
-
     logwriter_sts_path = constants.LOGWRITER_STS_PATH
     project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
     sts_data = templating.load_yaml(logwriter_sts_path)
