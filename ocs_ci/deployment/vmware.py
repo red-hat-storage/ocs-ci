@@ -880,37 +880,52 @@ class VSPHEREUPI(VSPHEREBASE):
                 ]
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
-            # prepare configuration for disconnected deployment
-            if config.DEPLOYMENT.get("disconnected"):
+            # prepare configuration for disconnected deployment (including deployment behind proxy)
+            if config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"):
                 # set non-existing gateway, to make the cluster disconnected
                 config.ENV_DATA["gateway"] = config.DEPLOYMENT.get(
                     "disconnected_false_gateway", "${cidrhost(var.machine_cidr, 1)}"
                 )
-                # set DNS server accessible from the disconnected env
+                # set DNS server accessible from the disconnected/proxy env
                 config.ENV_DATA["dns"] = config.DEPLOYMENT["disconnected_dns_server"]
 
-                install_config_obj.update(
-                    yaml.safe_load(config.RUN["imageContentSources"])
-                )
                 cluster_domain = (
                     f"{config.ENV_DATA.get('cluster_name')}."
                     f"{config.ENV_DATA.get('base_domain')}"
                 )
-                install_config_obj["proxy"] = {
-                    "httpProxy": config.DEPLOYMENT["disconnected_http_proxy"],
-                    "httpsProxy": config.DEPLOYMENT.get(
-                        "disconnected_https_proxy",
-                        config.DEPLOYMENT["disconnected_http_proxy"],
-                    ),
-                    "noProxy": ",".join(
-                        [
-                            cluster_domain,
-                            config.DEPLOYMENT.get("disconnected_no_proxy", ""),
-                        ],
-                    ),
-                }
-                with open(get_root_ca_cert(), "r") as fd:
-                    install_config_obj["additionalTrustBundle"] = fd.read()
+                if config.DEPLOYMENT.get("proxy"):
+                    install_config_obj["proxy"] = {
+                        "httpProxy": config.DEPLOYMENT["proxy_http_proxy"],
+                        "httpsProxy": config.DEPLOYMENT.get(
+                            "proxy_https_proxy",
+                            config.DEPLOYMENT["proxy_http_proxy"],
+                        ),
+                        "noProxy": ",".join(
+                            [
+                                cluster_domain,
+                                config.DEPLOYMENT.get("disconnected_no_proxy", ""),
+                            ],
+                        ),
+                    }
+                if config.DEPLOYMENT.get("disconnected"):
+                    install_config_obj["proxy"] = {
+                        "httpProxy": config.DEPLOYMENT["disconnected_http_proxy"],
+                        "httpsProxy": config.DEPLOYMENT.get(
+                            "disconnected_https_proxy",
+                            config.DEPLOYMENT["disconnected_http_proxy"],
+                        ),
+                        "noProxy": ",".join(
+                            [
+                                cluster_domain,
+                                config.DEPLOYMENT.get("disconnected_no_proxy", ""),
+                            ],
+                        ),
+                    }
+                    install_config_obj.update(
+                        yaml.safe_load(config.RUN["imageContentSources"])
+                    )
+                    with open(get_root_ca_cert(), "r") as fd:
+                        install_config_obj["additionalTrustBundle"] = fd.read()
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             with open(install_config, "w") as f:
@@ -2101,6 +2116,22 @@ def modify_haproxyservice():
     execstop = f"{to_change}\nExecStop=/bin/podman rm -f haproxy"
 
     replace_content_in_file(constants.TERRAFORM_HAPROXY_SERVICE, to_change, execstop)
+
+    if config.DEPLOYMENT.get("proxy"):
+        http_proxy = config.DEPLOYMENT["proxy_http_proxy"]
+        https_proxy = config.DEPLOYMENT.get(
+            "proxy_https_proxy",
+            config.DEPLOYMENT["proxy_http_proxy"],
+        )
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "[Service]",
+            (
+                "[Service]\n"
+                f'Environment="http_proxy={http_proxy}"\n'
+                f'Environment="https_proxy={https_proxy}"'
+            ),
+        )
 
     if config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
         "haproxy_router_image"

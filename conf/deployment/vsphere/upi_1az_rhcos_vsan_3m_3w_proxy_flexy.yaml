@@ -6,6 +6,8 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
+  flexy_deployment: true
+  flexy_template: 'upi-on-vsphere/versioned-installer-http_proxy'
   worker_replicas: 3
   master_replicas: 3
   worker_num_cpus: '16'
