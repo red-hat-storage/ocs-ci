@@ -343,8 +343,7 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to block pools page")
         storage_system_details = (
-            PageNavigator()
-            .nav_odf_default_page()
+            self.nav_odf_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )
