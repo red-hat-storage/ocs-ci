@@ -1058,7 +1058,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 if self.folder_structure:
                     # comment bootstrap module
-                    comment_bootstrap_in_lb_module()
+                    # comment_bootstrap_in_lb_module()
 
                     logger.debug(
                         "Remove bootstrap IP from load balancer and restart haproxy"
@@ -1749,7 +1749,7 @@ def clone_openshift_installer():
             # we need to revert the changes
             if version.get_semantic_version(
                 ocp_version
-            ) >= version.get_semantic_version("4.13"):
+            ) == version.get_semantic_version("4.13"):
                 clone_repo(
                     url=constants.VSPHERE_INSTALLER_REPO,
                     location=upi_repo_path,
