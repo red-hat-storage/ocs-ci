@@ -61,15 +61,13 @@ class TestReclaimSpaceCronJob(ManageTest):
         num_of_pvcs = 10
 
         existing_pvcs_num = 0
-        for line in run_oc_command(f"get pvc", namespace=self.namespace):
+        for line in run_oc_command("get pvc", namespace=self.namespace):
             if constants.STATUS_BOUND in line:
                 existing_pvcs_num += 1
 
         logger.info(f"There are {existing_pvcs_num} existing PVCs")
 
-        cron_jobs_result = run_oc_command(
-            f"get reclaimspacecronjob", namespace=self.namespace
-        )
+        cron_jobs_result = run_oc_command("get reclaimspacecronjob", namespace=self.namespace)
         existing_cronjobs_num = (
             len(cron_jobs_result) - 1
         )  # first line of the result is title
