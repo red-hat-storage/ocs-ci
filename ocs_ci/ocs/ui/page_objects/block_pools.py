@@ -3,12 +3,13 @@ from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import logger
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import CreateResourceForm
+from ocs_ci.ocs.ui.page_objects.searchbar import SearchBar
 from ocs_ci.ocs.ui.page_objects.edit_label_form import EditLabelForm
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
 
 
-class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm):
+class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, SearchBar):
     def __init__(self, block_pool_existed: list = None):
         StorageSystemTab.__init__(self)
         CreateResourceForm.__init__(self)
@@ -62,3 +63,61 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm):
                 f"cephblockpool status error | expected status:Ready \n "
                 f"actual status:{cephblockpool_status}"
             )
+
+    def delete_block_pool(self, block_pool_name: str, cannot_be_deleted: bool = False):
+        """
+        Deletes the block pool, does not verify the deletion, but verifies the alert if the block pool cannot be deleted
+
+        Args:
+            block_pool_name (str): Name of the block pool to be deleted
+            cannot_be_deleted (bool): Whether the block pool cannot be deleted
+
+        Returns:
+            bool: True if the block pool delete via UI performed, False otherwise
+        """
+        logger.info(f"Deleting the block pool: {block_pool_name}")
+        self.select_search_by("name")
+        self.search(block_pool_name)
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        resource_actions = format_locator(
+            self.generic_locators["actions_of_resource_from_list"], block_pool_name
+        )
+        self.do_click(resource_actions, enable_screenshot=True)
+        self.do_click(self.generic_locators["delete_resource"], enable_screenshot=True)
+
+        if cannot_be_deleted:
+            logger.info(
+                f"Block pool {block_pool_name} cannot be deleted. Verifying alert"
+            )
+            self.check_element_presence(
+                self.bp_loc["pool_cannot_be_deleted_warning"][::-1]
+            )
+            warning_text = self.get_element_text(
+                self.bp_loc["pool_cannot_be_deleted_warning"]
+            )
+            logger.info(f"Warning text: {warning_text}. Close warning modal")
+            self.do_click(self.generic_locators["close_modal_btn"])
+            return False
+
+        logger.info(f"Confirm {block_pool_name} Deletion")
+        self.do_click(self.generic_locators["confirm_action"], enable_screenshot=True)
+        return True
+
+    def is_block_pool_exist(self, block_pool_name: str):
+        """
+        Checks if the block pool exists in the list
+
+        Args:
+            block_pool_name (str): Name of the block pool
+        """
+        logger.info(f"Checking if the block pool {block_pool_name} exists")
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        block_pool_from_list = format_locator(
+            self.generic_locators["resource_from_list_by_name"], block_pool_name
+        )
+
+        return self.check_element_presence(block_pool_from_list[::-1], timeout=10)
