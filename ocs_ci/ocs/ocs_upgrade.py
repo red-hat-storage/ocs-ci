@@ -184,15 +184,21 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         config.DEPLOYMENT.get("external_mode")
         or config.ENV_DATA.get("mcg_only_deployment")
     ):
+        mon_count = constants.MON_COUNT
+        if config.DEPLOYMENT.get("arbiter_deployment") is True:
+            mon_count = 5
+
+        mgr_count = constants.MGR_COUNT
+        if config.DEPLOYMENT.get("arbiter_deployment") is True or upgrade_version >= parse_version("4.15"):
+            mgr_count = constants.MGR_COUNT_415
+
         verify_pods_upgraded(
             old_images,
             selector=constants.MON_APP_LABEL,
-            count=3,
+            count=mon_count,
             timeout=820,
         )
-        mgr_count = constants.MGR_COUNT_415
-        if upgrade_version < parse_version("4.15"):
-            mgr_count = constants.MGR_COUNT
+
         verify_pods_upgraded(
             old_images, selector=constants.MGR_APP_LABEL, count=mgr_count
         )
