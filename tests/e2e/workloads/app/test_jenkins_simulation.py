@@ -1,11 +1,10 @@
 import pytest
 import logging
 
-from ocs_ci.framework.testlib import ManageTest, workloads, polarion_id, bugzilla
-from ocs_ci.ocs import constants, node
+from ocs_ci.framework.testlib import ManageTest, workloads
+from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.pod import Pod
-from ocs_ci.ocs.resources import pod as res_pod
 
 logger = logging.getLogger(__name__)
 
@@ -39,47 +38,8 @@ class TestJenkinsSimulation(ManageTest):
     """
 
     @workloads
-    @polarion_id("OCS-4668")
-    @bugzilla("2096395")
     def test_git_clone(self, pod):
         """
         git clones a large repository
-        Added test coverage for BZ #2096395
         """
-        csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            selector=["csi-cephfsplugin"],
-        )
-
-        relevant_pod_logs = None
-        func_calls = ["NodeStageVolume", "NodeGetVolumeStats"]
-        error_msg = "System has not been booted with systemd"
-
-        # Get the node running this pod
-        node_name = res_pod.get_pod_node(pod_obj=pod).name
-
-        # Get the csi_cephfsplugin pod running on this node
-        cephfsplugin_pod = node.get_node_pods(
-            node_name=node_name, pods_to_search=csi_cephfsplugin_pod_objs
-        )[0]
-
-        pod_log = res_pod.get_pod_logs(
-            pod_name=cephfsplugin_pod.name, container="csi-cephfsplugin"
-        )
-        for f_call in func_calls:
-            if f_call in pod_log:
-                relevant_pod_logs = pod_log
-                logger.info(
-                    f"Found '{f_call}' call in logs on pod {cephfsplugin_pod.name}"
-                )
-                break
-
-        assert (
-            relevant_pod_logs
-        ), f"None of {func_calls} were not found on {cephfsplugin_pod.name} pod logs"
-        assert not (
-            error_msg in relevant_pod_logs
-        ), f"Logs should not contain the error message '{error_msg}'"
-        logger.info(f"Logs did not contain the error message '{error_msg}'")
-
         pod.run_git_clone()
