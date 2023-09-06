@@ -4385,3 +4385,45 @@ def filter_out_emojis(plaintext):
     # Join the characters back together to form the filtered string
     filtered_string = "".join(filtered_chars)
     return filtered_string
+
+
+def remove_ceph_crashes(toolbox_pod):
+    """
+    Deletes the Ceph crashes
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    """
+    ceph_crash_ids = get_ceph_crashes(toolbox_pod)
+    archive_ceph_crashes(toolbox_pod)
+    log.info(f"Removing all ceph crashes {ceph_crash_ids}")
+    for each_ceph_crash in ceph_crash_ids:
+        toolbox_pod.exec_ceph_cmd(f"ceph crash rm {each_ceph_crash}")
+
+
+def get_ceph_crashes(toolbox_pod):
+    """
+    Gets all Ceph crashes
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    Returns:
+        list: List of ceph crash ID's
+
+    """
+    ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
+    return [each_crash["crash_id"] for each_crash in ceph_crashes]
+
+
+def archive_ceph_crashes(toolbox_pod):
+    """
+    Archive all Ceph crashes
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    """
+    log.info("Archiving all ceph crashes")
+    toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
