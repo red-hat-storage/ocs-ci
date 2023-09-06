@@ -21,7 +21,6 @@ from ocs_ci.ocs.constants import (
     NOOBAA_RESOURCE_NAME,
 )
 from ocs_ci.ocs.exceptions import (
-    ArchitectureNotSupported,
     CommandFailed,
     CredReqSecretNotFound,
     TimeoutExpiredError,
@@ -913,14 +912,7 @@ class MCG:
             elif machine == "s390x":
                 path = os.path.join(path, f"{noobaa}-s390x")
         elif system == "Darwin":  # Mac
-            if machine == "arm64":
-                raise ArchitectureNotSupported(
-                    "Noobaa client binary is not compiled for arm64 architecture!"
-                    " Please compile MCG binary yourself and store it "
-                    f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-                )
-            elif machine == "x86_64":
-                path = os.path.join(path, "macosx", noobaa)
+            path = os.path.join(path, "macosx", noobaa)
         return path
 
     @retry(
