@@ -325,6 +325,7 @@ class MCGCLIBucket(ObjectBucket):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         bc = f" --bucketclass {self.bucketclass.name}" if self.bucketclass else ""
+        quota = f" --max-size {self.quota}" if self.quota else ""
         with tempfile.NamedTemporaryFile(
             delete=True, mode="wb", buffering=0
         ) as replication_policy_file:
@@ -338,7 +339,7 @@ class MCGCLIBucket(ObjectBucket):
             )
 
             self.mcg.exec_mcg_cmd(
-                f"obc create --exact {self.name}{bc}{replication_policy}"
+                f"obc create --exact {self.name}{bc}{quota}{replication_policy}"
             )
 
     def internal_delete(self):

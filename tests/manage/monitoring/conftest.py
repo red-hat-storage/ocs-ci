@@ -19,7 +19,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
-from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
@@ -647,12 +647,8 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     bucket_name = create_unique_resource_name(
         resource_description="bucket", resource_type="s3"
     )
-    bucket = MCGS3Bucket(bucket_name, mcg=mcg_obj)
-    mcg_obj.send_rpc_query(
-        "bucket_api",
-        "update_bucket",
-        {"name": bucket_name, "quota": {"unit": "GIGABYTE", "size": 2}},
-    )
+    quota = "2Gi"
+    bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota=quota)
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
     logger.info(f"Bucket {bucket.name} data: {bucket_info['data']}")
