@@ -109,11 +109,11 @@ class TestODFTopology(object):
             )
 
     @tier3
-    @bugzilla("2214023")
     @polarion_id("OCS-4903")
     def test_validate_topology_node_details(self, setup_ui_class):
         """
         Test to validate ODF Topology node details
+        BZ #2214023 fixed in 4.14.0-0.nightly-2023-09-02-132842
 
         Steps:
         1. Get node names and pick random node
