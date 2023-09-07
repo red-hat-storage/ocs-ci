@@ -49,8 +49,6 @@ def test_hpa_noobaa_endpoint_metric():
             if metric["resource"]["name"] != "cpu":
                 continue
             cpu_utilization = metric["resource"]["current"]["averageUtilization"]
-    assert (
-        cpu_utilization is not None
-    ), "Failed: noobaa-hpav2 cpu metrics not available"
+    assert cpu_utilization is not None, "Failed: noobaa-hpav2 cpu metrics not available"
     assert cpu_utilization >= 0
     logger.info("Current resource cpu utilized: %d%%", cpu_utilization)
