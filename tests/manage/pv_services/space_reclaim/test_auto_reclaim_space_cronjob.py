@@ -255,9 +255,6 @@ class TestReclaimSpaceCronJob(ManageTest):
                 cmd="get reclaimspacecronjob",
                 namespace=self.namespace,
             ):
-                # if (len(sample) > 1 and cronjobs_exist) or (
-                #     len(sample) == 1 and not cronjobs_exist
-                # ):
                 if (
                     len(sample) == cronjobs_num + 1
                 ):  # in the result one line is always a title
