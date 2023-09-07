@@ -1,6 +1,7 @@
 """
 Couchbase workload class
 """
+import json
 import logging
 import random
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -126,7 +127,7 @@ class CouchBase(PillowFight):
         log.info("Successfully created secrets for Couchbase")
         self.cb_create_cb_secret = True
 
-    def create_cb_cluster(self, replicas=1, sc_name=None):
+    def create_cb_cluster(self, replicas=1, sc_name=None, image=None):
         """
         Deploy a Couchbase server using Couchbase operator
 
@@ -145,7 +146,16 @@ class CouchBase(PillowFight):
         """
         log.info("Creating Couchbase worker pods...")
         cb_example = templating.load_yaml(constants.COUCHBASE_WORKER_EXAMPLE)
-
+        if not image:
+            cb_package_manifest = PackageManifest(
+                resource_name="couchbase-enterprise-certified"
+            )
+            data = json.loads(
+                cb_package_manifest.get()["status"]["channels"][0]["currentCSVDesc"][
+                    "annotations"
+                ]["alm-examples"]
+            )
+            cb_example["spec"]["image"] = data[0]["spec"]["image"]
         if (
             storagecluster_independent_check()
             and config.ENV_DATA["platform"].lower()
