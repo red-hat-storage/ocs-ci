@@ -412,3 +412,21 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
             not is_managed_service_cluster()
         ), "The cluster is a Managed Service cluster"
         logger.info("The cluster is not a Managed Service cluster as expected")
+
+
+def get_provider_service_type():
+    """
+    Get the type of the ocs-provider-server Service(e.g., NodePort, LoadBalancer)
+
+    Returns:
+        str: The type of the ocs-provider-server Service
+
+    """
+    service_obj = ocp.OCP(
+        kind=constants.SERVICE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.MANAGED_PROVIDER_SERVER_SECRET,
+    )
+    service_type = service_obj.get().get("spec").get("type")
+    logger.info(f"The type of the ocs-provider-server Service = {service_type}")
+    return service_type

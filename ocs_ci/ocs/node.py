@@ -2626,10 +2626,15 @@ def consumers_verification_steps_after_provider_node_replacement():
         bool: True, if all the consumers verification steps finished successfully. False, otherwise.
 
     """
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
+    from ocs_ci.ocs.managedservice import get_provider_service_type
+
+    if (
+        version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11
+        and get_provider_service_type() != "NodePort"
+    ):
         log.info(
-            "We need to change the consumers verification steps when the ODF version is 4.11. "
-            "Currently, we can skip these steps when we use ODF 4.11"
+            "We need to change the consumers verification steps when the ODF version is 4.11 and not using "
+            "the ocs-provider-server Service type 'NodePort'. Currently, we can skip these steps"
         )
         return True
 
