@@ -121,7 +121,7 @@ class BucketClassTab(ObjectService, CreateResourceForm, ResourceList):
 
         """
         logger.info(f"Navigate to bucket class {bucket_class_name}")
-        self.nav_to_resource(bucket_class_name)
+        self.nav_to_resource_via_name(bucket_class_name)
 
     def validate_bucket_class_ready(self) -> bool:
         """

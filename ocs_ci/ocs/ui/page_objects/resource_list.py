@@ -1,6 +1,5 @@
 from selenium.webdriver.common.by import By
 
-from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.searchbar import SearchBar
 from ocs_ci.ocs.ui.base_ui import logger
@@ -14,47 +13,38 @@ class ResourceList(SearchBar):
     This module is for selecting resource, navigation into, filtering, deletion, edition, etc.
     """
 
-    def nav_to_resource(self, resource_name: str = None, resource_label: str = None):
+    def nav_to_resource_via_name(self, resource_name: str = None):
         """
-        Navigate to resource.
-        Important! Mandatory to pass either resource_name or resource_label
+        Navigate to resource searching it via name
         Args:
-            resource_name (str): Resource name - optional argument
-            resource_label (str): Resource label - optional argument
+            resource_name (str): Resource name
         """
-        if not (resource_name or resource_label):
-            raise IncorrectUiOptionRequested(
-                "Either resource_name or resource_label should have value"
-            )
+        logger.info(f"Navigate to resource by name '{resource_name}'")
+        self.select_search_by("name")
+        self.search(resource_name)
+        self.do_click(
+            format_locator(self.generic_locators["resource_link"], resource_name),
+            enable_screenshot=True,
+        )
 
-        if resource_name:
-            logger.info(f"Navigate to resource by name '{resource_name}'")
-            self.select_search_by("name")
-            self.search(resource_name)
-            self.do_click(
-                format_locator(self.generic_locators["resource_link"], resource_name),
-                enable_screenshot=True,
-            )
-        elif resource_label:
-            logger.info(f"Navigate to resource by label '{resource_label}'")
-            raise NotImplementedError(
-                "TODO: select resource by label, first dropdown matching to entered label"
-            )
-
-    def select_resource_number(self, resource_number: int):
+    def nav_to_resource_via_label(self, resource_label: str):
         """
-        Select resource number
+        Navigate to resource searching it via label
         Args:
-            resource_number (int): Resource number (index)
+            resource_label (str): Resource label
         """
-        logger.info(f"Select resource number {resource_number}")
+        logger.info(f"Navigate to resource via label '{resource_label}'")
+        raise NotImplementedError(
+            "TODO: select resource by label, first dropdown matching to entered label. Not implemented yet."
+        )
 
     def delete_resource(self, delete_via, resource):
         """
         Delete Object Bucket, Object Bucket Claim, PVC, PV, BucketClass, BackingStore, StorageClass, Namespace, etc.
 
         Args:
-            delete_via (str): delete using 'three dots' icon, from the Resource List page
+            delete_via (str): supported values: 'three_dots' or 'Actions'
+                delete using 'three dots' icon, from the Resource List page
                 or click on specific resource and delete it using 'Actions' dropdown list
             resource (str): resource name to delete.
         """
@@ -65,7 +55,7 @@ class ResourceList(SearchBar):
         if delete_via == "Actions":
             logger.info(f"Go to {resource} Page")
             # delete specific resource by its dynamic name. Works both for
-            self.nav_to_resource(resource_name=resource)
+            self.nav_to_resource_via_name(resource_name=resource)
 
             logger.info(f"Click on '{delete_via}'")
             self.do_click(self.generic_locators["actions"], enable_screenshot=True)

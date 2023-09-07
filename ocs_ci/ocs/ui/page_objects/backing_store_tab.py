@@ -56,7 +56,7 @@ class BackingStoreTab(ObjectService, CreateResourceForm, ResourceList):
 
         """
         logger.info(f"Navigate to backing store {backing_store_name}")
-        self.nav_to_resource(backing_store_name)
+        self.nav_to_resource_via_name(backing_store_name)
 
     def validate_backing_store_ready(self) -> bool:
         """
