@@ -16,7 +16,7 @@ from ocs_ci.ocs import flowtest
 log = logging.getLogger(__name__)
 
 
-@skipif_ocp_version(">=4.12")
+@skipif_ocp_version(">=4.13")
 @workloads
 @ignore_leftovers
 class TestCouchBaseNodeDrain(E2ETest):
