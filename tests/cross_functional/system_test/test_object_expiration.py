@@ -138,8 +138,13 @@ class TestObjectExpiration:
         change_noobaa_lifecycle_interval,
         node_drain_teardown,
     ):
-        change_noobaa_lifecycle_interval(interval=2)
 
+        """
+        Test object expiration feature when there are some sort of disruption to the noobaa
+        like node drain, node restart, nb db recovery etc
+
+        """
+        change_noobaa_lifecycle_interval(interval=2)
         expiration_days = 1
         expire_rule = {
             "Rules": [
@@ -242,7 +247,7 @@ class TestObjectExpiration:
                     )
 
             logger.info(
-                "Objects with prefix 'others' should expire but not with the prefix 'new'"
+                "Objects with prefix 'others' should expire but not with the prefix 'perm'"
             )
             for bucket in buckets_with_prefix:
                 sampler = TimeoutSampler(
@@ -268,7 +273,7 @@ class TestObjectExpiration:
                     func=check_if_objects_expired,
                     mcg_obj=mcg_obj,
                     bucket_name=bucket.name,
-                    prefix="new",
+                    prefix="perm",
                 )
                 if sampler.wait_for_func_status(result=False):
                     logger.info(
@@ -332,3 +337,10 @@ class TestObjectExpiration:
         self.sanity_helpers.health_check(tries=120)
 
         sample_if_objects_expired()
+
+    def test_sample(self, setup_mcg_bg_features, validate_mcg_bg_feature):
+        mcg_sys_dict, kafka_rgw_dict = setup_mcg_bg_features()
+        import time
+
+        time.sleep(60)
+        validate_mcg_bg_feature(mcg_sys_dict, kafka_rgw_dict)
