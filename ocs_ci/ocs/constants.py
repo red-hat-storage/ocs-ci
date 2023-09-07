@@ -328,6 +328,7 @@ ACCESS_MODE_RWOP = "ReadWriteOncePod"
 # Pod names
 NB_DB_NAME_46_AND_BELOW = "noobaa-db-0"
 NB_DB_NAME_47_AND_ABOVE = "noobaa-db-pg-0"
+REPORT_STATUS_TO_PROVIDER_POD = "report-status-to-provider-"
 
 # Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
