@@ -3,12 +3,13 @@ import logging
 import pyipmi
 import pyipmi.interfaces
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes, get_master_nodes
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
-from ocs_ci.utility.utils import TimeoutSampler, load_auth_config, exec_cmd
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class BAREMETAL(object):
         Initialize the variables required
 
         """
-        self.mgmt_details = load_auth_config()["ipmi"]
+        self.mgmt_details = config.AUTH["ipmi"]
 
     def get_ipmi_ctx(self, host, user, password):
         """
