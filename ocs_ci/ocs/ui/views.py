@@ -1394,6 +1394,13 @@ validation_4_12 = {
 
 validation_4_13 = {"topology_tab": ("//a[normalize-space()='Topology']", By.XPATH)}
 
+validation_4_14 = {
+    "storagesystems_overview": (
+        "//button[@data-test='horizontal-link-Overview']",
+        By.XPATH,
+    )
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[@class='pf-topology__node__label']", By.XPATH),
@@ -1610,6 +1617,7 @@ locators = {
             **validation_4_11,
             **validation_4_12,
             **validation_4_13,
+            **validation_4_14,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
