@@ -49,7 +49,6 @@ from ocs_ci.helpers.helpers import (
     default_storage_class,
 )
 from ocs_ci.utility.utils import clone_notify
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(__name__)
 
@@ -700,7 +699,7 @@ def benchmark_fio_factory_fixture(request):
         jobs="read",
         read_runtime=30,
         bs="4096KiB",
-        storageclass=storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]),
+        storageclass=constants.DEFAULT_STORAGECLASS_RBD,
         timeout_completed=2400,
     ):
         bmo_fio_obj.setup_benchmark_fio(
