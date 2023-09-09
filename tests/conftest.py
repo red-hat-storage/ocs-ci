@@ -6910,11 +6910,3 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
         )
 
     return factory
-
-
-@pytest.fixture(autouse=True)
-def default_storage_classes(interface):
-    """ """
-    from ocs_ci.helpers.storageclass_helpers import storageclass_name
-
-    return storageclass_name(interface)
