@@ -6765,11 +6765,3 @@ def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_fact
     )
 
     return logwriter_sts
-
-
-@pytest.fixture(autouse=True)
-def default_storage_classes(interface):
-    """ """
-    from ocs_ci.helpers.storageclass_helpers import storageclass_name
-
-    return storageclass_name(interface)
