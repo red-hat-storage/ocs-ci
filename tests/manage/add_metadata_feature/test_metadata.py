@@ -62,6 +62,7 @@ class TestMetadataUnavailable(ManageTest):
         and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
+        sc_name = storageclass_name(sc_interface)
         external_mode = config.DEPLOYMENT["external_mode"]
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=external_mode
@@ -174,6 +175,7 @@ class TestDefaultMetadataDisabled(ManageTest):
             2. PVC clone
 
         """
+        sc_name = storageclass_name(sc_interface)
         external_mode = config.DEPLOYMENT["external_mode"]
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=external_mode
@@ -444,6 +446,7 @@ class TestMetadata(ManageTest):
             5. Validate the metadata created for the new PVC
                is different than previous metadata
         """
+        sc_name = storageclass_name(sc_interface)
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=self.external_mode
         )
@@ -557,6 +560,7 @@ class TestMetadata(ManageTest):
         no metadata details available for the volume clone and snapshot created
 
         """
+        sc_name = storageclass_name(sc_interface)
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=self.external_mode
         )
@@ -704,6 +708,7 @@ class TestMetadata(ManageTest):
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
 
         """
+        sc_name = storageclass_name(sc_interface)
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=self.external_mode
         )
@@ -827,6 +832,7 @@ class TestMetadata(ManageTest):
             16. validate metadata for new PVC created
 
         """
+        sc_name = storageclass_name(sc_interface)
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=self.external_mode
         )

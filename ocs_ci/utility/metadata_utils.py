@@ -183,6 +183,7 @@ def available_subvolumes(sc_name, toolbox_pod, fs):
         )
         log.info(f"available cephfs subvolumes-----{cephfs_subvolumes}")
         return cephfs_subvolumes
+
     elif sc_name == storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
         rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod(f"rbd ls {fs} --format json")
         log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")

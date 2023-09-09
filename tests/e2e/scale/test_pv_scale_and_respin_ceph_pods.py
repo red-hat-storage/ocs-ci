@@ -20,6 +20,7 @@ from ocs_ci.ocs.exceptions import (
     PVCNotCreated,
     PodNotCreated,
 )
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 
 log = logging.getLogger(__name__)
