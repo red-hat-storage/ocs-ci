@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_external_mode,
 )
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ def setup_sc(storageclass_factory_class):
         interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
     )
     return {
-        constants.CEPHBLOCKPOOL_SC: None,
-        constants.CEPHFILESYSTEM_SC: None,
+        storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]): None,
+        storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]): None,
         "sc-test-blk": sc_blk_obj,
         "sc-test-fs": sc_fs_obj,
     }

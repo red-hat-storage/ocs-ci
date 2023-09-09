@@ -74,6 +74,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
@@ -414,10 +415,14 @@ def ocs_install_verification(
         )
     else:
         if not disable_blockpools and not provider_cluster:
-            sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
+            sc_rbd = storage_class.get(
+                resource_name=storageclass_name(
+                    constants.OCS_COMPONENTS_MAP["blockpools"]
+                )
+            )
         if not disable_cephfs and not provider_cluster:
             sc_cephfs = storage_class.get(
-                resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+                resource_name=storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
             )
     if not disable_blockpools and not provider_cluster:
         if consumer_cluster:
@@ -1940,8 +1945,8 @@ def verify_consumer_resources():
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         for sc_claim in [
-            constants.DEFAULT_STORAGECLASS_RBD,
-            constants.DEFAULT_STORAGECLASS_CEPHFS,
+            storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]),
+            storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
         ]:
             sc_claim_phase = storage_class_claim.get_resource(
                 resource_name=sc_claim, column="PHASE"

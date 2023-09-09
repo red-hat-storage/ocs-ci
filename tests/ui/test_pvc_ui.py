@@ -13,6 +13,7 @@ from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework import config
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in constants.DEFAULT_STORAGECLASS_RBD:
+        if sc_name in storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
             interface_type = constants.CEPHBLOCKPOOL
         elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL

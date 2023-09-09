@@ -186,5 +186,11 @@ def test_get_sc_name_default():
     """
     Checking that we get correct storage class by default.
     """
-    assert fiojob.get_sc_name("foo_rbd") == constants.DEFAULT_STORAGECLASS_RBD
-    assert fiojob.get_sc_name("bar_cephfs") == constants.DEFAULT_STORAGECLASS_CEPHFS
+    from ocs_ci.helpers.storageclass_helpers import storageclass_name
+
+    assert fiojob.get_sc_name("foo_rbd") == storageclass_name(
+        constants.OCS_COMPONENTS_MAP["blockpools"]
+    )
+    assert fiojob.get_sc_name("bar_cephfs") == storageclass_name(
+        constants.OCS_COMPONENTS_MAP["cephfs"]
+    )

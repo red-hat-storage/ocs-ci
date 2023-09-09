@@ -17,6 +17,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.exceptions import PVCNotCreated
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
@@ -292,7 +293,7 @@ class TestCRRsourcesValidation(ManageTest):
         namespace = "default"
         try:
             pvc_obj = helpers.create_pvc(
-                sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
+                sc_name=storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
                 size="1Gi",
                 namespace=namespace,
             )

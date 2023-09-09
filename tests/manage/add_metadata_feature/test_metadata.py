@@ -19,6 +19,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     polarion_id,
 )
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 
 log = logging.getLogger(__name__)
@@ -40,17 +41,17 @@ class TestMetadataUnavailable(ManageTest):
     """
 
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["fs", "sc_interface"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.OCS_COMPONENTS_MAP["cephfs"],
             ),
         ],
     )
     @polarion_id("OCS-4669")
     def test_metadata_feature_unavailable_for_previous_versions(
-        self, project_factory_class, sc_name, fs
+        self, project_factory_class, sc_interface, fs
     ):
         """
         This test is to validate setmetadata feature is unavailable in previous ODF version
@@ -60,6 +61,7 @@ class TestMetadataUnavailable(ManageTest):
         and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
+        sc_name = storageclass_name(sc_interface)
         config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
         toolbox = pod.get_ceph_tools_pod()
@@ -145,18 +147,18 @@ class TestDefaultMetadataDisabled(ManageTest):
     """
 
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["fs", "sc_interface"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.OCS_COMPONENTS_MAP["cephfs"],
             )
         ],
     )
     @polarion_id("OCS-4671")
     @polarion_id("OCS-4674")
     def test_metadata_not_enabled_by_default(
-        self, pvc_factory, pvc_clone_factory, fs, sc_name
+        self, pvc_factory, pvc_clone_factory, fs, sc_interface
     ):
         """
         This test is to validate metadata feature is not enabled by default for  ODF(4.12) clusters
@@ -169,6 +171,7 @@ class TestDefaultMetadataDisabled(ManageTest):
             2. PVC clone
 
         """
+        sc_name = storageclass_name(sc_interface)
         config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
         toolbox = pod.get_ceph_tools_pod()
@@ -270,16 +273,16 @@ class TestMetadata(ManageTest):
 
     @tier1
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["fs", "sc_interface"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.OCS_COMPONENTS_MAP["cephfs"],
                 marks=pytest.mark.polarion_id("OCS-4676"),
             ),
             pytest.param(
                 "ocs-storagecluster-cephblockpool",
-                constants.DEFAULT_STORAGECLASS_RBD,
+                constants.OCS_COMPONENTS_MAP["blockpools"],
                 marks=[
                     pytest.mark.polarion_id("OCS-4679"),
                     pytest.mark.bugzilla("2039269"),
@@ -288,7 +291,12 @@ class TestMetadata(ManageTest):
         ],
     )
     def test_verify_metadata_details(
-        self, pvc_clone_factory, snapshot_factory, snapshot_restore_factory, fs, sc_name
+        self,
+        pvc_clone_factory,
+        snapshot_factory,
+        snapshot_restore_factory,
+        fs,
+        sc_interface,
     ):
         """
         This test case verifies the cephfs and rbd metadata created on the subvolume
@@ -299,6 +307,7 @@ class TestMetadata(ManageTest):
         4. Restore volume from snapshot
 
         """
+        sc_name = storageclass_name(sc_interface)
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -406,17 +415,17 @@ class TestMetadata(ManageTest):
 
     @tier1
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["fs", "sc_interface"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.OCS_COMPONENTS_MAP["cephfs"],
             )
         ],
     )
     @polarion_id("OCS-4673")
     @polarion_id("OCS-4683")
-    def test_verify_metadata_details_for_new_pvc_same_named(self, fs, sc_name):
+    def test_verify_metadata_details_for_new_pvc_same_named(self, fs, sc_interface):
         """
         This test case verifies the behavior for creating a PVC for CSI_ENABLE_METADATA flag
         enabled and then delete the PVC and created a new PVC with the same name
@@ -428,6 +437,7 @@ class TestMetadata(ManageTest):
             5. Validate the metadata created for the new PVC
                is different than previous metadata
         """
+        sc_name = storageclass_name(sc_interface)
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -499,22 +509,27 @@ class TestMetadata(ManageTest):
 
     @tier1
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["fs", "sc_interface"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.OCS_COMPONENTS_MAP["cephfs"],
                 marks=pytest.mark.polarion_id("OCS-4677"),
             ),
             pytest.param(
                 "ocs-storagecluster-cephblockpool",
-                constants.DEFAULT_STORAGECLASS_RBD,
+                constants.OCS_COMPONENTS_MAP["blockpools"],
                 marks=pytest.mark.polarion_id("OCS-4678"),
             ),
         ],
     )
     def test_metadata_details_available_only_when_metadata_flag_enabled(
-        self, pvc_clone_factory, snapshot_factory, snapshot_restore_factory, fs, sc_name
+        self,
+        pvc_clone_factory,
+        snapshot_factory,
+        snapshot_restore_factory,
+        fs,
+        sc_interface,
     ):
         """
         This test case is to validate that metadata details are available for the operations
@@ -533,6 +548,7 @@ class TestMetadata(ManageTest):
         no metadata details available for the volume clone and snapshot created
 
         """
+        sc_name = storageclass_name(sc_interface)
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -646,19 +662,20 @@ class TestMetadata(ManageTest):
 
     @tier3
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["fs", "sc_interface"],
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.OCS_COMPONENTS_MAP["cephfs"],
             ),
             pytest.param(
-                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+                "ocs-storagecluster-cephblockpool",
+                constants.OCS_COMPONENTS_MAP["blockpools"],
             ),
         ],
     )
     @polarion_id("OCS-4672")
-    def test_disable_metadata_flag_after_enabling(self, fs, sc_name):
+    def test_disable_metadata_flag_after_enabling(self, fs, sc_interface):
         """
         This test case is to validate the behavior for, disable CSI_ENABLE_METADATA flag
         after enabling----
@@ -676,6 +693,7 @@ class TestMetadata(ManageTest):
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
 
         """
+        sc_name = storageclass_name(sc_interface)
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -760,16 +778,19 @@ class TestMetadata(ManageTest):
 
     @tier1
     @pytest.mark.parametrize(
-        argnames=["fs", "sc_name"],
+        argnames=["fs", "sc_interface"],
         argvalues=[
             pytest.param(
-                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+                "ocs-storagecluster-cephblockpool",
+                constants.OCS_COMPONENTS_MAP["blockpools"],
             ),
         ],
     )
     @polarion_id("OCS-4680")
     @polarion_id("OCS-4681")
-    def test_metadata_update_for_PV_Retain(self, fs, sc_name, project_factory_class):
+    def test_metadata_update_for_PV_Retain(
+        self, fs, sc_interface, project_factory_class
+    ):
         """
         This test is to validate metadata is updated after a PVC is deleted by setting ReclaimPloicy: Retain on PV
         and a freshly created PVC in same or different namespace is attached to the old PV for CSI_ENABLE_METADATA
@@ -793,6 +814,7 @@ class TestMetadata(ManageTest):
             16. validate metadata for new PVC created
 
         """
+        sc_name = storageclass_name(sc_interface)
         # Enable CSI_ENABLE_OMAP_GENERATOR flag
         enable_omap_generator = '{"data":{"CSI_ENABLE_OMAP_GENERATOR": "true"}}'
 

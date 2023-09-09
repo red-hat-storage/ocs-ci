@@ -26,6 +26,7 @@ from ocs_ci.framework.testlib import (
     performance_b,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
@@ -542,9 +543,9 @@ class TestPvcSnapshotPerformance(PASTest):
                 sf_data["spec"]["elasticsearch"] = {"url": self.es["url"]}
 
         if interface == constants.CEPHBLOCKPOOL:
-            storageclass = constants.DEFAULT_STORAGECLASS_RBD
+            storageclass = storageclass_name(constants.OCS_COMPONENTS_MAP["rbd"])
         else:
-            storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
+            storageclass = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
         log.info(f"Using {storageclass} Storageclass")
 
         # Setting up the parameters for this test

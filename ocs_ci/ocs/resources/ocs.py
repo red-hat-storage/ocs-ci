@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.exceptions import CSVNotFound
 from ocs_ci.utility import templating, utils
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_9
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 
 log = logging.getLogger(__name__)
@@ -133,10 +134,9 @@ class OCS(object):
 
         """
         # Avoid accidental delete of default storageclass and secret
-        if (
-            self.name == constants.DEFAULT_STORAGECLASS_CEPHFS
-            or self.name == constants.DEFAULT_STORAGECLASS_RBD
-        ):
+        if self.name == storageclass_name(
+            constants.OCS_COMPONENTS_MAP["cephfs"]
+        ) or self.name == storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
             log.info("Attempt to delete default Secret or StorageClass")
             return
 

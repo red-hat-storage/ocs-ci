@@ -14,6 +14,7 @@ from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
@@ -37,8 +38,8 @@ class BasePvcCreateRespinCephPods(E2ETest):
         log.info(
             f"Start creating {number_of_pvc * 4} PVC of 4 types RBD, FS with RWO & RWX"
         )
-        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
-        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+        cephfs_sc_obj = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
+        rbd_sc_obj = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, rbd_rwx_pvc_dict_list, cephfs_pvc_dict_list = ([], [], [])

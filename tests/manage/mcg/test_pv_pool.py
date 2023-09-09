@@ -21,13 +21,14 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC
+from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB, OCS_COMPONENTS_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
 )
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
@@ -304,11 +305,12 @@ class TestPvPool:
         """
         Test if ephemeral storage on pv backingstore pod node is getting consumed
         """
+        CEPHRBD_SC = storageclass_name(OCS_COMPONENTS_MAP["cephfs"])
 
         # create pv pool backingstore
         pv_backingstore = backingstore_factory(
             "OC",
-            {"pv": [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC)]},
+            {"pv": [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHRBD_SC)]},
         )[0]
 
         pv_bs_pod = Pod(

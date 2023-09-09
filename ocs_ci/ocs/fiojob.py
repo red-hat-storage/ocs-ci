@@ -29,6 +29,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 
 logger = logging.getLogger(__name__)
@@ -297,12 +298,16 @@ def get_sc_name(fixture_name):
         if config.DEPLOYMENT.get("external_mode"):
             storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         else:
-            storage_class_name = constants.DEFAULT_STORAGECLASS_RBD
+            storage_class_name = storageclass_name(
+                constants.OCS_COMPONENTS_MAP["blockpools"]
+            )
     elif fixture_name.endswith("cephfs"):
         if config.DEPLOYMENT.get("external_mode"):
             storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
         else:
-            storage_class_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+            storage_class_name = storageclass_name(
+                constants.OCS_COMPONENTS_MAP["cephfs"]
+            )
     else:
         raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
     return storage_class_name

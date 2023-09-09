@@ -14,6 +14,7 @@ from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.framework.testlib import scale, E2ETest, polarion_id
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
@@ -61,9 +62,9 @@ class TestPVCCreationDeletionScale(E2ETest):
         scale_pvc_count = scale_lib.get_max_pvc_count()
         log.info(f"Start creating {access_mode}-{interface} {scale_pvc_count} PVC")
         if interface == constants.CEPHBLOCKPOOL:
-            sc_name = constants.DEFAULT_STORAGECLASS_RBD
+            sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
         elif interface == constants.CEPHFS_INTERFACE:
-            sc_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+            sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         pvc_dict_list1 = scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
@@ -170,8 +171,8 @@ class TestPVCCreationDeletionScale(E2ETest):
         """
         scale_pvc_count = scale_lib.get_max_pvc_count()
         log.info(f"Start creating {scale_pvc_count} PVC of all 4 types")
-        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
-        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+        cephfs_sc_obj = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
+        rbd_sc_obj = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, cephfs_pvc_dict_list = ([] for i in range(2))
@@ -225,9 +226,13 @@ class TestPVCCreationDeletionScale(E2ETest):
         rbd_pvc_obj, cephfs_pvc_obj = ([] for i in range(2))
         pvc_objs = pvc.get_all_pvc_objs(namespace=self.namespace)
         for pvc_obj in pvc_objs:
-            if pvc_obj.backed_sc == constants.DEFAULT_STORAGECLASS_RBD:
+            if pvc_obj.backed_sc == storageclass_name(
+                constants.OCS_COMPONENTS_MAP["blockpools"]
+            ):
                 rbd_pvc_obj.append(pvc_obj)
-            elif pvc_obj.backed_sc == constants.DEFAULT_STORAGECLASS_CEPHFS:
+            elif pvc_obj.backed_sc == storageclass_name(
+                constants.OCS_COMPONENTS_MAP["cephfs"]
+            ):
                 cephfs_pvc_obj.append(pvc_obj)
 
         # Get PVC creation time
