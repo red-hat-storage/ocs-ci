@@ -32,7 +32,10 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
-from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.bucket_utils import (
+    craft_s3_command,
+    put_bucket_policy,
+)
 from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -51,6 +54,7 @@ from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implement
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -88,6 +92,8 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     verify_data_integrity_for_multi_pvc_objs,
     get_noobaa_pods,
+    get_pod_count,
+    wait_for_pods_by_label_count,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -5502,11 +5508,7 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool): Whether to use SSL for the connection
 
         Returns:
-            A dictionary containing the S3 credentials, with the following keys:
-            access_key (str)
-            access_key_id (str)
-            endpoint (str)
-            ssl (bool)
+            (boto3.resource): The boto3 resource with the credentials of the created account
 
         """
 
@@ -5532,24 +5534,24 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             f" {str(acc_creation_process_output)}"
         )
 
-        # Prepare the credentials dict
+        # Prepare the boto3 client
         acc_secret_dict = OCP(
             kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
         ).get(f"noobaa-account-{name}")
-        credentials_dict = {
-            "access_key_id": acc_secret_dict["data"]["AWS_ACCESS_KEY_ID"],
-            "access_key": acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"],
-            "endpoint": mcg_obj_session.s3_endpoint,
-            "ssl": ssl,
-        }
-        credentials_dict["access_key_id"] = base64.b64decode(
-            credentials_dict["access_key_id"]
+        access_key_id = base64.b64decode(
+            acc_secret_dict["data"]["AWS_ACCESS_KEY_ID"]
         ).decode()
-        credentials_dict["access_key"] = base64.b64decode(
-            credentials_dict["access_key"]
+        access_key = base64.b64decode(
+            acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"]
         ).decode()
 
-        return credentials_dict
+        return boto3.resource(
+            "s3",
+            verify=ssl,
+            endpoint_url=mcg_obj_session.s3_endpoint,
+            aws_access_key_id=access_key_id,
+            aws_secret_access_key=access_key,
+        )
 
     def mcg_account_factory_cleanup():
         for acc_name in created_accounts:
@@ -5565,7 +5567,6 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
 
 @pytest.fixture(scope="function")
 def nsfs_bucket_factory(
-    request,
     namespace_store_factory,
     nsfs_interface,
     mcg_obj_session,
@@ -5573,7 +5574,6 @@ def nsfs_bucket_factory(
     bucket_factory,
 ):
     return nsfs_bucket_factory_fixture(
-        request,
         namespace_store_factory,
         nsfs_interface,
         mcg_obj_session,
@@ -5583,15 +5583,12 @@ def nsfs_bucket_factory(
 
 
 def nsfs_bucket_factory_fixture(
-    request,
     namespace_store_factory,
     nsfs_interface,
     mcg_obj_session,
     mcg_account_factory,
     bucket_factory,
 ):
-    created_rpc_buckets = []
-
     def nsfs_bucket_factory_implementation(nsfs_obj):
         """
         A factory for creating an NSFS bucket and setting up all required components.
@@ -5600,6 +5597,11 @@ def nsfs_bucket_factory_fixture(
             nsfs_obj (NSFS): An NSFS parametrization object (please see `mcg_params.py`)
 
         """
+        # Get the number of nooba-endpoint pods before creating the nsfs
+        original_endpoint_pods_count = get_pod_count(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL
+        )
+
         # Create a PVC and namespacestore for the bucket
         nsfs_obj.nss = namespace_store_factory(
             nsfs_obj.method,
@@ -5619,33 +5621,34 @@ def nsfs_bucket_factory_fixture(
         deployment_app_label = nsfs_deploy.data["spec"]["selector"]["matchLabels"][
             "app"
         ]
-        nsfs_interface_pod = Pod(
+        nsfs_obj.interface_pod = Pod(
             **get_pods_having_label(
                 f"app={deployment_app_label}",
                 ocsci_config.ENV_DATA["cluster_namespace"],
             )[0]
         )
-        wait_for_pods_to_be_running(pod_names=[nsfs_interface_pod.name])
+        wait_for_pods_to_be_running(pod_names=[nsfs_obj.interface_pod.name])
 
-        # Wait for the nooba-endpoint pods to reset and mount the PVC
-        nb_endpoint_pods = [
-            Pod(**pod_dict)
-            for pod_dict in get_pods_having_label(
+        # Wait for the new noobaa-endpoint pods with the mount to be created
+        # and for the obsolete noobaa-endpoint pods to be terminated
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            exptected_count=original_endpoint_pods_count,
+        )
+
+        # Get one of the endpoint pods for filesystem access in this fixture
+        endpoint_pod = Pod(
+            **get_pods_having_label(
                 constants.NOOBAA_ENDPOINT_POD_LABEL,
                 ocsci_config.ENV_DATA["cluster_namespace"],
-            )
-        ]
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in nb_endpoint_pods])
+            )[0]
+        )
 
         # Apply the necessary permissions on the filesystem
-        nsfs_interface_pod.exec_cmd_on_pod(f"chmod -R 777 {nsfs_obj.mount_path}")
-        # nsfs_interface_pod.exec_cmd_on_pod(f"groupadd -g {nsfs_obj.gid} nsfs-group")
-        # nsfs_interface_pod.exec_cmd_on_pod(
-        #     f"useradd -g {nsfs_obj.gid} -u {nsfs_obj.uid} nsfs-user"
-        # )
-        nsfs_obj.interface_pod = nsfs_interface_pod
-        # Create a new MCG account
-        nsfs_obj.s3_creds = mcg_account_factory(
+        endpoint_pod.exec_cmd_on_pod("chmod -R 777 /nsfs")
+
+        # Create a new MCG account and get a boto3 with its credentials
+        nsfs_s3_resource = mcg_account_factory(
             name=f"nsfs-integrity-test-{random.randrange(100)}",
             default_resource=nsfs_obj.nss.name,
             nsfs_account_config=True,
@@ -5653,84 +5656,54 @@ def nsfs_bucket_factory_fixture(
             uid=nsfs_obj.uid,
             ssl=False,
         )
+        nsfs_obj.s3_client = nsfs_s3_resource.meta.client
         # Let the account propagate through the system
         time.sleep(15)
-        # Create a boto3 S3 resource for commmunication with the NSFS bucket
-        nsfs_s3_resource = boto3.resource(
-            "s3",
-            verify=False,
-            endpoint_url=nsfs_obj.s3_creds["endpoint"],
-            aws_access_key_id=nsfs_obj.s3_creds["access_key_id"],
-            aws_secret_access_key=nsfs_obj.s3_creds["access_key"],
-        )
-        nsfs_obj.s3_client = nsfs_s3_resource.meta.client
+
         # Create a new NSFS bucket
         # Follow this flow if the bucket should be created on top of an existing directory
         if nsfs_obj.mount_existing_dir:
-            nsfs_obj.bucket_name = helpers.create_unique_resource_name(
-                resource_description="nsfs-bucket", resource_type="rpc"
+            new_dir_name = helpers.create_unique_resource_name(
+                resource_description="nsfs-bucket", resource_type="dir"
             )
-            new_dir_path = f"/{nsfs_obj.bucket_name}"
-            nsfs_interface_pod.exec_cmd_on_pod(
+            endpoint_pod.exec_cmd_on_pod(
                 "mkdir -m"
-                f" {nsfs_obj.existing_dir_mode} {nsfs_obj.mount_path}/{new_dir_path}"
+                f" {nsfs_obj.existing_dir_mode} /nsfs/{nsfs_obj.nss.name}/{new_dir_name}"
             )
-            rpc_bucket_creation_response = mcg_obj_session.send_rpc_query(
-                "bucket_api",
-                "create_bucket",
-                {
-                    "name": nsfs_obj.bucket_name,
-                    "namespace": {
-                        "write_resource": {
-                            "resource": nsfs_obj.nss.name,
-                            "path": new_dir_path,
-                        },
-                        "read_resources": [
-                            {"resource": nsfs_obj.nss.name, "path": new_dir_path}
-                        ],
-                    },
+            new_dir_path = f"/{new_dir_name}"
+
+            nsfs_obj.bucket_name = bucket_factory(
+                amount=1,
+                interface="mcg-namespace",
+                write_ns_resource={
+                    "resource": nsfs_obj.nss.name,
+                    "path": new_dir_path,
                 },
+                read_ns_resources=[
+                    {"resource": nsfs_obj.nss.name, "path": new_dir_path}
+                ],
+            )[0].name
+
+            # Allow access to the export dir by adding a bucket policy
+            bucket_policy = gen_bucket_policy(
+                user_list=["*"],
+                actions_list=["*"],
+                resources_list=["*"],
             )
-            created_rpc_buckets.append(nsfs_obj.bucket_name)
-            # A hardcoded sleep is necessary since the bucket is not immediately available
-            # for usage, despite it reporting a healthy status.
-            # Instantly using the bucket results in a NoSuchKey error.
-            try:
-                for resp in TimeoutSampler(
-                    60,
-                    15,
-                    mcg_obj_session.exec_mcg_cmd,
-                    f"bucket status {nsfs_obj.bucket_name}",
-                ):
-                    if "OPTIMAL" in resp.stdout:
-                        break
-                    else:
-                        log.info(
-                            f"""RPC bucket isn't in optimal state; Full creation response:
-                            {rpc_bucket_creation_response.text}"""
-                        )
-            except TimeoutExpiredError:
-                raise TimeoutExpiredError(
-                    f"Bucket {nsfs_obj.bucket_name} did not reach optimal state in time"
-                )
+            bucket_policy = json.dumps(bucket_policy)
+            put_bucket_policy(mcg_obj_session, nsfs_obj.bucket_name, bucket_policy)
+
+            nsfs_obj.mounted_bucket_path = f"{nsfs_obj.mount_path}/{new_dir_name}"
+
         # Otherwise, the new bucket will create a directory for itself
         else:
             nsfs_obj.bucket_name = retry(CommandFailed, tries=4, delay=10)(
                 bucket_factory
-            )(s3resource=nsfs_s3_resource, verify_health=nsfs_obj.verify_health)[0].name
-        nsfs_obj.mounted_bucket_path = f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
-
-    def nsfs_bucket_factory_cleanup():
-        """
-        Delete the NSFS mounting DeploymentConfig
-
-        """
-        for rpc_bucket_name in created_rpc_buckets:
-            mcg_obj_session.send_rpc_query(
-                "bucket_api", "delete_bucket", {"name": rpc_bucket_name}
+            )(s3resource=nsfs_s3_resource)[0].name
+            nsfs_obj.mounted_bucket_path = (
+                f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
             )
 
-    request.addfinalizer(nsfs_bucket_factory_cleanup)
     return nsfs_bucket_factory_implementation
 
 

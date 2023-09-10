@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import boto3
 
 from ocs_ci.ocs.resources.namespacestore import NamespaceStore
 from ocs_ci.ocs.resources.objectbucket import ObjectBucket
@@ -21,7 +22,6 @@ class NSFS:
         mount_path (str): The path to the mount point of the NSFS
         uid (int): The UID of the user that will be used to create the NSFS
         gid (int): The GID of the user that will be used to create the NSFS
-        verify_health (bool): Whether to verify the health of the NSFS bucket after its creation
     """
 
     method: str = "CLI"
@@ -34,7 +34,6 @@ class NSFS:
     mount_path: str = "/nsfs"
     uid: int = 5678
     gid: int = 1234
-    verify_health: bool = True
     """
     State parameters; These should not be modified unless needed, and will be (over/)written
     after the NSFS object will be passed to the bucket factory.
@@ -42,12 +41,12 @@ class NSFS:
         interface_pod (Pod): The pod that will be used to interact with the NSFS
         bucket_name (str): The name of the NSFS bucket
         mounted_bucket_path (str): The path to where the bucket is "mounted" in the FS
-        s3_creds (str): The NSFS S3 credentials
+        s3_client (boto3.client): The boto3 client that will be used to interact with the NSFS
         nss (NamespaceStore): The namespacestore that the NSFS uses
     """
     interface_pod: Pod = None
     bucket_obj: ObjectBucket = None
     bucket_name: str = None
     mounted_bucket_path: str = None
-    s3_creds: dict = None
+    s3_client: boto3.client = None
     nss: NamespaceStore = None
