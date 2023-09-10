@@ -122,6 +122,7 @@ class StorageSystemDetails(StorageSystemTab):
     def nav_storage_systems_via_breadcrumb(self):
         """
         Navigate to StorageSystems via breadcrumb
+
         Returns:
             StorageSystemTab: StorageSystemTab page object
         """

@@ -47,6 +47,7 @@ class OverviewTab(DataFoundationDefaultTab):
     def validate_block_and_file_ready(self):
         """
         Validate Block and File Storage are Ready
+
         Returns:
             bool: True if Block and File Storage are Ready, False otherwise
         """
@@ -99,6 +100,7 @@ class OverviewTab(DataFoundationDefaultTab):
     def validate_overview_tab_active(self) -> bool:
         """
         Validate Overview tab is active
+
         Returns:
             bool: True if active, False otherwise
         """
@@ -112,6 +114,7 @@ class OverviewTab(DataFoundationDefaultTab):
     def validate_system_capacity_card_present(self) -> bool:
         """
         Validate System Capacity Card is present on Overview page
+
         Returns:
             bool: True if present, False otherwise
         """
@@ -141,6 +144,7 @@ class OverviewTab(DataFoundationDefaultTab):
     def validate_performance_card_header_present(self) -> bool:
         """
         Validate Performance Card is present on Overview page
+
         Returns:
             bool: True if present, False otherwise
         """
@@ -158,6 +162,7 @@ class OverviewTab(DataFoundationDefaultTab):
     def nav_storage_systems_details_via_performance_card(self):
         """
         Navigate to Storage System Details via Performance Card
+
         Returns:
             StorageSystemDetails: Storage System Details page
         """

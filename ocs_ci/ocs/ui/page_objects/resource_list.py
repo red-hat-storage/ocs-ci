@@ -16,6 +16,7 @@ class ResourceList(SearchBar):
     def nav_to_resource_via_name(self, resource_name: str = None):
         """
         Navigate to resource searching it via name
+
         Args:
             resource_name (str): Resource name
         """
@@ -30,6 +31,7 @@ class ResourceList(SearchBar):
     def nav_to_resource_via_label(self, resource_label: str):
         """
         Navigate to resource searching it via label
+
         Args:
             resource_label (str): Resource label
         """
