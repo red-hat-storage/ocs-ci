@@ -1514,6 +1514,15 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         ceph_health_check_base()
                         log.info("Ceph health check passed at teardown")
             except CephHealthException:
+                if config.RUN["skip_reason_test_found"] is None:
+                    squad_name = None
+                    for marker in node.iter_markers():
+                        if "_squad" in marker.name:
+                            squad_name = marker.name
+                    config.RUN["skip_reason_test_found"] = {
+                        "test_name": node.name,
+                        "squad": squad_name,
+                    }
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
@@ -1532,6 +1541,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
+                config.RUN["skipped_tests_ceph_health"] += 1
                 skipped = True
                 # skip because ceph is not in good health
                 pytest.skip("Ceph health check failed at setup")
