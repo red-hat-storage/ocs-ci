@@ -12,12 +12,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     bugzilla,
 )
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
+from ocs_ci.ocs.constants import OCS_COMPONENTS_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_operator_pods
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +112,7 @@ class TestBucketCreation(MCGTest):
                     "OC",
                     {
                         "interface": "OC",
-                        "backingstore_dict": {
-                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                        },
+                        "backingstore_dict": {"pv": [[1, 50]]},
                     },
                 ],
                 marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
@@ -124,9 +123,7 @@ class TestBucketCreation(MCGTest):
                     "CLI",
                     {
                         "interface": "CLI",
-                        "backingstore_dict": {
-                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                        },
+                        "backingstore_dict": {"pv": [[1, 50]]},
                     },
                 ],
                 marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
@@ -153,6 +150,14 @@ class TestBucketCreation(MCGTest):
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
         """
+        if bucketclass_dict:
+            custom_rbd_storageclass = storageclass_name(
+                OCS_COMPONENTS_MAP["blockpools"]
+            )
+            bucketclass_dict["backingstore_dict"]["pv"][0].append(
+                custom_rbd_storageclass
+            )
+
         bucket_factory(amount, interface, bucketclass=bucketclass_dict)
 
     @pytest.mark.parametrize(

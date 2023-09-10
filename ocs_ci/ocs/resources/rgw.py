@@ -4,6 +4,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 
 class RGW(object):
@@ -16,10 +17,7 @@ class RGW(object):
             namespace if namespace else config.ENV_DATA["cluster_namespace"]
         )
 
-        if storagecluster_independent_check():
-            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
-        else:
-            sc_name = constants.DEFAULT_STORAGECLASS_RGW
+        sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["rgw"])
 
         self.storageclass = OCP(
             kind="storageclass", namespace=namespace, resource_name=sc_name

@@ -73,10 +73,14 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
-        argnames=["sc_name", "sc_type"],
+        argnames=["sc_interface", "sc_type"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
-            pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
+            pytest.param(
+                *[constants.OCS_COMPONENTS_MAP["blockpools"], constants.CEPHBLOCKPOOL]
+            ),
+            pytest.param(
+                *[constants.OCS_COMPONENTS_MAP["cephfs"], constants.CEPHFILESYSTEM]
+            ),
             pytest.param(
                 *["sc-test-blk", constants.CEPHBLOCKPOOL],
                 marks=[skipif_ocs_version("<4.10")],
@@ -90,7 +94,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
     def test_over_provision_level_policy_control(
         self,
         setup_sc,
-        sc_name,
+        sc_interface,
         sc_type,
         teardown_project_factory,
         pvc_factory,
@@ -110,9 +114,15 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             9.Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]
 
         """
+        sc_name = storageclass_name(sc_interface)
+
         quota_names = {
-            constants.CEPHBLOCKPOOL_SC: "ocs-storagecluster-ceph-rbd-quota-sc-test",
-            constants.CEPHFILESYSTEM_SC: "ocs-storagecluster-cephfs-quota-sc-test",
+            storageclass_name(
+                constants.OCS_COMPONENTS_MAP["blockpools"]
+            ): "ocs-storagecluster-ceph-rbd-quota-sc-test",
+            storageclass_name(
+                constants.OCS_COMPONENTS_MAP["cephfs"]
+            ): "ocs-storagecluster-cephfs-quota-sc-test",
             "sc-test-blk": "sc-test-blk-quota-sc-test",
             "sc-test-fs": "sc-test-fs-quota-sc-test",
         }

@@ -20,6 +20,7 @@ from ocs_ci.ocs.resources import topology
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile, link_spec_volume
 from ocs_ci.utility.utils import run_cmd, update_container_with_mirrored_image
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 
 logger = logging.getLogger(__name__)
@@ -43,9 +44,11 @@ def test_log_reader_writer_parallel(project, tmp_path):
     if (
         config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS
     ) and storagecluster_independent_check():
-        sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+        sc_name = storageclass_name(
+            constants.OCS_COMPONENTS_MAP["cephfs"], external_mode=True
+        )
     else:
-        sc_name = constants.CEPHFILESYSTEM_SC
+        sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
     pvc_dict["spec"]["storageClassName"] = sc_name
     # there is no need for lot of storage capacity for this test
     pvc_dict["spec"]["resources"]["requests"]["storage"] = "1Gi"

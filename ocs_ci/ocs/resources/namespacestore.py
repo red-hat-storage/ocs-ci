@@ -336,7 +336,7 @@ def oc_create_namespacestore(
 def template_pvc(
     name,
     namespace=config.ENV_DATA["cluster_namespace"],
-    storageclass=constants.CEPHFILESYSTEM_SC,
+    storageclass=None,
     access_mode=constants.ACCESS_MODE_RWX,
     size=20,
 ):
@@ -350,6 +350,10 @@ def template_pvc(
         size (str): Size of the PVC in GiB
 
     """
+    if storageclass is None:
+        from ocs_ci.helpers.storageclass_helpers import storageclass_name
+
+        storageclass = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["name"] = name
     pvc_data["metadata"]["namespace"] = namespace

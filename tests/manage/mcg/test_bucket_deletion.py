@@ -21,10 +21,11 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     rm_object_recursive,
 )
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
+from ocs_ci.ocs.constants import OCS_COMPONENTS_MAP, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
@@ -89,9 +90,7 @@ class TestBucketDeletion(MCGTest):
                     "OC",
                     {
                         "interface": "OC",
-                        "backingstore_dict": {
-                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                        },
+                        "backingstore_dict": {"pv": [[1, 50]]},
                     },
                 ],
                 marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2354")],
@@ -102,9 +101,7 @@ class TestBucketDeletion(MCGTest):
                     "CLI",
                     {
                         "interface": "CLI",
-                        "backingstore_dict": {
-                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
-                        },
+                        "backingstore_dict": {"pv": [[1, 50]]},
                     },
                 ],
                 marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2354")],
@@ -134,6 +131,13 @@ class TestBucketDeletion(MCGTest):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """
+        if bucketclass_dict:
+            custom_rbd_storageclass = storageclass_name(
+                OCS_COMPONENTS_MAP["blockpools"]
+            )
+            bucketclass_dict["backingstore_dict"]["pv"][0].append(
+                custom_rbd_storageclass
+            )
         buckets = bucket_factory(amount, interface, bucketclass=bucketclass_dict)
         for bucket in buckets:
             logger.info(f"Deleting bucket: {bucket.name}")

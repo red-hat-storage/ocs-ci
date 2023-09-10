@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(name=__file__)
 
@@ -520,11 +521,13 @@ class RGWOCBucket(OCBucket):
         if self.quota:
             obc_data["spec"]["additionalConfig"] = self.quota
         if storagecluster_independent_check():
-            obc_data["spec"][
-                "storageClassName"
-            ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
+            obc_data["spec"]["storageClassName"] = storageclass_name(
+                constants.OCS_COMPONENTS_MAP["rgw"], external_mode=True
+            )
         else:
-            obc_data["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
+            obc_data["spec"]["storageClassName"] = storageclass_name(
+                constants.OCS_COMPONENTS_MAP["rgw"]
+            )
         obc_data["metadata"]["namespace"] = self.namespace
         create_resource(**obc_data)
 
