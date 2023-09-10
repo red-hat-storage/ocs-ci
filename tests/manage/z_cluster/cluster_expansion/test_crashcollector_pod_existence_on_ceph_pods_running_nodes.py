@@ -73,7 +73,6 @@ class TestAddNodeCrashCollector(ManageTest):
         add_nodes(ocs_nodes=True, node_count=1)
 
         new_node_name = list(set(get_node_names()) - set(old_nodes))[0]
-        new_node = get_node_objs([new_node_name])[0]
         logger.info(f"New worker node is {new_node_name}")
 
         logger.info(f"Checking if the rack/zone of the node {new_node_name} is exist")
@@ -93,7 +92,7 @@ class TestAddNodeCrashCollector(ManageTest):
             new_node_rack_zone_dict = get_node_rack_or_zone_dict(failure_domain)
             logger.info(f"The new node rack/zone dict is {new_node_rack_zone_dict}")
 
-            logger.info("Get the new updated node object")
+            logger.info("Get the new updated node object with the new rack/zone")
             new_node = get_node_objs([new_node_name])[0]
             new_rack_zone = get_node_rack_or_zone(failure_domain, new_node)
             logger.info(f"New worker node {new_node_name} in zone/rack {new_rack_zone}")
