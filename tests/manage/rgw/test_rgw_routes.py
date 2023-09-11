@@ -1,21 +1,23 @@
 import logging
 
 import boto3
+import pytest
 
-from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
-    skipif_external_mode,
     on_prem_platform_required,
+    skipif_external_mode,
+    tier1,
 )
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import (
-    s3_put_object,
-    s3_get_object,
     s3_delete_object,
+    s3_get_object,
+    s3_put_object,
 )
+from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
+from ocs_ci.ocs.resources.objectbucket import OBC
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ class TestRGWRoutes:
 
     @skipif_external_mode
     @bugzilla("2139037")
+    @pytest.mark.polarion_id("OCS-5168")
+    @tier1
     def test_rgw_routes(self, rgw_bucket_factory):
         """
         Test the availability of RGW routes in an ODF cluster
