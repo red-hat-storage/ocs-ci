@@ -1518,7 +1518,6 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     for mark in node.iter_markers():
                         if "ceph_health_retry" == mark.name:
                             ceph_health_retry = True
-                            break
                     if ceph_health_retry:
                         ceph_health_check(
                             namespace=config.ENV_DATA["cluster_namespace"]
@@ -1536,6 +1535,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     for marker in node.iter_markers():
                         if "_squad" in marker.name:
                             squad_name = marker.name
+                            break
                     config.RUN["skip_reason_test_found"] = {
                         "test_name": node.name,
                         "squad": squad_name,
