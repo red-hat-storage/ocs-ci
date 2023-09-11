@@ -50,6 +50,7 @@ class TestObjectExpiration(MCGTest):
         )
 
     @tier1
+    @pytest.mark.polarion_id("OCS-5166")
     def test_object_expiration(
         self, mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
     ):
@@ -133,6 +134,7 @@ class TestObjectExpiration(MCGTest):
             sleep=10,
         ), "Objects were expired when they shouldn't have been!"
 
+    @pytest.mark.polarion_id("OCS-5167")
     @tier1
     def test_disabled_object_expiration(
         self, mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
