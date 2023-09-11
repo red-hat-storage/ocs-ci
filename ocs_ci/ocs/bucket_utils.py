@@ -2176,12 +2176,13 @@ def create_aws_bs_using_cli(
     )
 
 
-def upload_bulk_buckets(s3_obj, buckets, object_key="obj-key-0", prefix=None):
+def upload_bulk_buckets(s3_obj, buckets, amount=1, object_key="obj-key-0", prefix=None):
     """
     Upload object to the buckets
     """
     for bucket in buckets:
-        s3_put_object(s3_obj, bucket.name, f"{prefix}/{object_key}", object_key)
+        for i in range(amount):
+            s3_put_object(s3_obj, bucket.name, f"{prefix}/{object_key}-{i}", object_key)
 
 
 def change_expiration_query_interval(new_interval):

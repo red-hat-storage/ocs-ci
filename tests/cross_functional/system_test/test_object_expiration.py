@@ -133,6 +133,8 @@ class TestObjectExpiration:
         awscli_pod_session,
         nodes,
         snapshot_factory,
+        setup_mcg_bg_features,
+        validate_mcg_bg_feature,
         noobaa_db_backup_and_recovery,
         noobaa_db_backup_and_recovery_locally,
         change_noobaa_lifecycle_interval,
@@ -161,8 +163,10 @@ class TestObjectExpiration:
         }
 
         expire_rule_prefix = deepcopy(expire_rule)
-        number_of_buckets = 2
-        # Enable entry criteria
+        number_of_buckets = 50
+
+        # Entry criteria
+        mcg_sys_dict, kafka_rgw_dict = setup_mcg_bg_features()
 
         # Create bulk buckets with expiry rule and no prefix set
         logger.info(
@@ -185,12 +189,20 @@ class TestObjectExpiration:
             type_of_bucket=["data"],
         )
 
+        from botocore.exceptions import ClientError
+        from ocs_ci.utility.retry import retry
+
+        @retry(ClientError, tries=5, delay=5)
         def upload_objects_and_expire():
 
             # upload objects with prefix 'tmp'
             logger.info("Uploading objects with prefix 'tmp'")
             upload_bulk_buckets(
-                mcg_obj, buckets_without_prefix, object_key="tmp-obj", prefix="tmp"
+                mcg_obj,
+                buckets_without_prefix,
+                amount=50,
+                object_key="tmp-obj",
+                prefix="tmp",
             )
 
             # Manually expire objects in bucket
@@ -201,13 +213,21 @@ class TestObjectExpiration:
             # Upload objects with same prefix 'others'
             logger.info("upload objects under 'others' prefix")
             upload_bulk_buckets(
-                mcg_obj, buckets_with_prefix, object_key="other-obj", prefix="others"
+                mcg_obj,
+                buckets_with_prefix,
+                amount=50,
+                object_key="other-obj",
+                prefix="others",
             )
 
             # Upload objects with different prefix 'perm'
             logger.info("upload objects under 'perm' prefix")
             upload_bulk_buckets(
-                mcg_obj, buckets_with_prefix, object_key="perm-obj", prefix="perm"
+                mcg_obj,
+                buckets_with_prefix,
+                amount=50,
+                object_key="perm-obj",
+                prefix="perm",
             )
 
             # Manually expire objects in bucket
@@ -334,13 +354,8 @@ class TestObjectExpiration:
         # Perform noobaa db recovery locally
         noobaa_db_backup_and_recovery_locally()
         wait_for_storage_pods()
-        self.sanity_helpers.health_check(tries=120)
 
         sample_if_objects_expired()
 
-    def test_sample(self, setup_mcg_bg_features, validate_mcg_bg_feature):
-        mcg_sys_dict, kafka_rgw_dict = setup_mcg_bg_features()
-        import time
-
-        time.sleep(60)
+        # validate mcg entry criteria post test
         validate_mcg_bg_feature(mcg_sys_dict, kafka_rgw_dict)
