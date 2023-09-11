@@ -43,7 +43,7 @@ class TestFailurePropagator:
     """
 
     @pytest.mark.second_to_last
-    def test_report_skip_triggering_test(self):
+    def test_report_skip_triggering_test(self, request):
         """
         This test runs second to last and examines the skipped test cases of the execution.
         In case of high rate of skipped tests due to Ceph health not OK, which indicates something went wrong
@@ -68,6 +68,7 @@ class TestFailurePropagator:
                 squad = config.RUN.get("skip_reason_test_found").get("squad")
                 if squad:
                     message = message + f" which is under {squad}'s responsibility"
+                    request.node.add_marker(squad)
 
             else:
                 message = message + " Couldn't identify the test case that caused this"
