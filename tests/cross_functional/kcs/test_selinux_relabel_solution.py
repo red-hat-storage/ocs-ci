@@ -227,7 +227,7 @@ class TestSelinuxrelabel(E2ETest):
         num_of_files = random.randint(3, 9)
         ocp_obj = ocp.OCP(kind=constants.OPENSHIFT_STORAGE_NAMESPACE)
         random_files = ocp_obj.exec_oc_cmd(
-            f"exec -it {pod_obj.name} -- /bin/bash"
+            f"exec -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -it {pod_obj.name} -- /bin/bash"
             f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
             timeout=300,
         )
@@ -360,6 +360,7 @@ class TestSelinuxrelabel(E2ETest):
             pod_restart_time_before_fix > pod_restart_time_after_fix
         ), "Time taken for pod restart after fix is more than before fix."
 
+    @polarion_id("OCS-5163")
     @pytest.mark.parametrize("copies", [5])
     def test_selinux_relabel_for_new_pvc(
         self,
