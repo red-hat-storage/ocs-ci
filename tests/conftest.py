@@ -292,6 +292,18 @@ def pytest_collection_modifyitems(session, items):
                 items.remove(item)
 
 
+def pytest_collection_finish(session):
+    """
+    A pytest hook to get all collected tests post their collection modifications done in the varius
+    pytest_collection_modifyitems hook functions
+
+    Args:
+        session: pytest session
+
+    """
+    config.RUN["number_of_tests"] = len(session.items)
+
+
 @pytest.fixture()
 def supported_configuration():
     """
@@ -1486,6 +1498,10 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
 
     node = request.node
 
+    # ignore ceph health check for the TestFailurePropagator test cases
+    if "FailurePropagator" in node.cls:
+        return
+
     def finalizer():
         if not skipped:
             try:
@@ -1502,6 +1518,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     for mark in node.iter_markers():
                         if "ceph_health_retry" == mark.name:
                             ceph_health_retry = True
+                            break
                     if ceph_health_retry:
                         ceph_health_check(
                             namespace=config.ENV_DATA["cluster_namespace"]

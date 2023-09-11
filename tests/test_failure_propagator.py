@@ -9,6 +9,15 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     tier4b,
     tier4c,
+    pre_upgrade,
+    post_upgrade,
+    pre_ocs_upgrade,
+    pre_ocp_upgrade,
+    post_ocp_upgrade,
+    post_ocs_upgrade,
+    workloads,
+    performance,
+    scale,
 )
 
 
@@ -19,6 +28,15 @@ from ocs_ci.framework.pytest_customization.marks import (
 @tier4a
 @tier4b
 @tier4c
+@pre_upgrade
+@post_upgrade
+@pre_ocs_upgrade
+@pre_ocp_upgrade
+@post_ocp_upgrade
+@post_ocs_upgrade
+@workloads
+@performance
+@scale
 class TestFailurePropagator:
     """
     Test class for failure propagator test case. The test intention is to run last and propagate
@@ -32,7 +50,7 @@ class TestFailurePropagator:
         )
         message = (
             f"This run had {1 - (pass_rate_counting_ceph_health_skips * 100)}% of the "
-            f"tests skipped due to Ceph health not OK. "
+            f"tests skipped due to Ceph health not OK."
         )
         if (
             config.RUN["skipped_tests_ceph_health"] / config.RUN["number_of_tests"]
@@ -41,18 +59,17 @@ class TestFailurePropagator:
             if config.RUN["skip_reason_test_found"]:
                 message = (
                     message
-                    + f"The test that is likely to cause this is {config.RUN['skip_reason_test_found']['test_name']} "
+                    + f" The test that is likely to cause this is {config.RUN['skip_reason_test_found']['test_name']}"
                 )
                 if config.RUN["skip_reason_test_found"]["squad"]:
                     message = (
                         message
-                        + f"which is under {config.RUN['skip_reason_test_found']['squad']}'s responsibility"
+                        + f" which is under {config.RUN['skip_reason_test_found']['squad']}'s responsibility"
                     )
 
             else:
-                message = message + "Couldn't identify the test case that caused this"
+                message = message + " Couldn't identify the test case that caused this"
             pytest.fail(message)
-        pass
 
     @pytest.mark.last
     def test_failure_propagator(self):
