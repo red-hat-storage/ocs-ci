@@ -427,12 +427,14 @@ class BusyBox_AppSet(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def delete_workload(self, force=False):
+    def delete_workload(self, force=False, rbd_name="rbd"):
         """
         Delete busybox workload
 
         Args:
             force (bool): If True, force remove the stuck resources, default False
+            rbd_name (str): Name of the pool, default "rbd"
+
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
 
@@ -453,11 +455,16 @@ class BusyBox_AppSet(DRWorkload):
             log.info("Verify backend RBD images are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                rbd_pool_name = (
+                    (config.ENV_DATA.get("rbd_name") or rbd_name)
+                    if config.DEPLOYMENT["external_mode"]
+                    else constants.DEFAULT_CEPHBLOCKPOOL
+                )
                 for image_uuid in image_uuids:
                     status = verify_volume_deleted_in_backend(
                         interface=constants.CEPHBLOCKPOOL,
                         image_uuid=image_uuid,
-                        pool_name=constants.DEFAULT_CEPHBLOCKPOOL,
+                        pool_name=rbd_pool_name,
                     )
                     if not status:
                         raise UnexpectedBehaviour(

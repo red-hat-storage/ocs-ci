@@ -838,20 +838,25 @@ def create_backup_schedule():
     config.switch_ctx(old_ctx)
 
 
-def gracefully_reboot_ocp_nodes(namespace, drcluster_name):
+def gracefully_reboot_ocp_nodes(
+    namespace, drcluster_name, workload_type=constants.SUBSCRIPTION
+):
     """
     Gracefully reboot OpenShift Container Platform
     nodes which was fenced before
 
     Args:
         namespace (str): Name of the namespace
-        drcluster_name (str): Name of the drcluster which need to be reboot
+        drcluster_name (str): Name of the drcluster which needs to be rebooted
+        workload_type (str): Type of workload. ie Subscription(Default) or ApplicationSet
 
     """
 
-    primary_cluster_name = get_current_primary_cluster_name(namespace=namespace)
+    primary_cluster_name = get_current_primary_cluster_name(
+        namespace=namespace, workload_type=workload_type
+    )
     if primary_cluster_name == drcluster_name:
-        set_current_primary_cluster_context(namespace)
+        set_current_primary_cluster_context(namespace, workload_type)
     else:
-        set_current_secondary_cluster_context(namespace)
+        set_current_secondary_cluster_context(namespace, workload_type)
     gracefully_reboot_nodes()
