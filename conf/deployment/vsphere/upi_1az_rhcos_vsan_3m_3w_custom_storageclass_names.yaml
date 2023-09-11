@@ -1,5 +1,5 @@
 ---
-# This config is suppose to work on most of DCs we have.
+# This config is used to deploy with custom storageclass names.
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
