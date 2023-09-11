@@ -306,6 +306,8 @@ class DeploymentUI(PageNavigator):
             self.configure_in_transit_encryption()
             self.configure_encryption()
 
+        self.configure_data_protection()
+
         self.create_storage_cluster()
 
     def create_storage_cluster(self):
