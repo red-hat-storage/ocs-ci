@@ -14,14 +14,6 @@ class StorageSystemDetails(StorageSystemTab):
             self.do_click(
                 self.validation_loc["storagesystems_overview"], enable_screenshot=True
             )
-
-        elif (
-            self.ocp_version_semantic == version.VERSION_4_11
-            or self.ocs_version_semantic == version.VERSION_4_10
-        ):
-            self.do_click(
-                self.validation_loc["overview_odf_4_10"], enable_screenshot=True
-            )
         else:
             self.do_click(self.validation_loc["overview"], enable_screenshot=True)
 
