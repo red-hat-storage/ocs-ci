@@ -31,6 +31,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     NotFoundError,
     TimeoutException,
+    NoRunningCephToolBoxException,
 )
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
@@ -757,27 +758,49 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    @retry(NoRunningCephToolBoxException, tries=5, delay=10)
+    def get_tools_pod_objs():
         ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=namespace,
             selector=constants.TOOL_APP_LABEL,
+            cluster_kubeconfig=cluster_kubeconfig,
         )
         ct_pod_items = ocp_pod_obj.data["items"]
+        logger.info(
+            f"These are the ceph tool box pods: {[pod.get('metadata').get('name') for pod in ct_pod_items]}"
+        )
+        if not (ct_pod_items or skip_creating_pod):
+            # setup ceph_toolbox pod if the cluster has been setup by some other CI
+            setup_ceph_toolbox()
+            ocp_pod_obj = OCP(
+                kind=constants.POD,
+                namespace=namespace,
+                selector=constants.TOOL_APP_LABEL,
+            )
+            ct_pod_items = ocp_pod_obj.data["items"]
 
-    if not ct_pod_items:
-        raise CephToolBoxNotFoundException
+        if not ct_pod_items:
+            raise CephToolBoxNotFoundException
 
-    # In the case of node failure, the CT pod will be recreated with the old
-    # one in status Terminated. Therefore, need to filter out the Terminated pod
-    running_ct_pods = list()
-    for pod in ct_pod_items:
-        if (
-            ocp_pod_obj.get_resource_status(pod.get("metadata").get("name"))
-            == constants.STATUS_RUNNING
-        ):
-            running_ct_pods.append(pod)
+        # In the case of node failure, the CT pod will be recreated with the old
+        # one in status Terminated. Therefore, need to filter out the Terminated pod
+        running_ct_pods = list()
+        for pod in ct_pod_items:
+            if (
+                ocp_pod_obj.get_resource_status(pod.get("metadata").get("name"))
+                == constants.STATUS_RUNNING
+            ):
+                running_ct_pods.append(pod)
 
-    assert running_ct_pods, "No running Ceph tools pod found"
+        if not running_ct_pods:
+            raise NoRunningCephToolBoxException("No running Ceph tools pod found")
+        return running_ct_pods
+
+    running_ct_pods = get_tools_pod_objs()
+
     ceph_pod = Pod(**running_ct_pods[0])
     ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
 
@@ -3411,9 +3434,9 @@ def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         namespace (str): By default 'openshift-storage' namespace
 
     Returns:
-        List of Pod objects
-    """
+        List: of Pod objects
 
+    """
     debug_pods = []
     for node_name in debug_nodes:
         debug_pods.extend(

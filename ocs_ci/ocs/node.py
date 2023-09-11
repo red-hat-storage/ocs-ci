@@ -117,7 +117,7 @@ def get_nodes_having_label(label):
         label (str): Label
 
     Return:
-        Dict representing nodes info
+        Dict: Representing nodes info
 
     """
     ocp_node_obj = OCP(kind=constants.NODE)

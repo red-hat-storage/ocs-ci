@@ -678,3 +678,15 @@ class HostValidationFailed(Exception):
 
 class SameNameClusterAlreadyExistsException(Exception):
     pass
+
+
+class NoRunningCephToolBoxException(Exception):
+    def __init_(self, message=None):
+        self.message = message
+
+    def __str__(self):
+
+        if self.message:
+            return self.message
+
+

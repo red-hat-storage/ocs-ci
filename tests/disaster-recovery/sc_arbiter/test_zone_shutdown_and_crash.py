@@ -16,13 +16,15 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_debug_pods,
     get_mon_pods,
+    get_pod_node,
+    get_plugin_pods,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
-    TimeoutExpiredError,
     CephHealthException,
+    UnexpectedBehaviour,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.cluster import get_mon_quorum_ranks, fetch_connection_scores_for_mon
@@ -32,6 +34,10 @@ log = logging.getLogger(__name__)
 
 
 class TestZoneShutdowns:
+
+    zones = constants.ZONES_LABELS
+    zones.remove("arbiter")
+
     @pytest.fixture()
     def init_sanity(self, request, nodes):
         """
@@ -47,9 +53,7 @@ class TestZoneShutdowns:
 
             # check if all the nodes are Running
             log.info("Checking if all the nodes are READY")
-            nodes_not_ready = [
-                node.name for node in get_nodes() if node.status != "Ready"
-            ]
+            nodes_not_ready = [node for node in get_nodes() if node.status != "Ready"]
             if len(nodes_not_ready) != 0:
                 try:
                     nodes.start_nodes(nodes=nodes_not_ready)
@@ -91,15 +95,69 @@ class TestZoneShutdowns:
 
         request.addfinalizer(finalizer)
 
+    @retry(UnexpectedBehaviour, tries=2, delay=5)
+    def get_workload_pods_running(self, nodes, sc_obj, label, statuses=None):
+        """
+        Make sure the CephFs/RBD workloads pods are running
+        post failure and after cluster recovery, if not running
+        then perform dev suggested workarounds to recover, if still
+        not recovered then the fail the tests
+
+        """
+        sc_obj.get_logwriter_reader_pods(label, statuses=statuses)
+        workload_pods = sc_obj.workload_map[label][0]
+        pods_not_running = list()
+        for pod in workload_pods:
+            if pod.status() != constants.STATUS_RUNNING:
+                pods_not_running.append(pod)
+        log.info(
+            f"There are {len(pods_not_running)} not running\n"
+            f"those are {[pod.name for pod in pods_not_running]}"
+        )
+
+        for pod in pods_not_running:
+
+            # first workaround: restart the nodes where these
+            # stuck pods are scheduled
+
+            node_obj = get_pod_node(pod)
+            nodes.stop_nodes(nodes=[node_obj], wait=False)
+            wait_for_nodes_status(
+                node_names=[node_obj.name], status=constants.NODE_NOT_READY
+            )
+            nodes.start_nodes(nodes=[node_obj])
+            wait_for_nodes_status(node_names=[node_obj.name])
+            log.info(f"Restarted node: {node_obj.name}")
+
+            # second workaround: restart the respective plugin
+            # pods
+            if label == constants.LOGWRITER_RBD_LABEL:
+                all_plugin_pods = get_plugin_pods(
+                    constants.CEPHBLOCKPOOL
+                ) + get_plugin_pods(constants.CEPHFILESYSTEM)
+                for plugin in all_plugin_pods:
+                    if get_pod_node(plugin).name == node_obj.name:
+                        plugin.delete()
+                        wait_for_pods_to_be_in_statuses(
+                            [constants.STATUS_RUNNING], pod_names=[plugin.name]
+                        )
+                log.info("Restarted plugin pods")
+
+            # Just to be sure, restart the not running pods
+            pod.delete()
+            log.info(f"Restarted pod {pod.name}")
+
+        sc_obj.get_logwriter_reader_pods(label)
+
     @pytest.mark.parametrize(
         argnames="iteration, immediate, delay",
         argvalues=[
-            pytest.param(1, False, 3),
-            # pytest.param(3, True, 3),
+            # pytest.param(5, False, 3),
+            pytest.param(5, True, 3),
         ],
         ids=[
-            "Normal-Shutdown",
-            # "Immediate-Shutdown",
+            # "Normal-Shutdown",
+            "Immediate-Shutdown",
         ],
     )
     def test_shutdowns(
@@ -124,7 +182,7 @@ class TestZoneShutdowns:
             3) Induce the shutdown
                In case of normal shutdown we shut-down and wait for about 15 mins
                before start of nodes whereas immediate shutdown would involve starting
-               nodes immediately just after 5 mins
+               nodes immediately just after 5 mins.
             4) Make sure ceph is accessible during the crash duration
             5) Repeat the shutdown process as many times as number of iterations
             6) Make sure logreader job pods have Completed state.
@@ -135,6 +193,7 @@ class TestZoneShutdowns:
             10) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
+
         sc_obj = StretchCluster()
 
         if immediate:
@@ -155,11 +214,10 @@ class TestZoneShutdowns:
         sc_obj.get_logwriter_reader_pods(
             label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
         )
-
-        zones = constants.ZONES_LABELS
-        zones.remove("arbiter")
+        log.info("All the workloads pods are successfully up and running")
 
         start_time = datetime.now(timezone.utc)
+        end_time = None
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
             if not immediate:
@@ -170,27 +228,26 @@ class TestZoneShutdowns:
             sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
             # Fetch the nodes in zone that needs to be crashed
-            zone = random.choice(zones)
+            zone = random.choice(self.zones)
             nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
 
             assert (
                 len(nodes_to_shutdown) != 0
-            ), f"There are 0 zone nodes labeled as topology.kubernetes.io/zone={zone}!!"
+            ), f"There are 0 zone nodes labeled as {constants.ZONE_LABEL}={zone}!!"
 
-            try:
-                nodes.stop_nodes(nodes=nodes_to_shutdown)
-                wait_for_nodes_status(
-                    node_names=[node.name for node in nodes_to_shutdown],
-                    status=constants.NODE_NOT_READY,
-                    timeout=300,
-                )
-            except TimeoutExpiredError:
-                log.error("Seems like some nodes didnt shutdown properly!")
+            nodes.stop_nodes(nodes=nodes_to_shutdown)
+            wait_for_nodes_status(
+                node_names=[node.name for node in nodes_to_shutdown],
+                status=constants.NODE_NOT_READY,
+                timeout=300,
+            )
+            log.info(f"Nodes of zone {zone} are shutdown successfully")
 
             # check ceph accessibility while the nodes are down
             assert sc_obj.check_ceph_accessibility(
                 timeout=sc_obj.default_shutdown_durarion
             ), "Something went wrong. not expected. please check rook-ceph logs"
+            log.info("There is no issue with ceph access seen")
 
             # start the nodes
             try:
@@ -209,17 +266,32 @@ class TestZoneShutdowns:
                 tries=30,
                 delay=15,
             )(wait_for_nodes_status(timeout=1800))
+            log.info(f"Nodes of zone {zone} are started successfully")
 
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
+            end_time = datetime.now(timezone.utc)
+            log.info(f"Failure started at {start_time} and ended at {end_time}")
+
+            for label in (
+                constants.LOGWRITER_CEPHFS_LABEL,
+                constants.LOGREADER_CEPHFS_LABEL,
+                constants.LOGWRITER_RBD_LABEL,
+            ):
+                self.get_workload_pods_running(
+                    nodes,
+                    sc_obj,
+                    label,
+                    statuses=["Running", "ContainerCreating", "CrashLoopBackOff"],
+                )
+            log.info(
+                "All the workloads pods are up and running successfully post failure"
             )
 
             if not immediate:
-                end_time = datetime.now(timezone.utc)
                 sc_obj.post_failure_checks(
                     start_time, end_time, wait_for_read_completion=False
+                )
+                log.info(
+                    "Successfully verified with post failure checks for the workloads"
                 )
 
             # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
@@ -228,10 +300,11 @@ class TestZoneShutdowns:
             time.sleep(delay * 60)
 
         if immediate:
-            end_time = datetime.now(timezone.utc)
+            # end_time = datetime.now(timezone.utc)
             sc_obj.post_failure_checks(
                 start_time, end_time, wait_for_read_completion=False
             )
+            log.info("Successfully verified with post failure checks for the workloads")
 
         sc_obj.cephfs_logreader_job.delete()
         log.info(sc_obj.cephfs_logreader_pods)
@@ -298,7 +371,7 @@ class TestZoneShutdowns:
     @pytest.mark.parametrize(
         argnames="iteration, delay",
         argvalues=[
-            pytest.param(2, 5),
+            pytest.param(9, 5),
         ],
     )
     def test_zone_crashes(
@@ -310,6 +383,7 @@ class TestZoneShutdowns:
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
+        nodes,
     ):
         """
         This test will test the crash scenarios when active-active CephFS and RBD workloads
@@ -349,9 +423,6 @@ class TestZoneShutdowns:
             label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
         )
 
-        zones = constants.ZONES_LABELS
-        zones.remove("arbiter")
-
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
 
@@ -360,12 +431,12 @@ class TestZoneShutdowns:
             sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
             # Fetch the nodes in zone that needs to be crashed
-            zone = random.choice(zones)
+            zone = random.choice(self.zones)
             nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
 
             assert (
                 len(nodes_to_shutdown) != 0
-            ), f"There are 0 zone nodes labeled as topology.kubernetes.io/zone={zone}!!"
+            ), f"There are 0 zone nodes labeled as {constants.ZONE_LABEL}={zone}!!"
 
             # crash zone nodes
             log.info(f"Crashing zone {zone}")
@@ -411,11 +482,17 @@ class TestZoneShutdowns:
             end_time = datetime.now(timezone.utc)
             log.info(f"Start time : {start_time} & End time : {end_time}")
 
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-            )
+            for label in (
+                constants.LOGWRITER_CEPHFS_LABEL,
+                constants.LOGREADER_CEPHFS_LABEL,
+                constants.LOGWRITER_RBD_LABEL,
+            ):
+                self.get_workload_pods_running(
+                    nodes,
+                    sc_obj,
+                    label,
+                    statuses=["Running", "ContainerCreating", "CrashLoopBackOff"],
+                )
 
             # check the ceph access again after the nodes are completely up
             sc_obj.post_failure_checks(

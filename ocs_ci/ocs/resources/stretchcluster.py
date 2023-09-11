@@ -1,7 +1,8 @@
 import logging
 import json
 import re
-import time
+
+from datetime import timedelta
 
 from ocs_ci.ocs.node import get_nodes_having_label
 from ocs_ci.ocs.resources.ocs import OCS
@@ -12,12 +13,10 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
 )
 
-from datetime import timedelta
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
     get_ceph_tools_pod,
-    wait_for_pods_to_be_running,
     Pod,
     get_pods_having_label,
     wait_for_pods_to_be_in_statuses,
@@ -28,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 class StretchCluster(OCS):
+    """
+    A basic StrethCluster class to objectify stretch cluster
+    related operations, methods and properties
+
+    """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.cephfs_logwriter_dep = None
@@ -39,17 +44,17 @@ class StretchCluster(OCS):
         self.workload_map = {
             f"{constants.LOGWRITER_CEPHFS_LABEL}": [
                 None,
-                ["Running", "Creating", "Pending"],
+                ["Running"],
                 4,
             ],
             f"{constants.LOGWRITER_RBD_LABEL}": [
                 None,
-                ["Running", "Creating", "Pending"],
+                ["Running"],
                 2,
             ],
             f"{constants.LOGREADER_CEPHFS_LABEL}": [
                 None,
-                ["Running", "Succeeded", "Creating", "Pending"],
+                ["Running"],
                 4,
             ],
         }
@@ -113,11 +118,12 @@ class StretchCluster(OCS):
         Args:
             zone (str): string represeting zone that node
             belongs to
+
         Returns:
             List: Node (OCS) objects
 
         """
-        label = f"topology.kubernetes.io/zone={zone}"
+        label = f"{constants.ZONE_LABEL}={zone}"
         return [OCS(**node_info) for node_info in get_nodes_having_label(label)]
 
     @retry(CommandFailed, tries=10, delay=10)
@@ -188,12 +194,18 @@ class StretchCluster(OCS):
                         time_var = time_var + timedelta(minutes=1)
                     if pause_count > 5:
                         paused += 1
-                except Exception:
-                    if label == constants.LOGWRITER_RBD_LABEL and excepted == 0:
-                        logger.info(
-                            f"Seems like file {file_name} is not in RBD pod {pod.name}"
-                        )
-                        excepted += 1
+                except Exception as err:
+                    if (
+                        "No such file or directory" in err.args[0]
+                        and label == constants.LOGWRITER_RBD_LABEL
+                    ):
+                        if excepted == 0:
+                            logger.info(
+                                f"Seems like file {file_name} is not in RBD pod {pod.name}"
+                            )
+                            excepted += 1
+                        else:
+                            raise UnexpectedBehaviour
                     else:
                         raise
 
@@ -228,7 +240,7 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] = list(set(self.logfile_map[label][0]))
         logger.info(self.logfile_map[label][0])
 
-    @retry(UnexpectedBehaviour, tries=20, delay=10)
+    @retry(UnexpectedBehaviour, tries=5, delay=5)
     def get_logwriter_reader_pods(
         self,
         label,
@@ -256,19 +268,33 @@ class StretchCluster(OCS):
             for pod in get_pods_having_label(
                 label=label,
                 namespace=namespace,
-                statuses=self.workload_map[label][1] if statuses is None else statuses,
             )
         ]
 
-        if len(self.workload_map[label][0]) != exp_num_replicas:
+        statuses = self.workload_map[label][1] if statuses is None else statuses
+        pods_with_statuses = list()
+
+        for pod in self.workload_map[label][0]:
+            if pod.status() in statuses:
+                pods_with_statuses.append(pod)
+        logger.info(
+            f"These are the pods {[pod.name for pod in pods_with_statuses]} "
+            f"found in statues {statuses}"
+        )
+
+        self.workload_map[label][0] = pods_with_statuses
+        if len(self.workload_map[label][0]) < exp_num_replicas:
             logger.warning(
                 f"Expected replicas is {exp_num_replicas} but found {len(self.workload_map[label][0])}"
+            )
+            logger.warning(
+                f"These are pods statuses: {[pod.status for pod in self.workload_map[label][0]]}"
             )
             raise UnexpectedBehaviour
 
         logger.info(self.workload_map[label][0])
 
-    @retry(CommandFailed, tries=10, delay=10)
+    @retry(CommandFailed, tries=10, delay=5)
     def check_for_data_corruption(
         self, label, namespace=constants.STRETCH_CLUSTER_NAMESPACE
     ):
@@ -291,7 +317,6 @@ class StretchCluster(OCS):
                 read_logs = get_pod_logs(pod_name=pod.name, namespace=namespace)
             else:
                 read_logs = pod.exec_sh_cmd_on_pod(
-                    # command=f"/opt/logreader.py -t 5 {list(self.rbd_log_file_map[pod.name].keys())[0]} -d",
                     command="/opt/logreader.py -t 5 *.log -d",
                 )
             return "corrupt" not in read_logs
@@ -303,6 +328,7 @@ class StretchCluster(OCS):
 
         Args:
             label (str): Label for workload type
+
         Returns:
             Bool: True if no data loss else False
 
@@ -356,13 +382,7 @@ class StretchCluster(OCS):
             f"if [ $duration -ge {timeout} ];then break;fi;done"
         )
         ceph_tools_pod = get_ceph_tools_pod()
-        if not wait_for_pods_to_be_running(pod_names=[ceph_tools_pod.name]):
-            ceph_tools_pod.delete()
-            logger.info(f"Deleted ceph tools pod {ceph_tools_pod.name}")
-            time.sleep(5)
-            ceph_tools_pod = get_ceph_tools_pod()
-            wait_for_pods_to_be_running(pod_names=[ceph_tools_pod])
-            logger.info(f"New ceph tools pod {ceph_tools_pod.name}")
+
         try:
             if (
                 "monclient(hunting): authenticate timed out"
@@ -492,13 +512,7 @@ class StretchCluster(OCS):
                 start_time,
                 end_time,
             )
-            != 0
-            and self.check_for_write_pause(
-                constants.LOGWRITER_RBD_LABEL,
-                start_time,
-                end_time,
-            )
-            != 0
+            > 1
         ):
             logger.error(
                 "Write operations paused for RBD workloads even for the ones in available zone"
