@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import boto3
 
 from ocs_ci.ocs.resources.namespacestore import NamespaceStore
 from ocs_ci.ocs.resources.objectbucket import ObjectBucket
@@ -41,12 +40,12 @@ class NSFS:
         interface_pod (Pod): The pod that will be used to interact with the NSFS
         bucket_name (str): The name of the NSFS bucket
         mounted_bucket_path (str): The path to where the bucket is "mounted" in the FS
-        s3_client (boto3.client): The boto3 client that will be used to interact with the NSFS
+        s3_creds (str): The NSFS S3 credentials
         nss (NamespaceStore): The namespacestore that the NSFS uses
     """
     interface_pod: Pod = None
     bucket_obj: ObjectBucket = None
     bucket_name: str = None
     mounted_bucket_path: str = None
-    s3_client: boto3.client = None
+    s3_creds: dict = None
     nss: NamespaceStore = None

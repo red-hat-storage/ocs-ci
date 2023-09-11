@@ -5508,7 +5508,11 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool): Whether to use SSL for the connection
 
         Returns:
-            (boto3.resource): The boto3 resource with the credentials of the created account
+            A dictionary containing the S3 credentials, with the following keys:
+            access_key (str)
+            access_key_id (str)
+            endpoint (str)
+            ssl (bool)
 
         """
 
@@ -5534,7 +5538,7 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             f" {str(acc_creation_process_output)}"
         )
 
-        # Prepare the boto3 client
+        # Prepare the credentials dict
         acc_secret_dict = OCP(
             kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
         ).get(f"noobaa-account-{name}")
@@ -5545,13 +5549,12 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             acc_secret_dict["data"]["AWS_SECRET_ACCESS_KEY"]
         ).decode()
 
-        return boto3.resource(
-            "s3",
-            verify=ssl,
-            endpoint_url=mcg_obj_session.s3_endpoint,
-            aws_access_key_id=access_key_id,
-            aws_secret_access_key=access_key,
-        )
+        return {
+            "access_key_id": access_key_id,
+            "access_key": access_key,
+            "endpoint": mcg_obj_session.s3_endpoint,
+            "ssl": ssl,
+        }
 
     def mcg_account_factory_cleanup():
         for acc_name in created_accounts:
@@ -5647,14 +5650,21 @@ def nsfs_bucket_factory_fixture(
         # Apply the necessary permissions on the filesystem
         endpoint_pod.exec_cmd_on_pod("chmod -R 777 /nsfs")
 
-        # Create a new MCG account and get a boto3 with its credentials
-        nsfs_s3_resource = mcg_account_factory(
+        # Create a new MCG account and get its credentials
+        nsfs_obj.s3_creds = mcg_account_factory(
             name=f"nsfs-integrity-test-{random.randrange(100)}",
             default_resource=nsfs_obj.nss.name,
             nsfs_account_config=True,
             gid=nsfs_obj.gid,
             uid=nsfs_obj.uid,
             ssl=False,
+        )
+        nsfs_s3_resource = boto3.resource(
+            "s3",
+            verify=False,
+            endpoint_url=nsfs_obj.s3_creds["endpoint"],
+            aws_access_key_id=nsfs_obj.s3_creds["access_key_id"],
+            aws_secret_access_key=nsfs_obj.s3_creds["access_key"],
         )
         nsfs_obj.s3_client = nsfs_s3_resource.meta.client
         # Let the account propagate through the system
