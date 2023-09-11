@@ -549,7 +549,7 @@ class AzureAroUtil(AZURE):
             f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain}"
         )
         logger.info("Creating Azure ARO cluster.")
-        out = exec_cmd(cmd, timeout=3600).stdout
+        out = exec_cmd(cmd, timeout=5400).stdout
         self.set_dns_records(cluster_name, resource_group, base_domain)
         logger.info(f"Cluster deployed: {out}")
         cluster_info = self.get_cluster_details(cluster_name)
