@@ -59,7 +59,7 @@ class TestFailurePropagator:
             f"This run had {skipped_on_ceph_health_percent * 100}% of the "
             f"tests skipped due to Ceph health not OK."
         )
-        if 0 < skipped_on_ceph_health_percent > 0.2:
+        if 0 < skipped_on_ceph_health_percent < 0.5:
             if config.RUN.get("skip_reason_test_found"):
                 test_name = config.RUN.get("skip_reason_test_found").get("test_name")
                 message = (
