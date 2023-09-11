@@ -258,6 +258,8 @@ class DeploymentUI(PageNavigator):
 
         self.configure_encryption()
 
+        self.configure_data_protection()
+
         self.create_storage_cluster()
 
     def install_internal_cluster(self):
@@ -338,6 +340,13 @@ class DeploymentUI(PageNavigator):
             self.select_checkbox_status(
                 status=True, locator=self.dep_loc["wide_encryption"]
             )
+        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+
+    def configure_data_protection(self):
+        """
+        Configure Data Protection
+
+        """
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
     def enable_taint_nodes(self):
