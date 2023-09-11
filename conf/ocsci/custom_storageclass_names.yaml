@@ -1,4 +1,5 @@
 ---
+# This config is used to deploy with custom storageclass names.
 ENV_DATA:
   custom_default_storageclass_names: true
   storageclassnames:
