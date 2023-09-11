@@ -50,27 +50,24 @@ class TestFailurePropagator:
         with the cluster during the execution, it will fail and report the potential test case that caused
         this problematic state
         """
-        pass_rate_counting_ceph_health_skips = (
-            config.RUN["skipped_tests_ceph_health"] / config.RUN["number_of_tests"]
+        number_of_eligible_tests = config.RUN.get("number_of_tests") - 2
+
+        skipped_on_ceph_health_percent = (
+            config.RUN.get("skipped_tests_ceph_health") / number_of_eligible_tests
         )
         message = (
-            f"This run had {1 - (pass_rate_counting_ceph_health_skips * 100)}% of the "
+            f"This run had {skipped_on_ceph_health_percent * 100}% of the "
             f"tests skipped due to Ceph health not OK."
         )
-        if (
-            config.RUN["skipped_tests_ceph_health"] / config.RUN["number_of_tests"]
-            > 0.2
-        ):
-            if config.RUN["skip_reason_test_found"]:
+        if 0 < skipped_on_ceph_health_percent > 0.2:
+            if config.RUN.get("skip_reason_test_found"):
+                test_name = config.RUN.get("skip_reason_test_found").get("test_name")
                 message = (
-                    message
-                    + f" The test that is likely to cause this is {config.RUN['skip_reason_test_found']['test_name']}"
+                    message + f" The test that is likely to cause this is {test_name}"
                 )
-                if config.RUN["skip_reason_test_found"]["squad"]:
-                    message = (
-                        message
-                        + f" which is under {config.RUN['skip_reason_test_found']['squad']}'s responsibility"
-                    )
+                squad = config.RUN.get("skip_reason_test_found").get("squad")
+                if squad:
+                    message = message + f" which is under {squad}'s responsibility"
 
             else:
                 message = message + " Couldn't identify the test case that caused this"

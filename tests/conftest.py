@@ -1499,7 +1499,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
     node = request.node
 
     # ignore ceph health check for the TestFailurePropagator test cases
-    if "FailurePropagator" in node.cls:
+    if "FailurePropagator" in str(node.cls):
         return
 
     def finalizer():
@@ -1530,7 +1530,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         ceph_health_check_base()
                         log.info("Ceph health check passed at teardown")
             except CephHealthException:
-                if config.RUN["skip_reason_test_found"] is None:
+                if not config.RUN["skip_reason_test_found"]:
                     squad_name = None
                     for marker in node.iter_markers():
                         if "_squad" in marker.name:
