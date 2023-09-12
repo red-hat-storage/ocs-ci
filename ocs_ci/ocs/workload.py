@@ -47,23 +47,23 @@ class WorkLoad(object):
 
         self.thread_exec = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
-    def setup(self, **setup_conf):
-        """
-        Perform work_load_mod.setup() to setup the workload.
-        Every workload module should implement setup() method so that
-        respective <workload_module>.setup() function can be called from here
-
-        Args:
-            setup_conf (dict): Work load setup configuration, varies from
-                workload to workload. Refer constants.TEMPLATE_WORKLOAD_DIR
-                for various available workloads
-
-        Returns:
-            bool: True if setup is success else False
-        """
-        if self.pod:
-            setup_conf["pod"] = self.pod
-        return self.work_load_mod.setup(**setup_conf)
+    # def setup(self, **setup_conf):
+    #     """
+    #     Perform work_load_mod.setup() to setup the workload.
+    #     Every workload module should implement setup() method so that
+    #     respective <workload_module>.setup() function can be called from here
+    #
+    #     Args:
+    #         setup_conf (dict): Work load setup configuration, varies from
+    #             workload to workload. Refer constants.TEMPLATE_WORKLOAD_DIR
+    #             for various available workloads
+    #
+    #     Returns:
+    #         bool: True if setup is success else False
+    #     """
+    #     if self.pod:
+    #         setup_conf["pod"] = self.pod
+    #     return self.work_load_mod.setup(**setup_conf)
 
     def run(self, **conf):
         """
