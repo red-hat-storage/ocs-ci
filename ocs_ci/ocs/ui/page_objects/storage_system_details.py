@@ -10,12 +10,9 @@ class StorageSystemDetails(StorageSystemTab):
 
     def nav_details_overview(self):
         logger.info("Click on Overview tab")
-        if (
-            self.ocp_version_semantic == version.VERSION_4_11
-            and self.ocs_version_semantic == version.VERSION_4_10
-        ):
+        if self.ocp_version_semantic >= version.VERSION_4_14:
             self.do_click(
-                self.validation_loc["overview_odf_4_10"], enable_screenshot=True
+                self.validation_loc["storagesystems_overview"], enable_screenshot=True
             )
         else:
             self.do_click(self.validation_loc["overview"], enable_screenshot=True)
