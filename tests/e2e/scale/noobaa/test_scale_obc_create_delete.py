@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants, scale_noobaa_lib
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs.utils import oc_get_all_obc_names
@@ -23,6 +24,7 @@ def teardown(request):
 
 @orange_squad
 @scale
+@red_squad
 class TestScaleOCBCreateDelete(E2ETest):
     """
     OBC scale creation and deletion using Multi cloud Object Gateway

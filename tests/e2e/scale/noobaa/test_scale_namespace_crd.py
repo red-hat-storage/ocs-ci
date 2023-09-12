@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     on_prem_platform_required,
     scale,
 )
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import hsbench
 
@@ -30,6 +31,7 @@ def s3bench(request):
 
 @orange_squad
 @scale
+@red_squad
 class TestScaleNamespace(E2ETest):
     """
     Test creation of a namespace scale resource

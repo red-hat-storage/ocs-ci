@@ -5,6 +5,7 @@ import time
 from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
@@ -30,6 +31,7 @@ def s3bench(request):
 
 @orange_squad
 @scale
+@red_squad
 @skipif_ocs_version("<4.9")
 class TestScaleBucketReplication(E2ETest):
     """
