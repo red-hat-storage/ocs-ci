@@ -433,6 +433,6 @@ class MultiClusterConfig:
 config = MultiClusterConfig()
 
 
-class globalVariables:
+class GlobalVariables:
     # Test time report
     TIMEREPORT_DICT: dict = dict()

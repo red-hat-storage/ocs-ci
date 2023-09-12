@@ -6,6 +6,9 @@ from ocs_ci.utility.utils import email_reports, save_reports
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import globalVariables as globalVariables
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 @pytest.mark.optionalhook
 def pytest_html_results_table_header(cells):
@@ -82,7 +85,9 @@ def pytest_sessionfinish(session, exitstatus):
 
     # creating report of test cases with total time in ascending order
     data = globalVariables.TIMEREPORT_DICT
-    sorted_data = dict(sorted(data.items(), key=lambda item: item[1]["total"]))
+    sorted_data = dict(
+        sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
+    )
     with open("time_report.txt", "a") as f:
         f.write("testName\tsetup\tcall\tteardown\ttotal\n")
         for test, values in sorted_data.items():
@@ -109,7 +114,7 @@ def pytest_report_teststatus(report, config):
     ] = globalVariables.TIMEREPORT_DICT.get(report.nodeid, {})
 
     if report.when == "setup":
-        print(
+        logger.info(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
         globalVariables.TIMEREPORT_DICT[report.nodeid]["setup"] = round(
@@ -120,7 +125,7 @@ def pytest_report_teststatus(report, config):
         )
 
     if report.when == "call":
-        print(
+        logger.info(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
         globalVariables.TIMEREPORT_DICT[report.nodeid]["call"] = round(
@@ -131,7 +136,7 @@ def pytest_report_teststatus(report, config):
         )
 
     if report.when == "teardown":
-        print(
+        logger.info(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
         globalVariables.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(
