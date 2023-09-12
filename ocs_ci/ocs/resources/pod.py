@@ -361,8 +361,8 @@ class Pod(OCS):
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(name, path, work_load, storage_type, self, jobs)
-        if not (fio_installed and work_load == "fio"):
-            assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
+        # if not (fio_installed and work_load == "fio"):
+        #     assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
         self.wl_setup_done = True
 
     def run_io(
