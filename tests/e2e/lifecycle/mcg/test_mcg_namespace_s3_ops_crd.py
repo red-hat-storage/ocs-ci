@@ -175,7 +175,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         ],
     )
     def test_mcg_namespace_basic_s3_ops_crd(
-        self, mcg_obj, cld_mgr, bucket_factory, bucketclass_dict
+        self, mcg_obj, cld_mgr, bucket_factory, rgw_bucket_factory, bucketclass_dict
     ):
         """
         Test basic S3 operations on namespace buckets.
@@ -185,12 +185,21 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
 
         """
         max_keys = 50
-
-        ns_buc = bucket_factory(
-            amount=1,
-            interface=bucketclass_dict["interface"],
-            bucketclass=bucketclass_dict,
-        )[0]
+        if (
+            bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"].keys()[0]
+            == "rgw"
+        ):
+            ns_buc = rgw_bucket_factory(
+                amount=1,
+                interface=bucketclass_dict["interface"],
+                bucketclass=bucketclass_dict,
+            )[0]
+        else:
+            ns_buc = bucket_factory(
+                amount=1,
+                interface=bucketclass_dict["interface"],
+                bucketclass=bucketclass_dict,
+            )[0]
         ns_bucket = ns_buc.name
 
         # Put, Get, Copy, Head, Get Acl and Delete object operations
