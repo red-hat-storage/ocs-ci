@@ -83,7 +83,7 @@ class OCP(object):
         self.cluster_kubeconfig = cluster_kubeconfig
         self.threading_lock = threading_lock
         self.silent = silent
-        self.skip_tls_verify = skip_tls_verify
+        self.skip_tls_verify = skip_tls_verify or config.RUN.get("skip_tls_verify")
 
     @property
     def api_version(self):

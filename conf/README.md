@@ -57,6 +57,7 @@ run it belongs here.
 * `log_utilization` - Enable logging of cluster utilization metrics every 10 seconds. Set via --log-cluster-utilization
 * `use_ocs_worker_for_scale` - Use OCS workers for scale testing (Default: false)
 * `load_status` - Current status of IO load
+* `skip_tls_verify` - Add '--insecure-skip-tls-verify' to oc commands.
 
 #### DEPLOYMENT
 
