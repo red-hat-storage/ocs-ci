@@ -773,7 +773,19 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
             running_ct_pods.append(pod)
 
     assert running_ct_pods, "No running Ceph tools pod found"
-    ceph_pod = Pod(**running_ct_pods[0])
+
+    # pick rook-ceph-tool-external pod for external mode. External mode may have 2 toolboxes
+    ceph_pod = None
+    if config.DEPLOYMENT["external_mode"]:
+        for pod in running_ct_pods:
+            if pod.get("metadata").get("name").startswith("rook-ceph-tools-external"):
+                ceph_pod = Pod(**pod)
+                break
+    else:
+        ceph_pod = Pod(**running_ct_pods[0])
+    if not ceph_pod:
+        raise CephToolBoxNotFoundException
+
     ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
 
     if (
