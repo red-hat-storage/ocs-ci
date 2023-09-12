@@ -11,6 +11,7 @@ import re
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
     ManagedServiceAddonDeploymentError,
     UnsupportedPlatformVersionError,
     ConfigurationError,
@@ -564,8 +565,33 @@ def destroy_appliance_mode_cluster(cluster):
         )
         return False
 
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
+    if cluster_type.lower() == "provider":
+        # Check that no consumer is connected
+        storageconsumers = ocp.OCP(
+            kind="storageconsumer",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        for sample in utils.TimeoutSampler(
+            timeout=3600,
+            sleep=600,
+            func=storageconsumers.get,
+        ):
+            if len(sample.get("items")) == 0:
+                logger.info(
+                    "No consumer cluster connected, we can delete this provider cluster"
+                )
+                break
+
     delete_service_cmd = f"rosa delete service --id={service_id} --yes"
-    utils.run_cmd(delete_service_cmd, timeout=1200)
+    try:
+        utils.run_cmd(delete_service_cmd, timeout=1200)
+    except CommandFailed as err:
+        if "service is already deleting" in str(err):
+            logger.info(f"Cluster {cluster} deletion was already triggered.")
+        else:
+            raise
+
     logger.info("Waiting for ROSA cluster state changed to uninstalling")
     for cluster_info in utils.TimeoutSampler(
         1000, 90, ocm.get_cluster_details, cluster
