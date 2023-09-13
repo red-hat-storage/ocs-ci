@@ -4,11 +4,13 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    polarion_id,
+    skipif_mcg_only,
     tier2,
     tier3,
-    polarion_id,
-    bugzilla,
 )
+
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
@@ -33,6 +35,7 @@ logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
 
 
+@skipif_mcg_only
 class TestPvPool:
     """
     Test pv pool related operations
@@ -300,7 +303,6 @@ class TestPvPool:
     @bugzilla("2187789")
     @polarion_id("OCS-4862")
     def test_ephemeral_for_pv_bs(self, backingstore_factory):
-
         """
         Test if ephemeral storage on pv backingstore pod node is getting consumed
         """

@@ -9,6 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_ocs_version,
+    skipif_mcg_only,
     ignore_leftovers,
     tier3,
     polarion_id,
@@ -367,6 +368,7 @@ class TestAdmissionWebhooks(MCGTest):
         else:
             assert False, "Store patch succeeded unexpectedly"
 
+    @skipif_mcg_only
     @polarion_id("OCS-2792")
     def test_pvpool_downscaling(self, backingstore_factory_session):
         """

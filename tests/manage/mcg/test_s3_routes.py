@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ibm_cloud,
     skipif_managed_service,
+    skipif_mcg_only,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
@@ -89,6 +90,7 @@ class TestS3Routes:
     @skipif_external_mode
     @pytest.mark.polarion_id("OCS-4648")
     @skipif_ocs_version("<4.11")
+    @skipif_mcg_only
     def test_s3_routes_reconcile(self, revert_routes):
         """
         Tests:
