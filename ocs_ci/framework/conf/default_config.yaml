@@ -36,6 +36,8 @@ RUN:
   skip_reason_test_found: None
   skipped_tests_ceph_health: 0
   number_of_tests: None
+  skipped_on_ceph_health_ratio: 0
+  skipped_on_ceph_health_threshold: 0.1
 
 
 # In this section we are storing all deployment related configuration but not
