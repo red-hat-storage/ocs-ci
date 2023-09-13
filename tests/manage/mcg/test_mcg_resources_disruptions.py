@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     tier3,
     skipif_managed_service,
+    skipif_mcg_only,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -31,6 +32,7 @@ def setup(request):
 
 
 @ignore_leftovers()
+@skipif_mcg_only
 @pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):
     """
