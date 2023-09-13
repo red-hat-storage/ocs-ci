@@ -43,9 +43,13 @@ class DeploymentFactory(object):
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:
-            from .azure import AZUREIPI
+            from .azure import (
+                AZUREIPI,
+                AZUREAroManaged,
+            )
 
             self.cls_map["azure_ipi"] = AZUREIPI
+            self.cls_map["azure_managed"] = AZUREAroManaged
         elif self.deployment_platform == constants.GCP_PLATFORM:
             from .gcp import GCPIPI
 
