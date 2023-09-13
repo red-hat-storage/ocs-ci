@@ -5,10 +5,19 @@ metadata:
   name: es-dumper
   namespace: elastic-system
 spec:
+  securityContext:
+    runAsNonRoot: true
   containers:
-   - name: esdumpper
-     image: quay.io/ocsci/esdump:latest
-     imagePullPolicy: Always
-     command: ['/bin/bash']
-     stdin: true
-     tty: true
+  - name: esdumpper
+    image: quay.io/ocsci/esdump:latest
+    imagePullPolicy: Always
+    command: ['/bin/bash']
+    stdin: true
+    tty: true
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      seccompProfile:
+        type: RuntimeDefault
+
