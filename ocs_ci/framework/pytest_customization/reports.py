@@ -4,7 +4,7 @@ import logging
 from py.xml import html
 from ocs_ci.utility.utils import email_reports, save_reports
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.framework import globalVariables as globalVariables
+from ocs_ci.framework import GlobalVariables as GV
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def pytest_sessionfinish(session, exitstatus):
         email_reports(session)
 
     # creating report of test cases with total time in ascending order
-    data = globalVariables.TIMEREPORT_DICT
+    data = GV.TIMEREPORT_DICT
     sorted_data = dict(
         sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
     )
@@ -109,39 +109,25 @@ def pytest_report_teststatus(report, config):
     call : when the test case is run
     teardown: when the teardown of the test case happens.
     """
-    globalVariables.TIMEREPORT_DICT[
-        report.nodeid
-    ] = globalVariables.TIMEREPORT_DICT.get(report.nodeid, {})
+    GV.TIMEREPORT_DICT[report.nodeid] = GV.TIMEREPORT_DICT.get(report.nodeid, {})
 
     if report.when == "setup":
         logger.info(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
-        globalVariables.TIMEREPORT_DICT[report.nodeid]["setup"] = round(
-            report.duration, 2
-        )
-        globalVariables.TIMEREPORT_DICT[report.nodeid]["total"] = round(
-            report.duration, 2
-        )
+        GV.TIMEREPORT_DICT[report.nodeid]["setup"] = round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(report.duration, 2)
 
     if report.when == "call":
         logger.info(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
-        globalVariables.TIMEREPORT_DICT[report.nodeid]["call"] = round(
-            report.duration, 2
-        )
-        globalVariables.TIMEREPORT_DICT[report.nodeid]["total"] += round(
-            report.duration, 2
-        )
+        GV.TIMEREPORT_DICT[report.nodeid]["call"] = round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] += round(report.duration, 2)
 
     if report.when == "teardown":
         logger.info(
             f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
         )
-        globalVariables.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(
-            report.duration, 2
-        )
-        globalVariables.TIMEREPORT_DICT[report.nodeid]["total"] += round(
-            report.duration, 2
-        )
+        GV.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] += round(report.duration, 2)
