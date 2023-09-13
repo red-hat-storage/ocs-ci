@@ -708,7 +708,7 @@ def get_all_pods(
     return pod_objs
 
 
-@retry(ToolBoxNotFoundException, delay=5, tries=3)
+@retry(CephToolBoxNotFoundException, delay=5, tries=3)
 def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     """
     Get the Ceph tools pod
@@ -722,7 +722,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
         Pod object: The Ceph tools pod object
 
     Raises:
-        ToolBoxNotFoundException: In case of tool box not found
+        CephToolBoxNotFoundException: In case of tool box not found
 
     """
     from ocs_ci.ocs.managedservice import patch_consumer_toolbox
