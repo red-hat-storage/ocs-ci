@@ -1238,12 +1238,16 @@ def validate_pdb_creation():
         kind="PodDisruptionBudget", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
     )
     item_list = pdb_obj.get().get("items")
-    if len(item_list) != constants.PDB_COUNT:
+    pdb_count = constants.PDB_COUNT
+    pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
+    if config.DEPLOYMENT.get("arbiter_deployment"):
+        pdb_count = constants.PDB_COUNT_ARBITER
+        pdb_required.extend((constants.MGR_PDB, constants.RGW_PDB))
+    if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
-            f"Not All PDB's created. Expected {constants.PDB_COUNT} PDB's but found {len(item_list)}"
+            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
         )
     pdb_list = [item["metadata"]["name"] for item in item_list]
-    pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
 
     pdb_list.sort()
     pdb_required.sort()
