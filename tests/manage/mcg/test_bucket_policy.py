@@ -1,5 +1,4 @@
 import logging
-import time
 
 import pytest
 import botocore.exceptions as boto3exception
@@ -48,6 +47,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -909,15 +909,16 @@ class TestS3BucketPolicy(MCGTest):
         get_policy = get_bucket_policy(mcg_obj, s3_bucket[0].name)
         logger.info(f"Bucket policy: {get_policy['Policy']}")
 
-        logger.info("Waiting 5 seconds for bucket policy to propagate...")
-        time.sleep(5)
-
         # Verifying GetObject by reading the index of the website by anonymous users
         for user in users:
             logger.info(
                 f"Getting object using user: {user.email_id} on bucket: {s3_bucket[0].name} "
             )
-            assert s3_get_object(
+            retry_s3_get_object = retry(boto3exception.ClientError, tries=4, delay=10)(
+                s3_get_object
+            )
+
+            assert retry_s3_get_object(
                 user, s3_bucket[0].name, "index.html"
             ), f"Failed: Get Object by user {user.email_id}"
 
