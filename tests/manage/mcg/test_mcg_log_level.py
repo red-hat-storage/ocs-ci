@@ -10,7 +10,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_operator_pod,
     get_pod_logs,
 )
-from ocs_ci.framework.testlib import tier2, bugzilla
+from ocs_ci.framework.testlib import tier2
 from ocs_ci.ocs.constants import (
     CONFIGMAP,
     NOOBAA_CONFIGMAP,
@@ -76,7 +76,7 @@ def check_noobaa_logs(pod_name: str, text_to_search: str) -> bool:
 
 
 @tier2
-@bugzilla("1932846")
+@pytest.mark.bugzilla("1932846")
 @pytest.mark.polarion_id("OCS-4863")
 class TestNoobaaLogLevel:
     """
