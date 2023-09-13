@@ -143,8 +143,8 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                     condition=constants.STATUS_FAILED,
                     resource_name=machine_name,
                     column="PHASE",
-                    timeout=240,
-                    sleep=10,
+                    timeout=720,
+                    sleep=30,
                 )
                 delete_machine(machine_name)
                 timeout = 1500 if is_vsphere_ipi_cluster() else 900
