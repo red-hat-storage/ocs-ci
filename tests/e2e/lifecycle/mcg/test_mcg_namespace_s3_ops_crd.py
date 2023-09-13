@@ -186,7 +186,9 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         """
         max_keys = 50
         if (
-            bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"].keys()[0]
+            list(
+                bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"].keys()
+            )[0]
             == "rgw"
         ):
             ns_buc = rgw_bucket_factory(
