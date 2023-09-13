@@ -89,7 +89,6 @@ def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
 @skipif_managed_service
 @pytest.mark.polarion_id("OCS-3988")
 @orange_squad
-@red_squad
 def test_scale_obc_post_upgrade():
     """
     Validate OBC scaled for post upgrade
