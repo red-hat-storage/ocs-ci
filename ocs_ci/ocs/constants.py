@@ -1210,7 +1210,10 @@ STAGE_CA_FILE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "stage-ca.crt")
 MDS_PDB = "rook-ceph-mds-ocs-storagecluster-cephfilesystem"
 OSD_PDB = "rook-ceph-osd"
 MON_PDB = "rook-ceph-mon-pdb"
+MGR_PDB = "rook-ceph-mgr-pdb"
+RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 PDB_COUNT = 3
+PDB_COUNT_ARBITER = 5
 
 # Root Disk size
 CURRENT_VM_ROOT_DISK_SIZE = "60"
