@@ -708,7 +708,7 @@ def get_all_pods(
     return pod_objs
 
 
-@retry(CephToolBoxNotFoundException, delay=5, tries=3)
+@retry((CephToolBoxNotFoundException, AssertionError, CommandFailed), delay=5, tries=3)
 def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     """
     Get the Ceph tools pod
