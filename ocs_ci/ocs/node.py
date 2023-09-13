@@ -36,7 +36,11 @@ from ocs_ci.ocs.resources.pv import (
     get_node_pv_objs,
 )
 from ocs_ci.utility.version import get_semantic_version
-from ocs_ci.utility.rosa import is_odf_addon_installed, edit_addon_installation
+from ocs_ci.utility.rosa import (
+    is_odf_addon_installed,
+    edit_addon_installation,
+    wait_for_addon_to_be_ready,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
@@ -2579,7 +2583,21 @@ def consumer_verification_steps_after_provider_node_replacement():
         edit_addon_installation(
             addon_param_key="storage-provider-endpoint",
             addon_param_value=f"{wnode_ip}:{sp_endpoint_suffix}",
+            wait=False,
         )
+        try:
+            wait_for_addon_to_be_ready()
+        except TimeoutExpiredError:
+            log.warning("The consumer addon is not in a ready state")
+            log.info("Try to restart the ocs-operator pod")
+            pod.delete_pods([pod.get_ocs_operator_pod()])
+            log.info("Wait again for the consumer addon to be in ready state")
+            try:
+                wait_for_addon_to_be_ready()
+            except TimeoutExpiredError:
+                log.warning("The consumer addon is not in a ready state")
+                return False
+
         if not wait_for_consumer_storage_provider_endpoint_in_provider_wnodes():
             log.warning(
                 "The consumer storage endpoint is not found in the provider worker node ips"
@@ -2626,10 +2644,15 @@ def consumers_verification_steps_after_provider_node_replacement():
         bool: True, if all the consumers verification steps finished successfully. False, otherwise.
 
     """
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11:
+    from ocs_ci.ocs.managedservice import get_provider_service_type
+
+    if (
+        version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11
+        and get_provider_service_type() != "NodePort"
+    ):
         log.info(
-            "We need to change the consumers verification steps when the ODF version is 4.11. "
-            "Currently, we can skip these steps when we use ODF 4.11"
+            "We need to change the consumers verification steps when the ODF version is 4.11 and not using "
+            "the ocs-provider-server Service type 'NodePort'. Currently, we can skip these steps"
         )
         return True
 
