@@ -120,11 +120,11 @@ class OverviewTab(DataFoundationDefaultTab):
         """
         is_present = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["system-capacity"],
-            expected_text="System capacity",
+            expected_text="System raw capacity",
         )
         if not is_present:
             logger.warning(
-                "System Capacity Card not found on OpenShift Data Foundation Overview page"
+                "System raw capacity Card not found on OpenShift Data Foundation Overview page"
             )
         return is_present
 

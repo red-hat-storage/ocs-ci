@@ -1427,7 +1427,7 @@ validation_4_13 = {
 }
 
 validation_4_14 = {
-    "system-capacity": ("//div[contains(text(),'System capacity')]", By.XPATH),
+    "system-capacity": ("//div[contains(text(),'System raw capacity')]", By.XPATH),
 }
 
 topology = {
