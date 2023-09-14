@@ -714,7 +714,7 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
 
 
 @pytest.fixture
-def workload_idle(measurement_dir):
+def workload_idle(measurement_dir, threading_lock):
     """
     This workload represents a relative long timeframe when nothing special is
     happening, for test cases checking default status of various components
@@ -792,6 +792,7 @@ def workload_idle(measurement_dir):
         do_nothing,
         test_file,
         pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        threading_lock=threading_lock,
     )
     if restart_io_in_bg:
         logger.info("reverting load_status to resume io_in_bg")

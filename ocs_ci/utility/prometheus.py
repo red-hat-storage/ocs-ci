@@ -5,6 +5,7 @@ import requests
 import tempfile
 import time
 import yaml
+from threading import Timer
 from datetime import datetime
 
 from ocs_ci.framework import config
@@ -686,3 +687,75 @@ class PrometheusAPI(object):
             error_msg = f"{label} alerts were not cleared"
             logger.error(error_msg)
             raise AlertingError(error_msg)
+
+    def prometheus_log(self, prometheus_alert_list):
+        """
+        Log all alerts from Prometheus API to list
+
+        Args:
+            prometheus_alert_list (list): List to be populated with alerts
+        """
+
+        alerts_response = self.get(
+            "alerts", payload={"silenced": False, "inhibited": False}
+        )
+        msg = f"Request {alerts_response.request.url} failed"
+        if alerts_response.ok:
+            for alert in alerts_response.json().get("data").get("alerts"):
+                if alert not in prometheus_alert_list:
+                    logger.info(f"Adding {alert} to alert list")
+                    prometheus_alert_list.append(alert)
+        else:
+            # no need raise Assertion error or Exception here:
+            # 1. It will not lead to a test failure, fixture is in parallel Thread, in SetUp
+            # 2. One bad response should not fail the test
+            # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway on checking alert list
+            logger.error(msg)
+
+
+class PrometheusAlertSubscriber(Timer):
+
+    prometheus_alert_list = []
+
+    def __init__(self, threading_lock, interval: float):
+        self.prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+        super().__init__(
+            interval,
+            lambda: self.prometheus_api.prometheus_log(self.prometheus_alert_list),
+        )
+
+    def run(self):
+        """
+        Run logging of all prometheus alerts.
+
+        ! This method is called by Timer class, do not call it directly !
+        """
+        while not self.finished.wait(self.interval):
+            self.function(*self.args, **self.kwargs)
+
+    def get_alerts(self):
+        """
+        Get list of all alerts
+        """
+        return self.prometheus_alert_list
+
+    def clear_alerts(self):
+        """
+        Clear alert list
+        """
+        self.prometheus_alert_list = []
+
+    def subscribe(self):
+        """
+        Start logging of all prometheus alerts
+        """
+        logger.info("Logging of all prometheus alerts started")
+        self.daemon = True
+        self.start()
+
+    def unsubscribe(self):
+        """
+        Stop logging of all prometheus alerts
+        """
+        self.cancel()
+        logger.info("Logging of all prometheus alerts stopped")
