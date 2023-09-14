@@ -23,6 +23,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
+from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
@@ -1749,7 +1750,6 @@ def add_new_nodes_and_label_upi_lso(
     node_conf=None,
     add_disks=True,
     add_nodes_to_lvs_and_lvd=True,
-    num_of_disk=None,
     other_labels=None,
 ):
     """
@@ -1774,6 +1774,7 @@ def add_new_nodes_and_label_upi_lso(
     new_nodes = get_node_objs(new_node_names)
 
     if add_disks:
+        num_of_disk = get_deviceset_count()
         for node_obj in new_nodes:
             add_disk_to_node(node_obj, num_of_disk=num_of_disk)
 

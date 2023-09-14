@@ -99,6 +99,5 @@ class TestBaseOperations:
             ocs_nodes=True,
             other_labels=[f"{constants.ZONE_LABEL}={data_zones[0]}"],
         )
-
         nodes.stop_nodes(nodes=[data_nodes[0]])
         wait_for_storage_pods(timeout=600)

@@ -60,7 +60,6 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
-from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -6936,7 +6935,6 @@ def add_nodes():
         ocs_nodes=False,
         node_count=3,
         taint_label=None,
-        num_of_disk=None,
         other_labels=None,
     ):
         """
@@ -6946,6 +6944,10 @@ def add_nodes():
             taint_label (str): Taint label to be added
             num_of_disk (int): num of disk to add
             other_labels (str): Option to add any other labels to the node
+
+        Returns:
+            List: name of the new nodes
+
         """
 
         new_nodes = []
@@ -7002,17 +7004,12 @@ def add_nodes():
                     node_type = constants.RHCOS
 
                 if config.DEPLOYMENT.get("local_storage"):
-                    num_of_disk = (
-                        num_of_disk
-                        if num_of_disk is not None
-                        else get_deviceset_count()
-                    )
+
                     new_nodes.append(
                         add_new_nodes_and_label_upi_lso(
                             node_type,
                             node_count,
                             mark_for_ocs_label=ocs_nodes,
-                            num_of_disk=num_of_disk,
                             other_labels=other_labels,
                         )
                     )
@@ -7032,5 +7029,7 @@ def add_nodes():
         if taint_label:
             taint_nodes(nodes=nodes, taint_label=taint_label), "Failed to taint nodes"
         log.info(f"Successfully Tainted nodes {new_nodes} with {taint_label}")
+
+        return nodes
 
     return factory
