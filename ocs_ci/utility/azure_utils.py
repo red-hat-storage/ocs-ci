@@ -11,9 +11,10 @@ import time
 from datetime import datetime
 
 
-from azure.common.credentials import ServicePrincipalCredentials
+from azure.identity import ClientSecretCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.storage import StorageManagementClient
 
 
 from ocs_ci.framework import config
@@ -21,6 +22,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
+    TerrafromFileNotFoundException,
     UnsupportedPlatformVersionError,
 )
 from ocs_ci.utility import version as version_util
@@ -35,7 +37,8 @@ logger = logging.getLogger(name=__file__)
 
 # default location of files with necessary azure cluster details
 SERVICE_PRINCIPAL_FILEPATH = os.path.expanduser("~/.azure/osServicePrincipal.json")
-TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
+TERRRAFORM_FILENAME = "terraform.platform.auto.tfvars.json"
+OLD_TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
 
 
 def load_cluster_resource_group(cluster_path, terraform_filename=TERRRAFORM_FILENAME):
@@ -53,14 +56,27 @@ def load_cluster_resource_group(cluster_path, terraform_filename=TERRRAFORM_FILE
     Returns:
         string with resource group name
     """
-    filepath = os.path.join(cluster_path, terraform_filename)
-    with open(filepath, "r") as tf_file:
+    terraform_files = [
+        os.path.join(cluster_path, f)
+        for f in [OLD_TERRRAFORM_FILENAME, TERRRAFORM_FILENAME]
+    ]
+    terraform_filename = None
+    for tf_file in terraform_files:
+        if os.path.exists(tf_file):
+            terraform_filename = os.path.join(cluster_path, tf_file)
+
+    if not terraform_filename:
+        raise TerrafromFileNotFoundException(
+            f"None of terraform file path from {','.join(terraform_files)} exists!"
+        )
+
+    with open(terraform_filename, "r") as tf_file:
         tf_dict = json.load(tf_file)
     resource_group = tf_dict.get("azure_network_resource_group_name")
     logger.debug(
         "fetching azure resource group (%s) from %s file",
         tf_dict.get("clientId"),
-        filepath,
+        terraform_filename,
     )
     return resource_group
 
@@ -95,6 +111,7 @@ class AZURE:
 
     _compute_client = None
     _resource_client = None
+    _storage_client = None
     _credentials = None
     _cluster_resource_group = None
 
@@ -188,10 +205,10 @@ class AZURE:
         if self._client_secret is None:
             self._client_secret = sp_dict["clientSecret"]
         # create azure SP Credentials object
-        self._credentials = ServicePrincipalCredentials(
+        self._credentials = ClientSecretCredential(
             client_id=self._client_id,
-            secret=self._client_secret,
-            tenant=self._tenant_id,
+            client_secret=self._client_secret,
+            tenant_id=self._tenant_id,
         )
         return self._credentials
 
@@ -218,6 +235,17 @@ class AZURE:
                 credentials=self.credentials, subscription_id=self._subscription_id
             )
         return self._resource_client
+
+    @property
+    def storage_client(self):
+        """
+        Azure Stroage Management Client instance
+        """
+        if not self._storage_client:
+            self._storage_client = StorageManagementClient(
+                credential=self.credentials, subscription_id=self._subscription_id
+            )
+        return self._storage_client
 
     def get_vm_instance(self, vm_name):
         """

@@ -602,3 +602,7 @@ class UnexpectedODFAccessException(Exception):
 
 class ArchitectureNotSupported(Exception):
     pass
+
+
+class TerrafromFileNotFoundException(Exception):
+    pass
