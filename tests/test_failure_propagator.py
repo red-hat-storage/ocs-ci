@@ -3,6 +3,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
+    ignore_owner,
     tier1,
     tier2,
     tier3,
@@ -15,14 +16,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_ocp_upgrade,
     post_ocp_upgrade,
     post_ocs_upgrade,
-    purple_squad,
     workloads,
     performance,
     scale,
 )
 
 
-@purple_squad
+@ignore_owner
 @tier1
 @acceptance
 @tier2
