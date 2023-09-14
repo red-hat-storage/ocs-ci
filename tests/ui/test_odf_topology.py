@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_managed_service,
     tier4a,
+    ignore_leftovers,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_node_names
@@ -215,6 +216,7 @@ class TestODFTopology(object):
             )
 
     @tier4a
+    @ignore_leftovers
     @polarion_id("OCS-4905")
     def test_stop_start_node_validate_topology(
         self, nodes, setup_ui_class, teardown_nodes_job
