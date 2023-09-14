@@ -567,21 +567,22 @@ def destroy_appliance_mode_cluster(cluster):
 
     cluster_type = config.ENV_DATA.get("cluster_type", "")
     if cluster_type.lower() == "provider":
-        # Check that no consumer is connected
-        storageconsumers = ocp.OCP(
-            kind="storageconsumer",
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        for sample in utils.TimeoutSampler(
-            timeout=3600,
-            sleep=600,
-            func=storageconsumers.get,
-        ):
-            if len(sample.get("items")) == 0:
-                logger.info(
-                    "No consumer cluster connected, we can delete this provider cluster"
-                )
-                break
+        if ocm.get_cluster_details(cluster)["status"]["state"] == "ready":
+            # Check that no consumer is connected
+            storageconsumers = ocp.OCP(
+                kind="storageconsumer",
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            for sample in utils.TimeoutSampler(
+                timeout=3600,
+                sleep=600,
+                func=storageconsumers.get,
+            ):
+                if len(sample.get("items")) == 0:
+                    logger.info(
+                        "No consumer cluster connected, we can delete this provider cluster"
+                    )
+                    break
 
     delete_service_cmd = f"rosa delete service --id={service_id} --yes"
     try:
