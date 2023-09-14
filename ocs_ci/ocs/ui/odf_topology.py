@@ -144,7 +144,7 @@ def get_node_details_cli(node_name) -> dict:
         f"Internal IP: {_address_dict.get('InternalIP')}"
     )
     node_details["kubelet_version"] = node_status.get("nodeInfo").get("kubeletVersion")
-    node_details["provider_ID"] = node.get().get("spec")["providerID"].split(":")[0]
+    node_details["provider_ID"] = node.get().get("spec")["providerID"]
     node_details[
         "annotations_number"
     ] = f"{len(node_metadata.get('annotations'))} annotation"
