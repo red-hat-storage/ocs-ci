@@ -2,15 +2,21 @@ import logging
 import warnings
 import time
 
+import pandas as pd
+import pytest
 from selenium.common.exceptions import TimeoutException
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
+from ocs_ci.ocs.ui.page_objects.backing_store_tab import BackingStoreTab
+from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
+from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+from ocs_ci.framework.logger_helper import log_step
 
 
 logger = logging.getLogger(__name__)
@@ -270,183 +276,204 @@ class ValidationUI(PageNavigator):
         self,
     ):
         """
-        Function to verify changes and validate elements on ODF Overview tab for ODF 4.9
+        Method to verify changes and validate elements on ODF Overview tab for ODF 4.9
 
+        Steps:
+        1. Validate ODF console plugin is enabled, if not enable it
+        2. Navigate to ODF Default first tab
+        3. Verify if Overview tab is active
+        4. Verify if Storage System popup works
+        5. Ensure that Block and File status, on Storage System popup is Ready
+        6. Navigate to Storage System details via Storage System popup
+        7. Verify only one Block Pool present on Storage System details page
+        8. Navigate Storage System via breadcrumb
+        9. Verify if Overview tab is active
+        10. Verify if System Capacity Card is present
+        11. Navigate to Storage System details via System Capacity Card
+        12. Verify if Storage System details breadcrumb is present
+        13. Navigate to ODF Overview tab via tab bar
+        14. Verify if Performance Card is present and link works
+        15. Navigate to Storage System details via Performance Card
+        16. Verify if Storage System details breadcrumb is present and link works
+        17. Navigate ODF Backing store tab via Object Storage tab or PageNavigator
+        18. Verify if Backing Store is present and link to Backing Store resource works
+        19. Navigate to Storage System details via breadcrumb
+        20. Navigate to Storage Systems tab via breadcrumb
+        21. Navigate to the default Bucket Class details via Bucket Class tab
+        22. Verify the status of a default Bucket Class
+        23. Navigate to Storage System details via breadcrumb
+        24. Navigate to Namespace Store tab via Bucket Class tab
+        25. Navigate to ODF Overview tab via tab bar
         """
+        res_dict = {}
 
+        log_step("Validate ODF console plugin is enabled, if not enable it")
         self.odf_console_plugin_check()
-        odf_overview_page = self.nav_odf_default_page().nav_overview_tab()
-        if odf_overview_page.wait_storagesystem_popup():
-            logger.info("Click on 'Storage System' under Status card on Overview page")
-            self.do_click(self.validation_loc["storagesystem-status-card"])
-            block_and_file_health_message_check = (
-                self.wait_until_expected_text_is_found(
-                    locator=self.validation_loc["block-and-file-health-message"],
-                    timeout=5,
-                    expected_text="Block and File service is unhealthy",
-                )
-            )
-            if block_and_file_health_message_check:
-                logger.critical("Block and File service is unhealthy")
-                warnings.warn("Block and File service is unhealthy")
-            else:
-                pass
-            logger.info(
-                "Click on storage system hyperlink from Storage System pop-up "
-                "under Status Card on Data Foundation Overview page"
-            )
-            if config.DEPLOYMENT["external_mode"]:
-                self.do_click(
-                    self.validation_loc[
-                        "storage-system-external-status-card-hyperlink"
-                    ],
-                    enable_screenshot=True,
-                )
-            else:
-                self.do_click(
-                    self.validation_loc["storage-system-status-card-hyperlink"],
-                    enable_screenshot=True,
-                )
-            # verify that only one BlockPools tab is present. BZ #2096513
-            blockpools_tabs = self.get_elements(self.validation_loc["blockpools"])
-            if len(blockpools_tabs) > 1:
-                logger.critical("Multiple BlockPools tabs were found. BZ #2096513")
-                warnings.warn("Multiple BlockPools tabs were found. BZ #2096513")
-            logger.info("Click on StorageSystems breadcrumb")
-            self.do_click((self.validation_loc["storagesystems"]))
-            logger.info("Navigate back to ODF Overview page")
-            self.do_click((self.validation_loc["odf-overview"]))
-        else:
-            logger.critical(
-                "Storage system under Status card on Data Foundation Overview tab is missing"
-            )
-            raise NoSuchElementException
 
-        system_capacity_check = self.wait_until_expected_text_is_found(
-            locator=self.validation_loc["system-capacity"],
-            expected_text="System Capacity",
+        log_step("Navigate to ODF Default first tab")
+        odf_overview_tab = self.nav_odf_default_page().nav_overview_tab()
+
+        log_step("Verify if Overview tab is active")
+        res_dict[
+            "overview_tab_is_active_1"
+        ] = odf_overview_tab.validate_overview_tab_active()
+
+        log_step("Verify if Storage System popup works")
+        res_dict[
+            "storage_system_status_popup_present"
+        ] = odf_overview_tab.wait_storagesystem_popup()
+        odf_overview_tab.open_storage_popup_from_status_card()
+
+        log_step("Ensure that Block and File status, on Storage System popup is Ready")
+        is_block_and_file_healthy = odf_overview_tab.validate_block_and_file_ready()
+
+        if not is_block_and_file_healthy:
+            logger.critical("Block and File service is unhealthy, not a test failure")
+            pytest.skip("Block and File service is unhealthy, not a test failure")
+
+        log_step("Navigate to Storage System details via Storage System popup")
+        storage_system_details_page = (
+            odf_overview_tab.nav_storage_system_details_from_storage_status_popup()
         )
-        if system_capacity_check:
-            logger.info(
-                "System Capacity Card found on OpenShift Data Foundation Overview page"
+
+        log_step("Verify only one Block Pool present on Storage System details page")
+        res_dict[
+            "blockpools_tabs_bz_2096513"
+        ] = storage_system_details_page.check_only_one_block_pools_tab()
+
+        log_step("Navigate Storage System via breadcrumb")
+        storage_systems_tab = (
+            storage_system_details_page.nav_storage_systems_via_breadcrumb()
+        )
+
+        log_step("Verify if Overview tab is active")
+        odf_overview_tab = storage_systems_tab.nav_overview_tab()
+
+        log_step("Verify if System Capacity Card is present")
+        res_dict[
+            "system_capacity_card_present"
+        ] = odf_overview_tab.validate_system_capacity_card_present()
+
+        log_step("Navigate to Storage System details via System Capacity Card")
+        storage_system_details_page = (
+            odf_overview_tab.nav_storage_system_details_via_system_capacity_card()
+        )
+
+        log_step(
+            "Verify if Storage System details breadcrumb is present and link works"
+        )
+        res_dict[
+            "storagesystem-details-via-system-capacity-card-link-works"
+        ] = storage_system_details_page.is_storage_system_details_breadcrumb_present()
+
+        storage_systems_tab = (
+            storage_system_details_page.nav_storage_systems_via_breadcrumb()
+        )
+
+        log_step("Navigate to ODF Overview tab via tab bar")
+        odf_overview_tab = storage_systems_tab.nav_overview_tab()
+
+        log_step("Verify if Performance Card is present and link works")
+        res_dict[
+            "performance_card_header_present"
+        ] = odf_overview_tab.validate_performance_card_header_present()
+
+        log_step("Navigate to Storage System details via Performance Card")
+        storage_system_details_page = (
+            odf_overview_tab.nav_storage_systems_details_via_performance_card()
+        )
+
+        log_step(
+            "Verify if Storage System details breadcrumb is present and link works"
+        )
+        res_dict[
+            "storagesystem-details-via-performance-card-link-works"
+        ] = storage_system_details_page.is_storage_system_details_breadcrumb_present()
+
+        storage_system_details_page.nav_storage_systems_via_breadcrumb()
+
+        log_step(
+            "Navigate ODF Backing store tab via Object Storage tab or PageNavigator"
+        )
+        # Starting from ODF 4.13 Object Storage is implemented as a separate page
+        if self.ocp_version_semantic <= version.VERSION_4_13:
+            logger.info("Click on Backing Store")
+            self.do_click((self.validation_loc["backingstore"]))
+            backing_store_tab = BackingStoreTab()
+            backing_store_tab.nav_to_backing_store(
+                constants.DEFAULT_NOOBAA_BACKINGSTORE
             )
         else:
-            logger.critical(
-                "System Capacity Card not found on OpenShift Data Foundation Overview page"
+            backing_store_tab = (
+                StorageSystemDetails().nav_object_storage().nav_backing_store_tab()
             )
-            raise NoSuchElementException
-        logger.info(
-            "Navigate to System Capacity Card and Click on storage system hyperlink"
-        )
-        self.do_click(self.validation_loc["odf-capacityCardLink"])
-        navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
-            locator=self.validation_loc["storagesystem-details"],
-            timeout=15,
-            expected_text="StorageSystem details",
-        )
-        if navigate_to_storagesystem_details_page:
-            logger.info(
-                "Successfully navigated to 'StorageSystem details' page from System Capacity Card"
+            backing_store_tab.nav_to_backing_store(
+                constants.DEFAULT_NOOBAA_BACKINGSTORE
             )
-        else:
-            logger.critical(
-                "Couldn't navigate to 'StorageSystem details' page from System Capacity Card"
-            )
-            raise NoSuchElementException
-        logger.info("Click on StorageSystems breadcrumb")
-        self.do_click((self.validation_loc["storagesystems"]))
-        logger.info("Navigate back to ODF Overview page")
-        self.do_click((self.validation_loc["odf-overview"]))
-        logger.info(
-            "Now search for 'Performance' Card on Data Foundation Overview page"
+
+        log_step(
+            "Verify if Backing Store is present and link to Backing Store resource works"
         )
-        performance_card = self.wait_until_expected_text_is_found(
-            locator=self.validation_loc["performance-card"],
-            expected_text="Performance",
-            timeout=15,
+        res_dict[
+            "backing_store_status_ready"
+        ] = backing_store_tab.validate_backing_store_ready()
+
+        log_step("Navigate to Storage System details via breadcrumb")
+        backing_store_tab.nav_backing_store_breadcrumb()
+
+        log_step("Navigate to Storage Systems tab via breadcrumb")
+        bucket_class_tab = backing_store_tab.nav_bucket_class_tab()
+
+        log_step("Navigate to the default Bucket Class details via Bucket Class tab")
+        bucket_class_tab.nav_to_bucket_class(constants.DEFAULT_NOOBAA_BUCKETCLASS)
+
+        log_step(
+            f"Verify the status of a default bucket class: '{constants.DEFAULT_NOOBAA_BUCKETCLASS}'"
         )
-        if performance_card:
-            self.do_click(self.validation_loc["odf-performanceCardLink"])
-        else:
-            logger.critical(
-                "Couldn't find 'Performance' card on Data Foundation Overview page"
-            )
-            raise NoSuchElementException
-        navigate_to_storagesystem_details_page = self.wait_until_expected_text_is_found(
-            locator=self.validation_loc["storagesystem-details"],
-            timeout=15,
-            expected_text="StorageSystem details",
+        res_dict["bucket_class_status"] = bucket_class_tab.validate_bucket_class_ready()
+
+        log_step("Navigate to Storage System details via breadcrumb")
+        bucket_class_tab.nav_bucket_class_breadcrumb()
+
+        log_step(
+            "Navigate to Namespace Store tab via Bucket Class tab, verify if it works"
         )
-        if navigate_to_storagesystem_details_page:
-            logger.info(
-                "Successfully navigated to 'StorageSystem details' page from Performance Card"
-            )
-        else:
-            logger.critical(
-                "Couldn't navigate to 'StorageSystem details' page from Performance Card"
-            )
-            raise NoSuchElementException
-        logger.info("Now again click on StorageSystems breadcrumb")
-        self.do_click((self.validation_loc["storagesystems"]))
-        logger.info("Click on Backing Store")
-        self.do_click((self.validation_loc["backingstore"]))
-        logger.info("Click on Backing Store Hyperlink")
-        self.do_click(
-            (self.validation_loc["backingstore-link"]), enable_screenshot=True
-        )
-        logger.info("Verifying the status of 'noobaa-default-backing-store'")
-        backingstore_status = self.get_element_text(
-            self.validation_loc["backingstore-status"]
-        )
-        assert "Ready" == backingstore_status, (
-            f"backingstore status error | expected status:Ready \n "
-            f"actual status:{backingstore_status}"
-        )
-        logger.info("Verification of backingstore status is successful!")
-        logger.info("Click on backingstore breadcrumb")
-        if (
-            self.ocp_version_semantic == version.VERSION_4_11
-            and self.ocs_version_semantic == version.VERSION_4_10
-        ):
+        if self.ocp_version_semantic <= version.VERSION_4_13:
+            logger.info("Click on Namespace Store")
             self.do_click(
-                self.validation_loc["backingstorage-breadcrumb-odf-4-10"],
-                enable_screenshot=True,
+                (self.validation_loc["namespace-store"]), enable_screenshot=True
             )
+            namespace_store_tab = NameSpaceStoreTab()
         else:
-            self.do_click((self.validation_loc["backingstorage-breadcrumb"]))
-        logger.info("Click on Bucket Class")
-        self.do_click((self.validation_loc["bucketclass"]))
-        logger.info("Click on Bucket Class Hyperlink")
-        self.do_click((self.validation_loc["bucketclass-link"]), enable_screenshot=True)
-        logger.info("Verifying the status of 'noobaa-default-bucket-class'")
-        bucketclass_status = self.get_element_text(
-            self.validation_loc["bucketclass-status"]
-        )
-        assert "Ready" == bucketclass_status, (
-            f"bucketclass status error | expected status:Ready \n "
-            f"actual status:{bucketclass_status}"
-        )
-        logger.info("Verification of bucketclass status is successful!")
-        logger.info("Click on bucketclass breadcrumb")
-        if (
-            self.ocp_version_semantic == version.VERSION_4_11
-            and self.ocs_version_semantic == version.VERSION_4_10
-        ):
+            namespace_store_tab = bucket_class_tab.nav_namespace_store_tab()
+        res_dict[
+            "namespace_store_tab_works"
+        ] = namespace_store_tab.is_namespace_store_tab_active()
+
+        log_step("Navigate to ODF Overview tab via tab bar")
+        # Starting from ODF 4.13 Object Storage is implemented as a separate page and navigate via Overview tab
+        # is not possible
+        if self.ocp_version_semantic <= version.VERSION_4_13:
             self.do_click(
-                (self.validation_loc["bucketclass-breadcrumb-odf-4-10"]),
-                enable_screenshot=True,
+                locator=self.validation_loc["odf-overview"], enable_screenshot=True
             )
+            odf_overview_tab = OverviewTab()
         else:
-            self.do_click(
-                (self.validation_loc["bucketclass-breadcrumb"]), enable_screenshot=True
+            odf_overview_tab = (
+                namespace_store_tab.nav_odf_default_page().nav_overview_tab()
             )
-        logger.info("Click on Namespace Store")
-        self.do_click((self.validation_loc["namespace-store"]), enable_screenshot=True)
-        logger.info("Navigate again to ODF Overview page")
-        self.do_click((self.validation_loc["odf-overview"]), enable_screenshot=True)
-        logger.info(
-            "Successfully navigated back to ODF tab under Storage, test successful!"
-        )
+
+        res_dict[
+            "overview_tab_is_active_2"
+        ] = odf_overview_tab.validate_overview_tab_active()
+        logger.info("Navigated back to ODF tab under Storage. Check results below:")
+
+        res_pd = pd.DataFrame.from_dict(res_dict, orient="index", columns=["check"])
+        logger.info(res_pd.to_markdown(headers="keys", index=True, tablefmt="grid"))
+
+        if not all(res_dict.values()):
+            failed_checks = [check for check, res in res_dict.items() if not res]
+            pytest.fail("Following checks failed: {}".format(failed_checks))
 
     def odf_storagesystems_ui(self):
         """
