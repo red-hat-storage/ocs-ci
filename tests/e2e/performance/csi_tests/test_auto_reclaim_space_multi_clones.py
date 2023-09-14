@@ -232,7 +232,7 @@ class TestReclaimSpaceCronJobMultiClones(PASTest):
         performance_lib.wait_for_cronjobs(
             self.namespace,
             0,
-            f"No cronjobs should be created for CephFS ",
+            "No cronjobs should be created for CephFS ",
         )
 
-        logger.info(f"No cronjobs found")
+        logger.info("No cronjobs found")
