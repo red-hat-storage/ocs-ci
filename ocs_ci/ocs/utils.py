@@ -836,43 +836,6 @@ def setup_ceph_toolbox(force_setup=False):
             rook_toolbox.create()
             return
 
-        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1982721
-        # TODO: Remove workaround when bug 1982721 is fixed
-        # https://github.com/red-hat-storage/ocs-ci/issues/4585
-        if ocsci_config.ENV_DATA.get("is_multus_enabled"):
-            toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
-            toolbox["spec"]["template"]["spec"]["containers"][0][
-                "image"
-            ] = get_rook_version()
-            toolbox["metadata"]["name"] += "-multus"
-            # remove tini from multus tool box
-            if ocs_version >= version.VERSION_4_10:
-                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
-                    "/bin/bash"
-                ]
-                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
-                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
-                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
-
-            if ocsci_config.ENV_DATA["multus_create_public_net"]:
-                multus_net_name = ocsci_config.ENV_DATA["multus_public_net_name"]
-                multus_net_namespace = ocsci_config.ENV_DATA[
-                    "multus_public_net_namespace"
-                ]
-            elif ocsci_config.ENV_DATA["multus_create_cluster_net"]:
-                multus_net_name = ocsci_config.ENV_DATA["multus_cluster_net_name"]
-                multus_net_namespace = ocsci_config.ENV_DATA[
-                    "multus_cluster_net_namespace"
-                ]
-
-            toolbox["spec"]["template"]["metadata"]["annotations"] = {
-                "k8s.v1.cni.cncf.io/networks": f"{multus_net_namespace}/{multus_net_name}"
-            }
-            toolbox["spec"]["template"]["spec"]["hostNetwork"] = False
-            rook_toolbox = OCS(**toolbox)
-            rook_toolbox.create()
-            return
-
         if (
             ocsci_config.ENV_DATA.get("platform").lower()
             == constants.FUSIONAAS_PLATFORM
