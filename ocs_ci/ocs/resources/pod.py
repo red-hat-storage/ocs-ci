@@ -2215,6 +2215,7 @@ def check_pods_in_running_state(
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
+            and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
@@ -2608,7 +2609,9 @@ def get_osd_pod_id(osd_pod):
 
 
 def get_pods_in_statuses(
-    status_options, namespace=config.ENV_DATA["cluster_namespace"]
+    status_options,
+    namespace=config.ENV_DATA["cluster_namespace"],
+    exclude_pod_name_prefixes=None,
 ):
     """
     Get all the pods in specific statuses
@@ -2616,6 +2619,7 @@ def get_pods_in_statuses(
     Args:
         status_options (list): The list of the status options.
         namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
+        exclude_pod_name_prefixes (list): The list of the pod name prefixes to exclude from the pods to get
 
     Returns:
         list: All the pods that their status in the 'status_options' list.
@@ -2633,6 +2637,14 @@ def get_pods_in_statuses(
 
         if pod_status in status_options:
             pods_in_status_options.append(p)
+
+    if exclude_pod_name_prefixes:
+        exclude_pod_name_prefixes = tuple(exclude_pod_name_prefixes)
+        pods_in_status_options = [
+            p
+            for p in pods_in_status_options
+            if not p.name.startswith(exclude_pod_name_prefixes)
+        ]
 
     return pods_in_status_options
 
@@ -2681,7 +2693,10 @@ def check_pods_after_node_replacement():
         constants.STATUS_TERMINATING,
     ]
 
-    pods_not_ready = get_pods_in_statuses(status_options=not_ready_statuses)
+    pods_not_ready = get_pods_in_statuses(
+        status_options=not_ready_statuses,
+        exclude_pod_name_prefixes=[constants.REPORT_STATUS_TO_PROVIDER_POD],
+    )
     if len(pods_not_ready) == 0:
         logger.info("All the pods are running")
         return True
@@ -2708,6 +2723,7 @@ def check_pods_after_node_replacement():
             expected_statuses=expected_statuses,
             timeout=timeout,
             sleep=30,
+            exclude_pod_name_prefixes=constants.REPORT_STATUS_TO_PROVIDER_POD,
         )
         if are_pods_running:
             logger.info("All the pods are running")
@@ -2929,6 +2945,7 @@ def check_pods_in_statuses(
     pod_names=None,
     namespace=config.ENV_DATA["cluster_namespace"],
     raise_pod_not_found_error=False,
+    exclude_pod_name_prefixes=None,
 ):
     """
     checks whether the pods in a given namespace are in the expected statuses or not
@@ -2941,6 +2958,7 @@ def check_pods_in_statuses(
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             check the pod objects of the rest of the pod names. The default value is False
+        exclude_pod_name_prefixes (list): The list of the pod name prefixes to exclude from the pods to check
 
     Returns:
         Boolean: True, if the pods are in the expected statuses. False, otherwise
@@ -2954,6 +2972,12 @@ def check_pods_in_statuses(
         )
     else:
         list_of_pods = get_all_pods(namespace)
+
+    if exclude_pod_name_prefixes:
+        exclude_pod_name_prefixes = tuple(exclude_pod_name_prefixes)
+        list_of_pods = [
+            p for p in list_of_pods if not p.name.startswith(exclude_pod_name_prefixes)
+        ]
 
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
@@ -2978,6 +3002,7 @@ def wait_for_pods_to_be_in_statuses(
     pod_names=None,
     namespace=config.ENV_DATA["cluster_namespace"],
     raise_pod_not_found_error=False,
+    exclude_pod_name_prefixes=None,
     timeout=180,
     sleep=10,
 ):
@@ -2992,6 +3017,7 @@ def wait_for_pods_to_be_in_statuses(
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             check the pod objects of the rest of the pod names. The default value is False
+        exclude_pod_name_prefixes (list): The list of the pod name prefixes to exclude from the pods to check
         timeout (int): time to wait for the pods to be in the expected statuses
         sleep (int): Time in seconds to sleep between attempts
 
@@ -3006,6 +3032,7 @@ def wait_for_pods_to_be_in_statuses(
         pod_names=pod_names,
         namespace=namespace,
         raise_pod_not_found_error=raise_pod_not_found_error,
+        exclude_pod_name_prefixes=exclude_pod_name_prefixes,
     )
     return sample.wait_for_func_status(result=True)
 
