@@ -14,7 +14,6 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_external_mode,
 )
-from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs import constants
@@ -23,6 +22,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import exec_cmd, run_cmd, clone_notify
+from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 
 log = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class TestRGWAndKafkaNotifications(E2ETest):
 
         """
         # Get sc
-        sc = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
+        sc = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
 
         # Deploy amq cluster
         self.amq.setup_amq_cluster(sc.name)
