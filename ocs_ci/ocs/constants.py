@@ -1800,6 +1800,7 @@ SQUADS = {
     "Yellow": ["/managed-service/"],
     "Turquoise": ["/disaster-recovery/"],
 }
+SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
