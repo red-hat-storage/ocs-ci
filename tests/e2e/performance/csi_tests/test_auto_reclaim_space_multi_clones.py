@@ -50,7 +50,7 @@ class TestReclaimSpaceCronJobMultiClones(PASTest):
                 f"we want to use  {capacity_to_use} GiB, "
                 f"and we need {need_capacity} GiB to run the test"
             )
-            logging.error(err_msg)
+            logger.error(err_msg)
             raise StorageNotSufficientException(err_msg)
 
         # Calculating the PVC size in GiB
