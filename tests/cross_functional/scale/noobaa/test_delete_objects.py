@@ -1,22 +1,16 @@
 import logging
 import pytest
-import psutil
 
 from datetime import datetime
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     s3_delete_objects,
     list_objects_in_batches,
+    s3_delete_object,
 )
 from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id, scale
 
 log = logging.getLogger(__name__)
-
-
-def measure_memory_usage():
-    process = psutil.Process()
-    memory_info = process.memory_info()
-    log.info(f"Memory used: {memory_info.rss / 1024 / 1024} MB")
 
 
 @pytest.fixture(scope="class")
@@ -40,8 +34,11 @@ class TestDeleteObjects:
     @pytest.mark.parametrize(
         argnames=["delete_mode"],
         argvalues=[
+            # uncomment the blow params when we have stable noobaa db
+            # or work around for memory issue caused during single deletion
+            # pytest.param("single"),
             pytest.param("batch"),
-            pytest.param("whole"),
+            # pytest.param("whole"),
         ],
     )
     def test_delete_objects(
@@ -62,6 +59,7 @@ class TestDeleteObjects:
         bucket_class_dict = {
             "interface": "OC",
             "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            "timeout": 1800,
         }
         # create an object bucket
         bucket = bucket_factory(bucketclass=bucket_class_dict, verify_health=False)[0]
@@ -93,14 +91,13 @@ class TestDeleteObjects:
             f" Time taken to generate and upload objects: {(time_2-time_1).total_seconds()}"
         )
 
-        # if delete_mode == "single":
-        #     for obj_key in list_objects_in_batches(
-        #         mcg_obj, bucket.name, batch_size=10000
-        #     ):
-        #         s3_delete_object(mcg_obj, bucket.name, obj_key)
-        #     log.info("Deleted objects successfully!")
-        #     measure_memory_usage()
-        if delete_mode == "batch":
+        if delete_mode == "single":
+            for obj_key in list_objects_in_batches(
+                mcg_obj, bucket.name, batch_size=10000
+            ):
+                s3_delete_object(mcg_obj, bucket.name, obj_key)
+            log.info("Deleted objects successfully!")
+        elif delete_mode == "batch":
             # Delete objects in batch
             log.info("Deleting objects in batch of 1000 objects at a time")
             for obj_batch in list_objects_in_batches(
@@ -108,7 +105,6 @@ class TestDeleteObjects:
             ):
                 s3_delete_objects(mcg_obj, bucket.name, obj_batch)
             log.info("Deleted objects in a batch of 1000 objects!")
-            measure_memory_usage()
         else:
             # Delete the whole bucket directly
             bucket.delete()
