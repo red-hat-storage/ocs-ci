@@ -11,9 +11,10 @@ import time
 from datetime import datetime
 
 
-from azure.common.credentials import ServicePrincipalCredentials
+from azure.identity import ClientSecretCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.storage import StorageManagementClient
 
 
 from ocs_ci.framework import config
@@ -95,6 +96,7 @@ class AZURE:
 
     _compute_client = None
     _resource_client = None
+    _storage_client = None
     _credentials = None
     _cluster_resource_group = None
 
@@ -188,10 +190,10 @@ class AZURE:
         if self._client_secret is None:
             self._client_secret = sp_dict["clientSecret"]
         # create azure SP Credentials object
-        self._credentials = ServicePrincipalCredentials(
+        self._credentials = ClientSecretCredential(
             client_id=self._client_id,
-            secret=self._client_secret,
-            tenant=self._tenant_id,
+            client_secret=self._client_secret,
+            tenant_id=self._tenant_id,
         )
         return self._credentials
 
@@ -218,6 +220,17 @@ class AZURE:
                 credentials=self.credentials, subscription_id=self._subscription_id
             )
         return self._resource_client
+
+    @property
+    def storage_client(self):
+        """
+        Azure Stroage Management Client instance
+        """
+        if not self._storage_client:
+            self._storage_client = StorageManagementClient(
+                credential=self.credentials, subscription_id=self._subscription_id
+            )
+        return self._storage_client
 
     def get_vm_instance(self, vm_name):
         """
