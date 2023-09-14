@@ -9,10 +9,11 @@ from ocs_ci.ocs.ui.mcg_ui import logger
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import CreateResourceForm
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from tests.conftest import delete_projects
 
 
-class BucketsUI(PageNavigator):
+class BucketsUI(PageNavigator, ResourceList):
     """
     A class representation for abstraction of OBC or OB-related OpenShift UI actions
 
@@ -33,52 +34,6 @@ class BucketsUI(PageNavigator):
         logger.info("Select openshift-storage project")
         self.do_click(self.generic_locators["project_selector"])
         self.wait_for_namespace_selection(project_name=cluster_namespace)
-
-    def delete_resource(self, delete_via, resource):
-        """
-        Delete Object Bucket or Object bucket claim
-
-        Args:
-            delete_via (str): delete using 'three dots' icon, from the Object Bucket page/Object Bucket Claims page
-                or click on specific Object Bucket/Object Bucket Claim and delete it using 'Actions' dropdown list
-            resource (str): resource name to delete. It may be Object Bucket Claim name both for OBC or OB,
-                and it may be Object Bucket Name. Object Bucket name consists from Object Bucket Claim and prefix
-        """
-        logger.info(f"Find resource by name '{resource}' using search-bar")
-        self.page_has_loaded()
-        self.do_send_keys(self.generic_locators["search_resource_field"], resource)
-
-        from ocs_ci.ocs.ui.helpers_ui import format_locator
-
-        if delete_via == "Actions":
-            logger.info(f"Go to {resource} Page")
-            # delete specific resource by its dynamic name. Works both for OBC and OB
-
-            resource_from_list = format_locator(
-                self.generic_locators["resource_from_list_by_name"], resource
-            )
-            self.do_click(
-                resource_from_list,
-                enable_screenshot=True,
-            )
-
-            logger.info(f"Click on '{delete_via}'")
-            self.do_click(self.generic_locators["actions"], enable_screenshot=True)
-        else:
-            logger.info(f"Click on '{delete_via}'")
-            # delete specific resource by its dynamic name. Works both for OBC and OB
-            resource_actions_loc = format_locator(
-                self.generic_locators["actions_of_resource_from_list"], resource
-            )
-            self.do_click(resource_actions_loc, enable_screenshot=True)
-
-        logger.info(f"Click on 'Delete {resource}'")
-        # works both for OBC and OB, both from three_dots icon and Actions dropdown list
-        self.do_click(self.generic_locators["delete_resource"], enable_screenshot=True)
-
-        logger.info(f"Confirm {resource} Deletion")
-        # same PopUp both for OBC and OB
-        self.do_click(self.generic_locators["confirm_action"], enable_screenshot=True)
 
 
 class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):

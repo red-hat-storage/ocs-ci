@@ -116,11 +116,11 @@ class BaseUI:
         )
         if not os.path.isdir(self.screenshots_folder):
             Path(self.screenshots_folder).mkdir(parents=True, exist_ok=True)
-        logger.info(f"screenshots folder:{self.screenshots_folder}")
+        logger.debug(f"screenshots folder:{self.screenshots_folder}")
 
         if not os.path.isdir(self.dom_folder):
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
-        logger.info(f"dom files folder:{self.dom_folder}")
+        logger.debug(f"dom files folder:{self.dom_folder}")
 
         self.ocp_version = get_ocp_version()
         self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
