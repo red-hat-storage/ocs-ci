@@ -38,6 +38,7 @@ from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 
 from ocs_ci.framework import config
+from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -1734,6 +1735,7 @@ def email_reports(session):
     with open(os.path.expanduser(html)) as fd:
         html_data = fd.read()
     soup = BeautifulSoup(html_data, "html.parser")
+    add_time_report_to_email(session, soup)
 
     parse_html_for_email(soup)
     if config.RUN["cli_params"].get("squad_analysis"):
@@ -4435,3 +4437,68 @@ def archive_ceph_crashes(toolbox_pod):
     """
     log.info("Archiving all ceph crashes")
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
+
+
+def add_time_report_to_email(session, soup):
+    """
+    Takes the time report dictionary and converts it into HTML table
+    """
+    table_body_html = ""
+
+    for test in GV.TIMEREPORT_DICT:
+        table_body_html += f"""
+        <tr>
+            <th scope="row"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left">
+            {test}</th>
+            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+            {GV.TIMEREPORT_DICT[test]["setup"]:0.2f}</td>
+            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+            {GV.TIMEREPORT_DICT[test]["call"]:0.2f}</td>
+            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+            {GV.TIMEREPORT_DICT[test]["teardown"]:0.2f}</td>
+            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+            {GV.TIMEREPORT_DICT[test]["total"]:0.2f}</td>
+        </tr>
+        """
+    table_html_template = f"""
+    <table style="border-collapse: collapse; width: 100%; border: 1px solid #ddd;font-size:small">
+        <caption style="font-size:medium">
+            Test cases that took most amount of time to run in seconds
+        </caption>
+        <thead>
+            <tr>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Test Name
+            </th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Setup Time</th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Call Time</th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Teardown Time</th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Total Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {table_body_html}
+        </tbody>
+    </table>
+    """
+    with open("time.html", "a") as f:
+        f.write(table_html_template)
+    try:
+        time_report_file = os.path.join(
+            ocsci_log_path, "session__test_time_report_file"
+        )
+        with open("test_time_report.html", "a") as f:
+            f.write(table_html_template)
+        log.info(f"Test Time report saved to '{time_report_file}'")
+    except Exception:
+        log.exception("Failed save report to logs directory")
