@@ -78,7 +78,6 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         if not obc_found:
             logger.info("user is not able to access OBC")
             self.take_screenshot()
-            return None
         else:
             logger.info("user is able to access OBC")
 
@@ -86,6 +85,9 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
         namespaces.append(namespace_obj)
         delete_projects(namespaces)
+
+        if not obc_found:
+            return None
 
     def _check_obc_cannot_be_used_before(self, rule_exp):
         """
