@@ -23,7 +23,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
-from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
@@ -970,7 +969,9 @@ def get_node_az(node):
     return labels.get(constants.ZONE_LABEL)
 
 
-def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=False):
+def delete_and_create_osd_node_vsphere_upi(
+    osd_node_name, use_existing_node=False, **kwargs
+):
     """
     Unschedule, drain and delete osd node, and creating a new osd node.
     At the end of the function there should be the same number of osd nodes as
@@ -1010,7 +1011,7 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
 
     if not use_existing_node:
         log.info("Preparing to create a new node...")
-        new_node_names = add_new_node_and_label_upi(node_type, 1)
+        new_node_names = add_new_node_and_label_upi(node_type, 1, **kwargs)
         new_node_name = new_node_names[0]
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
@@ -1067,9 +1068,14 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     scale_down_deployments(osd_node_name)
     log.info("Scale down deployments finished successfully")
 
+    if config.DEPLOYMENT.get("arbiter_deployment"):
+        zone_label = (
+            osd_node.get().get("metadata").get("labels").get(constants.ZONE_LABEL)
+        )
     new_node_name = delete_and_create_osd_node_vsphere_upi(
-        osd_node_name, use_existing_node
+        osd_node_name, use_existing_node, other_labels=[zone_label]
     )
+
     assert new_node_name, "Failed to create a new node"
     log.info(f"New node created successfully. Node name: {new_node_name}")
 
@@ -1768,13 +1774,15 @@ def add_new_nodes_and_label_upi_lso(
         list: new spun node names
 
     """
+    from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count
+
     new_node_names = add_new_node_and_label_upi(
         node_type, num_nodes, mark_for_ocs_label, node_conf, other_labels=other_labels
     )
     new_nodes = get_node_objs(new_node_names)
 
     if add_disks:
-        num_of_disk = get_deviceset_count()
+        num_of_disk = get_deviceset_count() - 1
         for node_obj in new_nodes:
             add_disk_to_node(node_obj, num_of_disk=num_of_disk)
 

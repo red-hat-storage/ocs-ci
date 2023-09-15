@@ -11,7 +11,8 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_nodes_having_label
-from ocs_ci.ocs.resources.pod import wait_for_storage_pods
+
+# from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class TestBaseOperations:
         pod_factory,
         bucket_factory,
         rgw_bucket_factory,
-        add_nodes,
+        add_lso_nodes_and_teardown,
     ):
         """
         This test will perform base operations like add capacity,
@@ -94,10 +95,8 @@ class TestBaseOperations:
         # add node to the data-zone and turn off the original node
         orginal_node = data_nodes[0]
         logger.info(orginal_node)
-        add_nodes(
+        add_lso_nodes_and_teardown(
             node_count=1,
             ocs_nodes=True,
             other_labels=[f"{constants.ZONE_LABEL}={data_zones[0]}"],
         )
-        nodes.stop_nodes(nodes=[data_nodes[0]])
-        wait_for_storage_pods(timeout=600)
