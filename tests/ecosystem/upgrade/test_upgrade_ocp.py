@@ -138,6 +138,11 @@ class TestUpgradeOCP(ManageTest):
                     logger.info(f"{ocp_operator} upgrade will not be verified")
                     continue
                 # ############ End of Workaround ###############
+                if ocp_operator == "aro":
+                    logger.debug(
+                        f"{ocp_operator} do not match with OCP upgrade, check will be ignored!"
+                    )
+                    continue
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
                 for sampler in TimeoutSampler(
