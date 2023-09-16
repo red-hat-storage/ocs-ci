@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
-    tier2,
+    performance,
 )
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers.performance_lib import run_oc_command
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
-@tier2
+@performance
 @skipif_ocs_version("<4.14")
 class TestReclaimSpaceCronJobMultiClones(PASTest):
     """
