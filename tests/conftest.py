@@ -152,7 +152,6 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
@@ -958,12 +957,12 @@ def pvc_factory_fixture(request, project_factory):
             project = project or active_project or project_factory()
             active_project = project
             if interface == constants.CEPHBLOCKPOOL:
-                storageclass = storageclass or storageclass_name(
+                storageclass = storageclass or helpers.default_storage_class(
                     constants.OCS_COMPONENTS_MAP["blockpools"]
                 )
                 active_rbd_storageclass = storageclass
             elif interface == constants.CEPHFILESYSTEM:
-                storageclass = storageclass or storageclass_name(
+                storageclass = storageclass or helpers.default_storage_class(
                     constants.OCS_COMPONENTS_MAP["cephfs"]
                 )
                 active_cephfs_storageclass = storageclass

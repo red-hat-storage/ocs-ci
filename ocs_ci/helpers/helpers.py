@@ -633,9 +633,15 @@ def default_storage_class(
         OCS: Existing StorageClass Instance
     """
 
-    if interface_type == constants.CEPHBLOCKPOOL:
+    if interface_type in [
+        constants.CEPHBLOCKPOOL,
+        constants.OCS_COMPONENTS_MAP["blockpools"],
+    ]:
         resource_name = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
-    elif interface_type == constants.CEPHFILESYSTEM:
+    elif interface_type in [
+        constants.CEPHFILESYSTEM,
+        constants.OCS_COMPONENTS_MAP["cephfs"],
+    ]:
         resource_name = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
     base_sc.wait_for_resource(
