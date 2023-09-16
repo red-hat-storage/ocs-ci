@@ -1331,7 +1331,7 @@ def get_fio_rw_iops(pod_obj):
     Args:
         pod_obj (Pod): The object of the pod
     """
-    fio_result = pod_obj.get_fio_results(120)
+    fio_result = pod_obj.get_fio_results()
     logger.info(f"FIO output: {fio_result}")
     logger.info("IOPs after FIO:")
     logger.info(f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}")
