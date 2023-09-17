@@ -1026,4 +1026,6 @@ def wait_for_cronjobs(namespace, cronjobs_num, msg, timeout=60):
             ):  # in the result one line is always a title
                 return sample
     except TimeoutExpiredError:
-        raise Exception(f"{msg} \n Cronjobs found: \n {sample}")
+        raise Exception(
+            f"{msg} \n Only {len(sample) -1} cronjobs found.\n This is the full list: \n {sample}"
+        )

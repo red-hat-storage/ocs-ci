@@ -156,6 +156,9 @@ class TestReclaimSpaceCronJobMultiClones(PASTest):
                     namespace=self.namespace,
                     storage_size=f"{self.pvc_obj.size}Gi",
                 )
+                helpers.wait_for_resource_state(
+                    cloned_pvc_obj, constants.STATUS_BOUND, 600
+                )
             except Exception as e:
                 logger.error(f"Failed to create clone number {clone_num} : [{e}]")
                 break
@@ -164,6 +167,8 @@ class TestReclaimSpaceCronJobMultiClones(PASTest):
         if len(self.cloned_obj_list) != self.num_of_clones:
             logger.error("Not all clones created.")
             raise BenchmarkTestFailed("Not all clones created.")
+
+        logger.info(f"All {self.num_of_clones} created and reached bound state.")
 
     def test_rbd_pvc_multiple_clone_cronjobs(
         self,
@@ -199,7 +204,7 @@ class TestReclaimSpaceCronJobMultiClones(PASTest):
         performance_lib.wait_for_cronjobs(
             self.namespace,
             self.num_of_clones + 1,  # 1 for PVC and 1 for each clone
-            f"Expected number of cronjobs {self.num_of_clones+1} not found",
+            f"Expected number of cronjobs {self.num_of_clones+1} not found.",
         )
 
         logger.info(f"{self.num_of_clones+1} cronjobs found")
