@@ -14,6 +14,7 @@ from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.utils import (
     download_file,
     exec_cmd,
+    TimeoutSampler,
     wait_for_machineconfigpool_status,
 )
 
@@ -344,6 +345,22 @@ def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=
         wait_for_machineconfigpool_status(
             "all", timeout=1800, skip_tls_verify=skip_tls_verify
         )
+    logger.info(
+        f"Checking cluster status of {constants.OPENSHIFT_API_CLUSTER_OPERATOR}"
+    )
+    for sampler in TimeoutSampler(
+        timeout=1000,
+        sleep=10,
+        func=ocp.verify_cluster_operator_status,
+        cluster_operator=constants.OPENSHIFT_API_CLUSTER_OPERATOR,
+    ):
+        if sampler:
+            logger.info(f"{constants.OPENSHIFT_API_CLUSTER_OPERATOR} status is valid")
+            break
+        else:
+            logger.info(
+                f"{constants.OPENSHIFT_API_CLUSTER_OPERATOR} status is not valid"
+            )
 
 
 def configure_ingress_and_api_certificates(skip_tls_verify=False):
