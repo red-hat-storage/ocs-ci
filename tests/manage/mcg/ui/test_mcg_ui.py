@@ -3,7 +3,7 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     on_prem_platform_required,
-    red_squad,
+    black_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -28,7 +28,7 @@ from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
 logger = logging.getLogger(__name__)
 
 
-@red_squad
+@black_squad
 @skipif_ui_not_support("mcg_stores")
 class TestStoreUserInterface(object):
     """
@@ -99,7 +99,7 @@ class TestStoreUserInterface(object):
         assert test_store.check_resource_existence(should_exist=False)
 
 
-@red_squad
+@black_squad
 @ui
 @skipif_ui_not_support("bucketclass")
 @tier1
@@ -235,7 +235,7 @@ class TestBucketclassUserInterface(object):
         assert test_bc.check_resource_existence(should_exist=False)
 
 
-@red_squad
+@black_squad
 @skipif_ui_not_support("obc")
 class TestObcUserInterface(object):
     """
