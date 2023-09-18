@@ -87,9 +87,9 @@ class TestPvcUserInterface(object):
 
         if config.DEPLOYMENT["external_mode"]:
             if sc_name == constants.CEPHFILESYSTEM_SC:
-                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+                sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
             elif sc_name == constants.CEPHBLOCKPOOL_SC:
-                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+                sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
 
         pvc_ui_obj.create_pvc_ui(
             project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
@@ -132,7 +132,7 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
+        if sc_name in [storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])]:
             interface_type = constants.CEPHBLOCKPOOL
         elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL
