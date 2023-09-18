@@ -63,7 +63,10 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         self.sc_loc = self.obc_loc
 
     def check_obc_option(self, text="Object Bucket Claims"):
-        """check OBC is visible to user after giving admin access"""
+        """check OBC is visible to user after giving admin access
+
+        Returns:
+            bool: True if list of OBCs is visible to the user, False if not"""
 
         sc_name = create_unique_resource_name("namespace-", "interface")
         self.do_click(self.sc_loc["Developer_dropdown"])
