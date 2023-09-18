@@ -89,9 +89,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         namespaces.append(namespace_obj)
         delete_projects(namespaces)
 
-        if not obc_found:
-            return False
-        return True
+        return obc_found
 
     def _check_obc_cannot_be_used_before(self, rule_exp):
         """
