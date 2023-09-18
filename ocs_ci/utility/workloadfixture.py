@@ -43,6 +43,7 @@ def measure_operation(
     metadata=None,
     measure_after=False,
     pagerduty_service_ids=None,
+    extra_time=None,
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -66,6 +67,10 @@ def measure_operation(
             and utilized data are measured after the utilization is completed
         pagerduty_service_ids (list): Service IDs from PagerDuty system used
             incidents query
+        extra_time (int): Extra time in seconds to wait after operation and minimal_time
+            completes. This can be useful e.g. for capacity utilization testing where
+            estimation time to finish the operation is unknown, and we want to wait for some
+            time after operation completes to get alerts from Prometheus
 
     Returns:
         dict: contains information about `start` and `stop` time of given
@@ -99,7 +104,11 @@ def measure_operation(
                 "alerts", payload={"silenced": False, "inhibited": False}
             )
             msg = f"Request {alerts_response.request.url} failed"
-            assert alerts_response.ok, msg
+            if not alerts_response.ok:
+                # if request failed log error and proceed with next request
+                logger.error(msg)
+                logger.error(alerts_response.status_code)
+                logger.error(alerts_response.text)
             for alert in alerts_response.json().get("data").get("alerts"):
                 if alert not in prometheus_alert_list:
                     logger.info(f"Adding {alert} to alert list")
@@ -165,6 +174,12 @@ def measure_operation(
                     )
                     time.sleep(additional_time)
             # Dumping measurement results into result file.
+            if extra_time:
+                logger.info(
+                    f"Monitoring extra time {extra_time}s after operation completes"
+                )
+                time.sleep(extra_time)
+
             stop_time = time.time()
             info["run"] = False
             logging_thread_prometheus.join()
