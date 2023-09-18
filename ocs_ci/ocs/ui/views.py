@@ -1428,13 +1428,10 @@ validation_4_13 = {
 
 validation_4_14 = {
     "system-capacity": ("//div[contains(text(),'System raw capacity')]", By.XPATH),
-}
-
-validation_4_14 = {
     "storagesystems_overview": (
         "//button[@data-test='horizontal-link-Overview']",
         By.XPATH,
-    )
+    ),
 }
 
 topology = {
