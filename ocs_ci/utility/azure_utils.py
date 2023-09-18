@@ -607,10 +607,11 @@ class AzureAroUtil(AZURE):
         self.write_kubeadmin_password(cluster_name, resource_group)
         configure_ingress_and_api_certificates(skip_tls_verify=True)
         attempts = 0
-        maximum_attempts = 100
+        maximum_attempts = 150
         successful_connections = 0
-        successful_connections_in_row = 10
+        successful_connections_in_row = 20
         while successful_connections != successful_connections_in_row:
+            attempts += 1
             try:
                 exec_cmd("oc cluster-info")
                 successful_connections += 1
