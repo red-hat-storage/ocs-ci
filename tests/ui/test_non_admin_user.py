@@ -63,7 +63,7 @@ class TestOBCUi(ManageTest):
         """Login using created user"""
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
-        obc_ui_obj.check_obc_option()
+        assert obc_ui_obj.check_obc_option()
 
 
 class TestUnprivilegedUserODFAccess(E2ETest):

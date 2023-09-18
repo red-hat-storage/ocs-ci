@@ -71,7 +71,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         self.do_click(self.sc_loc["create_project"])
         self.do_send_keys(self.sc_loc["project_name"], sc_name)
         self.do_click(self.sc_loc["save_project"])
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        BucketsUI.navigate_object_bucket_claims_page()
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
         )
@@ -87,7 +87,8 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         delete_projects(namespaces)
 
         if not obc_found:
-            return None
+            return False
+        return True
 
     def _check_obc_cannot_be_used_before(self, rule_exp):
         """
