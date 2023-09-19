@@ -1124,63 +1124,6 @@ def get_topolvm_node_pod(
     return Pod(**topolvm_node_pod[0])
 
 
-def get_noobaa_core_pod(
-    label: str = constants.NOOBAA_CORE_POD_LABEL,
-    namespace: str = config.ENV_DATA["cluster_namespace"],
-) -> Pod:
-    """
-    Get noobaa core pod
-
-    Args:
-        label (str): Label associated with noobaa-core pod
-        namespace (str): Namespace in which noobaa-core pod is residing
-
-    Returns:
-        Pod: Pod object of noobaa-core pod
-
-    """
-    noobaa_core_pod = get_pods_having_label(label, namespace)
-    return Pod(**noobaa_core_pod[0])
-
-
-def get_noobaa_endpoint_pod(
-    label: str = constants.NOOBAA_ENDPOINT_POD_LABEL,
-    namespace: str = config.ENV_DATA["cluster_namespace"],
-) -> Pod:
-    """
-    Get Noobaa endpoint pod
-
-    Args:
-        label (str): Label associated with noobaa endpoint pod
-        namespace (str): Namespace in which noobaa endpoint pod is residing
-
-    Returns:
-        Pod: Pod object of noobaa endpoint pod
-
-    """
-    noobaa_endpoint_pod = get_pods_having_label(label, namespace)
-    return Pod(**noobaa_endpoint_pod[0])
-
-
-def get_noobaa_operator_pod(
-    label: str = constants.NOOBAA_OPERATOR_POD_LABEL,
-    namespace: str = config.ENV_DATA["cluster_namespace"],
-) -> Pod:
-    """
-    get Noobaa operator pod
-
-    Args:
-        label (str): Label associated with noobaa operator pod
-        namespace (str): Namespace in which noobaa operator pod is residing
-
-    Returns:
-        Pod: Pod object of noobaa operator pod
-
-    """
-    noobaa_operator_opd = get_pods_having_label(label, namespace)
-    return Pod(**noobaa_operator_opd[0])
-
-
 def list_ceph_images(pool_name="rbd"):
     """
     Args:
@@ -3145,7 +3088,6 @@ def get_mon_label(mon_pod_obj):
 
 
 def set_osd_maintenance_mode(osd_deployment):
-
     """
     Set osd in maintenance mode for running ceph-objectstore commands
 
