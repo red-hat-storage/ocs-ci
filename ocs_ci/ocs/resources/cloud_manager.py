@@ -40,6 +40,7 @@ class CloudManager(ABC):
             "AWS": S3Client,
             "GCP": GoogleClient,
             "AZURE": AzureClient,
+            "AZURE_WITH_LOGS": AzureWithLogsClient,
             "IBMCOS": S3Client,
             "RGW": S3Client,
         }
@@ -562,6 +563,70 @@ class AzureClient(CloudClient):
         ).decode("ascii")
         bs_secret_data["data"]["AccountName"] = base64.urlsafe_b64encode(
             self.account_name.encode("UTF-8")
+        ).decode("ascii")
+
+        return create_resource(**bs_secret_data)
+
+
+class AzureWithLogsClient(AzureClient):
+    """
+    Implementation of an Azure Client using the Azure API
+    to an existing storage account with bucket logs enabled
+
+    """
+
+    def __init__(
+        self, account_name=None, credential=None, auth_dict=None, *args, **kwargs
+    ):
+        if auth_dict:
+            self.tenant_id = auth_dict.get("TENANT_ID")
+            self.app_id = auth_dict.get("APPLICATION_ID")
+            self.app_secret = auth_dict.get("APPLICATION_SECRET")
+            self.logs_analytics_workspace_id = auth_dict.get(
+                "LOGS_ANALYTICS_WORKSPACE_ID"
+            )
+        super().__init__(
+            account_name=account_name,
+            credential=credential,
+            auth_dict=auth_dict,
+            *args,
+            **kwargs,
+        )
+
+    def create_azure_secret(self):
+        """
+        Create a Kubernetes secret to allow NooBaa to create Azure-based backingstores
+
+        Note that this method overides the parent method to include the
+        additional fields that are needed for the bucket logs feature
+
+        """
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            "cldmgr-azure-logs", "secret"
+        )
+        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_secret_data["data"]["AccountKey"] = base64.urlsafe_b64encode(
+            self.credential.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["AccountName"] = base64.urlsafe_b64encode(
+            self.account_name.encode("UTF-8")
+        ).decode("ascii")
+
+        # Note that the following encodings are in plain base64, and not urlsafe.
+        # This is because the urlsafe encoding for this credentials might contain
+        # characters that are not accepted when creating the secret.
+        bs_secret_data["data"]["TenantID"] = base64.b64encode(
+            self.tenant_id.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["ApplicationID"] = base64.b64encode(
+            self.app_id.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["ApplicationSecret"] = base64.b64encode(
+            self.app_secret.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["LogsAnalyticsWorkspaceID"] = base64.b64encode(
+            self.logs_analytics_workspace_id.encode("UTF-8")
         ).decode("ascii")
 
         return create_resource(**bs_secret_data)
