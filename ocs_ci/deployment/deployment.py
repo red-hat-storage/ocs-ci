@@ -1335,6 +1335,14 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"] = {
                     "storageClassName": storageclassnames["encryption"]
                 }
+        # Bluestore for RDR greenfield deployments: 4.14 onwards
+        if config.multicluster and (
+            config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        ):
+            rdr_bluestore_annotation = {
+                "ocs.openshift.io/clusterIsDisasterRecoveryTarget": "true"
+            }
+            cluster_data["metadata"]["annotations"].update(rdr_bluestore_annotation)
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -1521,6 +1529,7 @@ class Deployment(object):
         """
         set_registry_to_managed_state()
         image = None
+        ceph_cluster = None
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
@@ -1634,6 +1643,24 @@ class Deployment(object):
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+
+        # In case of RDR, check for bluestore on osds: 4.14 onwards
+        if config.multicluster and (
+            config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        ):
+            if not ceph_cluster:
+                ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
+                store_type = (
+                    ceph_cluster.get()
+                    .get("items")[0]["status"]["storage"]["osd"]["storeType"]
+                    .keys()
+                )
+            if "bluestore-rdr" in store_type:
+                logger.info("OSDs with bluestore found")
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    f"OSDs were not brought up with bluestore! instead we have {store_type}"
+                )
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
