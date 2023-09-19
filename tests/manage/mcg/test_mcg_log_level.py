@@ -82,34 +82,50 @@ class TestNoobaaLogLevel:
     """
     Test optional Noobaa (MCG) log level reduction, as validation of BZ-1932846
 
+        1. Check logs on default level, make sure that logs has reduced
+        2. Change log level to "All"
+        3. Make sure that logs now contains addional information
+
     """
 
     cfgmap = OCP(namespace=NAMESPACE, kind=CONFIGMAP, resource_name=NOOBAA_CONFIGMAP)
     pod_obj = OCP(namespace=NAMESPACE, kind=POD, selector=NOOBAA_APP_LABEL)
 
-    @pytest.fixture(autouse=True, scope="class")
-    def set_log_level_warn(self) -> None:
+    @pytest.fixture(scope="class")
+    def verify_log_default_level(self) -> None:
         log_level = get_noobaa_cfg_log_level(self.cfgmap)
-        if log_level != "warn":
-            set_noobaa_cfg_log_level(cfgmap=self.cfgmap, log_level=LOG_LEVEL_WARN)
-        self.pod_obj.wait_for_resource(condition=STATUS_RUNNING)
-        yield log_level
-        set_noobaa_cfg_log_level(cfgmap=self.cfgmap, log_level=LOG_LEVEL_DEFAULT)
+        if log_level != LOG_LEVEL_DEFAULT:
+            set_noobaa_cfg_log_level(cfgmap=self.cfgmap, log_level=LOG_LEVEL_DEFAULT)
         self.pod_obj.wait_for_resource(condition=STATUS_RUNNING)
 
-    def test_mcg_core_log_level(self) -> None:
+    def test_mcg_core_log_default_level(self, verify_log_default_level) -> None:
         noobaa_core_pod = get_noobaa_core_pod()
         noobaa_core_name = noobaa_core_pod.data.get("metadata").get("name")
 
         # When log level is reduced, we should only observe '[0]' level lines
         assert not check_noobaa_logs(noobaa_core_name, "[1]")
 
-    def test_noobaa_operator_log_level(self) -> None:
+    def test_noobaa_operator_log_default_level(self, verify_log_default_level) -> None:
         noobaa_operator_pod = get_noobaa_operator_pod()
         noobaa_operator_name = noobaa_operator_pod.data.get("metadata").get("name")
         assert not check_noobaa_logs(noobaa_operator_name, "level=info")
 
-    def test_noobaa_endpoint_log_level(self) -> None:
+    def test_noobaa_endpoint_log_default_level(self, verify_log_default_level) -> None:
         noobaa_endpoint_pod = get_noobaa_endpoint_pod()
         noobaa_endpoint_name = noobaa_endpoint_pod.data.get("metadata").get("name")
         assert not check_noobaa_logs(noobaa_endpoint_name, "[1]")
+
+    def test_mcg_core_log_level_all(self, change_the_noobaa_log_level):
+        noobaa_core_pod = get_noobaa_core_pod()
+        noobaa_core_name = noobaa_core_pod.data.get("metadata").get("name")
+        assert check_noobaa_logs(noobaa_core_name, "[1]")
+
+    def test_noobaa_operator_log_level_all(self, change_the_noobaa_log_level):
+        noobaa_operator_pod = get_noobaa_operator_pod()
+        noobaa_operator_name = noobaa_operator_pod.data.get("metadata").get("name")
+        assert check_noobaa_logs(noobaa_operator_name, "level=info")
+
+    def test_noobaa_endpoint_log_level_all(self, change_the_noobaa_log_level):
+        noobaa_endpoint_pod = get_noobaa_endpoint_pod()
+        noobaa_endpoint_name = noobaa_endpoint_pod.data.get("metadata").get("name")
+        assert check_noobaa_logs(noobaa_endpoint_name, "[1]")
