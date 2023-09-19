@@ -1735,12 +1735,12 @@ def email_reports(session):
     with open(os.path.expanduser(html)) as fd:
         html_data = fd.read()
     soup = BeautifulSoup(html_data, "html.parser")
-    add_time_report_to_email(session, soup)
 
     parse_html_for_email(soup)
     if config.RUN["cli_params"].get("squad_analysis"):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
+    add_time_report_to_email(session, soup)
     part1 = MIMEText(soup, "html")
     add_mem_stats(soup)
     msg.attach(part1)
@@ -4495,5 +4495,9 @@ def add_time_report_to_email(session, soup):
         </tbody>
     </table>
     """
-    with open("time.html", "a") as f:
-        f.write(table_html_template)
+    summary_tag = soup.find("h2", string="Summary")
+    time_div = soup.new_tag("div")
+    time_div.append(table_html_template)
+    summary_tag.insert_after(time_div)
+    with open("time.html", "a", encoding="utf-8") as f:
+        f.write(str(soup))
