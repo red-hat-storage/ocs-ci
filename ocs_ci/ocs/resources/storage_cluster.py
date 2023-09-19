@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
+    CephToolBoxNotFoundException,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
@@ -512,8 +513,14 @@ def ocs_install_verification(
 
     log.info("Verified node and provisioner secret names in storage class.")
 
-    # TODO: Enable the tools pod check when a solution is identified for tools pod on FaaS consumer
-    if not fusion_aas_consumer:
+    if consumer_cluster:
+        ct_pod = retry(
+            (AssertionError, CephToolBoxNotFoundException, CommandFailed),
+            tries=6,
+            delay=20,
+            backoff=1,
+        )(get_ceph_tools_pod)()
+    else:
         ct_pod = get_ceph_tools_pod()
 
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
