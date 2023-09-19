@@ -4445,20 +4445,24 @@ def add_time_report_to_email(session, soup):
     """
     table_body_html = ""
 
-    for test in GV.TIMEREPORT_DICT:
+    data = GV.TIMEREPORT_DICT
+    sorted_data = dict(
+        sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
+    )
+    for test, values in sorted_data.items():
         table_body_html += f"""
         <tr>
             <th scope="row"
             style="border: 1px solid #ddd;padding: 8px;text-align: left">
             {test}</th>
             <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {GV.TIMEREPORT_DICT[test]["setup"]:0.2f}</td>
+            {values.get("setup", 'NA')}</td>
             <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {GV.TIMEREPORT_DICT[test]["call"]:0.2f}</td>
+            {values.get("call", 'NA')}</td>
             <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {GV.TIMEREPORT_DICT[test]["teardown"]:0.2f}</td>
+            {values.get("teardown", 'NA')}</td>
             <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {GV.TIMEREPORT_DICT[test]["total"]:0.2f}</td>
+            {values.get("total", 'NA')}</td>
         </tr>
         """
     table_html_template = f"""
@@ -4493,12 +4497,3 @@ def add_time_report_to_email(session, soup):
     """
     with open("time.html", "a") as f:
         f.write(table_html_template)
-    try:
-        time_report_file = os.path.join(
-            ocsci_log_path, "session__test_time_report_file"
-        )
-        with open("test_time_report.html", "a") as f:
-            f.write(table_html_template)
-        log.info(f"Test Time report saved to '{time_report_file}'")
-    except Exception:
-        log.exception("Failed save report to logs directory")

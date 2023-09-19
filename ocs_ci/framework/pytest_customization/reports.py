@@ -2,7 +2,7 @@ import os
 import pytest
 import logging
 from py.xml import html
-from ocs_ci.utility.utils import email_reports, save_reports
+from ocs_ci.utility.utils import email_reports, save_reports, ocsci_log_path
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
 
@@ -88,16 +88,22 @@ def pytest_sessionfinish(session, exitstatus):
     sorted_data = dict(
         sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
     )
-    with open("time_report.txt", "a") as f:
-        f.write("testName\tsetup\tcall\tteardown\ttotal\n")
-        for test, values in sorted_data.items():
-            row = (
-                f"{test}\t{values.get('setup', 'NA')}\t"
-                f"{values.get('call', 'NA')}\t"
-                f"{values.get('teardown', 'NA')}\t"
-                f"{values.get('total', 'NA'):.2f}\n"
-            )
-            f.write(row)
+    try:
+        time_report_file = os.path.join(ocsci_log_path, "session_test_time_report_file")
+        with open(time_report_file, "a") as fil:
+            fil.write("testName\tsetup\tcall\tteardown\ttotal\n")
+            for test, values in sorted_data.items():
+                row = (
+                    f"{test}\t"
+                    f"{values.get('setup', 'NA')}\t"
+                    f"{values.get('call', 'NA')}\t"
+                    f"{values.get('teardown', 'NA')}\t"
+                    f"{values.get('total', 'NA')}\n"
+                )
+                fil.write(row)
+        logger.info(f"Test Time report saved to '{time_report_file}'")
+    except Exception:
+        logger.exception("Failed save report to logs directory")
 
 
 def pytest_report_teststatus(report, config):
