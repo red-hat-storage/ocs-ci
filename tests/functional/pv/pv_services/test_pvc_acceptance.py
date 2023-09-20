@@ -6,8 +6,6 @@
 #     test_rwo_dynamic_pvc[CephFileSystem-Delete]
 #     test_rwx_dynamic_pvc[CephFileSystem-Retain]
 #     test_rwx_dynamic_pvc[CephFileSystem-Delete]
-#
-# ## partially implemented #########
 # tests/manage/pv_services/test_pvc_assign_pod_node.py::TestPvcAssignPodNode
 #     test_rwo_pvc_assign_pod_node[CephBlockPool]
 #     test_rwo_pvc_assign_pod_node[CephFileSystem]
@@ -117,7 +115,9 @@ class TestPvcAcceptance(ManageTest):
     ]
 
     @acceptance
-    def test_pvc_acceptance(self, pvc_factory, pod_factory, storageclass_factory):
+    def test_pvc_acceptance(
+        self, pvc_factory, pod_factory, storageclass_factory, teardown_factory
+    ):
         """
         RWO Dynamic PVC creation tests with Reclaim policy set to Retain/Delete
 
@@ -142,7 +142,10 @@ class TestPvcAcceptance(ManageTest):
             test_variant.create_pvc()
 
         for test_variant in test_variants:
-            test_variant.create_pods()
+            test_variant.create_pods(teardown_factory)
+
+        for test_variant in test_variants:
+            test_variant.check_pod_running_on_selected_node()
 
         for test_variant in test_variants:
             test_variant.run_io_on_first_pod()
@@ -191,7 +194,11 @@ class TestPvcAcceptance(ManageTest):
             if test_variant.access_mode == constants.ACCESS_MODE_RWX:
                 test_variant.verify_data_is_mutable_from_any_pod()
 
-        self.verify_access_token_notin_odf_pod_logs()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (ocs_version >= version.VERSION_4_12) and (
+            config.ENV_DATA.get("platform") != constants.FUSIONAAS_PLATFORM
+        ):
+            self.verify_access_token_notin_odf_pod_logs()
 
     def verify_access_token_notin_odf_pod_logs(self):
         """
@@ -288,7 +295,7 @@ class PvcAcceptance:
         )
 
     @log_execution
-    def create_pods(self):
+    def create_pods(self, teardown_factory):
         """
         Create pods
         """
@@ -296,10 +303,6 @@ class PvcAcceptance:
             f"Creating first pod on node: {self.worker_nodes_list[0]} "
             f"with pvc {self.pvc_obj.name}"
         )
-        # TODO: randomly select nodes where to run the pods?
-        # (from test_pvc_assign_pod_node)
-        # TODO: add teardown_factory?
-        # (from test_pvc_assign_pod_node)
         self.pod_obj1 = self.pod_factory(
             interface=self.interface_type,
             pvc=self.pvc_obj,
@@ -307,6 +310,7 @@ class PvcAcceptance:
             node_name=self.worker_nodes_list[0],
             pod_dict_path=constants.NGINX_POD_YAML,
         )
+        teardown_factory(self.pod_obj1)
 
         logger.info(
             f"Creating second pod on node: {self.worker_nodes_list[1]} "
@@ -321,21 +325,37 @@ class PvcAcceptance:
             node_name=self.worker_nodes_list[1],
             pod_dict_path=constants.NGINX_POD_YAML,
         )
+        teardown_factory(self.pod_obj2)
 
         node_pod1 = self.pod_obj1.get().get("spec").get("nodeName")
         node_pod2 = self.pod_obj2.get().get("spec").get("nodeName")
         assert node_pod1 != node_pod2, "Both pods are on the same node"
 
-        # TODO: check that pods are running on the selected node?
-        # (from test_pvc_assign_pod_node)
+    @log_execution
+    def check_pod_running_on_selected_node(self):
+        # Confirm that the pods are running on the selected nodes
+        helpers.wait_for_resource_state(
+            resource=self.pod_obj1, state=constants.STATUS_RUNNING, timeout=120
+        )
+        self.pod_obj1.reload()
+        assert pod.verify_node_name(
+            self.pod_obj1, self.worker_nodes_list[0]
+        ), "Pod is running on a different node than the selected node"
+
+        if self.access_mode == constants.ACCESS_MODE_RWX:
+            helpers.wait_for_resource_state(
+                resource=self.pod_obj2, state=constants.STATUS_RUNNING, timeout=120
+            )
+            self.pod_obj2.reload()
+            assert pod.verify_node_name(
+                self.pod_obj2, self.worker_nodes_list[1]
+            ), "Pod is running on a different node than the selected node"
 
     @log_execution
     def run_io_on_first_pod(self):
         """
         Run IO on first pod
         """
-        # TODO: size=512M, runtime=30? (same also on second pod?)
-        # (from test_pvc_assign_pod_node)
         logger.info(f"Running IO on first pod {self.pod_obj1.name}")
         self.file_name1 = self.pod_obj1.name
         self.pod_obj1.run_io(
