@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: fio
-          image: quay.io/repository/ocsci/ocsci-fio:latest
+          image: quay.io/ocsci/ocsci-fio:latest
           volumeDevices:
             - devicePath: /dev/rbdblock
               name: my-volume
