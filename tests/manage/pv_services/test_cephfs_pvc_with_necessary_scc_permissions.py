@@ -23,6 +23,8 @@ def validate_permissions(pod_obj):
         f"output of command 'ls -l /etc/healing-controller.d/' "
         f"on the pod {pod_obj.name}: {cmd_output}"
     )
+    log.info("Pod Yaml:")
+    log.info(pod_obj.describe())
     cmd_output = cmd_output.split()
     assert "root" in cmd_output[4] and cmd_output[13], "Owner is not set to root "
     assert "9999" in cmd_output[5] and cmd_output[14], "Owner group is not set to 9999"
