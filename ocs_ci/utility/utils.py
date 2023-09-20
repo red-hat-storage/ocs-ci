@@ -4449,7 +4449,10 @@ def add_time_report_to_email(session, soup):
     sorted_data = dict(
         sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
     )
+    count = 1
     for test, values in sorted_data.items():
+        if count > 5:
+            break
         table_body_html += f"""
         <tr>
             <th scope="row"
@@ -4465,6 +4468,8 @@ def add_time_report_to_email(session, soup):
             {values.get("total", 'NA')}</td>
         </tr>
         """
+        count += 1
+
     table_html_template = f"""
     <table style="border-collapse: collapse; width: 100%; border: 1px solid #ddd;font-size:small">
         <caption style="font-size:medium">
@@ -4497,7 +4502,6 @@ def add_time_report_to_email(session, soup):
     """
     summary_tag = soup.find("h2", string="Summary")
     time_div = soup.new_tag("div")
-    time_div.append(table_html_template)
+    table = BeautifulSoup(table_html_template, "html.parser")
+    time_div.append(table)
     summary_tag.insert_after(time_div)
-    with open("time.html", "a", encoding="utf-8") as f:
-        f.write(str(soup))
