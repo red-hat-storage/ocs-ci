@@ -573,7 +573,7 @@ class AzureAroUtil(AZURE):
             f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain}"
         )
         logger.info("Creating Azure ARO cluster.")
-        out = exec_cmd(cmd, timeout=3600).stdout
+        out = exec_cmd(cmd, timeout=5400).stdout
         self.set_dns_records(cluster_name, resource_group, base_domain)
         logger.info(f"Cluster deployed: {out}")
         cluster_info = self.get_cluster_details(cluster_name)
@@ -603,10 +603,11 @@ class AzureAroUtil(AZURE):
         self.write_kubeadmin_password(cluster_name, resource_group)
         configure_ingress_and_api_certificates(skip_tls_verify=True)
         attempts = 0
-        maximum_attempts = 100
+        maximum_attempts = 150
         successful_connections = 0
-        successful_connections_in_row = 10
+        successful_connections_in_row = 20
         while successful_connections != successful_connections_in_row:
+            attempts += 1
             try:
                 exec_cmd("oc cluster-info")
                 successful_connections += 1
