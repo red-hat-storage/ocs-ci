@@ -124,8 +124,10 @@ class TestCephDefaultValuesCheck(ManageTest):
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_410.split("\n")
         elif ocs_version == version.VERSION_4_11:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_411.split("\n")
-        elif ocs_version >= version.VERSION_4_12:
+        elif ocs_version == version.VERSION_4_12 or ocs_version == version.VERSION_4_13:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
+        elif ocs_version >= version.VERSION_4_14:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_414.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         log.info(f"OCS version is {ocs_version}")
