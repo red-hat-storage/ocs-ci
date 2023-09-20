@@ -425,7 +425,7 @@ class ValidationUI(PageNavigator):
         ] = backing_store_tab.validate_backing_store_ready()
 
         log_step("Navigate to Backing Store tab via breadcrumb")
-        backing_store_tab.nav_backing_store_breadcrumb()
+        backing_store_tab.nav_backing_store_list_breadcrumb()
 
         log_step("Navigate to Bucket class tab")
         bucket_class_tab = backing_store_tab.nav_bucket_class_tab()

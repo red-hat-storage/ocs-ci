@@ -1,7 +1,8 @@
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator, logger
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 
 
-class ObjectService(PageNavigator):
+class ObjectStorage(PageNavigator, ResourceList):
     """
     Object Service page object under PageNavigator / Storage (version 4.14 and above)
     """
@@ -83,9 +84,15 @@ class ObjectService(PageNavigator):
 
         return ObjectBucketClaimsTab()
 
-    def navigate_namespace_store_tab(self):
-        logger.info("Navigate to Namespace Store Tab")
-        self.do_click(locator=self.validation_loc["namespacestore_page"])
-        from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
+    def select_project(self, cluster_namespace):
+        """
+        Helper function to select openshift-storage project
 
-        return NameSpaceStoreTab()
+        Args:
+            cluster_namespace (str): project name will be selected from the list
+
+        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
+        """
+        logger.info("Select openshift-storage project")
+        self.do_click(self.generic_locators["project_selector"])
+        self.wait_for_namespace_selection(project_name=cluster_namespace)

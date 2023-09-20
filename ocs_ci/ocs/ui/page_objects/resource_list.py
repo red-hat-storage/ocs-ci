@@ -20,6 +20,7 @@ class ResourceList(SearchBar):
         """
         logger.info(f"Navigate to resource by name '{resource_name}'")
         self.select_search_by("name")
+        self.do_clear(self.generic_locators["searchbar_input"])
         self.search(resource_name)
         self.do_click(
             format_locator(self.generic_locators["resource_link"], resource_name),
