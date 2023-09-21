@@ -469,7 +469,7 @@ def run_cmd(
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
-        threading_lock (threading.Lock): threading.Lock object that is used
+        threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
 
@@ -599,7 +599,7 @@ def exec_cmd(
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
-        threading_lock (threading.Lock): threading.Lock object that is used
+        threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
         use_shell (bool): If True will pass the cmd without splitting

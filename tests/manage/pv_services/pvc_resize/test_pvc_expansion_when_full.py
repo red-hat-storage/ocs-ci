@@ -43,7 +43,7 @@ class TestPvcExpansionWhenFull(ManageTest):
             access_modes_cephfs=[constants.ACCESS_MODE_RWO],
         )
 
-    def test_pvc_expansion_when_full(self):
+    def test_pvc_expansion_when_full(self, threading_lock):
         """
         Verify PVC expansion when the PVC is 100% utilized.
         Verify utilization alert will stop firing after volume expansion.
@@ -79,7 +79,7 @@ class TestPvcExpansionWhenFull(ManageTest):
             )
             log.info(f"Verified: Used space on pod {pod_obj.name} is 100%")
 
-        prometheus_api = PrometheusAPI()
+        prometheus_api = PrometheusAPI(threading_lock=threading_lock)
 
         # Wait till utilization alerts starts
         for response in TimeoutSampler(140, 5, prometheus_api.get, "alerts"):

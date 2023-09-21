@@ -65,6 +65,7 @@ class TestLvmMultiClone(ManageTest):
         pvc_clone_factory,
         pvc_factory,
         pod_factory,
+        threading_lock,
     ):
         """
         test create delete multi snapshot
@@ -77,7 +78,9 @@ class TestLvmMultiClone(ManageTest):
         .* Run IO
 
         """
-        lvm = LVM(fstrim=True, fail_on_thin_pool_not_empty=True)
+        lvm = LVM(
+            fstrim=True, fail_on_thin_pool_not_empty=True, threading_lock=threading_lock
+        )
         logger.info(f"LVMCluster version is {lvm.get_lvm_version()}")
         logger.info(
             f"Lvm thin-pool overprovisionRation is {lvm.get_lvm_thin_pool_config_overprovision_ratio()}"

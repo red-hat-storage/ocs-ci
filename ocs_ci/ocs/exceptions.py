@@ -643,5 +643,9 @@ class UnableUpgradeConnectionException(Exception):
     pass
 
 
+class NoThreadingLockUsedError(Exception):
+    pass
+
+
 class VSLMNotFoundException(Exception):
     pass

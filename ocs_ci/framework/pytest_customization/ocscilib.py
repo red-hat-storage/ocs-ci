@@ -712,8 +712,13 @@ def pytest_runtest_makereport(item, call):
     ):
         metrics = item.get_closest_marker("gather_metrics_on_fail").args
         try:
+            threading_lock = call.getfixturevalue("threading_lock")
             collect_prometheus_metrics(
-                metrics, f"{item.name}-{call.when}", call.start, call.stop
+                metrics,
+                f"{item.name}-{call.when}",
+                call.start,
+                call.stop,
+                threading_lock=threading_lock,
             )
         except Exception:
             log.exception("Failed to collect prometheus metrics")

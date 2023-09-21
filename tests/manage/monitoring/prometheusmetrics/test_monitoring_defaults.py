@@ -33,13 +33,13 @@ logger = logging.getLogger(__name__)
 @pytest.mark.first
 @pytest.mark.polarion_id("OCS-1261")
 @skipif_managed_service
-def test_monitoring_enabled():
+def test_monitoring_enabled(threading_lock):
     """
     OCS Monitoring is enabled after OCS installation (which is why this test
     has a post deployment marker) by asking for values of one ceph and one
     noobaa related metrics.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
 
     if (
         storagecluster_independent_check()
@@ -120,12 +120,12 @@ def test_ceph_mgr_dashboard_not_deployed():
 @tier1
 @pytest.mark.polarion_id("OCS-1267")
 @skipif_managed_service
-def test_ceph_rbd_metrics_available():
+def test_ceph_rbd_metrics_available(threading_lock):
     """
     Ceph RBD metrics should be provided via OCP Prometheus as well.
     See also: https://ceph.com/rbd/new-in-nautilus-rbd-performance-monitoring/
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus, metrics.ceph_rbd_metrics
     )
@@ -143,7 +143,7 @@ def test_ceph_rbd_metrics_available():
 @metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
 @skipif_managed_service
-def test_ceph_metrics_available():
+def test_ceph_metrics_available(threading_lock):
     """
     Ceph metrics as listed in KNIP-634 should be provided via OCP Prometheus.
 
@@ -155,7 +155,7 @@ def test_ceph_metrics_available():
     Since ODF 4.9 only subset of all ceph metrics ``ceph_metrics_healthy`` will
     be always available, as noted in BZ 2028649.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus,
         metrics.ceph_metrics_healthy,
@@ -176,14 +176,14 @@ def test_ceph_metrics_available():
 @pytest.mark.post_ocp_upgrade
 @pytest.mark.polarion_id("OCS-1302")
 @skipif_managed_service
-def test_monitoring_reporting_ok_when_idle(workload_idle):
+def test_monitoring_reporting_ok_when_idle(workload_idle, threading_lock):
     """
     When nothing is happening, OCP Prometheus reports OCS status as OK.
 
     If this test case fails, the status is either reported wrong or the
     cluster is in a broken state. Either way, a failure here is not good.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
 
     health_result = prometheus.query_range(
         query="ceph_health_status",

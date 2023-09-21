@@ -1319,6 +1319,7 @@ def collect_prometheus_metrics(
     start,
     stop,
     step=1.0,
+    threading_lock=None,
 ):
     """
     Collects metrics from Prometheus and saves them in file in json format.
@@ -1333,8 +1334,9 @@ def collect_prometheus_metrics(
         start (str): start timestamp of required datapoints
         stop (str): stop timestamp of required datapoints
         step (float): step of required datapoints
+        threading_lock: (threading.RLock): Lock to use for thread safety (default: None)
     """
-    api = PrometheusAPI()
+    api = PrometheusAPI(threading_lock=threading_lock)
     log_dir_path = os.path.join(
         os.path.expanduser(ocsci_config.RUN["log_dir"]),
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
