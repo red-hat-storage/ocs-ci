@@ -10,11 +10,11 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
 )
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_cmd
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import PVCNotCreated, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import PVCNotCreated
 
 logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
@@ -94,7 +94,8 @@ class TestReclaimSpaceCronJob(ManageTest):
         # in case of creation faliure, the wait_for_resource_bulk_status function
         # will raise an exception. so in this point the creation succeed
 
-        result = self.wait_for_cronjobs(
+        result = performance_lib.wait_for_cronjobs(
+            self.namespace,
             num_of_pvcs + existing_cronjobs_num,
             f"No reclaim space cron jobs exist in namespace {self.namespace}",
         )
@@ -118,7 +119,8 @@ class TestReclaimSpaceCronJob(ManageTest):
         logger.info(
             "Validating that all the cron jobs were deleted following deletion of the PVCs"
         )
-        self.wait_for_cronjobs(
+        performance_lib.wait_for_cronjobs(
+            self.namespace,
             existing_cronjobs_num,
             "After PVCs deletion some reclaimspacecronjobs were left",
         )
@@ -138,7 +140,8 @@ class TestReclaimSpaceCronJob(ManageTest):
         logger.info(f"PVC by name {pvc_obj.name} created")
         self.pvc_objs_created.append(pvc_obj)
 
-        self.wait_for_cronjobs(
+        performance_lib.wait_for_cronjobs(
+            self.namespace,
             existing_cronjobs_num,
             "After CephtFS PVC creation reclaim space cron job exists",
         )
@@ -227,37 +230,11 @@ class TestReclaimSpaceCronJob(ManageTest):
         logger.info(f"PVC by name {pvc_obj.name} created")
         self.pvc_objs_created.append(pvc_obj)
 
-        self.wait_for_cronjobs(0, "For RBD PVC creation reclaim space cron job exists")
+        performance_lib.wait_for_cronjobs(
+            self.namespace, 0, "For RBD PVC creation reclaim space cron job exists"
+        )
 
         logger.info(
             "No reclaim space cron job was created for RBD PVC if skipReclaimspaceSchedule is True."
         )
         pvc_obj.delete()
-
-    def wait_for_cronjobs(self, cronjobs_num, msg, timeout=60):
-        """
-        Runs 'oc get reclaimspacecronjob' with the TimeoutSampler
-
-        Args:
-            cronjobs_num (int): the exact number of cronjobs that should exist
-            msg (str): Error message to be printed if the desired condition is not reached
-            timeout (int): Timeout
-        Returns:
-
-            list : Result of 'oc get reclaimspacecronjob' command
-
-        """
-        try:
-            for sample in TimeoutSampler(
-                timeout=timeout,
-                sleep=5,
-                func=run_oc_command,
-                cmd="get reclaimspacecronjob",
-                namespace=self.namespace,
-            ):
-                if (
-                    len(sample) == cronjobs_num + 1
-                ):  # in the result one line is always a title
-                    return sample
-        except TimeoutExpiredError:
-            raise Exception(f"{msg}: {sample}")

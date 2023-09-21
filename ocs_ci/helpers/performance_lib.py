@@ -10,6 +10,9 @@ import re
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -994,3 +997,35 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
     )
 
     return total_time
+
+
+def wait_for_cronjobs(namespace, cronjobs_num, msg, timeout=60):
+    """
+    Runs 'oc get reclaimspacecronjob' with the TimeoutSampler
+
+    Args:
+        namespace(str): namespace in which cronjobs will be looked for
+        cronjobs_num (int): the exact number of cronjobs that should exist
+        msg (str): Error message to be printed if the desired condition is not reached
+        timeout (int): Timeout
+    Returns:
+
+        list : Result of 'oc get reclaimspacecronjob' command
+
+    """
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=run_oc_command,
+            cmd="get reclaimspacecronjob",
+            namespace=namespace,
+        ):
+            if (
+                len(sample) == cronjobs_num + 1
+            ):  # in the result one line is always a title
+                return sample
+    except TimeoutExpiredError:
+        raise Exception(
+            f"{msg} \n Only {len(sample) -1} cronjobs found.\n This is the full list: \n {sample}"
+        )
