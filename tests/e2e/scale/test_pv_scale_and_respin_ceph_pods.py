@@ -12,6 +12,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
 
@@ -206,6 +207,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
         self.kube_job_pvc_list.clear()
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @skipif_external_mode

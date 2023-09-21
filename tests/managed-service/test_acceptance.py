@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import ManageTest, acceptance, managed_service_required
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility.utils import TimeoutSampler
@@ -9,6 +10,7 @@ from ocs_ci.helpers import helpers
 logger = logging.getLogger(__name__)
 
 
+@yellow_squad
 class TestAcceptance(ManageTest):
     """
     Acceptance test Managed Service

@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
     tier1,
     skipif_external_mode,
 )
@@ -20,6 +21,7 @@ from fauxfactory import gen_alpha, gen_special
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.14")

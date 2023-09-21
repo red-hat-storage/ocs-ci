@@ -9,11 +9,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     bugzilla,
     skipif_external_mode,
+    magenta_squad,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 class TestDisableMCGExternalService:
     @pytest.fixture()
     def patch_noobaa_object(self, request):

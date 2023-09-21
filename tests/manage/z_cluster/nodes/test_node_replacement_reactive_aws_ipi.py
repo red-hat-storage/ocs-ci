@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     ManageTest,
@@ -28,6 +29,7 @@ from ocs_ci.ocs.node import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4a
 @aws_based_platform_required

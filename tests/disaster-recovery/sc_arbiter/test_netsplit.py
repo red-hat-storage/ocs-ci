@@ -3,6 +3,7 @@ import logging
 import time
 import ocpnetsplit
 
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
 from ocs_ci.ocs import constants
@@ -76,6 +77,7 @@ def get_logfile_map_from_logwriter_pods(logwriter_pods, is_rbd=False):
     return log_file_map
 
 
+@turquoise_squad
 class TestNetSplit:
     @pytest.fixture()
     def init_sanity(self, request):

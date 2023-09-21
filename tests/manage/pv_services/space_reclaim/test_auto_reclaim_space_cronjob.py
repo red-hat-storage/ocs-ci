@@ -5,6 +5,7 @@ from uuid import uuid4
 import os
 from tempfile import NamedTemporaryFile
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
+@green_squad
 @tier2
 @skipif_ocs_version("<4.14")
 class TestReclaimSpaceCronJob(ManageTest):

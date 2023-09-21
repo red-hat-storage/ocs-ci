@@ -7,6 +7,7 @@ import pytest
 import statistics
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_b
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
@@ -92,6 +93,7 @@ class ClonesResultsAnalyse(ResultsAnalyse):
         logger.info("test_clones_creation_performance finished successfully.")
 
 
+@grey_squad
 @performance
 @performance_b
 class TestPVCClonePerformance(PASTest):

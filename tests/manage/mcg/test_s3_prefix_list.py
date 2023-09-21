@@ -11,11 +11,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier2,
     skipif_ocs_version,
+    red_squad,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @bugzilla("2068110")
 @pytest.mark.polarion_id("OCS-3925")
 @tier2

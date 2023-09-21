@@ -10,6 +10,7 @@ import pytest
 
 from ocs_ci.utility import utils, templating
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_b
 from ocs_ci.helpers import performance_lib
 from ocs_ci.helpers.helpers import (
@@ -40,6 +41,7 @@ Interfaces_info = {
 }
 
 
+@grey_squad
 @performance
 @performance_b
 class TestBulkCloneCreation(PASTest):

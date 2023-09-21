@@ -13,12 +13,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     polarion_id,
     vsphere_platform_required,
+    red_squad,
 )
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 class TestNoobaaDbNFSMount:
     @pytest.fixture()
     def mount_ngix_pod(self, request):

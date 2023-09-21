@@ -4,6 +4,7 @@ from itertools import cycle
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
@@ -20,6 +21,7 @@ from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 log = logging.getLogger(__name__)
 
 
+@yellow_squad
 @tier4c
 @managed_service_required
 @ignore_leftover_label(constants.TOOL_APP_LABEL)

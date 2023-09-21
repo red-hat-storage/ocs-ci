@@ -10,6 +10,7 @@ import time
 from elasticsearch import Elasticsearch, exceptions as esexp
 
 # Local modules
+from ocs_ci.framework.pytest_customization.marks import libtest
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs import benchmark_operator, constants, defaults
@@ -24,6 +25,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@libtest
 class TestElasticsearch:
     """
     Testing the ElasticjSearch module used by ocs-ci

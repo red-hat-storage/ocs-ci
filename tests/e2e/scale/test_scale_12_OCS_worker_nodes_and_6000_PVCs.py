@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 from ocs_ci.framework.pytest_customization.marks import (
+    orange_squad,
     skipif_aws_i3,
     skipif_bm,
     skipif_external_mode,
@@ -38,6 +39,7 @@ log_path = ocsci_log_path()
 SCALE_DATA_FILE = f"{log_path}/scale_data_file.yaml"
 
 
+@orange_squad
 @scale_changed_layout
 @skipif_aws_i3
 @skipif_bm

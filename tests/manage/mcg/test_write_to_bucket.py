@@ -9,6 +9,7 @@ from flaky import flaky
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
+    red_squad,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -79,6 +80,7 @@ def file_setup(request):
     return zip_filename
 
 
+@red_squad
 @skipif_managed_service
 class TestBucketIO(MCGTest):
     """

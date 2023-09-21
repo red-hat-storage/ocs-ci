@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, tier1
+from ocs_ci.framework.pytest_customization.marks import bugzilla, tier1, blue_squad
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 import ocs_ci.utility.prometheus
@@ -11,6 +11,7 @@ import ocs_ci.utility.prometheus
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 def test_alerting_works():
     """
     If alerting works then there is at least one alert.
@@ -25,6 +26,7 @@ def test_alerting_works():
     assert len(alerts) > 0
 
 
+@blue_squad
 @pytest.mark.polarion_id("OCS-2503")
 @bugzilla("1897674")
 @tier1

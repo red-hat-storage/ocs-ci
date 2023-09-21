@@ -4,7 +4,11 @@ from time import sleep
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, system_test
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    system_test,
+    magenta_squad,
+)
 from ocs_ci.framework.testlib import version
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
@@ -12,6 +16,7 @@ from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @system_test
 @bugzilla("2039309")
 @skipif_ocs_version("<4.11")

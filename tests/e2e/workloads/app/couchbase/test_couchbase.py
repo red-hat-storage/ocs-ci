@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, skipif_ocp_version
 from ocs_ci.ocs.couchbase import CouchBase
 
@@ -19,6 +20,7 @@ def couchbase(request):
     return couchbase
 
 
+@magenta_squad
 @skipif_ocp_version(">=4.13")
 @workloads
 @pytest.mark.polarion_id("OCS-785")

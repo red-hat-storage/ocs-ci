@@ -3,6 +3,7 @@ import pytest
 from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, google_api_required
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
@@ -21,6 +22,7 @@ def pgsql(request):
     return pgsql
 
 
+@magenta_squad
 @google_api_required
 @workloads
 @pytest.mark.polarion_id("OCS-807")

@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     libtest,
     ManageTest,
@@ -20,6 +21,7 @@ from ocs_ci.ocs.managedservice import (
 logger = logging.getLogger(__name__)
 
 
+@yellow_squad
 @libtest
 class TestSwitchToCorrectIndexAtSetup(ManageTest):
     """

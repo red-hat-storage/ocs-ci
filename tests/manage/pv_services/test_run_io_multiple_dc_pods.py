@@ -1,9 +1,11 @@
 import pytest
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 
+@green_squad
 @tier2
 @pytest.mark.parametrize(
     argnames=["interface"],

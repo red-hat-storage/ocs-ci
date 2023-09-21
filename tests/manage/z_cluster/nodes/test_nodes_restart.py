@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -31,6 +32,7 @@ from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @skipif_managed_service
 class TestNodesRestart(ManageTest):

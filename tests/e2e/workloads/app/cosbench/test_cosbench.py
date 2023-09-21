@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import bugzilla, magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.cosbench import Cosbench
 
@@ -20,6 +20,7 @@ def cosbench(request):
     return cosbench
 
 
+@magenta_squad
 @workloads
 @pytest.mark.polarion_id("OCS-2529")
 class TestCosbenchWorkload(E2ETest):

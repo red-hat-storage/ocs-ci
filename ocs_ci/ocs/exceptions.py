@@ -631,6 +631,10 @@ class ArchitectureNotSupported(Exception):
     pass
 
 
+class MissingSquadDecoratorError(Exception):
+    pass
+
+
 class PDBNotCreatedException(Exception):
     pass
 

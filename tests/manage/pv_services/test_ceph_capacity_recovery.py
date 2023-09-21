@@ -2,6 +2,7 @@ import logging
 import time
 
 from ocs_ci.ocs.perftests import PASTest
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     tier2,
     skipif_ocs_version,
@@ -50,6 +51,7 @@ def check_health_status():
         return False
 
 
+@green_squad
 @tier2
 @skipif_external_mode
 @skipif_disconnected_cluster

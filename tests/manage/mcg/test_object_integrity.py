@@ -13,6 +13,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_disconnected_cluster,
+    red_squad,
 )
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ FILESIZE_SKIP = pytest.mark.skip("Current test filesize is too large.")
 RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be parallelized")
 
 
+@red_squad
 @flaky
 @skipif_managed_service
 class TestObjectIntegrity(MCGTest):

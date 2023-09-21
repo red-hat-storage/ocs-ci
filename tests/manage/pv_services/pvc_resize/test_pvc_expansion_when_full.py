@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -17,6 +18,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @skipif_ocs_version("<4.5")
 @skipif_upgraded_from(["4.4"])

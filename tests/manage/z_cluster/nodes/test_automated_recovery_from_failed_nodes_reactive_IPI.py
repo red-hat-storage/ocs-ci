@@ -1,5 +1,6 @@
 import logging
 import pytest
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -40,6 +41,7 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4b
 @ipi_deployment_required
@@ -213,6 +215,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         self.sanity_helpers.health_check(tries=tries)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4a
 @ipi_deployment_required

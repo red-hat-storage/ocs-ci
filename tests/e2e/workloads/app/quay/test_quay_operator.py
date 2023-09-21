@@ -4,7 +4,11 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    skipif_ocs_version,
+    magenta_squad,
+)
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -44,6 +48,7 @@ def _exec_cmd(cmd):
     exec_cmd(cmd)
 
 
+@magenta_squad
 @workloads
 class TestQuayWorkload(E2ETest):
     """

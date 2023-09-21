@@ -2,6 +2,7 @@ import logging
 import pytest
 from uuid import uuid4
 
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     performance,
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
+@grey_squad
 @performance
 @skipif_ocs_version("<4.14")
 class TestReclaimSpaceCronJobMultiClones(PASTest):

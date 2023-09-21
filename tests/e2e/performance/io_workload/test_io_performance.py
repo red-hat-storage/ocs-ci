@@ -4,12 +4,14 @@ Module to perform IOs with several weights
 import pytest
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import ManageTest
 
 
 logger = logging.getLogger(__name__)
 
 
+@grey_squad
 class TestIOPerformance(ManageTest):
     """
     Test IO performance

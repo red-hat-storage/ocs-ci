@@ -5,6 +5,7 @@ from itertools import cycle
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4,
@@ -42,6 +43,7 @@ from ocs_ci.helpers import disruption_helpers
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4
 @tier4c
 @ignore_leftover_label(constants.drain_canary_pod_label)

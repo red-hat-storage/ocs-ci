@@ -9,6 +9,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import tier3, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -92,6 +93,7 @@ def invalid_storageclass(request):
     storageclass.delete()
 
 
+@green_squad
 @tier3
 class TestStorageClassInvalid(ManageTest):
     def test_storageclass_invalid(self, invalid_storageclass):

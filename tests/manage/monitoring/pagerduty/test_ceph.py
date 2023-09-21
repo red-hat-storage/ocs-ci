@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     managed_service_required,
     skipif_ms_consumer,
@@ -15,6 +16,7 @@ from ocs_ci.utility import pagerduty
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @pytest.mark.skip(
     reason="measure_corrupt_pg is unstable and may turn cluster into segfault state"
 )

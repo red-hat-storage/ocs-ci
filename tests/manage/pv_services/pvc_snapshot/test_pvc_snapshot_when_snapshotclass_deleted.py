@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     bugzilla,
     ManageTest,
@@ -20,6 +21,7 @@ from ocs_ci.utility import templating
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier3
 @skipif_managed_service
 @bugzilla("1902711")

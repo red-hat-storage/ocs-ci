@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -21,6 +22,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4
 @tier4b
 @ignore_leftovers

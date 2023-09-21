@@ -4,6 +4,7 @@ from ocs_ci.ocs import hsbench
 from ocs_ci.utility import utils
 from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
+    orange_squad,
     vsphere_platform_required,
     bugzilla,
     skipif_ocs_version,
@@ -42,6 +43,7 @@ def s3bench(request):
     return s3bench
 
 
+@orange_squad
 @scale
 class TestHsBench(E2ETest):
     """

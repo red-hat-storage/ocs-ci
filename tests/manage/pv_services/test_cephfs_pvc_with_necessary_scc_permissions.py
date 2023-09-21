@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_pod
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -25,6 +26,7 @@ def validate_permissions(pod_obj):
     log.info("FSGroup is correctly set on subPath volume for CephFS CSI ")
 
 
+@green_squad
 @tier1
 @polarion_id("OCS-4931")
 @bugzilla("2182943")

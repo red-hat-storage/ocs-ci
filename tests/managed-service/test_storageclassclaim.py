@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -16,6 +17,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@yellow_squad
 @tier1
 @polarion_id("OCS-4628")
 @skipif_ocs_version("<4.11")

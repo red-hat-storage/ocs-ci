@@ -7,6 +7,7 @@ from ocs_ci.ocs.registry import (
     image_pull_and_push,
     validate_image_exists,
 )
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -15,6 +16,7 @@ log = logging.getLogger(__name__)
 IMAGE_URL = "docker.io/library/busybox"
 
 
+@magenta_squad
 @workloads
 class TestRegistryPodRespin(E2ETest):
     """

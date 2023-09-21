@@ -9,7 +9,12 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_LABEL,
     CSI_RBDPLUGIN_PROVISIONER_LABEL,
 )
-from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    bugzilla,
+    polarion_id,
+    brown_squad,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_containers_names_by_pod
 
@@ -18,6 +23,7 @@ log = getLogger("__name__")
 LIVENESS_CONTAINER = "liveness-prometheus"
 
 
+@brown_squad
 @tier1
 @bugzilla("2142901")
 @polarion_id("OCS-4847")

@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from concurrent.futures import ThreadPoolExecutor
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources import pod
@@ -10,6 +11,7 @@ from ocs_ci.helpers import helpers
 logger = logging.getLogger(__name__)
 
 
+@green_squad
 class TestRWXMountPoint(ManageTest):
     """
     Automates the following test cases:

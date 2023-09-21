@@ -25,6 +25,7 @@ import pytest
 
 # Local modules
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import benchmark_operator, constants
@@ -360,6 +361,7 @@ class SmallFileResultsAnalyse(PerfResult):
         log.debug(f"The Initial DB is : {self.results['full-res']}")
 
 
+@grey_squad
 @performance
 @performance_a
 class TestSmallFileWorkload(PASTest):

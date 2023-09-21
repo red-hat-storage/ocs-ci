@@ -43,6 +43,7 @@ from datetime import datetime
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import tier1, skipif_managed_service
 from ocs_ci.utility.prometheus import PrometheusAPI
 
@@ -50,6 +51,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
 def test_workload_rbd(workload_storageutilization_50p_rbd):
@@ -123,6 +125,7 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
     assert not at_least_one_value_out_of_range
 
 
+@blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
 def test_workload_rbd_in_some_other_way(workload_storageutilization_50p_rbd):
@@ -135,6 +138,7 @@ def test_workload_rbd_in_some_other_way(workload_storageutilization_50p_rbd):
     logger.info(workload_storageutilization_50p_rbd)
 
 
+@blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
 def test_workload_cephfs(workload_storageutilization_50p_cephfs):
@@ -144,6 +148,7 @@ def test_workload_cephfs(workload_storageutilization_50p_cephfs):
     logger.info(workload_storageutilization_50p_cephfs)
 
 
+@blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
 def test_workload_rbd_cephfs(
@@ -158,6 +163,7 @@ def test_workload_rbd_cephfs(
     logger.info(workload_storageutilization_50p_cephfs)
 
 
+@blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
 def test_workload_rbd_cephfs_minimal(
@@ -175,6 +181,7 @@ def test_workload_rbd_cephfs_minimal(
     logger.info(workload_storageutilization_05p_cephfs)
 
 
+@blue_squad
 @tier1
 @pytest.mark.polarion_id("OCS-2125")
 @skipif_managed_service

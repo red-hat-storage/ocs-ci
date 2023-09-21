@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_power,
     skipif_no_lso,
     skipif_lso,
+    brown_squad,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -95,6 +96,7 @@ def add_capacity_test(ui_flag=False):
     check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
 
 
+@brown_squad
 @ignore_leftovers
 @polarion_id("OCS-1191")
 @pytest.mark.second_to_last
@@ -127,6 +129,7 @@ class TestAddCapacity(ManageTest):
         add_capacity_test(ui_flag=True)
 
 
+@brown_squad
 @ignore_leftovers
 @polarion_id("OCS-4647")
 @pytest.mark.second_to_last
@@ -159,6 +162,7 @@ class TestAddCapacityLSO(ManageTest):
         storage_cluster.add_capacity_lso(ui_flag=True)
 
 
+@brown_squad
 @skipif_ocs_version("<4.4")
 @pre_upgrade
 @ignore_leftovers

@@ -5,12 +5,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     managed_service_required,
     skipif_ms_provider,
+    blue_squad,
 )
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @pytest.mark.polarion_id("OCS-2718")
 @tier2
 @managed_service_required

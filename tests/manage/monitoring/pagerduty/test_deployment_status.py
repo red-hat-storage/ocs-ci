@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     bugzilla,
     managed_service_required,
@@ -32,6 +33,7 @@ def get_pagerduty_service_id():
         return config.RUN["pagerduty_service_id"]
 
 
+@blue_squad
 @tier4
 @tier4c
 @managed_service_required
@@ -66,6 +68,7 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
         )
 
 
+@blue_squad
 @tier4
 @tier4c
 @managed_service_required
@@ -98,6 +101,7 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
         )
 
 
+@blue_squad
 @tier4
 @tier4b
 @managed_service_required
@@ -132,6 +136,7 @@ def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
         )
 
 
+@blue_squad
 @tier4
 @tier4c
 @managed_service_required
@@ -170,6 +175,7 @@ def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
         )
 
 
+@blue_squad
 @tier4
 @tier4c
 @managed_service_required
