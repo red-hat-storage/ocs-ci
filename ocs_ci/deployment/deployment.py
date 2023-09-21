@@ -1336,8 +1336,10 @@ class Deployment(object):
                     "storageClassName": storageclassnames["encryption"]
                 }
         # Bluestore for RDR greenfield deployments: 4.14 onwards
-        if config.multicluster and (
-            config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        if (
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
+            and config.multicluster
+            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
         ):
             rdr_bluestore_annotation = {
                 "ocs.openshift.io/clusterIsDisasterRecoveryTarget": "true"
@@ -1645,8 +1647,10 @@ class Deployment(object):
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
         # In case of RDR, check for bluestore on osds: 4.14 onwards
-        if config.multicluster and (
-            config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        if (
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
+            and config.multicluster
+            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
         ):
             if not ceph_cluster:
                 ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
