@@ -30,7 +30,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
     upload_file,
     get_ocp_version,
-    load_auth_config,
     wait_for_co,
     check_for_rhcos_images,
     get_infra_id,
@@ -53,8 +52,8 @@ class BAREMETALUPI(Deployment):
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super().__init__()
-            self.helper_node_details = load_auth_config()["baremetal"]
-            self.mgmt_details = load_auth_config()["ipmi"]
+            self.helper_node_details = config.AUTH["baremetal"]
+            self.mgmt_details = config.AUTH["ipmi"]
             self.aws = aws.AWS()
 
         def deploy_prereq(self):
@@ -763,7 +762,7 @@ class BaremetalPSIUPI(Deployment):
             self.flexy_deployment = True
             super().__init__()
             self.flexy_instance = FlexyBaremetalPSI()
-            self.psi_conf = load_auth_config()["psi"]
+            self.psi_conf = config.AUTH["psi"]
             self.utils = psiutils.PSIUtils(self.psi_conf)
 
         def deploy_prereq(self):
