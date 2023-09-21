@@ -78,6 +78,8 @@ def pytest_sessionfinish(session, exitstatus):
     """
     save session's report files and send email report
     """
+    import csv
+
     if ocsci_config.REPORTING.get("save_mem_report"):
         save_reports()
     if ocsci_config.RUN["cli_params"].get("email"):
@@ -93,19 +95,20 @@ def pytest_sessionfinish(session, exitstatus):
             ocsci_log_path(), "session_test_time_report_file.csv"
         )
         with open(time_report_file, "a") as fil:
-            fil.write("testName\tsetup\tcall\tteardown\ttotal\n")
+            c = csv.writer(fil)
+            c.writerow(["testName", "setup", "call", "teardown", "total"])
             for test, values in sorted_data.items():
-                row = (
-                    f"{test}\t"
-                    f"{values.get('setup', 'NA')}\t"
-                    f"{values.get('call', 'NA')}\t"
-                    f"{values.get('teardown', 'NA')}\t"
-                    f"{values.get('total', 'NA')}\n"
-                )
-                fil.write(row)
+                row = [
+                    f"{test}",
+                    f"{values.get('setup', 'NA')}",
+                    f"{values.get('call', 'NA')}",
+                    f"{values.get('teardown', 'NA')}",
+                    f"{values.get('total', 'NA')}",
+                ]
+                c.writerow(row)
         logger.info(f"Test Time report saved to '{time_report_file}'")
     except Exception:
-        logger.exception("Failed save report to logs directory")
+        logger.exception("Failed to save Test Time report to logs directory")
 
 
 def pytest_report_teststatus(report, config):
