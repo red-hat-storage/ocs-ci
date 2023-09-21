@@ -22,18 +22,18 @@ class BucketsUI(PageNavigator, ResourceList):
     def __init__(self):
         super().__init__()
 
-    def select_openshift_storage_project(self, cluster_namespace):
+    def select_project(self, namespace):
         """
-        Helper function to select openshift-storage project
+        Helper function to select the project
 
         Args:
-            cluster_namespace (str): project name will be selected from the list
+            namespace (str): project name will be selected from the list
 
         Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
         """
-        logger.info("Select openshift-storage project")
+        logger.info(f"Select project {namespace}")
         self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(project_name=cluster_namespace)
+        self.wait_for_namespace_selection(project_name=namespace)
 
 
 class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
@@ -62,32 +62,30 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         }
         self.sc_loc = self.obc_loc
 
-    def check_obc_option(self, text="Object Bucket Claims"):
-        """check OBC is visible to user after giving admin access
+    def check_obc_option(self, namespace):
+        """
+        Check that the list of OBCs in the namespace is visible to the user
+
+        Args:
+            namespace(str): namespace of the OBCs
 
         Returns:
             bool: True if list of OBCs is visible to the user, False if not"""
 
-        sc_name = create_unique_resource_name("namespace-", "interface")
         self.do_click(self.sc_loc["Developer_dropdown"])
         self.do_click(self.sc_loc["select_administrator"], timeout=5)
-        self.do_click(self.sc_loc["create_project"])
-        self.do_send_keys(self.sc_loc["project_name"], sc_name)
-        self.do_click(self.sc_loc["save_project"])
         BucketsUI.navigate_object_bucket_claims_page(self)
+        BucketsUI.select_project(namespace)
+
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
         )
+
         if not obc_found:
             logger.info("user is not able to access OBC")
             self.take_screenshot()
         else:
             logger.info("user is able to access OBC")
-
-        namespaces = []
-        namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
-        namespaces.append(namespace_obj)
-        delete_projects(namespaces)
 
         return obc_found
 
@@ -145,7 +143,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         self.navigate_OCP_home_page()
         self.navigate_object_bucket_claims_page()
 
-        self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
+        self.select_project(config.ENV_DATA["cluster_namespace"])
 
         logger.info("Click on 'Create Object Bucket Claim'")
         self.do_click(self.generic_locators["create_resource_button"])
@@ -172,18 +170,6 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
 
-    def select_openshift_storage_default_project(self):
-        """
-        Helper function to select openshift-storage project
-
-        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
-        """
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(
-            project_name=config.ENV_DATA["cluster_namespace"]
-        )
-
     def delete_obc_ui(self, obc_name, delete_via):
         """
         Delete an OBC via the UI
@@ -193,6 +179,6 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         """
         self.navigate_object_bucket_claims_page()
 
-        self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
+        self.select_project(config.ENV_DATA["cluster_namespace"])
 
         self.delete_resource(delete_via, obc_name)
