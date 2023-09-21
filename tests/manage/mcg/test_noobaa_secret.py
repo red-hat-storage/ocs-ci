@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_ocs_version,
     skipif_disconnected_cluster,
+    red_squad,
     mcg,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -58,6 +59,7 @@ def cleanup(request):
     return factory
 
 
+@red_squad
 @mcg
 @tier2
 @skipif_ocs_version("<4.11")

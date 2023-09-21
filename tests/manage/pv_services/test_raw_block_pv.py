@@ -5,6 +5,7 @@ import pytest
 
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     tier1,
     ManageTest,
@@ -19,6 +20,7 @@ from ocs_ci.utility.utils import convert_device_size
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier1
 @acceptance
 @pytest.mark.parametrize(

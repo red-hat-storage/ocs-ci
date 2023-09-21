@@ -227,6 +227,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
         self.kube_job_pvc_list.clear()
 
 
+@orange_squad
 @scale
 @orange_squad
 @ignore_leftovers

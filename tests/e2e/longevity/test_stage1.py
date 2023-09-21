@@ -1,9 +1,11 @@
 import logging
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, skipif_external_mode
 
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @skipif_external_mode
 class TestLongevity(E2ETest):
     """

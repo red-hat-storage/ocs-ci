@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     bugzilla,
     polarion_id,
+    red_squad,
     mcg,
 )
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -34,6 +35,7 @@ def get_bucket_used_bytes_metric(bucket_name):
     return value[1]
 
 
+@red_squad
 @mcg
 class TestNoobaaaPrometheus:
     @tier2

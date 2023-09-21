@@ -13,6 +13,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.prometheus import check_query_range_result_limits
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
+    blue_squad,
     mcg,
 )
 
@@ -27,6 +28,7 @@ CPU_USAGE_POD = (
 )
 
 
+@blue_squad
 @mcg
 @tier1
 @marks.polarion_id("OCS-2364")

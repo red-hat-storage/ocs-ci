@@ -6,6 +6,7 @@ import time
 import statistics
 import os
 
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.helpers import get_full_test_logs_path
@@ -18,6 +19,7 @@ from ocs_ci.ocs.exceptions import PodNotCreated
 logger = logging.getLogger(__name__)
 
 
+@grey_squad
 @performance
 @performance_a
 class TestPodReattachTimePerformance(PASTest):

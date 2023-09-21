@@ -10,6 +10,7 @@ from ocs_ci.ocs.registry import (
     validate_pvc_mount_on_registry_pod,
     get_registry_pod_obj,
 )
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, bugzilla
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.resources.pod import get_pod_logs
@@ -17,6 +18,7 @@ from ocs_ci.ocs.resources.pod import get_pod_logs
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @workloads
 @bugzilla("1981639")
 @bugzilla("2128263")

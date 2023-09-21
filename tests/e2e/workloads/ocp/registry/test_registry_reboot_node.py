@@ -16,12 +16,14 @@ from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @workloads
 @ignore_leftovers
 class TestRegistryRebootNode(E2ETest):

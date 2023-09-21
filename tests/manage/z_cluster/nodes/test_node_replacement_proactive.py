@@ -173,6 +173,7 @@ def delete_and_create_osd_node(osd_node_name):
     )
 
 
+@brown_squad
 @tier4a
 @ignore_leftovers
 @ipi_deployment_required
@@ -247,6 +248,7 @@ class TestNodeReplacementWithIO(ManageTest):
             osd_encryption_verification()
 
 
+@brown_squad
 @tier4a
 @ignore_leftovers
 @skipif_bmpsi

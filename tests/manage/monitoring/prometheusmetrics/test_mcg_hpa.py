@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     tier1,
+    blue_squad,
     mcg,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
@@ -15,6 +16,7 @@ from ocs_ci.utility.version import get_semantic_version, VERSION_4_10
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @mcg
 @tier1
 @skipif_ocs_version("<4.6")

@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     skipif_managed_service,
     skipif_disconnected_cluster,
+    red_squad,
     mcg,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -25,6 +26,7 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @mcg
 @skipif_managed_service
 @skipif_disconnected_cluster

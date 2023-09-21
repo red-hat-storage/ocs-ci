@@ -33,6 +33,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
+    red_squad,
     mcg,
 )
 from ocs_ci.ocs import constants, bucket_utils
@@ -45,6 +46,7 @@ from ocs_ci.ocs.resources.bucket_policy import HttpResponseParser
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @mcg
 @skipif_managed_service
 @skipif_aws_creds_are_missing

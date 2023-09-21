@@ -4,6 +4,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, registry
 from ocs_ci.ocs.resources.pvc import delete_pvcs, get_all_pvc_objs
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_ocs_version,
@@ -18,6 +19,7 @@ from ocs_ci.helpers.helpers import get_cephfs_name
 logger = logging.getLogger(__name__)
 
 
+@green_squad
 @skipif_ocs_version("<4.12")
 @polarion_id("OCS-4664")
 @bugzilla("2124469")

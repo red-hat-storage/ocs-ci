@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     tier4b,
     skipif_external_mode,
+    green_squad,
 )
 from ocs_ci.ocs.resources.pod import search_pattern_in_pod_logs
 from ocs_ci.helpers.helpers import change_vm_network_state
@@ -18,6 +19,7 @@ from ocs_ci.helpers.helpers import change_vm_network_state
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @skipif_external_mode
 @vsphere_platform_required
 class TestCephFSWithMDSNetworkFailure:

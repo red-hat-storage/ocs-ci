@@ -2,7 +2,11 @@ import collections
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    skipif_ocs_version,
+    brown_squad,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -25,6 +29,7 @@ from ocs_ci.utility.retry import retry
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier1
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")

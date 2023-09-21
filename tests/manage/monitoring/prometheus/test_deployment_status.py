@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     tier4c,
     bugzilla,
@@ -15,6 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-1052")
 @skipif_managed_service
@@ -44,6 +46,7 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr):
     )
 
 
+@blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-904")
 @skipif_managed_service
@@ -83,6 +86,7 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
         )
 
 
+@blue_squad
 @tier4c
 @bugzilla("1944513")
 @pytest.mark.polarion_id("OCS-2724")
@@ -114,6 +118,7 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
     )
 
 
+@blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-900")
 @skipif_managed_service

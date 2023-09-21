@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.helpers.sanity_helpers import SanityManagedService
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     libtest,
     ManageTest,
@@ -13,6 +14,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@yellow_squad
 @libtest
 @managed_service_required
 class TestSanityManagedServiceWithDefaultParams(ManageTest):
@@ -62,6 +64,7 @@ class TestSanityManagedServiceWithDefaultParams(ManageTest):
         log.info("The current index is equal to the original index")
 
 
+@yellow_squad
 @libtest
 @managed_service_required
 class TestSanityManagedServiceWithOptionalParams(ManageTest):

@@ -56,6 +56,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @pre_upgrade
 @tier2
 @skipif_managed_service
@@ -71,6 +72,7 @@ def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
     assert fio["jobs"][0]["error"] == 0, msg
 
 
+@blue_squad
 @post_upgrade
 @tier2
 @skipif_managed_service

@@ -4,6 +4,7 @@ import random
 import time
 
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftovers,
@@ -43,6 +44,7 @@ from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4b
 @skipif_ibm_cloud
 @skipif_external_mode

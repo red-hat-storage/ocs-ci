@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
+    orange_squad,
     mcg,
 )
 
@@ -22,6 +23,7 @@ def teardown(request):
     request.addfinalizer(finalizer)
 
 
+@orange_squad
 @mcg
 @scale
 class TestScaleOCBCreation(E2ETest):

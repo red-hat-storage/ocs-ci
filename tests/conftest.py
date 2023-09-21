@@ -2,6 +2,7 @@ import base64
 import copy
 import logging
 import os
+import pandas as pd
 import random
 import time
 import tempfile
@@ -243,6 +244,58 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
+def export_squad_marker_to_csv(items, filename=None):
+    """
+    Export data regarding tests that are missing squad markers to a CSV
+
+    Args:
+        items: list of collected tests
+        filename: name of the file to export the data to
+
+    """
+    _filename = filename or "squad_decorator_data.csv"
+    test_data = {"File": [], "Name": [], "Suggestions": []}
+    ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
+    for item in items:
+        item_markers = [marker.name for marker in item.iter_markers()]
+        if any(marker in item_markers for marker in ignored_markers):
+            log.debug(
+                "Ignoring test case %s as it has a marker in the ignore list", item.name
+            )
+        else:
+            item_squad = None
+            for marker in item_markers:
+                if "_squad" in marker:
+                    item_squad = marker.split("_")[0]
+                    item_squad = item_squad.capitalize()
+                    log.info("Test item %s has squad marker: %s", item.name, marker)
+            if not item_squad:
+                suggested_squads = []
+                for squad, paths in constants.SQUADS.items():
+                    for _path in paths:
+                        test_path = os.path.relpath(
+                            item.fspath.strpath, constants.TOP_DIR
+                        )
+                        if _path in test_path:
+                            suggested_squads.append(squad)
+                test_data["File"].append(item.fspath.strpath)
+                test_data["Name"].append(item.name)
+                test_data["Suggestions"].append(",".join(suggested_squads))
+
+    df = pd.DataFrame(data=test_data)
+    df.to_csv(
+        _filename,
+        header=["File ", "Test Name", "Squad Suggestions"],
+        index=False,
+        sep=",",
+        mode="a",
+    )
+    num_tests = len(test_data["Name"])
+    num_files = len(set(test_data["File"]))
+    log.info("Exported squad marker info to %s", _filename)
+    log.info("%s tests require action across %s files", num_tests, num_files)
+
+
 def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
@@ -264,21 +317,10 @@ def pytest_collection_modifyitems(session, config, items):
     # Add squad markers to each test item based on filepath
     for item in items:
         # check, if test already have squad marker manually assigned
-        skip_path_squad_marker = False
         for marker in item.iter_markers():
             if "_squad" in marker.name:
                 squad = marker.name.split("_")[0]
                 item.user_properties.append(("squad", squad.capitalize()))
-                skip_path_squad_marker = True
-        if not skip_path_squad_marker:
-            for squad, paths in constants.SQUADS.items():
-                for _path in paths:
-                    # Limit the test_path to the tests directory
-                    test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
-                    if _path in test_path:
-                        item.add_marker(f"{squad.lower()}_squad")
-                        item.user_properties.append(("squad", squad))
-                        break
 
     if not (teardown or deploy or (deploy and skip_ocs_deployment)):
         for item in items[:]:

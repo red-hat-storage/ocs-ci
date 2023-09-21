@@ -1,10 +1,12 @@
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import libtest
 from ocs_ci.framework.testlib import BaseTest, skipif_ocp_version
 
 log = logging.getLogger(__name__)
 
 
+@libtest
 class TestSkipifOCP(BaseTest):
     """
     Tests to check the skipif_ocp marker

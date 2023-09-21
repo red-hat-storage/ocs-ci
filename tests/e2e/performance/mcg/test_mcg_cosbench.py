@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import mcg
+from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
 from ocs_ci.framework.testlib import performance, performance_c
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
@@ -22,6 +22,7 @@ def cosbench(request):
     return cosbench
 
 
+@red_squad
 @mcg
 @performance
 @performance_c

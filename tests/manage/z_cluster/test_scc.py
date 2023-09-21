@@ -22,12 +22,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier2,
     skipif_ocs_version,
+    brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 class TestSCC:
     @tier2
     @bugzilla("1938647")

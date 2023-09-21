@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.helpers.disruption_helpers import Disruptions
@@ -39,6 +40,7 @@ def respin_amq_app_pod(kafka_namespace, pod_pattern):
             raise ie
 
 
+@magenta_squad
 @ignore_leftovers
 @workloads
 class TestAMQPodRespin(E2ETest):

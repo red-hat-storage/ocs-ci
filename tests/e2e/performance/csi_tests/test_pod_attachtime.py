@@ -8,6 +8,7 @@ import os
 import pytest
 import statistics
 
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
@@ -44,6 +45,7 @@ class ResultsAnalyse(PerfResult):
         self.es_connect()
 
 
+@grey_squad
 @performance
 @performance_a
 class TestPodStartTime(PASTest):

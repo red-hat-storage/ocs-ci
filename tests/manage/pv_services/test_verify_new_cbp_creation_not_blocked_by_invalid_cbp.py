@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.helpers import helpers
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_ocs_version,
@@ -11,6 +12,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @skipif_ocs_version("<4.3")
 @polarion_id("OCS-2130")

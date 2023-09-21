@@ -3,6 +3,7 @@ import pytest
 import random
 
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -44,6 +45,7 @@ from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @managed_service_required
 class TestNodesRestartMS(ManageTest):

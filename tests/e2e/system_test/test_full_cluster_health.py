@@ -14,12 +14,17 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.disruptive_operations import osd_node_reboot
 from ocs_ci.ocs.node import wait_for_nodes_status
-from ocs_ci.framework.pytest_customization.marks import system_test, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    system_test,
+    polarion_id,
+    magenta_squad,
+)
 from ocs_ci.helpers import sanity_helpers
 
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 class TestFullClusterHealth(PASTest):
     """
     Test Cluster health when storage is ~85%

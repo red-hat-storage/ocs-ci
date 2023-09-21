@@ -22,6 +22,7 @@ from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.utility import kms
+from ocs_ci.framework.pytest_customization.marks import black_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -34,6 +35,7 @@ from ocs_ci.utility import version
 logger = logging.getLogger(__name__)
 
 
+@black_squad
 @pytest.mark.parametrize(
     argnames=["kv_version"],
     argvalues=[

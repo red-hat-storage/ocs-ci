@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_lvm_not_installed,
+    aqua_squad,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, acceptance
 from ocs_ci.ocs import constants
@@ -15,6 +16,7 @@ from ocs_ci.ocs.exceptions import Md5CheckFailed
 logger = logging.getLogger(__name__)
 
 
+@aqua_squad
 @pytest.mark.parametrize(
     argnames=["volume_mode", "volume_binding_mode"],
     argvalues=[

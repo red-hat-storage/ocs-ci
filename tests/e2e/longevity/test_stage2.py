@@ -1,11 +1,13 @@
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.longevity import Longevity
 
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 class TestLongevityStage2(E2ETest):
     """
     Tests Longevity Testing - Stage 2

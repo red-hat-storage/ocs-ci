@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_aws_creds_are_missing,
@@ -16,6 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @mcg
 @tier2
 @polarion_id("OCS-1254")
@@ -113,6 +115,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
         )
 
 
+@blue_squad
 @mcg
 @tier4a
 @polarion_id("OCS-2498")

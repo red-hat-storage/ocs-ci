@@ -4,6 +4,7 @@ from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
+    green_squad,
 )
 from ocs_ci.ocs.cluster import (
     validate_compression,
@@ -15,6 +16,7 @@ from ocs_ci.ocs.exceptions import PoolNotReplicatedAsNeeded, PoolNotCompressedAs
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.6")

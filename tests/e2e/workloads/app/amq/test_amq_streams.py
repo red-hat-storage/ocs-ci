@@ -2,6 +2,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
@@ -22,6 +23,7 @@ def test_fixture_amq(request):
     return amq
 
 
+@magenta_squad
 @workloads
 class TestAMQBasics(E2ETest):
     @pytest.mark.parametrize(

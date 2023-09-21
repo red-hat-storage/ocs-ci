@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -23,6 +24,7 @@ from ocs_ci.ocs.cluster import (
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @pytest.mark.parametrize(
     argnames=["num_of_nodes", "workload_storageutilization_rbd"],
     argvalues=[

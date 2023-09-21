@@ -20,6 +20,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.bucket_utils import sync_object_directory, verify_s3_object_integrity
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
+    red_squad,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -30,6 +31,7 @@ from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @mcg
 @skipif_managed_service
 @skipif_aws_creds_are_missing

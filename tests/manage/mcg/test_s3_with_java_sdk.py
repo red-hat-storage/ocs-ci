@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_disconnected_cluster,
     tier1,
+    red_squad,
     mcg,
 )
 from ocs_ci.ocs.bucket_utils import upload_objects_with_javasdk
@@ -13,6 +14,7 @@ from ocs_ci.ocs.bucket_utils import upload_objects_with_javasdk
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @mcg
 @skipif_ocs_version("<4.9")
 @skipif_disconnected_cluster

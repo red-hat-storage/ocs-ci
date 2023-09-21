@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.constants import STATUS_COMPLETED, MASTER_MACHINE, WORKER_MACHINE
 
@@ -22,6 +23,7 @@ def jenkins(request):
     return jenkins
 
 
+@magenta_squad
 @workloads
 @ignore_leftovers
 class TestJenkinsNodeDrain(E2ETest):

@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization import marks
+from ocs_ci.framework.pytest_customization.marks import bugzilla, magenta_squad
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import exceptions
@@ -25,8 +25,9 @@ from ocs_ci.helpers.helpers import storagecluster_independent_check
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier1
-@marks.bugzilla("1989301")
+@bugzilla("1989301")
 @pytest.mark.polarion_id("OCS-2735")
 def test_log_reader_writer_parallel(project, tmp_path):
     """

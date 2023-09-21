@@ -10,6 +10,7 @@ import pytest
 
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -41,6 +42,7 @@ Interfaces_info = {
 ERR_MSG = "Error in command"
 
 
+@grey_squad
 @performance
 @performance_b
 @skipif_ocp_version("<4.6")

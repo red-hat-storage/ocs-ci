@@ -10,6 +10,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -34,6 +35,7 @@ log = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
+@brown_squad
 @tier1
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
@@ -66,6 +68,7 @@ class TestDefaultNfsDisabled(ManageTest):
             log.error("nfs feature is enabled by default")
 
 
+@brown_squad
 @skipif_external_mode
 @aws_platform_required
 @skipif_ocs_version("<4.11")

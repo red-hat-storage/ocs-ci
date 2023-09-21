@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     flowtests,
     skipif_managed_service,
+    red_squad,
     mcg,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
@@ -39,6 +40,7 @@ from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @mcg
 @skipif_managed_service
 @skipif_aws_creds_are_missing

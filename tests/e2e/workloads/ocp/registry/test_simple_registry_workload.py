@@ -3,6 +3,7 @@ import pytest
 import shlex
 from subprocess import Popen, PIPE
 import logging
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.utility.svt import (
     svt_project_clone,
     svt_create_venv_setup,
@@ -13,6 +14,7 @@ from ocs_ci.utility.svt import (
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @pytest.mark.skip(
     reason="Skipped due to issue https://github.com/openshift/svt/issues/697"
 )

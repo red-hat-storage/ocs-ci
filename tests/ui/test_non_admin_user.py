@@ -1,7 +1,10 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import skipif_ibm_cloud_managed
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_ibm_cloud_managed,
+    black_squad,
+)
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.mcg_ui import ObcUi
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -22,6 +25,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@black_squad
 class TestOBCUi(ManageTest):
     """
     Validate User able to see the OBC resource from the Console
@@ -65,6 +69,7 @@ class TestOBCUi(ManageTest):
         obc_ui_obj.check_obc_option()
 
 
+@black_squad
 class TestUnprivilegedUserODFAccess(E2ETest):
     """
     Test if unprivileged user can see ODF dashboard

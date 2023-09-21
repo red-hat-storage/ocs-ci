@@ -2,6 +2,7 @@ import logging
 import pytest
 import random
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4b,
     ManageTest,
@@ -221,6 +222,7 @@ FAILURE_TYPE_FUNC_CALL_DICT = {
 }
 
 
+@brown_squad
 @ignore_leftovers
 @tier4b
 @managed_service_required

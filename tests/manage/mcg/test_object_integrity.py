@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_ocs_version,
     skipif_disconnected_cluster,
+    red_squad,
     mcg,
 )
 
@@ -25,6 +26,7 @@ FILESIZE_SKIP = pytest.mark.skip("Current test filesize is too large.")
 RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be parallelized")
 
 
+@red_squad
 @mcg
 @flaky
 @skipif_managed_service

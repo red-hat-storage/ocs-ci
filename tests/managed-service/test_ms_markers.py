@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     libtest,
     ManageTest,
@@ -19,6 +20,7 @@ from ocs_ci.ocs.managedservice import check_and_change_current_index_to_default_
 logger = logging.getLogger(__name__)
 
 
+@yellow_squad
 @libtest
 @managed_service_required
 @ignore_leftovers

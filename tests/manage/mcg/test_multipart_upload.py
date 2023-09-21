@@ -19,6 +19,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     bugzilla,
     skipif_ocs_version,
+    red_squad,
     mcg,
 )
 
@@ -54,6 +55,7 @@ def setup(pod_obj, bucket_factory, test_directory_setup):
     return bucket, object_key, origin_dir, res_dir, full_object_path, parts
 
 
+@red_squad
 @mcg
 @skipif_managed_service
 class TestS3MultipartUpload(MCGTest):

@@ -2,6 +2,7 @@ import logging
 import pytest
 import random
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4a,
@@ -76,6 +77,7 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
     return is_rook_ceph_pods_status_changed
 
 
+@brown_squad
 @ignore_leftovers
 @tier4a
 @skipif_managed_service

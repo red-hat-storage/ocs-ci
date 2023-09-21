@@ -10,6 +10,7 @@ from ocs_ci.helpers.helpers import (
     get_last_log_time_date,
     check_osd_log_exist_on_rook_ceph_operator_pod,
 )
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -21,6 +22,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @bugzilla("1962821")
 @skipif_ocs_version("<4.8")

@@ -6,6 +6,7 @@ from time import sleep
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4,
@@ -37,6 +38,7 @@ from ocs_ci.helpers import disruption_helpers, helpers
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4
 @tier4c
 @skipif_managed_service

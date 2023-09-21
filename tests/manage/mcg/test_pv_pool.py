@@ -7,6 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     tier3,
+    red_squad,
     mcg,
 )
 
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
 
 
+@red_squad
 @mcg
 class TestPvPool:
     """

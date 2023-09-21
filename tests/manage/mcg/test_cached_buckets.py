@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     skipif_aws_creds_are_missing,
     tier2,
+    red_squad,
     mcg,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -23,6 +24,7 @@ from ocs_ci.framework.testlib import MCGTest
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @mcg
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing

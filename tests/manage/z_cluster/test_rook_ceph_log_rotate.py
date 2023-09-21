@@ -10,6 +10,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -23,6 +24,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @ignore_leftovers
 @bugzilla("2116416")

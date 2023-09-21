@@ -4,12 +4,12 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, mcg
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier3,
     skipif_managed_service,
     skipif_ocs_version,
-    mcg,
 )
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -24,6 +24,7 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @mcg
 @tier3
 @pytest.mark.polarion_id("OCS-4662")

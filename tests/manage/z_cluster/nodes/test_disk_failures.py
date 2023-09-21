@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
@@ -34,6 +35,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4a
 @ignore_leftovers
 class TestDiskFailures(ManageTest):

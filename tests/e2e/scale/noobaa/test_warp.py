@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     bugzilla,
+    orange_squad,
     mcg,
 )
 
@@ -28,6 +29,7 @@ def warps3(request):
     return warps3
 
 
+@orange_squad
 @mcg
 @scale
 @ignore_leftovers

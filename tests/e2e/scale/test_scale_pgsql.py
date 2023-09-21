@@ -3,6 +3,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import scale_pgsql
 from ocs_ci.utility import utils
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import E2ETest, scale, ignore_leftovers
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
@@ -21,6 +22,7 @@ def pgsql(request):
     return pgsql
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2239")

@@ -1,5 +1,6 @@
 import logging
 import pytest
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
@@ -18,6 +19,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4c
 @skipif_ocs_version("<4.10")
 @ignore_leftover_label(constants.OSD_APP_LABEL)

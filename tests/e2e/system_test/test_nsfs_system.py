@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     ignore_leftovers,
     skipif_ocs_version,
+    magenta_squad,
 )
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import constants
@@ -33,6 +34,7 @@ from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_storage_pods
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @system_test
 @skipif_mcg_only
 @ignore_leftovers

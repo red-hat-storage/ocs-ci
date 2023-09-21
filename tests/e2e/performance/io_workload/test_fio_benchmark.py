@@ -12,6 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_c, skipif_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
@@ -128,6 +129,7 @@ class FIOResultsAnalyse(PerfResult):
         # Todo: Fail test if 5% deviation from benchmark value
 
 
+@grey_squad
 @performance
 @performance_c
 class TestFIOBenchmark(PASTest):

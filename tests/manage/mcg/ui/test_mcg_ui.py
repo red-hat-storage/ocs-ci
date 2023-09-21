@@ -3,6 +3,7 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     on_prem_platform_required,
+    black_squad,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -24,6 +25,7 @@ from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI, ObcUI, ObUI
 logger = logging.getLogger(__name__)
 
 
+@black_squad
 @mcg
 @skipif_ui_not_support("mcg_stores")
 class TestStoreUserInterface(object):
@@ -95,6 +97,7 @@ class TestStoreUserInterface(object):
         assert test_store.check_resource_existence(should_exist=False)
 
 
+@black_squad
 @mcg
 @ui
 @skipif_ui_not_support("bucketclass")
@@ -231,6 +234,7 @@ class TestBucketclassUserInterface(object):
         assert test_bc.check_resource_existence(should_exist=False)
 
 
+@black_squad
 @skipif_ui_not_support("obc")
 class TestObcUserInterface(object):
     """

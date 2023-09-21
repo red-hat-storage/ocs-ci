@@ -48,6 +48,7 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     bugzilla,
+    red_squad,
     mcg,
 )
 from ocs_ci.utility import version
@@ -56,6 +57,7 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @mcg
 @skipif_managed_service
 @skipif_ocs_version("<4.3")

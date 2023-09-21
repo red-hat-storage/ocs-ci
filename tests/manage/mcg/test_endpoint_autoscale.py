@@ -3,14 +3,14 @@ from ocs_ci.framework.testlib import MCGTest, tier1, skipif_ocs_version
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
+    red_squad,
     mcg,
 )
 
 
 # @pytest.mark.polarion_id("OCS-XXXX")
 # Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
-
-
+@red_squad
 @mcg
 @skipif_ocs_version(["<4.5", ">4.6"])
 @skipif_managed_service

@@ -15,6 +15,7 @@ import yaml
 
 # Local modules
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -38,6 +39,7 @@ log = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
+@grey_squad
 @performance
 @performance_b
 @skipif_ocp_version("<4.6")
