@@ -251,6 +251,8 @@ class PvcAcceptance:
             reclaim_policy (str): The type of reclaim policy
                 (eg., 'Delete', 'Retain')
             access_mode (str): access mode (rwo or rwx)
+            pvc_factory: A fixture to create new pvc
+            pod_factory: A fixture to create new pod
             storageclass_factory: A fixture to create new storage class
             teardown_factory: A fixture to cleanup created resources
 
