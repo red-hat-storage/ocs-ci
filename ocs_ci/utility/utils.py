@@ -4472,7 +4472,7 @@ def add_time_report_to_email(session, soup):
 
     table_html_template = f"""
     <table style="border-collapse: collapse; width: 100%; border: 1px solid #ddd;font-size:small">
-        <caption style="font-size:medium text-align: left font-weight: bold">
+        <caption style="font-size:medium; text-align:left; font-weight:bold">
             Test cases that took most amount of time to run in seconds
         </caption>
         <thead>
