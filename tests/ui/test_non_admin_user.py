@@ -61,13 +61,15 @@ class TestOBCUi(ManageTest):
         # Create project and give the user admin access to it
         project = project_factory()
         ocp_obj = ocp.OCP()
-        ocp_obj.exec_oc_cmd(f"adm policy add-role-to-user admin {user[0]} -n {project}")
+        ocp_obj.exec_oc_cmd(
+            f"adm policy add-role-to-user admin {user[0]} -n {project.name}"
+        )
 
         # Login using created user
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
         assert obc_ui_obj.check_obc_option(
-            project
+            project.name
         ), f"User {user[0]} wasn't able to see the list of OBCs"
 
 
