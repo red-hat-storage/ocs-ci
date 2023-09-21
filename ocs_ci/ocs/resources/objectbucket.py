@@ -14,7 +14,12 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    NotFoundError,
+    TimeoutExpiredError,
+    UnhealthyBucket,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
 from ocs_ci.ocs.resources.rgw import RGW
@@ -202,12 +207,9 @@ class ObjectBucket(ABC):
         logger.info(f"Deleting bucket: {self.name}")
         try:
             self.internal_delete()
-        except CommandFailed as e:
-            if "not found" in str(e):
-                logger.warning(f"{self.name} was not found, or already deleted.")
-                return True
-            else:
-                raise e
+        except NotFoundError:
+            logger.warning(f"{self.name} was not found, or already deleted.")
+            return True
         if verify:
             self.verify_deletion()
         else:
@@ -356,6 +358,7 @@ class MCGCLIBucket(ObjectBucket):
         """
         Deletes the bucket using the NooBaa CLI
         """
+        # TODO: Raise NotFoundError exception if bucket not found
         self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
 
     @property
@@ -407,14 +410,19 @@ class MCGS3Bucket(ObjectBucket):
         """
         Deletes the bucket using the S3 API
         """
-        response = self.s3client.get_bucket_versioning(Bucket=self.name)
-        logger.info(response)
-        if "Status" in response and response["Status"] == "Enabled":
-            for obj_version in self.s3resource.Bucket(self.name).object_versions.all():
-                obj_version.delete()
-        else:
-            self.s3resource.Bucket(self.name).objects.all().delete()
-        self.s3resource.Bucket(self.name).delete()
+        try:
+            response = self.s3client.get_bucket_versioning(Bucket=self.name)
+            logger.info(response)
+            if "Status" in response and response["Status"] == "Enabled":
+                for obj_version in self.s3resource.Bucket(
+                    self.name
+                ).object_versions.all():
+                    obj_version.delete()
+            else:
+                self.s3resource.Bucket(self.name).objects.all().delete()
+            self.s3resource.Bucket(self.name).delete()
+        except boto3.errorfactory.NoSuchKey as e:
+            raise NotFoundError(e)
 
     @property
     def internal_status(self):
@@ -449,7 +457,10 @@ class OCBucket(ObjectBucket):
         """
         Deletes the bucket using the OC CLI
         """
-        OCP(kind="obc", namespace=self.namespace).delete(resource_name=self.name)
+        try:
+            OCP(kind="obc", namespace=self.namespace).delete(resource_name=self.name)
+        except CommandFailed as e:
+            raise NotFoundError(e)
 
     @property
     def internal_status(self):
@@ -554,6 +565,7 @@ class MCGNamespaceBucket(ObjectBucket):
         """
         Deletes the bucket using the S3 API
         """
+        # TODO: Raise NotFoundError exception if bucket not found
         self.mcg.send_rpc_query("bucket_api", "delete_bucket", {"name": self.name})
 
     @property
