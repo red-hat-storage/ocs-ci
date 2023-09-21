@@ -4012,6 +4012,7 @@ def snapshot_restore_factory_fixture(request):
             helpers.create_unique_resource_name(snapshot_obj.name, "restore")
         )
         vol_snapshot_class = snapshot_info["spec"]["volumeSnapshotClassName"]
+        log.info(f"Volume snapshot class name: {vol_snapshot_class}")
 
         if (
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
@@ -4028,6 +4029,8 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+            or config.ENV_DATA.get("cluster_type", "").lower()
+            == constants.MS_CONSUMER_TYPE
         ):
             storageclass = (
                 storageclass
