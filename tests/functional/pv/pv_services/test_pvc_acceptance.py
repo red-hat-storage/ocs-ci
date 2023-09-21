@@ -130,6 +130,7 @@ class TestPvcAcceptance(ManageTest):
                 pvc_factory=pvc_factory,
                 pod_factory=pod_factory,
                 storageclass_factory=storageclass_factory,
+                teardown_factory=teardown_factory,
             )
             for variant in TestPvcAcceptance.variants
             if not variant.get("skip")
@@ -142,7 +143,7 @@ class TestPvcAcceptance(ManageTest):
             test_variant.create_pvc()
 
         for test_variant in test_variants:
-            test_variant.create_pods(teardown_factory)
+            test_variant.create_pods()
 
         for test_variant in test_variants:
             test_variant.check_pod_running_on_selected_node()
@@ -240,6 +241,7 @@ class PvcAcceptance:
         pvc_factory,
         pod_factory,
         storageclass_factory,
+        teardown_factory,
     ):
         """
 
@@ -250,6 +252,7 @@ class PvcAcceptance:
                 (eg., 'Delete', 'Retain')
             access_mode (str): access mode (rwo or rwx)
             storageclass_factory: A fixture to create new storage class
+            teardown_factory: A fixture to cleanup created resources
 
         """
         self.interface_type = interface_type
@@ -258,6 +261,7 @@ class PvcAcceptance:
         self.pvc_factory = pvc_factory
         self.pod_factory = pod_factory
         self.storageclass_factory = storageclass_factory
+        self.teardown_factory = teardown_factory
 
         self.expected_failure_str = "Multi-Attach error for volume"
         self.storage_type = "fs"
@@ -295,7 +299,7 @@ class PvcAcceptance:
         )
 
     @log_execution
-    def create_pods(self, teardown_factory):
+    def create_pods(self):
         """
         Create pods
         """
@@ -310,7 +314,7 @@ class PvcAcceptance:
             node_name=self.worker_nodes_list[0],
             pod_dict_path=constants.NGINX_POD_YAML,
         )
-        teardown_factory(self.pod_obj1)
+        self.teardown_factory(self.pod_obj1)
 
         logger.info(
             f"Creating second pod on node: {self.worker_nodes_list[1]} "
@@ -325,7 +329,7 @@ class PvcAcceptance:
             node_name=self.worker_nodes_list[1],
             pod_dict_path=constants.NGINX_POD_YAML,
         )
-        teardown_factory(self.pod_obj2)
+        self.teardown_factory(self.pod_obj2)
 
         node_pod1 = self.pod_obj1.get().get("spec").get("nodeName")
         node_pod2 = self.pod_obj2.get().get("spec").get("nodeName")
