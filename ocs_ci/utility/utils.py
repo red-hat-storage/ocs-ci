@@ -4455,9 +4455,9 @@ def add_time_report_to_email(session, soup):
             break
         table_body_html += f"""
         <tr>
-            <th scope="row"
+            <td scope="row"
             style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {test}</th>
+            {test}</td>
             <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
             {values.get("setup", 'NA')}</td>
             <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
@@ -4472,7 +4472,7 @@ def add_time_report_to_email(session, soup):
 
     table_html_template = f"""
     <table style="border-collapse: collapse; width: 100%; border: 1px solid #ddd;font-size:small">
-        <caption style="font-size:medium">
+        <caption style="font-size:medium text-align: left font-weight: bold">
             Test cases that took most amount of time to run in seconds
         </caption>
         <thead>

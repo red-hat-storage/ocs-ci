@@ -89,7 +89,9 @@ def pytest_sessionfinish(session, exitstatus):
         sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
     )
     try:
-        time_report_file = os.path.join(ocsci_log_path, "session_test_time_report_file")
+        time_report_file = os.path.join(
+            ocsci_log_path(), "session_test_time_report_file.csv"
+        )
         with open(time_report_file, "a") as fil:
             fil.write("testName\tsetup\tcall\tteardown\ttotal\n")
             for test, values in sorted_data.items():
