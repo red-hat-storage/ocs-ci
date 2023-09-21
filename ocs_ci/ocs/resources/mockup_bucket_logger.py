@@ -1,6 +1,7 @@
 from datetime import datetime
 import logging
 import uuid
+from ocs_ci.helpers.helpers import setup_pod_directories
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -23,8 +24,6 @@ class MockupBucketLogger:
 
     """
 
-    LOG_FILES_DIR = "/log_files"
-
     def __init__(self, awscli_pod, mcg_obj, bucket_factory, platform, region):
         """
         Args:
@@ -38,6 +37,7 @@ class MockupBucketLogger:
 
         self.awscli_pod = awscli_pod
         self.mcg_obj = mcg_obj
+        self.log_files_dir = setup_pod_directories(awscli_pod, ["bucket_logs_dir"])[0]
 
         logger.info("Creating the AWS logs bucket Namespacestore")
 
@@ -129,25 +129,26 @@ class MockupBucketLogger:
 
         logger.info(f"Logging {op} operations for {len(obj_list)} objects")
 
-        self.awscli_pod.exec_cmd_on_pod(f"mkdir {self.LOG_FILES_DIR}")
+        # Build one command that creates all the log files on the awscli_pod
+        command = "bash -c " + '"'
         for obj_name in obj_list:
             s3mockuplog = S3MockupLog(bucket_name, obj_name, op)
-            command = (
-                "bash -c "
-                + '"echo '
+            command += (
+                "echo "
                 + f"'{s3mockuplog}'"
-                + f'  > {self.LOG_FILES_DIR}/{s3mockuplog.file_name}"'
+                + f"  > {self.log_files_dir}/{s3mockuplog.file_name};"
             )
-            self.awscli_pod.exec_cmd_on_pod(command)
+        command += '"'
+        self.awscli_pod.exec_cmd_on_pod(command)
 
         sync_object_directory(
             self.awscli_pod,
-            f"{self.LOG_FILES_DIR}",
+            f"{self.log_files_dir}",
             f"s3://{self.logs_bucket_mcg_name}",
             self.mcg_obj,
         )
 
-        self.awscli_pod.exec_cmd_on_pod(f"rm -rf {self.LOG_FILES_DIR}")
+        self.awscli_pod.exec_cmd_on_pod(f"rm -rf {self.log_files_dir}/*")
 
 
 class S3MockupLog:
