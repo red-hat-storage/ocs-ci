@@ -274,7 +274,7 @@ def export_squad_marker_to_csv(items, filename=None):
     log.info("%s tests require action across %s files", num_tests, num_files)
 
 
-def pytest_collection_modifyitems(session, items):
+def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
@@ -290,7 +290,8 @@ def pytest_collection_modifyitems(session, items):
     skip_ocs_deployment = ocsci_config.ENV_DATA["skip_ocs_deployment"]
 
     # Verify tests are decorated with the correct squad owner
-    verify_squad_owners(items)
+    if config.option.collectonly:
+        verify_squad_owners(items)
 
     # Add squad markers to each test item based on filepath
     for item in items:
