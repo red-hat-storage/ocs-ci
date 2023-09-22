@@ -10,7 +10,6 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import CreateResourc
 from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
-from tests.conftest import delete_projects
 
 
 class BucketsUI(PageNavigator, ResourceList):
@@ -78,7 +77,9 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         BucketsUI.select_project(namespace)
 
         obc_found = self.wait_until_expected_text_is_found(
-            locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
+            locator=self.sc_loc["obc_menu_name"],
+            expected_text="Object Bucket Claims",
+            timeout=10,
         )
 
         if not obc_found:
