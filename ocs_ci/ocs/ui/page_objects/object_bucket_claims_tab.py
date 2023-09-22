@@ -74,7 +74,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         self.do_click(self.sc_loc["Developer_dropdown"])
         self.do_click(self.sc_loc["select_administrator"], timeout=5)
         BucketsUI.navigate_object_bucket_claims_page(self)
-        BucketsUI.select_project(namespace)
+        BucketsUI.select_project(self, namespace)
 
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"],
