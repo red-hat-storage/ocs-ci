@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -32,6 +33,7 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
+@red_squad
 @tier4b
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2374")
