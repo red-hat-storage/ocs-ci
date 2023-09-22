@@ -6,7 +6,6 @@ from ocs_ci.utility.utils import email_reports, save_reports, ocsci_log_path
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -99,11 +98,11 @@ def pytest_sessionfinish(session, exitstatus):
             c.writerow(["testName", "setup", "call", "teardown", "total"])
             for test, values in sorted_data.items():
                 row = [
-                    f"{test}",
-                    f"{values.get('setup', 'NA')}",
-                    f"{values.get('call', 'NA')}",
-                    f"{values.get('teardown', 'NA')}",
-                    f"{values.get('total', 'NA')}",
+                    test,
+                    values.get("setup", "NA"),
+                    values.get("call", "NA"),
+                    values.get("teardown", "NA"),
+                    values.get("total", "NA"),
                 ]
                 c.writerow(row)
         logger.info(f"Test Time report saved to '{time_report_file}'")
