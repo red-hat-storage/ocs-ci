@@ -116,7 +116,10 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             9.Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]
 
         """
-        sc_name = storageclass_name(sc_interface)
+        if sc_interface not in constants.OCS_COMPONENTS_MAP:
+            sc_name = sc_interface
+        else:
+            sc_name = storageclass_name(sc_interface)
 
         quota_names = {
             storageclass_name(
