@@ -12,7 +12,6 @@ from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resour
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework import config
 from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 logger = logging.getLogger(__name__)
@@ -30,32 +29,37 @@ class TestPvcUserInterface(object):
 
     @tier1
     @pytest.mark.parametrize(
-        argnames=["sc_name", "access_mode", "pvc_size", "vol_mode"],
+        argnames=["sc_interface", "access_mode", "pvc_size", "vol_mode"],
         argvalues=[
             pytest.param(
-                "ocs-storagecluster-cephfs",
+                constants.OCS_COMPONENTS_MAP["cephfs"],
                 "ReadWriteMany",
                 "2",
                 "Filesystem",
             ),
             pytest.param(
-                "ocs-storagecluster-ceph-rbd",
+                constants.OCS_COMPONENTS_MAP["blockpools"],
                 "ReadWriteMany",
                 "3",
                 "Block",
             ),
             pytest.param(
-                "ocs-storagecluster-cephfs",
+                constants.OCS_COMPONENTS_MAP["cephfs"],
                 "ReadWriteOnce",
                 "10",
                 "Filesystem",
             ),
             pytest.param(
-                *["ocs-storagecluster-ceph-rbd", "ReadWriteOnce", "11", "Block"],
+                *[
+                    constants.OCS_COMPONENTS_MAP["blockpools"],
+                    "ReadWriteOnce",
+                    "11",
+                    "Block",
+                ],
                 marks=[skipif_ocs_version("<4.7")],
             ),
             pytest.param(
-                "ocs-storagecluster-ceph-rbd",
+                constants.OCS_COMPONENTS_MAP["blockpools"],
                 "ReadWriteOnce",
                 "13",
                 "Filesystem",
@@ -67,7 +71,7 @@ class TestPvcUserInterface(object):
         project_factory,
         teardown_factory,
         setup_ui_class,
-        sc_name,
+        sc_interface,
         access_mode,
         pvc_size,
         vol_mode,
@@ -79,17 +83,12 @@ class TestPvcUserInterface(object):
         # Creating a test project via CLI
         pro_obj = project_factory()
         project_name = pro_obj.namespace
+        sc_name = storageclass_name(sc_interface)
 
         pvc_ui_obj = PvcUI()
 
         # Creating PVC via UI
         pvc_name = create_unique_resource_name("test", "pvc")
-
-        if config.DEPLOYMENT["external_mode"]:
-            if sc_name == constants.CEPHFILESYSTEM_SC:
-                sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
-            elif sc_name == constants.CEPHBLOCKPOOL_SC:
-                sc_name = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
 
         pvc_ui_obj.create_pvc_ui(
             project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
@@ -212,15 +211,15 @@ class TestPvcUserInterface(object):
 
     @tier1
     @pytest.mark.parametrize(
-        argnames=["sc_name", "access_mode", "clone_access_mode"],
+        argnames=["sc_interface", "access_mode", "clone_access_mode"],
         argvalues=[
             pytest.param(
-                "ocs-storagecluster-ceph-rbd",
+                constants.OCS_COMPONENTS_MAP["blockpools"],
                 constants.ACCESS_MODE_RWO,
                 constants.ACCESS_MODE_RWO,
             ),
             pytest.param(
-                "ocs-storagecluster-cephfs",
+                constants.OCS_COMPONENTS_MAP["cephfs"],
                 constants.ACCESS_MODE_RWX,
                 constants.ACCESS_MODE_RWO,
             ),
@@ -231,7 +230,7 @@ class TestPvcUserInterface(object):
         project_factory,
         teardown_factory,
         setup_ui_class,
-        sc_name,
+        sc_interface,
         access_mode,
         clone_access_mode,
     ):
@@ -241,18 +240,13 @@ class TestPvcUserInterface(object):
         """
         pvc_size = "1"
         vol_mode = constants.VOLUME_MODE_FILESYSTEM
+        sc_name = storageclass_name(sc_interface)
 
         # Creating a project from CLI
         pro_obj = project_factory()
         project_name = pro_obj.namespace
 
         pvc_ui_obj = PvcUI()
-
-        if config.DEPLOYMENT["external_mode"]:
-            if sc_name == constants.CEPHFILESYSTEM_SC:
-                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
-            elif sc_name == constants.CEPHBLOCKPOOL_SC:
-                sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
 
         # Creating PVC from UI
         pvc_name = create_unique_resource_name("test", "pvc")

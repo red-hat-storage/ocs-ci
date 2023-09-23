@@ -109,13 +109,10 @@ class TestPvPool:
         """
         Test to check the scale out functionality of pv pool backing store.
         """
+        rbd_sc_name = storageclass_name(OCS_COMPONENTS_MAP["blockpools"])
         pv_backingstore = backingstore_factory(
             "OC",
-            {
-                "pv": [
-                    (1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, "ocs-storagecluster-ceph-rbd")
-                ]
-            },
+            {"pv": [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, rbd_sc_name)]},
         )[0]
 
         logger.info(f"Scaling out PV Pool {pv_backingstore.name}")
@@ -163,11 +160,10 @@ class TestPvPool:
                     "interface": "OC",
                     "backingstore_dict": {
                         "pv": [
-                            (
+                            [
                                 3,
                                 MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-                                "ocs-storagecluster-ceph-rbd",
-                            )
+                            ]
                         ]
                     },
                 },
@@ -183,15 +179,14 @@ class TestPvPool:
                     "interface": "CLI",
                     "backingstore_dict": {
                         "pv": [
-                            (
+                            [
                                 3,
                                 MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-                                "ocs-storagecluster-ceph-rbd",
                                 "300m",
                                 "500Mi",
                                 "400m",
                                 "600Mi",
-                            )
+                            ]
                         ]
                     },
                 },
@@ -220,6 +215,8 @@ class TestPvPool:
             pods.
 
         """
+        rbd_sc_name = storageclass_name(OCS_COMPONENTS_MAP["blockpools"])
+        bucketclass_dict["pv"][0].append(rbd_sc_name)
         bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
         bucket_name = bucket.name
         pv_backingstore = bucket.bucketclass.backingstores[0]

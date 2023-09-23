@@ -298,7 +298,9 @@ class TestObcUserInterface(object):
 
         obc_ui_obj = ObjectBucketClaimsTab()
 
-        storageclass = storageclass_name(constants.OCS_COMPONENTS_MAP["rgw"])
+        if storageclass == constants.DEFAULT_STORAGECLASS_RGW:
+            storageclass = storageclass_name(constants.OCS_COMPONENTS_MAP["rgw"])
+
         obc_ui_obj.create_obc_ui(obc_name, storageclass, bucketclass)
 
         assert obc_ui_obj.verify_current_page_resource_status(
