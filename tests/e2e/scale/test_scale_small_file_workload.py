@@ -13,6 +13,7 @@ import time
 import pytest
 
 # Local modules
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
@@ -22,6 +23,7 @@ from ocs_ci.ocs.small_file_workload import SmallFiles
 log = logging.getLogger(__name__)
 
 
+@orange_squad
 @scale
 class TestSmallFileWorkloadScale(E2ETest):
     """

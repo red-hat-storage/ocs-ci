@@ -9,6 +9,7 @@ import threading
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 
 log = logging.getLogger(__name__)
@@ -145,6 +146,7 @@ class BasePvcPodCreateDelete(E2ETest):
         self.cephfs_sc_obj.delete()
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @pytest.mark.parametrize(

@@ -2,6 +2,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
@@ -22,6 +23,7 @@ def test_fixture_amq(request):
     return amq
 
 
+@orange_squad
 @scale
 @pytest.mark.skip(
     reason="Skipped due to github issue #3372, TC is failing "

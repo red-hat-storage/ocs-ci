@@ -1,6 +1,7 @@
 import pytest
 import logging
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
@@ -8,6 +9,7 @@ from ocs_ci.utility import templating
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier1
 @pytest.mark.polarion_id("OCS-2085")
 class TestRegistryImage(E2ETest):

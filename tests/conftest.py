@@ -2,6 +2,7 @@ import base64
 import copy
 import logging
 import os
+import pandas as pd
 import random
 import time
 import tempfile
@@ -44,6 +45,7 @@ from ocs_ci.ocs.exceptions import (
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
     ResourceNotDeleted,
+    MissingSquadDecoratorError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -181,6 +183,97 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
+def verify_squad_owners(items):
+    """
+    Verify that all tests collected are decorated with a squad marker
+
+    Args:
+        items: list of collected tests
+
+    """
+    items_without_squad_marker = {}
+    for item in items:
+        base_dir = os.path.join(constants.TOP_DIR, "tests")
+        ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
+        if item.fspath.strpath.startswith(base_dir):
+            item_markers = [marker.name for marker in item.iter_markers()]
+            if any(marker in item_markers for marker in ignored_markers):
+                log.debug(
+                    "Ignoring test case %s as it has a marker in the ignore list",
+                    item.name,
+                )
+            elif not any(["_squad" in marker for marker in item_markers]):
+                log.debug("%s is missing a squad owner marker", item.name)
+                items_without_squad_marker.update({item.name: item.fspath.strpath})
+
+    if items_without_squad_marker:
+        msg = f"""
+Missing squad decorator for the following test items: {json.dumps(items_without_squad_marker, indent=4)}
+
+Tests are required to be decorated with their squad owner. Please add the tests respective owner.
+
+For example:
+
+    @magenta_squad
+    def test_name():
+
+Test owner marks can be imported from `ocs_ci.framework.pytest_customization.marks`
+            """
+        raise MissingSquadDecoratorError(msg)
+
+
+def export_squad_marker_to_csv(items, filename=None):
+    """
+    Export data regarding tests that are missing squad markers to a CSV
+
+    Args:
+        items: list of collected tests
+        filename: name of the file to export the data to
+
+    """
+    _filename = filename or "squad_decorator_data.csv"
+    test_data = {"File": [], "Name": [], "Suggestions": []}
+    ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
+    for item in items:
+        item_markers = [marker.name for marker in item.iter_markers()]
+        if any(marker in item_markers for marker in ignored_markers):
+            log.debug(
+                "Ignoring test case %s as it has a marker in the ignore list", item.name
+            )
+        else:
+            item_squad = None
+            for marker in item_markers:
+                if "_squad" in marker:
+                    item_squad = marker.split("_")[0]
+                    item_squad = item_squad.capitalize()
+                    log.info("Test item %s has squad marker: %s", item.name, marker)
+            if not item_squad:
+                suggested_squads = []
+                for squad, paths in constants.SQUADS.items():
+                    for _path in paths:
+                        test_path = os.path.relpath(
+                            item.fspath.strpath, constants.TOP_DIR
+                        )
+                        if _path in test_path:
+                            suggested_squads.append(squad)
+                test_data["File"].append(item.fspath.strpath)
+                test_data["Name"].append(item.name)
+                test_data["Suggestions"].append(",".join(suggested_squads))
+
+    df = pd.DataFrame(data=test_data)
+    df.to_csv(
+        _filename,
+        header=["File ", "Test Name", "Squad Suggestions"],
+        index=False,
+        sep=",",
+        mode="a",
+    )
+    num_tests = len(test_data["Name"])
+    num_files = len(set(test_data["File"]))
+    log.info("Exported squad marker info to %s", _filename)
+    log.info("%s tests require action across %s files", num_tests, num_files)
+
+
 def pytest_collection_modifyitems(session, items):
     """
     A pytest hook to filter out skipped tests satisfying
@@ -196,24 +289,16 @@ def pytest_collection_modifyitems(session, items):
     deploy = config.RUN["cli_params"].get("deploy")
     skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
 
+    # Verify tests are decorated with the correct squad owner
+    verify_squad_owners(items)
+
     # Add squad markers to each test item based on filepath
     for item in items:
         # check, if test already have squad marker manually assigned
-        skip_path_squad_marker = False
         for marker in item.iter_markers():
             if "_squad" in marker.name:
                 squad = marker.name.split("_")[0]
                 item.user_properties.append(("squad", squad.capitalize()))
-                skip_path_squad_marker = True
-        if not skip_path_squad_marker:
-            for squad, paths in constants.SQUADS.items():
-                for _path in paths:
-                    # Limit the test_path to the tests directory
-                    test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
-                    if _path in test_path:
-                        item.add_marker(f"{squad.lower()}_squad")
-                        item.user_properties.append(("squad", squad))
-                        break
 
     if not (teardown or deploy or (deploy and skip_ocs_deployment)):
         for item in items[:]:
@@ -290,6 +375,18 @@ def pytest_collection_modifyitems(session, items):
                     f" UI is not supported on {config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
+
+
+def pytest_collection_finish(session):
+    """
+    A pytest hook to get all collected tests post their collection modifications done in the varius
+    pytest_collection_modifyitems hook functions
+
+    Args:
+        session: pytest session
+
+    """
+    config.RUN["number_of_tests"] = len(session.items)
 
 
 @pytest.fixture()
@@ -1486,6 +1583,10 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
 
     node = request.node
 
+    # ignore ceph health check for the TestFailurePropagator test cases
+    if "FailurePropagator" in str(node.cls):
+        return
+
     def finalizer():
         if not skipped:
             try:
@@ -1514,6 +1615,16 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         ceph_health_check_base()
                         log.info("Ceph health check passed at teardown")
             except CephHealthException:
+                if not config.RUN["skip_reason_test_found"]:
+                    squad_name = None
+                    for marker in node.iter_markers():
+                        if "_squad" in marker.name:
+                            squad_name = marker.name
+                            break
+                    config.RUN["skip_reason_test_found"] = {
+                        "test_name": node.name,
+                        "squad": squad_name,
+                    }
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
@@ -1532,6 +1643,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
+                config.RUN["skipped_tests_ceph_health"] += 1
                 skipped = True
                 # skip because ceph is not in good health
                 pytest.skip("Ceph health check failed at setup")
@@ -3985,6 +4097,7 @@ def snapshot_restore_factory_fixture(request):
             helpers.create_unique_resource_name(snapshot_obj.name, "restore")
         )
         vol_snapshot_class = snapshot_info["spec"]["volumeSnapshotClassName"]
+        log.info(f"Volume snapshot class name: {vol_snapshot_class}")
 
         if (
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
@@ -4001,6 +4114,8 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+            or config.ENV_DATA.get("cluster_type", "").lower()
+            == constants.MS_CONSUMER_TYPE
         ):
             storageclass = (
                 storageclass

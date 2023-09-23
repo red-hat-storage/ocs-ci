@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_mcg_only,
     skipif_ibm_cloud_managed,
+    acceptance,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
@@ -24,6 +25,7 @@ from ocs_ci.utility import version
 logger = logging.getLogger(__name__)
 
 
+@black_squad
 @skipif_ibm_cloud_managed
 class TestUserInterfaceValidation(object):
     """
@@ -33,7 +35,6 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
-    @black_squad
     @polarion_id("OCS-4925")
     @skipif_ui_not_support("validation")
     def test_storage_cluster_validation_ui(self, setup_ui_class):
@@ -49,7 +50,7 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
-    @black_squad
+    @acceptance
     @bugzilla("2155743")
     @polarion_id("OCS-2575")
     @skipif_ui_not_support("validation")
@@ -86,7 +87,6 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
-    @black_squad
     @polarion_id("OCS-4642")
     @skipif_ocs_version("<4.9")
     @skipif_ui_not_support("validation")
@@ -103,7 +103,6 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
-    @black_squad
     @skipif_ocs_version("<4.9")
     @skipif_external_mode
     @skipif_mcg_only

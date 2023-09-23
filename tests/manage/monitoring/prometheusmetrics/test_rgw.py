@@ -9,6 +9,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import skipif_managed_service, skipif_ocs_version, tier4c
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import metrics
@@ -19,6 +20,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @skipif_ocs_version("<4.6")
 @tier4c
 @pytest.mark.polarion_id("OCS-2385")

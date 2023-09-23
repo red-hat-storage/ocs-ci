@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_power,
     skipif_managed_service,
     bugzilla,
+    brown_squad,
 )
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4b
 from ocs_ci.ocs import constants, node
@@ -20,6 +21,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4b
 @skipif_aws_i3
 @skipif_vsphere_ipi

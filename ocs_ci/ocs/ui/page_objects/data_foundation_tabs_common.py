@@ -457,7 +457,9 @@ class DataFoundationTabBar(PageNavigator):
         """
         logger.info("Navigate to Data Foundation - Overview")
         # pay attention Overview loc will show twice if Home Page nav extended
-        self.do_click(locator=self.page_nav["overview_page"])
+        self.do_click(
+            locator=self.validation_loc["odf-overview"], enable_screenshot=True
+        )
 
         from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 
@@ -483,3 +485,14 @@ class DataFoundationDefaultTab(DataFoundationTabBar):
 
     def __init__(self):
         DataFoundationTabBar.__init__(self)
+
+    def is_overview_tab(self):
+        """
+        Check if the current tab is Overview tab
+
+        Returns:
+            bool: True if the current tab is Overview tab, False otherwise
+        """
+        return (
+            len(self.get_elements(self.validation_loc["odf-overview-tab-active"])) == 1
+        )

@@ -8,6 +8,7 @@ import statistics
 
 # Local modules
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
@@ -31,6 +32,7 @@ from ocs_ci.helpers.storageclass_helpers import storageclass_name
 log = logging.getLogger(__name__)
 
 
+@grey_squad
 @performance
 @performance_b
 @skipif_ocp_version("<4.6")

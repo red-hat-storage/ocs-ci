@@ -12,8 +12,8 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
-    skipif_ocs_version,
     skipif_disconnected_cluster,
+    red_squad,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ FILESIZE_SKIP = pytest.mark.skip("Current test filesize is too large.")
 RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be parallelized")
 
 
+@red_squad
 @flaky
 @skipif_managed_service
 class TestObjectIntegrity(MCGTest):
@@ -31,7 +32,6 @@ class TestObjectIntegrity(MCGTest):
     Test data integrity of various objects
     """
 
-    @skipif_disconnected_cluster
     @pytest.mark.polarion_id("OCS-1321")
     @pytest.mark.parametrize(
         argnames="bucketclass_dict",
@@ -49,19 +49,19 @@ class TestObjectIntegrity(MCGTest):
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier1, skipif_disconnected_cluster],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier1, skipif_disconnected_cluster],
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier1, skipif_disconnected_cluster],
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier1, skipif_disconnected_cluster],
             ),
             pytest.param(
                 {
@@ -79,7 +79,7 @@ class TestObjectIntegrity(MCGTest):
                         ]
                     },
                 },
-                marks=[tier1, skipif_ocs_version("<4.7")],
+                marks=[tier1, skipif_disconnected_cluster],
             ),
         ],
         ids=[

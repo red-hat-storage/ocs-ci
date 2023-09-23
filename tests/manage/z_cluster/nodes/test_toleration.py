@@ -1,7 +1,13 @@
 import logging
 import pytest
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4c, E2ETest, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.testlib import (
+    tier4c,
+    E2ETest,
+    ignore_leftovers,
+    skipif_managed_service,
+)
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     check_toleration_on_pods,
@@ -17,8 +23,10 @@ from ocs_ci.ocs.node import (
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4c
 @ignore_leftovers
+@skipif_managed_service
 @pytest.mark.polarion_id("OCS-2450")
 class TestTaintAndTolerations(E2ETest):
     """

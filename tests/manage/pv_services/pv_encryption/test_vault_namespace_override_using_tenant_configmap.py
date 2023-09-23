@@ -3,6 +3,7 @@ import pytest
 
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     kms_config_required,
@@ -42,6 +43,7 @@ else:
     ]
 
 
+@green_squad
 @pytest.mark.parametrize(
     argnames=argnames,
     argvalues=argvalues,

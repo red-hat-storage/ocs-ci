@@ -229,6 +229,11 @@ generic_locators = {
         By.XPATH,
     ),
     "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
+    "three_dots_specific_resource": (
+        "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions']",
+        By.XPATH,
+    ),
+    "resource_link": ("//td[@id='name']//a[contains(text(),'{}')]", By.XPATH),
     "confirm_action": (
         'button[id="confirm-action"],button[data-test="delete-action"]',
         By.CSS_SELECTOR,
@@ -241,9 +246,21 @@ generic_locators = {
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
     "text_input_popup_rules": ("//*[@class='pf-c-helper-text__item-text']", By.XPATH),
+    "ocp-overview-status-storage-popup-btn": (
+        "//button[@type='button'][normalize-space()='Storage']",
+        By.XPATH,
+    ),
+    "ocp-overview-status-storage-popup-content": (
+        "//div[@class='pf-c-popover__content']//div[contains(.,'Storage')]",
+        By.XPATH,
+    ),
+    "searchbar-dropdown": (
+        "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text']",
+        By.XPATH,
+    ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
-    "searchbar_select_name": ("NAME-link", By.ID),
-    "searchbar_select_label": ("LABEL-link", By.ID),
+    "searchbar-select-name": ("//button[@id='NAME-link']", By.XPATH),
+    "searchbar-select-label": ("//button[@id='LABEL-link']", By.XPATH),
     "searchbar_input": ("//input[@data-test-id='item-filter']", By.XPATH),
     "resource_from_list_by_name": (
         "//td[@id='name']//a[contains(text(), '{}')]",
@@ -1206,10 +1223,6 @@ validation_4_9 = {
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster/overview']",
         By.CSS_SELECTOR,
     ),
-    "overview": (
-        "a[data-test-id='horizontal-link-Overview']",
-        By.CSS_SELECTOR,
-    ),
     "odf-overview": ("a[data-test-id='horizontal-link-Overview']", By.CSS_SELECTOR),
     "1_storage_system": ("//button[normalize-space()='1 Storage System']", By.XPATH),
     "blockandfile": (
@@ -1291,7 +1304,10 @@ validation_4_9 = {
         "article[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
         By.CSS_SELECTOR,
     ),
-    "performance-card": ("//h2[normalize-space()='Performance']", By.XPATH),
+    "performance-card": (
+        "//div[@class='pf-c-card__title' and contains(text(), 'Performance')]",
+        By.XPATH,
+    ),
     "backingstore": ("//a[normalize-space()='Backing Store']", By.XPATH),
     "backingstore-link": (
         "//a[normalize-space()='noobaa-default-backing-store']",
@@ -1355,7 +1371,6 @@ validation_4_10 = {
 }
 
 validation_4_11 = {
-    "overview": ("//span[normalize-space()='Overview']", By.XPATH),
     "overview_odf_4_10": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
     "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
     "object": ("//span[normalize-space()='Object']", By.XPATH),
@@ -1392,7 +1407,32 @@ validation_4_12 = {
     ),
 }
 
-validation_4_13 = {"topology_tab": ("//a[normalize-space()='Topology']", By.XPATH)}
+validation_4_13 = {
+    "topology_tab": ("//a[normalize-space()='Topology']", By.XPATH),
+    # locator presented only if the tab is active
+    "odf-overview-tab-active": (
+        "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
+        "//a[@data-test-id='horizontal-link-Overview']",
+        By.XPATH,
+    ),
+    "status-storage-popup-content": (
+        "//div[@class='pf-c-popover pf-m-top']//*[contains(text(), 'Storage System')]",
+        By.XPATH,
+    ),
+    "namespace-store-tab-active": (
+        "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
+        "//a[normalize-space()='Namespace Store']",
+        By.XPATH,
+    ),
+}
+
+validation_4_14 = {
+    "system-capacity": ("//div[contains(text(),'System raw capacity')]", By.XPATH),
+    "storagesystems_overview": (
+        "//button[@data-test='horizontal-link-Overview']",
+        By.XPATH,
+    ),
+}
 
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
@@ -1610,6 +1650,7 @@ locators = {
             **validation_4_11,
             **validation_4_12,
             **validation_4_13,
+            **validation_4_14,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},

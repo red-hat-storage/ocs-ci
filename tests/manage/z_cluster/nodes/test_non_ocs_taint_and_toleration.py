@@ -27,12 +27,13 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
 )
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import bugzilla, brown_squad
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4b
 @ignore_leftovers
 @skipif_tainted_nodes

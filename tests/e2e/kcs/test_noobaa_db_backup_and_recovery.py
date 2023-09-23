@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import warp
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -20,6 +21,7 @@ from ocs_ci.ocs.resources.pod import (
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier3
 @ignore_leftovers
 @skipif_managed_service

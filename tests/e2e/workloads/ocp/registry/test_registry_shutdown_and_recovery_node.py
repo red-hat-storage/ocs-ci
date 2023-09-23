@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     workloads,
@@ -22,6 +23,7 @@ from ocs_ci.utility.retry import retry
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @workloads
 @ignore_leftovers
 class TestRegistryShutdownAndRecoveryNode(E2ETest):

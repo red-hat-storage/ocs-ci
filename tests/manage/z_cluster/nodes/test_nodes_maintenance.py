@@ -27,6 +27,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -85,6 +86,7 @@ def teardown(request):
     request.addfinalizer(finalizer)
 
 
+@brown_squad
 @ignore_leftovers
 class TestNodesMaintenance(ManageTest):
     """

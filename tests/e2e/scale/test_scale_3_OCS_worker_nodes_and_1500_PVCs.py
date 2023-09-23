@@ -11,6 +11,7 @@ from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 from ocs_ci.ocs import constants, scale_lib, platform_nodes, machine
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.framework.pytest_customization.marks import (
+    orange_squad,
     skipif_external_mode,
     ipi_deployment_required,
     skipif_vsphere_ipi,
@@ -57,6 +58,7 @@ def fioscale(request):
     return fioscale
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @skipif_external_mode
@@ -112,6 +114,7 @@ class TestScaleRespinCephPods(E2ETest):
         )
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @bugzilla("2092737")
@@ -177,6 +180,7 @@ class TestScaleRespinOperatorPods(E2ETest):
             )
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @skipif_external_mode

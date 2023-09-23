@@ -9,27 +9,29 @@ class SearchBar(BaseUI):
 
         Args:
             search_by (str): search by option Name | Label
-
         """
         if search_by not in ["name", "label"]:
             raise IncorrectUiOptionRequested(f"Invalid search by option {search_by}")
         current_option = self.get_element_text(
-            self.generic_locators["searchbar_drop_down"]
+            self.generic_locators["searchbar-dropdown"]
         )
-        if current_option != search_by:
+        if current_option.lower() != search_by.lower():
             logger.info(f"Selecting search by option {search_by}")
-            self.do_click(self.generic_locators["searchbar_drop_down"])
-            self.do_click(self.generic_locators[f"searchbar_select_{search_by}"])
+            self.do_click(
+                self.generic_locators["searchbar-dropdown"], enable_screenshot=True
+            )
+            self.do_click(
+                self.generic_locators[f"searchbar-select-{search_by}"],
+                enable_screenshot=True,
+            )
         else:
-            logger.info(f"Search by option is already {search_by}")
+            logger.info(f"Search-by option is already '{search_by}'")
 
     def search(self, search_text: str):
         """
         Search for text
-
         Args:
             search_text (str): Text to search
-
         """
-        logger.info(f"Searching for {search_text}")
+        logger.info(f"Enter the text into search input: '{search_text}'")
         self.do_send_keys(self.generic_locators["searchbar_input"], search_text)

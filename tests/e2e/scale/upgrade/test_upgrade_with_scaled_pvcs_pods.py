@@ -30,6 +30,7 @@ log_path = ocsci_log_path()
 SCALE_DATA_FILE = f"{log_path}/scale_data_file.yaml"
 
 
+@orange_squad
 @skipif_external_mode
 @skipif_bm
 @pre_upgrade

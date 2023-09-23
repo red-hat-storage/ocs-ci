@@ -4,6 +4,7 @@ import random
 from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import (
@@ -27,6 +28,7 @@ def pgsql(request):
     return pgsql
 
 
+@magenta_squad
 @ignore_leftovers
 @workloads
 class TestPgSQLNodeReboot(E2ETest):

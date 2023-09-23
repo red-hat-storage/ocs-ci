@@ -8,6 +8,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import verify_quota_resource_exist
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -37,6 +38,7 @@ def setup_sc(storageclass_factory_class):
     }
 
 
+@green_squad
 @tier1
 @bugzilla("2024545")
 @skipif_external_mode

@@ -6,7 +6,7 @@ import json
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import tier2
-from ocs_ci.framework.pytest_customization.marks import skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import skipif_ocs_version, green_squad
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
@@ -14,6 +14,7 @@ from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 logger = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @skipif_ocs_version("<4.11")
 class TestPvcEvictCephClients:

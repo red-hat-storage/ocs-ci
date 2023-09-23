@@ -1210,7 +1210,10 @@ STAGE_CA_FILE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "stage-ca.crt")
 MDS_PDB = "rook-ceph-mds-ocs-storagecluster-cephfilesystem"
 OSD_PDB = "rook-ceph-osd"
 MON_PDB = "rook-ceph-mon-pdb"
+MGR_PDB = "rook-ceph-mgr-pdb"
+RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 PDB_COUNT = 3
+PDB_COUNT_ARBITER = 5
 
 # Root Disk size
 CURRENT_VM_ROOT_DISK_SIZE = "60"
@@ -1827,6 +1830,7 @@ SQUADS = {
     "Yellow": ["/managed-service/"],
     "Turquoise": ["/disaster-recovery/"],
 }
+SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
@@ -1944,6 +1948,20 @@ mon_pg_warn_max_object_skew = 0
 mon_data_avail_warn = 15
 [osd]
 osd_memory_target_cgroup_limit_ratio = 0.8
+"""
+
+ROOK_CEPH_CONFIG_VALUES_414 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+bluestore_prefer_deferred_size_hdd = 0
 """
 
 CEPH_DEBUG_CONFIG_VALUES = """

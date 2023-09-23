@@ -11,6 +11,7 @@ import re
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
     ManagedServiceAddonDeploymentError,
     UnsupportedPlatformVersionError,
     ConfigurationError,
@@ -504,7 +505,7 @@ def delete_odf_addon(cluster):
     cmd = f"rosa uninstall addon --cluster={cluster} {addon_name} --yes"
     utils.run_cmd(cmd)
     for addon_info in utils.TimeoutSampler(
-        4000, 30, get_addon_info, cluster, addon_name
+        7200, 300, get_addon_info, cluster, addon_name
     ):
         logger.info(f"Current addon installation info: " f"{addon_info}")
         if "not installed" in addon_info:
@@ -564,11 +565,37 @@ def destroy_appliance_mode_cluster(cluster):
         )
         return False
 
+    cluster_type = config.ENV_DATA.get("cluster_type", "")
+    if cluster_type.lower() == "provider":
+        if ocm.get_cluster_details(cluster)["status"]["state"] == "ready":
+            # Check that no consumer is connected
+            storageconsumers = ocp.OCP(
+                kind="storageconsumer",
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            for sample in utils.TimeoutSampler(
+                timeout=3600,
+                sleep=300,
+                func=storageconsumers.get,
+            ):
+                if len(sample.get("items")) == 0:
+                    logger.info(
+                        "No consumer cluster connected, we can delete this provider cluster"
+                    )
+                    break
+
     delete_service_cmd = f"rosa delete service --id={service_id} --yes"
-    utils.run_cmd(delete_service_cmd, timeout=1200)
+    try:
+        utils.run_cmd(delete_service_cmd, timeout=1200)
+    except CommandFailed as err:
+        if "service is already deleting" in str(err):
+            logger.info(f"Cluster {cluster} deletion was already triggered.")
+        else:
+            raise
+
     logger.info("Waiting for ROSA cluster state changed to uninstalling")
     for cluster_info in utils.TimeoutSampler(
-        1000, 90, ocm.get_cluster_details, cluster
+        3600, 90, ocm.get_cluster_details, cluster
     ):
         status = cluster_info["status"]["state"]
         logger.info(f"Cluster uninstalling status: {status}")
@@ -576,7 +603,7 @@ def destroy_appliance_mode_cluster(cluster):
             logger.info(f"Cluster '{cluster}' is uninstalling")
             break
     for service_status in utils.TimeoutSampler(
-        1000, 30, get_rosa_service_details, cluster
+        3600, 30, get_rosa_service_details, cluster
     ):
         if "deleting service" in service_status:
             logger.info("Rosa service status is 'deleting service'")

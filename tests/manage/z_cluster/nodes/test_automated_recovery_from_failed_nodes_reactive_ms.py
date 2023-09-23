@@ -2,6 +2,7 @@ import logging
 import pytest
 import random
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4b,
     ManageTest,
@@ -221,6 +222,7 @@ FAILURE_TYPE_FUNC_CALL_DICT = {
 }
 
 
+@brown_squad
 @ignore_leftovers
 @tier4b
 @managed_service_required
@@ -259,13 +261,14 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             log.info("Verify again that the ceph health is OK")
             ceph_health_check()
 
-            config.switch_ctx(self.orig_index)
             # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
             if is_ms_provider_cluster() and config.is_consumer_exist():
                 log.info(
                     "Execute the the consumers verification steps before starting the next test"
                 )
                 consumers_verification_steps_after_provider_node_replacement()
+
+            config.switch_ctx(self.orig_index)
 
         request.addfinalizer(finalizer)
 

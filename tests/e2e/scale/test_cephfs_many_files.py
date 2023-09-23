@@ -7,7 +7,7 @@ from tempfile import mkdtemp, NamedTemporaryFile
 import uuid
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import scale
+from ocs_ci.framework.pytest_customization.marks import scale, orange_squad
 from ocs_ci.framework.testlib import E2ETest, ignore_leftovers
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.utility.utils import run_cmd, ceph_health_check
@@ -125,6 +125,7 @@ def million_file_cephfs(request):
     return million_file_cephfs
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @pytest.mark.parametrize(

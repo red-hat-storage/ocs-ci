@@ -2,7 +2,10 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_external_mode,
+    brown_squad,
+)
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
@@ -12,6 +15,7 @@ from ocs_ci.framework.testlib import ManageTest, tier2
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2481")

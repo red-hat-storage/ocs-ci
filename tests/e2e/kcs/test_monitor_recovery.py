@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     system_test,
     skipif_ocp_version,
+    magenta_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.ocp import OCP, switch_to_project
@@ -49,6 +50,7 @@ from ocs_ci.utility.utils import exec_cmd
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @system_test
 @ignore_leftovers
 @pytest.mark.last

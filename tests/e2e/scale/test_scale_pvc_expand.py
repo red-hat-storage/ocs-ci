@@ -1,6 +1,7 @@
 import logging
 import pytest
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     scale,
@@ -30,6 +31,7 @@ def resize_pvc(request):
     return resize_pvc
 
 
+@orange_squad
 @scale
 @skipif_ocs_version("<4.5")
 @ignore_leftovers

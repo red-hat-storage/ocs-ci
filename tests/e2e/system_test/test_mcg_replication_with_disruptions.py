@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     system_test,
     skipif_vsphere_ipi,
+    magenta_squad,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
@@ -33,6 +34,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @system_test
 @skipif_ocs_version("<4.9")
 @skipif_vsphere_ipi

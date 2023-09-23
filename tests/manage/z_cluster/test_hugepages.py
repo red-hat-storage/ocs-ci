@@ -15,6 +15,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_external_mode,
@@ -27,6 +28,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @skipif_ocs_version("<4.8")
 @bugzilla("1995271")

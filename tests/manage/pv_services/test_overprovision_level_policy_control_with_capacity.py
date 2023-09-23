@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.ocp import OCP, set_overprovision_policy, clear_overprovision_spec
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -29,6 +30,7 @@ def setup_sc(storageclass_factory_class):
     sc_blk_obj.delete()
 
 
+@green_squad
 @tier1
 @pytest.mark.polarion_id("OCS-3778")
 @skipif_external_mode

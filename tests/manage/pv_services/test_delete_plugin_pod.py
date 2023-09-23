@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier4c
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
@@ -12,6 +13,7 @@ log = logging.getLogger(__name__)
 DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 
+@green_squad
 @tier4c
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],

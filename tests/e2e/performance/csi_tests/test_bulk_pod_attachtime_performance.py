@@ -8,7 +8,7 @@ import pytest
 import pathlib
 import time
 from datetime import datetime
-
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a, polarion_id
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants, scale_lib
@@ -32,6 +32,7 @@ Interfaces_info = {
 }
 
 
+@grey_squad
 @performance
 @performance_a
 class TestBulkPodAttachPerformance(PASTest):

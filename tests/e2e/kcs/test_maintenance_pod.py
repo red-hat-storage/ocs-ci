@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier2,
     skipif_external_mode,
+    magenta_squad,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.resources.deployment import (
@@ -25,6 +26,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier2
 @skipif_external_mode
 @bugzilla("2103256")

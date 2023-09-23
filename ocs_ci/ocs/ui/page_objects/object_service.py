@@ -45,7 +45,9 @@ class ObjectService(PageNavigator):
             NameSpaceStoreTab: NameSpaceStoreTab page object
         """
         logger.info("Navigate to Data Foundation - Namespace Store tab")
-        self.do_click(locator=self.validation_loc["namespacestore_page"])
+        self.do_click(
+            locator=self.validation_loc["namespacestore_page"], enable_screenshot=True
+        )
 
         from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
 

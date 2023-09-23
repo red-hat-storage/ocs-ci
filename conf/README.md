@@ -243,6 +243,8 @@ higher priority).
 * `lvmo` - set to True if it's LVMO deployment - mainly used for reporting purpose.
 * `nb_nfs_server` - NFS server used for testing noobaa db NFS mount test
 * `nb_nfs_mount` - NFS mount point used specifically for testing noobaa db NFS mount test
+* `custom_default_storageclass_names` - Set to true if custom storageclass names use instead of default one.
+* `storageclassnames` - Under this key, custom storage class names for `cephFilesystems`, `cephObjectStores`, `cephBlockPools`, `cephNonResilientPools`, `nfs` and for `encryption` are defined.
 
 #### UPGRADE
 

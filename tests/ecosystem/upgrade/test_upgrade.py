@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import purple_squad
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
     polarion_id,
@@ -25,6 +26,7 @@ def teardown(request, nodes):
     request.addfinalizer(finalizer)
 
 
+@purple_squad
 @pytest.mark.polarion_id("OCS-1579")
 def test_worker_node_abrupt_shutdown(teardown):
     """
@@ -36,6 +38,7 @@ def test_worker_node_abrupt_shutdown(teardown):
     run_ocs_upgrade(operation=worker_node_shutdown, abrupt=True)
 
 
+@purple_squad
 @pytest.mark.polarion_id("OCS-1575")
 def test_worker_node_permanent_shutdown(teardown):
     """
@@ -46,6 +49,7 @@ def test_worker_node_permanent_shutdown(teardown):
     run_ocs_upgrade(operation=worker_node_shutdown, abrupt=False)
 
 
+@purple_squad
 @pytest.mark.polarion_id("OCS-1558")
 def test_osd_reboot(teardown):
     """
@@ -57,6 +61,7 @@ def test_osd_reboot(teardown):
     run_ocs_upgrade(operation=osd_node_reboot)
 
 
+@purple_squad
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
 def test_upgrade():

@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -55,6 +56,7 @@ else:
         ]
 
 
+@green_squad
 @pytest.mark.parametrize(
     argnames=argnames,
     argvalues=argvalues,

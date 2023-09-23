@@ -2,11 +2,13 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, node
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @pytest.mark.polarion_id("OCS-2599")
 class TestRbdBlockPvc(ManageTest):

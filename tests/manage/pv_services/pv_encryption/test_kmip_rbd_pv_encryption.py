@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -21,6 +22,7 @@ from ocs_ci.ocs import constants
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @aws_platform_required
 @skipif_ocs_version("<4.12")
 @kms_config_required

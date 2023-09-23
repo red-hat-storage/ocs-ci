@@ -8,6 +8,7 @@ import random
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
@@ -30,6 +31,7 @@ DD_BLOCK_SIZE = 16
 DD_COUNT = 64
 
 
+@brown_squad
 @tier2
 @bugzilla("1964055")
 @pytest.mark.polarion_id("OCS-2733")

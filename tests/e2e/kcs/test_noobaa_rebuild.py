@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -21,6 +22,7 @@ from ocs_ci.ocs.resources.pvc import get_pvc_objs
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier3
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2653")

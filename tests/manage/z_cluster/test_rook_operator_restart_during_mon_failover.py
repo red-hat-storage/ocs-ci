@@ -9,6 +9,7 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods,
     wait_for_pods_to_be_running,
 )
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4b,
@@ -22,6 +23,7 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4b
 @skipif_external_mode
 @skipif_ocs_version("<4.6")

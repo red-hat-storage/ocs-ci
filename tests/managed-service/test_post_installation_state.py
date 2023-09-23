@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
+from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     acceptance,
     managed_service_required,
@@ -18,6 +19,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 
 
+@yellow_squad
 @managed_service_required
 class TestPostInstallationState(ManageTest):
     """

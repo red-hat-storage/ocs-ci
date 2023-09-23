@@ -10,6 +10,7 @@ import statistics
 import tempfile
 import yaml
 
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
@@ -35,6 +36,7 @@ Interface_Info = {
 Operations_Mesurment = ["create", "delete", "csi_create", "csi_delete"]
 
 
+@grey_squad
 @performance
 @performance_a
 class TestPVCCreationDeletionPerformance(PASTest):

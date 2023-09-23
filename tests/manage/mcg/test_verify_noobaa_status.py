@@ -1,8 +1,12 @@
 import logging
 import re
 
-from ocs_ci.framework.pytest_customization.marks import tier1, skipif_ocs_version
-from ocs_ci.framework.pytest_customization.marks import skipif_openshift_dedicated
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    skipif_ocs_version,
+    skipif_openshift_dedicated,
+    red_squad,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.testlib import polarion_id, bugzilla
@@ -11,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 log = logging.getLogger(__name__)
 
 
+@red_squad
 @tier1
 @polarion_id("OCS-2084")
 @bugzilla("1799077")
@@ -28,6 +33,7 @@ def test_verify_noobaa_status_cli(mcg_obj_session):
     log.info("Verified: noobaa status does not contain any error.")
 
 
+@red_squad
 @tier1
 @skipif_ocs_version("<4.8")
 @polarion_id("OCS-2748")

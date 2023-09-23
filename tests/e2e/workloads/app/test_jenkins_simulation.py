@@ -2,6 +2,7 @@ import pytest
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import ManageTest, workloads, polarion_id, bugzilla
 from ocs_ci.ocs import constants, node
 from ocs_ci.utility import templating
@@ -34,6 +35,7 @@ def pod(request, pvc_factory, pod_factory, interface_iterate):
     return pod
 
 
+@magenta_squad
 class TestJenkinsSimulation(ManageTest):
     """
     Run simulation for "Jenkins" - git clone

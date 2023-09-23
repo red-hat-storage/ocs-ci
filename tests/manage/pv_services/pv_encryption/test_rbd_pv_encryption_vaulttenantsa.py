@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     aws_platform_required,
     ManageTest,
@@ -39,6 +40,7 @@ else:
     ]
 
 
+@green_squad
 @aws_platform_required
 @skipif_ocs_version("<4.9")
 @kms_config_required

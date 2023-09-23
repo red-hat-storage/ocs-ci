@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ms_provider_and_consumer,
     ms_consumer_required,
     skipif_bm,
+    magenta_squad,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -26,6 +27,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier1
 @ignore_leftovers
 class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
@@ -115,6 +117,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         )
 
 
+@magenta_squad
 @tier1
 @ignore_leftovers
 @ms_provider_and_consumer_required

@@ -11,6 +11,7 @@ import textwrap
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import skipif_managed_service
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 TEST_NS = "namespace-test-fio-continuous-workload"
 
 
+@blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
 def test_start_fio_job(
@@ -84,6 +86,7 @@ def test_start_fio_job(
         raise
 
 
+@blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
 def test_stop_fio_job():

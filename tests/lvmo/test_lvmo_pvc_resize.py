@@ -4,6 +4,7 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_lvm_not_installed,
+    aqua_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest
@@ -13,6 +14,7 @@ from ocs_ci.ocs.cluster import LVM
 log = logging.getLogger(__name__)
 
 
+@aqua_squad
 @pytest.mark.parametrize(
     argnames=["volume_mode", "volume_binding_mode", "status"],
     argvalues=[

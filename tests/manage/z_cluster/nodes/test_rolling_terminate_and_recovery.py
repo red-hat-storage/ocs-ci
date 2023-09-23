@@ -3,6 +3,7 @@ import pytest
 import random
 
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftovers,
@@ -46,6 +47,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4b
 @skipif_ibm_cloud
 @skipif_external_mode
@@ -143,8 +145,8 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                     condition=constants.STATUS_FAILED,
                     resource_name=machine_name,
                     column="PHASE",
-                    timeout=240,
-                    sleep=10,
+                    timeout=720,
+                    sleep=30,
                 )
                 delete_machine(machine_name)
                 timeout = 1500 if is_vsphere_ipi_cluster() else 900

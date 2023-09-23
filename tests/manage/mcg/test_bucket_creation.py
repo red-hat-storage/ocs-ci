@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     performance,
     skipif_mcg_only,
     bugzilla,
+    red_squad,
 )
 from ocs_ci.ocs.constants import OCS_COMPONENTS_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -23,6 +24,7 @@ from ocs_ci.helpers.storageclass_helpers import storageclass_name
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @skipif_managed_service
 class TestBucketCreation(MCGTest):
     """

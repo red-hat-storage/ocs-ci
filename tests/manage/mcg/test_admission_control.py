@@ -6,9 +6,11 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_ocs_version,
+    skipif_mcg_only,
     ignore_leftovers,
     tier3,
     polarion_id,
@@ -20,6 +22,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @skipif_ocs_version("<4.10")
 # We have to ignore leftovers since environment_checker runs before the
 # bucket_factory_session teardown, due to it being session-scoped.
@@ -367,6 +370,7 @@ class TestAdmissionWebhooks(MCGTest):
         else:
             assert False, "Store patch succeeded unexpectedly"
 
+    @skipif_mcg_only
     @polarion_id("OCS-2792")
     def test_pvpool_downscaling(self, backingstore_factory_session):
         """

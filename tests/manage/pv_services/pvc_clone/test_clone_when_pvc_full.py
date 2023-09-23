@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -22,6 +23,7 @@ from ocs_ci.helpers.storageclass_helpers import storageclass_name
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")

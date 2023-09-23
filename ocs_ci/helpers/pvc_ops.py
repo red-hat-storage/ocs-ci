@@ -2,6 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import ignore_leftovers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import delete_pvcs
@@ -48,6 +49,7 @@ def delete_pods(pod_objs):
         pod_obj.delete()
 
 
+@brown_squad
 @ignore_leftovers
 def test_create_delete_pvcs(multi_pvc_factory, pod_factory, project=None):
     # create the pods for deleting

@@ -21,6 +21,7 @@ from ocs_ci.framework import config
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @skipif_intransit_encryption_notset
 @green_squad
 class TestDataIntegrityWithInTransitEncryption:
