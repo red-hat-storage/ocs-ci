@@ -2832,9 +2832,10 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         3. backupstoragelocation resource in "Available" phase
 
         """
-        # Check restic pods
+        # Check restic pods.
+        # Restic pods have been renamed to node-agent
         restic_list = get_pods_having_label(
-            "name=restic", constants.ACM_HUB_BACKUP_NAMESPACE
+            "name=node-agent", constants.ACM_HUB_BACKUP_NAMESPACE
         )
         if len(restic_list) != constants.MDR_RESTIC_POD_COUNT:
             raise MDRDeploymentException("restic pod count mismatch")
