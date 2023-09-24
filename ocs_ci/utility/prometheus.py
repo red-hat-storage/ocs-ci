@@ -330,7 +330,7 @@ class PrometheusAPI(object):
         Args:
             user (str): OpenShift username used to connect to API
         """
-        if not threading_lock:
+        if threading_lock is None:
             raise NoThreadingLockUsedError(
                 "using threading.Lock object is mandatory for PrometheusAPI class"
             )
