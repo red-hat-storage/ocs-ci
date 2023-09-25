@@ -118,6 +118,7 @@ from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.logging import OCSLogFormatter
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,

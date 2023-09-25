@@ -10,6 +10,7 @@ import logging
 import os
 import pandas as pd
 import pytest
+from urllib.parse import urljoin
 from junitparser import JUnitXml
 import ocs_ci.utility.memory
 from ocs_ci.framework import config as ocsci_config
@@ -32,6 +33,8 @@ from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
+    create_directory_path,
+    ocsci_log_path,
     dump_config_to_file,
     get_ceph_version,
     get_cluster_name,
@@ -361,9 +364,9 @@ def pytest_configure(config):
     for i in range(ocsci_config.nclusters):
         log.info(f"Pytest configure switching to: cluster={i}")
         ocsci_config.switch_ctx(i)
-
         if not (config.getoption("--help") or config.getoption("collectonly")):
             process_cluster_cli_params(config)
+            create_directory_path(ocsci_config.RUN["log_dir"])
             config_file = os.path.expanduser(
                 os.path.join(
                     ocsci_config.RUN["log_dir"],
@@ -419,6 +422,23 @@ def pytest_configure(config):
                 gather_version_info_for_report(config)
     # switch the configuration context back to the default cluster
     ocsci_config.switch_default_cluster_ctx()
+    pytest_logs_dir = ocsci_log_path()
+    create_directory_path(ocsci_config.RUN["log_dir"])
+    create_directory_path(pytest_logs_dir)
+    config.option.logger_logsdir = os.path.join(pytest_logs_dir, "pytest_logger")
+    config.option.log_file = os.path.join(pytest_logs_dir, "test_info_level.log")
+    logs_url = ocsci_config.RUN.get("logs_url")
+    for i in range(ocsci_config.nclusters):
+        ocsci_config.switch_ctx(i)
+        if logs_url:
+            ocsci_config.RUN["info_logs_url"] = urljoin(
+                logs_url, os.path.basename(pytest_logs_dir)
+            )
+        ocsci_config.REPORTING["log_path_message"] = (
+            f"Logs from run-ci execution (RUN ID: {ocsci_config.RUN['run_id']})"
+            f" will be stored in: {ocsci_config.RUN.get('info_logs_url') or pytest_logs_dir}\n"
+        )
+    print(ocsci_config.REPORTING["log_path_message"])
 
 
 def gather_version_info_for_report(config):

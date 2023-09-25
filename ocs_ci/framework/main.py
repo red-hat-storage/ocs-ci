@@ -3,7 +3,6 @@ import os
 import re
 import sys
 import time
-from urllib.parse import urljoin
 
 import pytest
 import yaml
@@ -283,18 +282,6 @@ def main(argv=None):
     init_ocsci_conf(arguments)
     for i in range(framework.config.nclusters):
         framework.config.switch_ctx(i)
-        pytest_logs_dir = utils.ocsci_log_path()
-        utils.create_directory_path(framework.config.RUN["log_dir"])
-        logs_url = framework.config.RUN.get("logs_url")
-        if logs_url:
-            framework.config.RUN["info_logs_url"] = urljoin(
-                logs_url, os.path.basename(pytest_logs_dir)
-            )
-        framework.config.REPORTING["log_path_message"] = (
-            f"Logs from run-ci execution (RUN ID: {framework.config.RUN['run_id']}) for cluster"
-            f" {i} will be stored in: {framework.config.RUN.get('info_logs_url') or pytest_logs_dir}\n"
-        )
-        print(framework.config.REPORTING["log_path_message"])
     arguments.extend(
         [
             "-p",
@@ -303,10 +290,6 @@ def main(argv=None):
             "ocs_ci.framework.pytest_customization.marks",
             "-p",
             "ocs_ci.framework.pytest_customization.reports",
-            "--logger-logsdir",
-            os.path.join(pytest_logs_dir, "pytest_logger"),
-            "--log-file",
-            os.path.join(pytest_logs_dir, "test_info_level.log"),
         ]
     )
     return pytest.main(arguments)

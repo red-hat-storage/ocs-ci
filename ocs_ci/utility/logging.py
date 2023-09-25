@@ -45,20 +45,23 @@ class CustomLoggerFilter(logging.Filter):
             )
 
 
-def separator(symbol_, val=None):
+def separator(symbol_="-", val=None, new_line=True):
     """
     Creates nice separator text which center the val surrounded by separator with width of terminal.
 
     Args:
         symbol_ (str): Symbol to use as separator, e.g. "-"
         val (str): Value which should be in the center of the output text
+        new_line (bool): put new line before the returned string.
 
     Returns:
         str: string like ------------- VAL ----------------
 
     """
-    terminal_width = shutil.get_terminal_size(fallback=(120, 40))[0]
+    new_line_char = "\n"
+    if not new_line:
+        new_line_char = ""
+    terminal_width = shutil.get_terminal_size(fallback=(80, 40))[0]
     if not val:
-        return f"{symbol_ * terminal_width}"
-    sepa = int((terminal_width - len(val) - 2) // 2)
-    return f"{symbol_ * sepa} {val} {symbol_ * sepa}"
+        return f"{new_line_char}{symbol_ * terminal_width}"
+    return f"{new_line_char}{val.center(terminal_width, symbol_)}"
