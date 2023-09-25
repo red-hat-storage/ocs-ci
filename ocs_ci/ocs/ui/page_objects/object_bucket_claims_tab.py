@@ -32,7 +32,8 @@ class BucketsUI(PageNavigator, ResourceList):
         """
         logger.info(f"Select project {namespace}")
         self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(project_name=namespace, obc=True)
+        self.do_send_keys(self.pvc_loc["search-project"], text=namespace)
+        self.wait_for_namespace_selection(project_name=namespace)
 
 
 class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
@@ -73,8 +74,9 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
 
         self.do_click(self.sc_loc["Developer_dropdown"])
         self.do_click(self.sc_loc["select_administrator"], timeout=5)
-        BucketsUI.navigate_object_bucket_claims_page(self)
+        BucketsUI.navigate_persistentvolumeclaims_page()
         BucketsUI.select_project(self, namespace)
+        BucketsUI.navigate_object_bucket_claims_page(self)
 
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"],
