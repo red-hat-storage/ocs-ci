@@ -123,6 +123,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers = Sanity()
 
     @skipif_managed_service
+    @skipif_ibm_cloud
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
     @bugzilla("1825675")
