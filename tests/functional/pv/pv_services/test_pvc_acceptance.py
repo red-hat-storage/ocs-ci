@@ -12,13 +12,17 @@
 #     test_rwx_pvc_assign_pod_node[CephBlockPool]
 #     test_rwx_pvc_assign_pod_node[CephFileSystem]
 #
+# ## partially implemented
+# tests/manage/pv_services/pvc_resize/test_pvc_expansion.py::TestPvcExpand::test_pvc_expansion
+#   - the original test_pvc_expansion performs expansion on 5 PVCs (2 cephfs, 3 rbd)
+#   - some of the configuration of PVCs and maybe also PODs is/might be different
+#
 # ## not implemented ###############
 # tests/manage/pv_services/test_pvc_delete_verify_size_is_returned_to_backendpool.py
 #     test_pvc_delete_and_verify_size_is_returned_to_backend_pool
 # tests/manage/pv_services/test_raw_block_pv.py::TestRawBlockPV
 #     test_raw_block_pv[Delete]
 #     test_raw_block_pv[Retain]
-# tests/manage/pv_services/pvc_resize/test_pvc_expansion.py::TestPvcExpand::test_pvc_expansion
 
 # 1. Create PVCs according to this table:
 #   Type                        RWO    RWX  Recliam policy
@@ -48,6 +52,7 @@ from ocs_ci.framework.testlib import (
 )
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
@@ -56,10 +61,12 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 
+@green_squad
 @acceptance
 class TestPvcAcceptance(ManageTest):
     """
@@ -167,6 +174,12 @@ class TestPvcAcceptance(ManageTest):
                 test_variant.check_pod_state_containercreating()
 
         for test_variant in test_variants:
+            test_variant.expand_pvc()
+
+        for test_variant in test_variants:
+            test_variant.verify_expansion()
+
+        for test_variant in test_variants:
             if test_variant.access_mode == constants.ACCESS_MODE_RWO:
                 test_variant.delete_first_pod()
 
@@ -268,6 +281,12 @@ class PvcAcceptance:
         self.expected_failure_str = "Multi-Attach error for volume"
         self.storage_type = "fs"
         self.pvc_size = 10  # size in Gi
+        # Expand PVC with a small amount to fall behind default quota (100 Gi) for
+        # openshift dedicated
+        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+            self.pvc_size_new = 15
+        else:
+            self.pvc_size_new = 25
 
     @log_execution
     def setup(self):
@@ -418,6 +437,55 @@ class PvcAcceptance:
             self.verify_expected_failure_event(
                 ocs_obj=self.pod_obj2, failure_str=self.expected_failure_str
             )
+
+    @log_execution
+    def expand_pvc(self):
+        """
+        Modify size of PVC
+        """
+
+        logger.info(
+            f"Expanding size of PVC {self.pvc_obj.name} to {self.pvc_size_new}G"
+        )
+        self.pvc_obj.resize_pvc(self.pvc_size_new, False)
+
+    @log_execution
+    def verify_expansion(self):
+        """
+        Verify new size of pvc on pods
+        """
+        self.pvc_obj.verify_pvc_size(self.pvc_size_new)
+
+        logger.info("Verifying new size on pods.")
+        # Wait for 240 seconds to reflect the change on pod
+        pods_for_check = [self.pod_obj1]
+        if self.access_mode == constants.ACCESS_MODE_RWX:
+            pods_for_check.append(self.pod_obj2)
+        for pod_obj in pods_for_check:
+            logger.info(f"Checking pod {pod_obj.name} to verify the change.")
+            for df_out in TimeoutSampler(
+                240, 3, pod_obj.exec_cmd_on_pod, command="df -kh"
+            ):
+                if not df_out:
+                    continue
+                df_out = df_out.split()
+                new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
+                if new_size_mount in [
+                    f"{self.pvc_size_new - 0.1}G",
+                    f"{float(self.pvc_size_new)}G",
+                    f"{self.pvc_size_new}G",
+                ]:
+                    logger.info(
+                        f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
+                        f"is reflected on pod {pod_obj.name}"
+                    )
+                    break
+                logger.info(
+                    f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
+                    f" on pod {pod_obj.name}. New size on mount is not "
+                    f"{self.pvc_size_new}G as expected, but {new_size_mount}. "
+                    f"Checking again."
+                )
 
     @log_execution
     def delete_first_pod(self):
