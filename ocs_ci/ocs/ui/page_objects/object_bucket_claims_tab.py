@@ -31,8 +31,8 @@ class BucketsUI(PageNavigator, ResourceList):
         Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
         """
         logger.info(f"Select project {namespace}")
-        self.do_click(self.generic_locators["project_selector"], obc=True)
-        self.wait_for_namespace_selection(project_name=namespace)
+        self.do_click(self.generic_locators["project_selector"])
+        self.wait_for_namespace_selection(project_name=namespace, obc=True)
 
 
 class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
