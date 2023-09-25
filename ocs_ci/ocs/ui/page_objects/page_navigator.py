@@ -350,7 +350,7 @@ class PageNavigator(BaseUI):
         storage_system_details.nav_ceph_blockpool()
         logger.info("Now at Block pool page")
 
-    def wait_for_namespace_selection(self, project_name):
+    def wait_for_namespace_selection(self, project_name, obc=False):
         """
         If you have already navigated to namespace drop-down, this function waits for namespace selection on UI.
         It would be useful to avoid test failures in case of delays/latency in populating the list of projects under the
@@ -359,6 +359,7 @@ class PageNavigator(BaseUI):
 
         Args:
             project_name (str): Name of the project to be selected
+            obc (bool): Whether project selection is on OBC page. Default value is False
 
         Returns:
             bool: True if the project is found, raises NoSuchElementException otherwise with a log message
@@ -366,7 +367,7 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        if self.ocp_version_full in (version.VERSION_4_10, version.VERSION_4_11):
+        if self.ocp_version_full in (version.VERSION_4_10, version.VERSION_4_11) or obc:
             default_projects_is_checked = self.driver.find_element_by_xpath(
                 "//span[@class='pf-c-switch__toggle']"
             )
