@@ -31,7 +31,6 @@ log_path = ocsci_log_path()
 obc_scaled_data_file = f"{log_path}/obc_scale_data_file.yaml"
 
 
-@orange_squad
 @pre_upgrade
 @skipif_external_mode
 @skipif_bm

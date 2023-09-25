@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     skipif_ocs_version,
@@ -29,7 +28,6 @@ def s3bench(request):
     return s3bench
 
 
-@orange_squad
 @scale
 @red_squad
 class TestScaleNamespace(E2ETest):

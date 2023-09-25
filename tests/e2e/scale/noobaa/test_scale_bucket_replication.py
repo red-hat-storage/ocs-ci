@@ -2,7 +2,6 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import red_squad
@@ -29,7 +28,6 @@ def s3bench(request):
     return s3bench
 
 
-@orange_squad
 @scale
 @red_squad
 @skipif_ocs_version("<4.9")
