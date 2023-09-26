@@ -52,7 +52,6 @@ class ResourceList(SearchBar):
         """
         logger.info(f"Find resource by name '{resource}' using search-bar")
         self.page_has_loaded()
-        self.do_send_keys(self.generic_locators["search_resource_field"], resource)
 
         if delete_via == "Actions":
             logger.info(f"Go to {resource} Page")
@@ -64,12 +63,10 @@ class ResourceList(SearchBar):
         else:
             logger.info(f"Click on '{delete_via}'")
 
+            self.do_send_keys(self.generic_locators["search_resource_field"], resource)
             self.do_click(
-                (
-                    format_locator(
-                        self.generic_locators["three_dots_specific_resource"], resource
-                    ),
-                    By.XPATH,
+                format_locator(
+                    self.generic_locators["three_dots_specific_resource"], resource
                 ),
                 enable_screenshot=True,
             )
