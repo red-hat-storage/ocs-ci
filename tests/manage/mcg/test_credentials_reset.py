@@ -6,7 +6,7 @@ import boto3
 from time import sleep
 import botocore
 
-from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id
+from ocs_ci.framework.pytest_customization.marks import tier2, polarion_id, red_squad
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import get_s3_credentials_from_secret
 
@@ -14,6 +14,7 @@ from ocs_ci.helpers.helpers import get_s3_credentials_from_secret
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 class TestCredentialsReset(MCGTest):
     """
     Test suite for resetting and regenerating MCG related credentials
