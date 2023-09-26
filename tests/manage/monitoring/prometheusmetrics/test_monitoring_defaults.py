@@ -112,6 +112,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
+@skipif_mcg_only
 @blue_squad
 @skipif_ocs_version("<4.6")
 @metrics_for_external_mode_required
@@ -166,6 +167,7 @@ def test_ceph_metrics_available():
     assert list_of_metrics_without_results == [], msg
 
 
+@skipif_mcg_only
 @blue_squad
 @tier1
 @metrics_for_external_mode_required
