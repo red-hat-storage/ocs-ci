@@ -4,7 +4,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, red_squad
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import get_nb_bucket_stores
@@ -61,6 +61,7 @@ def allow_default_backingstore_override(request):
     patch_allow_manual_default_backingstore()
 
 
+@red_squad
 @pytest.mark.usefixtures(allow_default_backingstore_override.__name__)
 class TestDefaultBackingstoreOverride(MCGTest):
     """
