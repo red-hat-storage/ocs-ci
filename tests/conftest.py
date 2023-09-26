@@ -35,7 +35,9 @@ from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
+    change_expiration_query_interval,
 )
+
 from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -92,8 +94,12 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     verify_data_integrity_for_multi_pvc_objs,
     get_noobaa_pods,
+<<<<<<< HEAD
     get_pod_count,
     wait_for_pods_by_label_count,
+=======
+    get_noobaa_core_pod,
+>>>>>>> 3ef4de76 (Entry critieria for MCG system tests)
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -6885,3 +6891,36 @@ def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_fact
     )
 
     return logwriter_sts
+
+
+@pytest.fixture()
+def change_noobaa_lifecycle_interval(request):
+    nb_core_pod = get_noobaa_core_pod()
+    interval_changed = False
+
+    def factory(interval):
+        nonlocal interval_changed
+        interval_changed = True
+        change_expiration_query_interval(new_interval=interval)
+
+    def finalizer():
+        if interval_changed:
+            params = (
+                f'[{{"op": "test", "path": "/spec/template/spec/containers/0/env/20/name",'
+                f'"value": "CONFIG_JS_LIFECYCLE_INTERVAL"}},'
+                f'{{"op": "remove", "path": "/spec/template/spec/containers/0/env/20"}}]'
+            )
+
+            OCP(
+                kind="statefulset", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).patch(
+                resource_name=constants.NOOBAA_CORE_STATEFULSET,
+                params=params,
+                format_type="json",
+            )
+            nb_core_pod.delete()
+            wait_for_pods_to_be_running(pod_names=[nb_core_pod.name], timeout=300)
+            log.info("Switched back to default lifecycle interval")
+
+    request.addfinalizer(finalizer)
+    return factory

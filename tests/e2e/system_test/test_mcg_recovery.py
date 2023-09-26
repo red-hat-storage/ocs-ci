@@ -42,3 +42,23 @@ class TestMCGRecovery(E2ETest):
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
 
         verify_mcg_system_recovery(mcg_sys_dict)
+
+    def test_sample(self, setup_mcg_bg_features):
+
+        feature_setup_map = setup_mcg_bg_features(
+            num_of_buckets=10,
+            is_disruptive=False,
+            skip_any_features=["caching", "nsfs", "rgw kafka"],
+        )
+
+        import time
+
+        log.error("Waiting for 5 mins")
+        time.sleep(300)
+
+        feature_setup_map["executor"]["event"].set()
+        log.error("asked the background process to stop executing")
+        for th in feature_setup_map["executor"]["threads"]:
+            th.result()
+
+        log.error("Done executing")

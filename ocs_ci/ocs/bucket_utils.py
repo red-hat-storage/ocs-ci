@@ -6,6 +6,7 @@ import logging
 import os
 import shlex
 from uuid import uuid4
+from datetime import date
 
 import boto3
 from botocore.handlers import disable_signing
@@ -1343,18 +1344,20 @@ def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=No
     list_objects_res = [name["key"] for name in res.get("reply").get("objects")]
     if not expected_objects_names:
         expected_objects_names = []
-    if set(expected_objects_names) == set(list_objects_res):
-        logger.info("Files cached as expected")
-        return True
-    logger.warning(
-        "Objects did not cache properly, \n"
-        f"Expected: [{expected_objects_names}]\n"
-        f"Cached: [{list_objects_res}]"
-    )
-    return False
+    # if set(expected_objects_names) == set(list_objects_res):
+    for obj in expected_objects_names:
+        if obj not in list_objects_res:
+            logger.warning(
+                "Objects did not cache properly, \n"
+                f"Expected: [{expected_objects_names}]\n"
+                f"Cached: [{list_objects_res}]"
+            )
+            return False
+    logger.info("Files cached as expected")
+    return True
 
 
-def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
+def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None, timeout=60):
     """
     wait for existing cache bucket to cache all required objects
 
@@ -1365,7 +1368,7 @@ def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
 
     """
     sample = TimeoutSampler(
-        timeout=60,
+        timeout=timeout,
         sleep=10,
         func=check_cached_objects_by_name,
         mcg_obj=mcg_obj,
@@ -1912,3 +1915,105 @@ def create_aws_bs_using_cli(
         f"--target-bucket {uls_name} --region {region}",
         use_yes=True,
     )
+
+
+def change_expiration_query_interval(new_interval):
+    """
+    Change how often noobaa should check for object expiration
+    By default it will be 8 hours
+    Args:
+        new_interval (int): New interval in minutes
+    """
+
+    from ocs_ci.ocs.resources.pod import (
+        get_noobaa_core_pod,
+        wait_for_pods_to_be_running,
+    )
+
+    nb_core_pod = get_noobaa_core_pod()
+    new_interval = new_interval * 60 * 1000
+    params = (
+        '[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", '
+        f'"value": {{ "name": "CONFIG_JS_LIFECYCLE_INTERVAL", "value": "{new_interval}" }}}}]'
+    )
+    OCP(kind="statefulset", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).patch(
+        resource_name=constants.NOOBAA_CORE_STATEFULSET,
+        params=params,
+        format_type="json",
+    )
+    logger.info(f"Updated the expiration query interval to {new_interval} ms")
+    nb_core_pod.delete()
+    wait_for_pods_to_be_running(pod_names=[nb_core_pod.name], timeout=300)
+
+
+def expire_objects_in_bucket(bucket_name, new_expire_interval=None):
+    """
+    Manually expire the objects in a bucket
+    Args:
+        bucket_name (str): Name of the bucket
+        new_expire_interval (int): New expiration interval
+    """
+
+    from ocs_ci.ocs.resources.pod import (
+        get_noobaa_db_pod,
+    )
+
+    if new_expire_interval is not None and isinstance(new_expire_interval, int):
+        change_expiration_query_interval(new_expire_interval)
+
+    creation_time = f"{date.today().year-1}-06-25T14:18:28.712Z"
+    nb_db_pod = get_noobaa_db_pod()
+    query = (
+        'UPDATE objectmds SET "data"=jsonb_set("data", \'{create_time}\','
+        f"'\\\"{creation_time}\\\"') WHERE data ->> 'bucket' IN "
+        f"( SELECT _id FROM buckets WHERE data ->> 'name' = '{bucket_name}' );"
+    )
+    command = f'psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "{query}"'
+
+    nb_db_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
+
+
+def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
+    """
+    Checks if objects in the bucket is expired
+
+    Args:
+        mcg_obj(MCG): MCG object
+        bucket_name(str): Name of the bucket
+        prefix(str): Objects prefix
+
+    Returns:
+        Bool: True if objects are expired, else False
+
+    """
+
+    response = s3_list_objects_v2(
+        mcg_obj, bucketname=bucket_name, prefix=prefix, delimiter="/"
+    )
+    if response["KeyCount"] != 0:
+        return False
+    return True
+
+
+def sample_if_objects_expired(mcg_obj, bucket_name, prefix="", timeout=600, sleep=30):
+    """
+    Sample if the objects in a bucket expired using
+    TimeoutSampler
+
+    """
+    message = (
+        f"Objects in bucket with prefix {prefix} "
+        if prefix != ""
+        else "Objects in the bucket "
+    )
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=check_if_objects_expired,
+        mcg_obj=mcg_obj,
+        bucket_name=bucket_name,
+        prefix=prefix,
+    )
+
+    assert sampler.wait_for_func_status(result=True), f"{message} are not expired"
+    logger.info(f"{message} are expired")
