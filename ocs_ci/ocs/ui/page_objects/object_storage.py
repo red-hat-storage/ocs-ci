@@ -92,6 +92,6 @@ class ObjectStorage(PageNavigator, ResourceList):
             cluster_namespace (str): project name will be selected from the list
 
         """
-        logger.info("Select openshift-storage project")
+        logger.info(f"Select '{cluster_namespace}' project")
         self.do_click(self.generic_locators["project_selector"])
         self.wait_for_namespace_selection(project_name=cluster_namespace)
