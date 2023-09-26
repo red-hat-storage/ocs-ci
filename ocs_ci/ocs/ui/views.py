@@ -1814,7 +1814,7 @@ locators = {
 }
 
 
-locate_aws_regions = {"region_table": ('//*[@id="w101aac10b9c15"]', By.XPATH)}
-locate_noobaa_regions = {
-    "regions_list": ('//*[@id="read-only-cursor-text-area"]', By.XPATH)
+locate_aws_regions = {
+    "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
 }
+locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}
