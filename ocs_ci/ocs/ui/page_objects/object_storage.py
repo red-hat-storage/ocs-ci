@@ -86,12 +86,11 @@ class ObjectStorage(PageNavigator, ResourceList):
 
     def select_project(self, cluster_namespace):
         """
-        Helper function to select openshift-storage project
+        Helper function to select a project via UI. e.g. 'openshift-storage'
 
         Args:
             cluster_namespace (str): project name will be selected from the list
 
-        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
         """
         logger.info("Select openshift-storage project")
         self.do_click(self.generic_locators["project_selector"])
