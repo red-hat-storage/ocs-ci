@@ -1,5 +1,3 @@
-from selenium.webdriver.common.by import By
-
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.searchbar import SearchBar
 from ocs_ci.ocs.ui.base_ui import logger
