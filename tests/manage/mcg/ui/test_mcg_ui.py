@@ -284,9 +284,9 @@ class TestObcUserInterface(object):
 
         if (
             config.DEPLOYMENT["external_mode"]
-            and storageclass == "ocs-storagecluster-ceph-rgw"
+            and storageclass == constants.DEFAULT_STORAGECLASS_RGW
         ):
-            storageclass = "ocs-external-storagecluster-ceph-rgw"
+            storageclass = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
         obc_ui_obj.create_obc_ui(obc_name, storageclass, bucketclass)
 
         assert obc_ui_obj.verify_current_page_resource_status(
