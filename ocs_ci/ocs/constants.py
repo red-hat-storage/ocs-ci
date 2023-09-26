@@ -824,6 +824,7 @@ DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
 DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 RDR_MODE = "regional-dr"
+MDR_MODE = "metro-dr"
 MDR_RESTIC_POD_COUNT = 3
 MDR_VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
