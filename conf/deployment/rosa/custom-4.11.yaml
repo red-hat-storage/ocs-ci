@@ -1,0 +1,7 @@
+DEPLOYMENT:
+  ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.11"
+  not_ga_wa: True
+UPGRADE:
+  upgrade_ocs_version: "4.11.0"
+  deployer_version: "2.0.2"
+  ocs_channel: "stable-4.11"

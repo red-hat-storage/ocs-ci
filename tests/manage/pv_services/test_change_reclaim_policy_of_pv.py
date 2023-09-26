@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier1, skipif_managed_service
 from ocs_ci.ocs.constants import RECLAIM_POLICY_DELETE, RECLAIM_POLICY_RETAIN
 from ocs_ci.utility.utils import TimeoutSampler
@@ -16,6 +17,7 @@ from ocs_ci.helpers.helpers import (
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier1
 @pytest.mark.parametrize(
     argnames=["interface", "reclaim_policy"],
@@ -88,7 +90,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(interface=interface, pvc=pvc_obj, status=None)
             )
         for pod in self.pod_objs:
-            wait_for_resource_state(pod, constants.STATUS_RUNNING)
+            wait_for_resource_state(pod, constants.STATUS_RUNNING, 90)
             pod.reload()
 
     def run_and_verify_io(self, pods_list, do_setup=True):
@@ -221,7 +223,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(interface=interface, pvc=pvc_obj, status=None)
             )
         for pod in new_pod_objs:
-            wait_for_resource_state(pod, constants.STATUS_RUNNING)
+            wait_for_resource_state(pod, constants.STATUS_RUNNING, 90)
             pod.reload()
 
         # Run IO on new pods

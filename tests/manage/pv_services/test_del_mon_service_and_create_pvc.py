@@ -3,6 +3,7 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
@@ -29,9 +30,10 @@ from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
-POD_OBJ = OCP(kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
 
+@green_squad
 @tier4c
 @ignore_leftovers
 @skipif_external_mode
@@ -52,18 +54,8 @@ class TestPvcCreationAfterDelMonService(E2ETest):
     @bugzilla("1858195")
     @runs_on_provider
     @skipif_ocs_version("<4.6")
-    @pytest.mark.parametrize(
-        argnames=["interface"],
-        argvalues=[
-            pytest.param(
-                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2495")
-            ),
-            pytest.param(
-                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2494")
-            ),
-        ],
-    )
-    def test_pvc_creation_after_del_mon_services(self, interface, pod_factory):
+    @pytest.mark.polarion_id("OCS-2494")
+    def test_pvc_creation_after_del_mon_services(self, pod_factory):
         """
         1. Delete one mon service
         2. Edit the configmap rook-ceph-endpoints
@@ -82,8 +74,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             # Switch to consumer to create PVC, pod and start IO
             config.switch_to_consumer(self.consumer_cluster_index)
 
-        pod_obj = pod_factory(interface=interface)
-        run_io_in_bg(pod_obj)
+        for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
+            pod_obj = pod_factory(interface=interface)
+            run_io_in_bg(pod_obj)
 
         if self.consumer_cluster_index is not None:
             # Switch to provider
@@ -92,7 +85,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         # Get all mon services
         mon_svc = get_services_by_label(
             label=constants.MON_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         # Get all mon pods
@@ -127,7 +120,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             log.info("Delete mon deployments")
             del_obj = OCP(
                 kind=constants.DEPLOYMENT,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             mon_info = del_obj.get(resource_name=svc_name)
             del_obj.delete(resource_name=svc_name)
@@ -140,20 +133,20 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 ]
                 log.info(f"Delete the directory `{mon_data_path}` from {mon_node}")
                 cmd = f"rm -rf {mon_data_path}"
-                ocp_obj = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+                ocp_obj = OCP(namespace=config.ENV_DATA["cluster_namespace"])
                 ocp_obj.exec_oc_debug_cmd(node=mon_node, cmd_list=[cmd])
             else:
                 log.info("Delete mon PVC")
                 pvc_name = svc["metadata"]["labels"]["pvc_name"]
                 pvc_obj = OCP(
-                    kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                    kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
                 )
                 pvc_obj.delete(resource_name=pvc_name)
 
             # Delete the mon service
             log.info("Delete mon service")
             svc_obj = OCP(
-                kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"]
             )
             svc_obj.delete(resource_name=svc_name)
 
@@ -161,7 +154,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             log.info(f"Edit the configmap {constants.ROOK_CEPH_MON_ENDPOINTS}")
             configmap_obj = OCP(
                 kind=constants.CONFIGMAP,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             output_get = configmap_obj.get(
                 resource_name=constants.ROOK_CEPH_MON_ENDPOINTS
@@ -230,7 +223,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             wait_for_storage_pods()
 
             # Sleep for some seconds before deleting another mon
-            sleep_time = 300
+            sleep_time = 60
             log.info(f"Waiting for {sleep_time} seconds before deleting another mon")
             time.sleep(sleep_time)
 
@@ -238,7 +231,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         log.info("Validate the mon endpoints are changed")
         new_mon_svc = get_services_by_label(
             label=constants.MON_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         list_new_svc = []
         for new_svc in new_mon_svc:
@@ -256,9 +249,10 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             config.switch_to_consumer(self.consumer_cluster_index)
 
         # Create PVC and pods
-        log.info(f"Create {interface} PVC")
-        pod_obj = pod_factory(interface=interface)
-        pod_obj.run_io(storage_type="fs", size="500M")
+        for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
+            log.info(f"Create {interface} PVC")
+            pod_obj = pod_factory(interface=interface)
+            pod_obj.run_io(storage_type="fs", size="500M")
 
     @pytest.fixture()
     def validate_all_mon_svc_are_up_at_teardown(self, request):
@@ -273,7 +267,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         # Get all mon services
         mon_svc_list = get_services_by_label(
             label=constants.MON_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         # Get all mon pods
@@ -288,7 +282,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             if len(mon_svc_list) != len(
                 get_services_by_label(
                     label=constants.MON_APP_LABEL,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             ):
 
@@ -306,7 +300,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                     len(mon_svc_list),
                     get_services_by_label,
                     constants.MON_APP_LABEL,
-                    constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    config.ENV_DATA["cluster_namespace"],
                 ):
                     try:
                         if len(svc_list) == len(mon_svc_list):
@@ -361,7 +355,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         # Get all mon services
         mon_svc_before = get_services_by_label(
             label=constants.MON_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         # Get all mon pods
@@ -369,7 +363,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
         # Delete the mon services one by one
         svc_obj = OCP(
-            kind=constants.SERVICE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"]
         )
         mon_svc_ip_before = []
         for svc in mon_svc_before:
@@ -409,7 +403,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         log.info("Validate same mon services are running")
         mon_svc_after = get_services_by_label(
             label=constants.MON_APP_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         mon_svc_ip_after = [svc["spec"]["clusterIP"] for svc in mon_svc_after]
         assert len(set(mon_svc_ip_after) ^ set(mon_svc_ip_before)) == 0, (

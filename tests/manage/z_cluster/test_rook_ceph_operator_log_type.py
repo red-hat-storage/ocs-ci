@@ -3,25 +3,30 @@ import pytest
 import random
 
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
     get_last_log_time_date,
     check_osd_log_exist_on_rook_ceph_operator_pod,
 )
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_ocs_version,
+    skipif_external_mode,
     bugzilla,
 )
 
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @bugzilla("1962821")
 @skipif_ocs_version("<4.8")
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-2581")
 class TestRookCephOperatorLogType(ManageTest):
     """
@@ -43,6 +48,7 @@ class TestRookCephOperatorLogType(ManageTest):
 
     def teardown(self):
         set_configmap_log_level_rook_ceph_operator(value="INFO")
+        ceph_health_check()
 
     def test_rook_ceph_operator_log_type(self):
         """

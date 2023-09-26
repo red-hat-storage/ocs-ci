@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -27,6 +28,7 @@ def mustgather(request):
     return mustgather
 
 
+@brown_squad
 class TestMustGather(ManageTest):
     @tier1
     @pytest.mark.parametrize(

@@ -134,8 +134,7 @@ to the pytest.
   ```bash
   [DEFAULT]
   bugzilla_url = https://bugzilla.redhat.com/xmlrpc.cgi
-  bugzilla_username = kerberos@redhat.com
-  bugzilla_password = yourPassword
+  bugzilla_api_key = <API_KEY>
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
 * `--collect-logs-on-success-run` - Collect must gather logs at the end of the
@@ -155,6 +154,9 @@ to the pytest.
     previous execution. If the file is provided, the execution will remove all the test cases
     which passed and will run only those test cases which were skipped / failed / or had error
     in the provided report.
+* `--install-lvmo` - Deploy LVMCluster, will skip ODF deployment.
+* `--lvmo-disks` - Number of disks to add to SNO deployment.
+* `--lvmo-disks-size` - Size of disks to add to SNO deployment.
 
 ## Examples
 
@@ -235,7 +237,7 @@ If you would like to send the test run results to email you can run
 following command:
 ```bash
 
-run-ci tests/
+run-ci tests/ \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
     --html=report.html --self-contained-html \
@@ -246,7 +248,7 @@ If you want to send reports to multiple email ID's, use comma separated
 email ID's like below
 ```bash
 
-run-ci tests/
+run-ci tests/ \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
     --html=report.html --self-contained-html \
@@ -259,13 +261,13 @@ run-ci tests/
 If you would like to run multicluster environment tests and deployments, use `multicluster` subcommand for run-ci.
 ###### example 1:
 ```bash
-run-ci multicluster 2
-    tests/ -m tier1
-    --cluster1
-    --cluster-name test_cluster1 --cluster-path test_cluster1_path
-    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2
-    --cluster2
-    --cluster-name test_cluster2 --cluster-path test_cluster2_path
+run-ci multicluster 2 \
+    tests/ -m tier1 \
+    --cluster1 \
+    --cluster-name test_cluster1 --cluster-path test_cluster1_path \
+    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
+    --cluster2 \
+    --cluster-name test_cluster2 --cluster-path test_cluster2_path \
     --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
 ```
 `multicluster` cluster subcommand is slightly different from usual CLI used in run-ci.
@@ -279,12 +281,12 @@ as arguments of `cluster1`.
 ###### example 2:
 Passing common arguments to cluster:
 ```bash
-run-ci multicluster 2
-    tests/ -m tier1 --ocsci-conf common-conf.yaml
+run-ci multicluster 2 \
+    tests/ -m tier1 --ocsci-conf common-conf.yaml \
     --cluster1 --cluster-name test_cluster1 --cluster-path test_cluster1_path \
-    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2
-    --cluster2
-    --cluster-name test_cluster2 --cluster-path test_cluster2_path
+    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
+    --cluster2 \
+    --cluster-name test_cluster2 --cluster-path test_cluster2_path \
     --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
 ```
 In the above example `common-conf.yaml` configuration will be applied on both the clusters.

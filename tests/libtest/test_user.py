@@ -2,11 +2,13 @@ import logging
 import os
 from time import sleep
 
+from ocs_ci.framework.pytest_customization.marks import libtest
 from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
 
+@libtest
 def test_user_creation(user_factory):
     user = user_factory()
     kubeconfig = os.getenv("KUBECONFIG")

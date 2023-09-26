@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -10,12 +11,16 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
 )
 from ocs_ci.ocs.resources.pod import cal_md5sum, verify_data_integrity
-from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import (
+    storagecluster_independent_check,
+    wait_for_resource_state,
+)
 from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier1
 @skipif_managed_service
 @skipif_ocs_version("<4.6")
@@ -112,7 +117,10 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
 
         # If ODF >=4.9 create one more storage class that will use new pool
         # to verify the bug 1901954
-        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
+        if (
+            not storagecluster_independent_check()
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9
+        ):
             sc_objs[constants.CEPHBLOCKPOOL].append(
                 storageclass_factory(
                     interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True

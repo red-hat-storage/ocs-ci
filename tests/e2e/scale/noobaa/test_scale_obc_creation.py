@@ -3,9 +3,13 @@ import pytest
 import time
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required
+from ocs_ci.framework.pytest_customization.marks import (
+    vsphere_platform_required,
+    orange_squad,
+)
 
 log = logging.getLogger(__name__)
 
@@ -13,11 +17,12 @@ log = logging.getLogger(__name__)
 @pytest.fixture(autouse=True)
 def teardown(request):
     def finalizer():
-        scale_noobaa_lib.cleanup(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        scale_noobaa_lib.cleanup(config.ENV_DATA["cluster_namespace"])
 
     request.addfinalizer(finalizer)
 
 
+@orange_squad
 @scale
 class TestScaleOCBCreation(E2ETest):
     """
@@ -27,7 +32,7 @@ class TestScaleOCBCreation(E2ETest):
 
     """
 
-    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = config.ENV_DATA["cluster_namespace"]
     sc_name = constants.NOOBAA_SC
     sc_rgw_name = constants.DEFAULT_STORAGECLASS_RGW
     scale_obc_count = 1000
@@ -62,7 +67,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file.create(namespace=self.namespace)
             time.sleep(timeout * 5)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file,
@@ -70,7 +75,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                 )
             )
-            log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
+            log.info(f"Number of OBCs in Bound state {len(obc_bound_list)}")
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2479")
@@ -103,7 +108,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file.create(namespace=self.namespace)
             time.sleep(timeout * 5)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file,
@@ -111,7 +116,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                 )
             )
-            log.info(f"Number of PVCs in Bound state {len(obc_bound_list)}")
+            log.info(f"Number of OBCs in Bound state {len(obc_bound_list)}")
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2480")
@@ -158,7 +163,7 @@ class TestScaleOCBCreation(E2ETest):
             job_file2.create(namespace=self.namespace)
             time.sleep(timeout * 3)
 
-            # Check all the PVC reached Bound state
+            # Check all the OBC reached Bound state
             obc_mcg_bound_list = (
                 scale_noobaa_lib.check_all_obc_reached_bound_state_in_kube_job(
                     kube_job_obj=job_file1,
@@ -177,5 +182,3 @@ class TestScaleOCBCreation(E2ETest):
                 f"Number of OBCs in Bound state MCG: {len(obc_mcg_bound_list)},"
                 f" RGW: {len(obc_rgw_bound_list)}"
             )
-
-        # TODO: Adding support to calculate OBC creation time

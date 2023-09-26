@@ -1,6 +1,7 @@
 import logging
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -9,7 +10,7 @@ from ocs_ci.utility.utils import TimeoutIterator
 log = logging.getLogger(__name__)
 
 
-def get_job_obj(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_job_obj(name, namespace=None):
     """
     Get OCS instance for job of given job name.
 
@@ -20,38 +21,45 @@ def get_job_obj(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     Returns:
         OCS: A job OCS instance
     """
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
     ocp_dict = ocp_obj.get(resource_name=name)
     return OCS(**ocp_dict)
 
 
-def get_all_jobs(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_all_jobs(namespace=None):
     """
     Get all the jobs in a specific namespace
 
     Args:
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: list of dictionaries of the job OCS instances.
 
     """
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
     return ocp_obj.get()["items"]
 
 
-def get_jobs_with_prefix(prefix, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def get_jobs_with_prefix(prefix, namespace=None):
     """
     Get all the jobs that start with a specific prefix
 
     Args:
         prefix (str): The prefix to search in the job names
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace
+            (default: config.ENV_DATA["cluster_namespace"] if None provided)
 
     Returns:
         list: list of dictionaries of the job OCS instances that start with the prefix
 
     """
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
     jobs_dict = get_all_jobs(namespace)
     job_names = [item["metadata"]["name"] for item in jobs_dict]

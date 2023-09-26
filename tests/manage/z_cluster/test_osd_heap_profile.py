@@ -3,6 +3,7 @@ import pytest
 import time
 import random
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -17,6 +18,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @bugzilla("1938049")
 @skipif_ocs_version("<4.6")

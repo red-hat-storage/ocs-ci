@@ -6,12 +6,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     polarion_id,
     skipif_ocs_version,
+    magenta_squad,
 )
 from ocs_ci.framework.testlib import E2ETest
 
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @system_test
 @ignore_leftovers
 @polarion_id("OCS-2716")

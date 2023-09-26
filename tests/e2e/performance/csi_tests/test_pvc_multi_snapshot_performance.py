@@ -14,20 +14,21 @@ import pytest
 import yaml
 
 # Local modules
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
     performance,
+    performance_b,
 )
 
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources import ocs
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.performance_lib import run_oc_command
@@ -36,11 +37,11 @@ log = logging.getLogger(__name__)
 
 # Error message to look in a command output
 ERRMSG = "Error in command"
-# Time formatting in the csi-driver logs
-time_format = "%H:%M:%S.%f"
 
 
+@grey_squad
 @performance
+@performance_b
 @skipif_ocp_version("<4.6")
 @skipif_ocs_version("<4.6")
 class TestPvcMultiSnapshotPerformance(PASTest):
@@ -76,18 +77,10 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         self.capacity_to_use = int(self.ceph_capacity * 0.7)
 
         # Creating new namespace for the test
-        self.nss_name = "pas-test-namespace"
-        log.info(f"Creating new namespace ({self.nss_name}) for the test")
-        try:
-            self.proj = helpers.create_project(project_name=self.nss_name)
-        except CommandFailed as ex:
-            if str(ex).find("(AlreadyExists)"):
-                log.warning("The namespace is already exists !")
-            log.error("Cannot create new project")
-            raise CommandFailed(f"{self.nss_name} was not created")
+        self.create_test_project()
 
         # Initialize a general Snapshot object to use in the test
-        self.snapshot = OCP(kind="volumesnapshot", namespace=self.nss_name)
+        self.snapshot = OCP(kind="volumesnapshot", namespace=self.namespace)
 
     def teardown(self):
         """
@@ -134,11 +127,13 @@ class TestPvcMultiSnapshotPerformance(PASTest):
                     log.error(f"Cannot delete {snap_name} : {err}")
 
             # Deleting the pod which wrote data to the pvc
-            log.info(f"Deleting the test POD : {self.pod_obj.name}")
+            log.info(f"Deleting the test POD : {self.pod_object.name}")
             try:
-                self.pod_obj.delete()
+                self.pod_object.delete()
                 log.info("Wait until the pod is deleted.")
-                self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
+                self.pod_object.ocp.wait_for_delete(
+                    resource_name=self.pod_object.name, timeout=180
+                )
             except Exception as ex:
                 log.error(f"Cannot delete the test pod : {ex}")
 
@@ -194,22 +189,8 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             else:
                 log.info(f"The pool {self.sc_name} was deleted successfully")
 
-            # Deleting the namespace used by the test
-            log.info(f"Deleting the test namespace : {self.nss_name}")
-            switch_to_default_rook_cluster_project()
-            try:
-                self.proj.delete(resource_name=self.nss_name)
-                self.proj.wait_for_delete(
-                    resource_name=self.nss_name, timeout=60, sleep=10
-                )
-            except CommandFailed:
-                log.error(f"Can not delete project {self.nss_name}")
-                raise CommandFailed(f"{self.nss_name} was not created")
-
-            # After deleting all data from the cluster, we need to wait until it will re-balance
-            ceph_health_check(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, tries=30, delay=60
-            )
+        # Deleting the namespace used by the test
+        self.delete_test_project()
 
         super(TestPvcMultiSnapshotPerformance, self).teardown()
 
@@ -258,7 +239,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         """
         # Find the path that the PVC is mounted within the POD
         path = (
-            self.pod_obj.get("spec")
+            self.pod_object.get("spec")
             .get("spec")
             .get("containers")[0]
             .get("volumeMounts")[0]
@@ -295,6 +276,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         snapshotclass_data = templating.load_yaml(yaml_files[interface])
 
         snapshotclass_data["metadata"]["name"] = snapclass_name
+        snapshotclass_data["metadata"]["namespace"] = config.ENV_DATA[
+            "cluster_namespace"
+        ]
         ocs_obj = ocs.OCS(**snapshotclass_data)
         log.info(f"Creating new snapshot class : {snapclass_name}")
         try:
@@ -332,7 +316,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         with open(tmpfile, "w") as f:
             yaml.dump(self.snap_templ, f, default_flow_style=False)
 
-        res = run_oc_command(cmd=f"create -f {tmpfile}", namespace=self.nss_name)
+        res = run_oc_command(cmd=f"create -f {tmpfile}", namespace=self.namespace)
         if ERRMSG in res[0]:
             err_msg = f"Failed to create snapshot : {res}"
             log.error(err_msg)
@@ -345,7 +329,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
         snap_uid = None
         while timeout > 0:
             res = run_oc_command(
-                f"get volumesnapshot {snap_name} -o yaml", namespace=self.nss_name
+                f"get volumesnapshot {snap_name} -o yaml", namespace=self.namespace
             )
 
             if ERRMSG not in res[0]:
@@ -397,7 +381,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             log.info(f"Starting test number {test_num}")
 
             # Running IO on the POD - (re)-write data on the PVC
-            self.pod_obj.exec_cmd_on_pod(
+            self.pod_object.exec_cmd_on_pod(
                 self.fio_cmd, out_yaml_format=False, timeout=3600
             )
 
@@ -430,8 +414,6 @@ class TestPvcMultiSnapshotPerformance(PASTest):
     )
     def test_pvc_multiple_snapshot_performance(
         self,
-        pvc_factory,
-        pod_factory,
         secret_factory,
         interface_type,
         snap_number,
@@ -481,9 +463,9 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             raise exceptions.StorageNotSufficientException(err_msg)
 
         # Calculating the PVC size in GiB
-        self.pvc_size = int(self.capacity_to_use / (self.num_of_snaps + 2))
+        self.pvc_size = str(int(self.capacity_to_use / (self.num_of_snaps + 2)))
         if self.dev_mode:
-            self.pvc_size = 5
+            self.pvc_size = "5"
 
         self.interface = interface_type
         self.sc_name = "pas-testing-rbd"
@@ -512,28 +494,39 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         # Create new PVC
         log.info(f"Creating {self.pvc_size} GiB PVC of {interface_type}")
-        self.pvc_obj = pvc_factory(
-            interface=self.interface,
-            storageclass=self.sc_obj,
-            size=self.pvc_size,
-            status=constants.STATUS_BOUND,
-            project=self.proj,
+
+        self.pvc_obj = helpers.create_pvc(
+            sc_name=self.sc_obj.name,
+            size=self.pvc_size + "Gi",
+            namespace=self.namespace,
         )
+        helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        self.pvc_obj.reload()
 
         # Create POD which will attache to the new PVC
-        log.info("Creating A POD")
-        self.pod_obj = pod_factory(
-            interface=self.interface,
-            pvc=self.pvc_obj,
-            status=constants.STATUS_RUNNING,
-            pod_dict_path=constants.PERF_POD_YAML,
-        )
+        log.info("Creating a Pod")
+
+        try:
+            self.pod_object = helpers.create_pod(
+                interface_type=self.interface,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+                pod_dict_path=constants.PERF_POD_YAML,
+            )
+            helpers.wait_for_resource_state(self.pod_object, constants.STATUS_RUNNING)
+            self.pod_object.reload()
+            # self.pod_object.workload_setup("fs", jobs=1, fio_installed=True)
+        except Exception as e:
+            log.error(
+                f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
+            )
+            raise exceptions.PodNotCreated("Pod on PVC was not created.")
 
         # Calculating the file size as 80% of the PVC size
         self.filesize = self.pvc_obj.size * 0.80
         # Change the file size to MB for the FIO function
         self.file_size = f"{int(self.filesize * constants.GB2MB)}M"
-        self.file_name = self.pod_obj.name
+        self.file_name = self.pod_object.name
 
         log.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "

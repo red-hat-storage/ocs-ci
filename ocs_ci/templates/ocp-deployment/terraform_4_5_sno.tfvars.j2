@@ -1,0 +1,25 @@
+cluster_id: {{ cluster_name }}
+cluster_domain: {{ cluster_domain }}
+base_domain: {{ base_domain | default('qe.rh-ocs.com') }}
+vsphere_server: {{ vsphere_server }}
+vsphere_user: {{ vsphere_user | default('Administrator@vsphere.local') }}
+vsphere_password: {{ vsphere_password }}
+vsphere_cluster: {{ vsphere_cluster }}
+vsphere_datacenter: {{ vsphere_datacenter }}
+vsphere_datastore: {{ vsphere_datastore }}
+vm_template: {{ vm_template }}
+machine_cidr: {{ machine_cidr }}
+control_plane_count: {{ master_replicas | default(3) }}
+compute_count: {{ worker_replicas | default(3) }}
+ipam: {{ ipam | default('139.178.89.254') }}
+ipam_token: {{ ipam_token }}
+vm_network: {{ vm_network | default('VLAN_172') }}
+control_plane_memory: {{ master_memory | default('16384') }}
+compute_memory: {{ compute_memory | default('16384') }}
+control_plane_num_cpus: {{ master_num_cpus | default('4') }}
+compute_num_cpus: {{ worker_num_cpus | default('12') }}
+vm_dns_addresses: {{ vm_dns_addresses }}
+iso_file: {{ iso_file }}
+ssh_public_key_path: {{ ssh_public_key_path | default('~/.ssh/openshift-dev.pub')}}
+folder: {{ folder }}
+vm_ip_address: {{vm_ip_address}}

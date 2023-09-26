@@ -3,6 +3,8 @@ import pytest
 import csv
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.utils import ocsci_log_path
@@ -14,11 +16,12 @@ log = logging.getLogger(__name__)
 @pytest.fixture(autouse=True)
 def teardown(request):
     def finalizer():
-        scale_noobaa_lib.cleanup(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        scale_noobaa_lib.cleanup(config.ENV_DATA["cluster_namespace"])
 
     request.addfinalizer(finalizer)
 
 
+@orange_squad
 @scale
 class TestScaleOCBCreateDelete(E2ETest):
     """
@@ -28,7 +31,7 @@ class TestScaleOCBCreateDelete(E2ETest):
 
     """
 
-    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = config.ENV_DATA["cluster_namespace"]
     scale_obc_count = 500
     num_obc_batch = 50
 
@@ -87,7 +90,7 @@ class TestScaleOCBCreateDelete(E2ETest):
         ]
 
         for i in range(len(new_list)):
-            scale_noobaa_lib.cleanup(self.namespace, obc_count=new_list[i])
+            scale_noobaa_lib.cleanup(self.namespace, obc_list=new_list[i])
             obc_deletion_time = scale_noobaa_lib.measure_obc_deletion_time(
                 obc_name_list=new_list[i]
             )

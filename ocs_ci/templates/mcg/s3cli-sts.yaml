@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: openshift-storage
+  name: s3cli
+spec:
+  selector:
+    matchLabels:
+      app: s3cli
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: OrderedReady
+  volumeClaimTemplates: []
+  template:
+    metadata:
+      labels:
+        app: s3cli
+    spec:
+      securityContext:
+        runAsUser: 0
+      volumes:
+        - name: service-ca
+          configMap:
+            name: awscli-service-ca
+      containers:
+        - name: s3cli
+          image: quay.io/ocsci/s3-cli-with-test-objects-multiarch:2.0
+          command: ['/bin/sh']
+          stdin: true
+          tty: true
+          volumeMounts:
+            - name: service-ca
+              mountPath: /cert/service-ca.crt
+              subPath: service-ca.crt

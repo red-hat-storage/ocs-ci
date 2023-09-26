@@ -1,7 +1,8 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import E2ETest, workloads, google_api_required
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.testlib import E2ETest, google_api_required
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.utility import templating
@@ -22,8 +23,8 @@ def test_fixture_amq(request):
     return amq
 
 
+@magenta_squad
 @google_api_required
-@workloads
 @pytest.mark.skip(reason="Skip due to helm permission issue")
 class TestAMQBasics(E2ETest):
     @pytest.mark.parametrize(

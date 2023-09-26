@@ -1,0 +1,23 @@
+[connection]
+id="Wired connection 1"
+uuid=d7a375d7-1d57-4d79-9cf6-c66999243a3e
+type=ethernet
+autoconnect-retries=1
+interface-name=ens192
+#multi-connect=1
+permissions=
+
+[ethernet]
+mac-address-blacklist=
+
+[ipv4]
+address=
+dns=
+dns-search=
+method=manual
+
+[ipv6]
+addr-gen-mode=eui64
+dhcp-timeout=90
+dns-search=
+method=auto

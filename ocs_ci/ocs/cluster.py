@@ -7,38 +7,55 @@ functional and proper configurations are made for interaction.
 """
 
 import base64
+import json
 import logging
 import random
 import re
 import threading
 import yaml
 import time
+import os
+
 from semantic_version import Version
+from ocs_ci.ocs.utils import thread_init_class
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
+    PDBNotCreatedException,
     PoolSizeWrong,
     PoolCompressionWrong,
     CommandFailed,
+    LvDataPercentSizeWrong,
+    ThinPoolUtilityWrong,
+    TimeoutExpiredError,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.mcg import MCG
+from ocs_ci.utility import version
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     run_cmd,
     convert_device_size,
+    convert_bytes_to_unit,
     get_trim_mean,
     ceph_health_check,
 )
+from ocs_ci.ocs.node import get_node_ip_addresses
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.utility.connection import Connection
+from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
+from ocs_ci.ocs.resources.pod import get_mds_pods
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +78,10 @@ class CephCluster(object):
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
-        if config.ENV_DATA["mcg_only_deployment"]:
+        if config.ENV_DATA["mcg_only_deployment"] or (
+            config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+            and config.ENV_DATA["cluster_type"].lower() == "consumer"
+        ):
             return
         # cluster_name is name of cluster in rook of type CephCluster
         self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
@@ -190,12 +210,12 @@ class CephCluster(object):
                 logger.warning(e)
                 logger.warning("No CephFS found")
 
-        self.mon_count = len(self.mons)
-        self.mds_count = len(self.mdss)
-        self.mgr_count = len(self.mgrs)
-        self.osd_count = len(self.osds)
-        self.noobaa_count = len(self.noobaas)
-        self.rgw_count = len(self.rgws)
+        self.mon_count = len(set([mon.name for mon in self.mons]))
+        self.mds_count = len(set([mds.name for mds in self.mdss]))
+        self.mgr_count = len(set([mgr.name for mgr in self.mgrs]))
+        self.osd_count = len(set([osd.name for osd in self.osds]))
+        self.noobaa_count = len(set([noobaa.name for noobaa in self.noobaas]))
+        self.rgw_count = len(set([rgw.name for rgw in self.rgws]))
 
     @staticmethod
     def set_port(pod):
@@ -308,7 +328,23 @@ class CephCluster(object):
             config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
             and not config.COMPONENTS["disable_noobaa"]
         ):
-            self.wait_for_noobaa_health_ok()
+            # skip noobaa healthcheck due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2075422
+            ocp_version = version.get_semantic_ocp_version_from_config()
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if config.DEPLOYMENT.get("live_deployment") and (
+                (
+                    ocp_version == version.VERSION_4_10
+                    and ocs_version == version.VERSION_4_9
+                )
+                or (
+                    ocp_version == version.VERSION_4_11
+                    and ocs_version == version.VERSION_4_10
+                )
+            ):
+                logger.info("skipping noobaa health check due to bug 2075422")
+                return
+            else:
+                self.wait_for_noobaa_health_ok()
 
     def noobaa_health_check(self):
         """
@@ -591,19 +627,35 @@ class CephCluster(object):
 
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
-                  if the replica is '0', return 0.
+
+        """
+        replica = int(self.get_ceph_default_replica())
+        logger.info(f"Number of replica : {replica}")
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        usable_capacity = (
+            int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
+        )
+
+        return usable_capacity
+
+    def get_ceph_free_capacity(self):
+        """
+        Function to calculate the free capacity of a cluster
+
+        Returns:
+            float: The free capacity of a cluster (in GB)
 
         """
         replica = int(self.get_ceph_default_replica())
         if replica > 0:
             logger.info(f"Number of replica : {replica}")
-            ceph_pod = pod.get_ceph_tools_pod()
-            ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-            usable_capacity = (
-                int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
-            )
-
-            return usable_capacity
+            ct_pod = pod.get_ceph_tools_pod()
+            output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+            total_avail = output.get("stats").get("total_bytes")
+            total_used = output.get("stats").get("total_used_raw_bytes")
+            total_free = total_avail - total_used
+            return total_free / replica / constants.BYTES_IN_GB
         else:
             # if the replica number is 0, usable capacity can not be calculate
             # so, return 0 as usable capacity.
@@ -726,24 +778,45 @@ class CephCluster(object):
                 and states["count"] == total_pg_count
             )
 
-    def wait_for_rebalance(self, timeout=600):
+    def wait_for_rebalance(self, timeout=600, repeat=3):
         """
         Wait for re-balance to complete
 
         Args:
             timeout (int): Time to wait for the completion of re-balance
+            repeat (int): How many times to repeat the check to make sure, it's
+                really completed.
 
         Returns:
-            bool: True if rebalance completed, False otherwise
+            bool: True if re-balance completed, False otherwise
 
         """
         try:
-            for rebalance in TimeoutSampler(
-                timeout=timeout, sleep=10, func=self.get_rebalance_status
-            ):
-                if rebalance:
-                    logger.info("Re-balance is completed")
-                    return True
+            sleep_time = 10
+            start_time = time.time()
+            for attempt in range(1, repeat + 1):
+                new_timeout = timeout - int(time.time() - start_time)
+                if new_timeout < sleep_time:
+                    new_timeout = sleep_time + 5
+                logger.debug(f"Attempt {attempt} out of {repeat} repeats.")
+                for rebalance in TimeoutSampler(
+                    timeout=new_timeout,
+                    sleep=sleep_time,
+                    func=self.get_rebalance_status,
+                ):
+                    if rebalance:
+                        logger.info(
+                            f"Re-balance completed! This is attempt {attempt} out of {repeat} repeats. "
+                            f"This rebalance check needs to prove it {repeat} times in row."
+                        )
+                        if repeat == attempt:
+                            return True
+                        else:
+                            logger.debug(
+                                f"Wait {sleep_time} seconds before next attempt to check re-balance has completed."
+                            )
+                            time.sleep(sleep_time)
+                            break
         except exceptions.TimeoutExpiredError:
             logger.error(
                 f"Data re-balance failed to complete within the given "
@@ -841,20 +914,41 @@ class CephCluster(object):
             logger.error(err_msg)
             raise exceptions.CephHealthException(err_msg)
 
-    def delete_filesystem(self, fs_name):
+    def delete_filesystem(self, fs_name="ocs-storagecluster-cephfilesystem"):
         """
-        Delete a ceph filesystem - not the default one - from the cluster
+        Delete the ceph filesystem from the cluster, and wait until it recreated,
+        then create the subvolumegroup on it.
 
-        Args:
-            fs_name (str): the name of the filesystem to delete
         """
-        # Make sure the the default filesystem is not deleted.
-        if fs_name == "ocs-storagecluster-cephfilesystem":
-            return
 
         # Delete the filesystem
-        self.CEPHFS.delete(resource_name=fs_name)
-        self.CEPHFS.wait_for_delete(resource_name=fs_name)
+        try:
+            self.CEPHFS.delete(resource_name=fs_name)
+        except Exception as ex:
+            logger.warning(f"Cephfs filesystem deletion failed ({ex}).")
+
+        if fs_name != "ocs-storagecluster-cephfilesystem":
+            # don't need to wait until filesystem is recreated.
+            return
+
+        # The ceph filesystem is re-created automaticly
+        logger.info(f"Wait until the CephFS {fs_name} is re-created")
+        # wait 20 Sec. until the filesystem is fully created.
+        time.sleep(20)
+        try:
+            self.CEPHFS.wait_for_resource(
+                resource_name=fs_name,
+                timeout=120,
+                condition=constants.STATUS_READY,
+                column="PHASE",
+            )
+        except Exception as ex:
+            logger.warning(f"The CephFS filesystem failed to re-creste ({ex})")
+        logger.info(f"The CephFS {fs_name} re-created.")
+        logger.info("Try to re-create the subvolumegroup")
+        cmd = f"ceph fs subvolumegroup create {fs_name} csi"
+        self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        logger.info("The subvolumegroup was created.")
 
     def get_blockpool_status(self, poolname=None):
         """
@@ -1131,6 +1225,7 @@ def count_cluster_osd():
     return osd_count
 
 
+@retry(PDBNotCreatedException, tries=9, backoff=2)
 def validate_pdb_creation():
     """
     Validate creation of PDBs for MON, MDS and OSD pods.
@@ -1139,13 +1234,20 @@ def validate_pdb_creation():
         AssertionError: If required PDBs were not created.
 
     """
-    pdb_obj = ocp.OCP(kind="PodDisruptionBudget")
+    pdb_obj = ocp.OCP(
+        kind="PodDisruptionBudget", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
     item_list = pdb_obj.get().get("items")
+    pdb_count = constants.PDB_COUNT
+    pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
+    if config.DEPLOYMENT.get("arbiter_deployment"):
+        pdb_count = constants.PDB_COUNT_ARBITER
+        pdb_required.extend((constants.MGR_PDB, constants.RGW_PDB))
+    if len(item_list) != pdb_count:
+        raise PDBNotCreatedException(
+            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
+        )
     pdb_list = [item["metadata"]["name"] for item in item_list]
-    osd_count = count_cluster_osd()
-    pdb_required = [constants.MDS_PDB, constants.MON_PDB]
-    for num in range(osd_count):
-        pdb_required.append(constants.OSD_PDB + str(num))
 
     pdb_list.sort()
     pdb_required.sort()
@@ -1488,6 +1590,7 @@ def validate_pg_balancer():
         logger.info("pg_balancer is not active")
 
 
+@retry((ZeroDivisionError, CommandFailed))
 def get_percent_used_capacity():
     """
     Function to calculate the percentage of used capacity in a cluster
@@ -1887,7 +1990,7 @@ def wait_for_silence_ceph_osd_crash_warning(osd_pod_name, timeout=900):
         ):
             if silence_old_osd_crash_warning:
                 return True
-    except TimeoutError:
+    except TimeoutExpiredError:
         return False
 
 
@@ -1920,13 +2023,19 @@ def get_mds_cache_memory_limit():
 
     Raises:
         UnexpectedBehaviour: if MDS-a and MDS-b cache memory limit doesn't match
+        IOError if fail to read configuration
 
     """
     pod_obj = pod.get_ceph_tools_pod()
-    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
-    mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
-    mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    try:
+        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
+        mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
+        mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    except IOError as ioe:
+        if "ENOENT" not in ioe:
+            raise ioe
+
     if mds_a_cache_memory_limit != mds_b_cache_memory_limit:
         raise UnexpectedBehaviour(
             f"mds_a_cache_memory_limit: {mds_a_cache_memory_limit}. "
@@ -1980,7 +2089,7 @@ def check_ceph_health_after_add_capacity(
         additional_ceph_health_tries = int(config.RUN.get("io_load") * 1.3)
         ceph_health_tries += additional_ceph_health_tries
 
-        additional_ceph_rebalance_timeout = int(config.RUN.get("io_load") * 80)
+        additional_ceph_rebalance_timeout = int(config.RUN.get("io_load") * 100)
         ceph_rebalance_timeout += additional_ceph_rebalance_timeout
 
     ceph_health_check(
@@ -1990,6 +2099,32 @@ def check_ceph_health_after_add_capacity(
     assert ceph_cluster_obj.wait_for_rebalance(
         timeout=ceph_rebalance_timeout
     ), "Data re-balance failed to complete"
+
+
+def change_ceph_backfillfull_ratio(backfillfull_ratio):
+    """
+    Change Ceph Backfillfull Ratio
+
+    Args:
+        backfillfull_ratio (int): backfillfull_ratio
+
+    """
+    ceph_cmd = f"ceph osd set-backfillfull-ratio {str(float(backfillfull_ratio/100))}"
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+
+
+def change_ceph_full_ratio(full_ratio):
+    """
+    Change Ceph full_ratio
+
+    Args:
+        full_ratio (int): backfillfull_ratio
+
+    """
+    ceph_cmd = f"ceph osd set-full-ratio {str(float(full_ratio/100))}"
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
 
 def validate_existence_of_blocking_pdb():
@@ -2004,7 +2139,8 @@ def validate_existence_of_blocking_pdb():
 
     """
     pdb_obj = ocp.OCP(
-        kind=constants.POD_DISRUPTION_BUDGET, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.POD_DISRUPTION_BUDGET,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []
@@ -2037,6 +2173,140 @@ def is_managed_service_cluster():
 
     """
     return config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+
+
+def is_ms_consumer_cluster():
+    """
+    Check if the cluster is a managed service consumer cluster
+
+    Returns:
+        bool: True, if the cluster is a managed service consumer cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "consumer"
+    )
+
+
+def is_ms_provider_cluster():
+    """
+    Check if the cluster is a managed service provider cluster
+
+    Returns:
+        bool: True, if the cluster is a managed service provider cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == "provider"
+    )
+
+
+def get_osd_dump(pool_name):
+    """
+    Get the osd dump part of a given pool
+
+    Args:
+        pool_name (str): ceph pool name
+
+    Returns:
+        dict: pool information from osd dump
+
+    """
+    osd_dump_dict = pod.get_ceph_tools_pod().exec_ceph_cmd("ceph osd dump")
+    for pool in osd_dump_dict["pools"]:
+        if pool["pool_name"] == pool_name:
+            return pool
+    assert False, "Failed to get the pool information from osd dump"
+
+
+def get_pool_num(pool_name):
+    """
+    Get the pool number of a given pool (e.g., ocs-storagecluster-cephblockpool -> 2)
+
+    Args:
+        pool_name (str): ceph pool name
+
+    Returns:
+        int: pool number
+
+    """
+    return int(get_osd_dump(pool_name)["pool"])
+
+
+def get_pgs_brief_dump():
+    """
+    Get pgs_brief dump from ceph pg dump
+
+    Returns:
+        dict: pgs_brief dump output
+
+    """
+    pgs_brief_dict = pod.get_ceph_tools_pod().exec_ceph_cmd("ceph pg dump pgs_brief")
+
+    return pgs_brief_dict
+
+
+def get_all_pgid():
+    """
+    Get all the pgid's listed in pgs_brief dump
+
+    Returns:
+        list: List of all the pgid's in pgs_brief dump
+
+    """
+    pg_dump_dict = get_pgs_brief_dump()
+
+    return [pgid["pgid"] for pgid in pg_dump_dict["pg_stats"]]
+
+
+def get_specific_pool_pgid(pool_name):
+    """
+    Get all the pgid's of a specific pool
+
+    Args:
+        pool_name (str): ceph pool name
+
+    Returns:
+        list: List of all the pgid's of a given pool
+
+    """
+    pool_num = get_pool_num(pool_name)
+    all_pgid = get_all_pgid()
+
+    return list(filter(lambda x: x.startswith(f"{pool_num}."), all_pgid))
+
+
+def get_osd_pg_log_dups_tracked():
+    """
+    Get the default tracked number of osd pg log dups
+
+    Returns:
+        int: Number of default tracked osd pg log dups
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    osd_pg_log_dups_count = ct_pod.exec_ceph_cmd(
+        "ceph config get osd osd_pg_log_dups_tracked"
+    )
+    logger.info(f"Default number of osd pg log dups:{osd_pg_log_dups_count}")
+
+    return int(osd_pg_log_dups_count)
+
+
+def is_vsphere_ipi_cluster():
+    """
+    Check if the cluster is a vSphere IPI cluster
+
+    Returns:
+        bool: True, if the cluster is a vSphere IPI cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "ipi"
+    )
 
 
 class CephClusterExternal(CephCluster):
@@ -2109,3 +2379,711 @@ class CephClusterExternal(CephCluster):
                 f"PVC {pvc_obj.name} is not Bound"
             }
             logger.info(f"PVC {pvc_obj.name} is in Bound state")
+
+
+class LVM(object):
+    """
+    class for lvm cluster
+
+    """
+
+    def __init__(self, fstrim=False, fail_on_thin_pool_not_empty=False):
+        """
+        Initiate the class, gets 2 parameters.
+        Args:
+            fstrim (bool): If to run fstrim on all disks
+            fail_on_thin_pool_not_empty (bool): In init we are checking thinpool util percentage, if percentage
+                if not 0 will fail test on True.
+        Return:
+            (LVM) object
+        """
+        self.lv_data = None
+        self.lvmcluster = None
+        self.pv_data = None
+        self.version = None
+        self.ip = None
+        self.vg_data = None
+        self.node_ssh = None
+        self.new_prom = None
+        func_list = [
+            self.cluster_ip(),
+            self.get_lvmcluster(),
+            self.get_lvm_version(),
+            self.get_and_parse_pvs(),
+            self.get_and_parse_lvs(),
+            self.get_and_parse_vgs(),
+        ]
+        extend_func_list = []
+        if fstrim and fail_on_thin_pool_not_empty:
+            extend_func_list = [
+                self.fstrim(),
+                self.compare_thin_pool_data_percent(
+                    data_percent=0,
+                    sampler=True,
+                    timeout=15,
+                    fail=True,
+                    diff_allowed=0,
+                ),
+            ]
+        elif fstrim and not fail_on_thin_pool_not_empty:
+            extend_func_list = [
+                self.fstrim(),
+                self.compare_thin_pool_data_percent(
+                    data_percent=0,
+                    sampler=False,
+                    timeout=1,
+                    fail=False,
+                    diff_allowed=0,
+                ),
+            ]
+        elif not fstrim and not fail_on_thin_pool_not_empty:
+            extend_func_list = [
+                self.compare_thin_pool_data_percent(
+                    data_percent=0,
+                    sampler=False,
+                    timeout=1,
+                    fail=False,
+                    diff_allowed=0,
+                ),
+            ]
+        elif not fstrim and fail_on_thin_pool_not_empty:
+            extend_func_list = [
+                self.compare_thin_pool_data_percent(
+                    data_percent=0,
+                    sampler=True,
+                    timeout=15,
+                    fail=True,
+                    diff_allowed=0,
+                ),
+            ]
+        func_list.extend(extend_func_list)
+
+        thread_init_class(func_list, shutdown=0)
+
+    def init_prom(self):
+        self.new_prom = PrometheusAPI()
+
+    def get_lvmcluster(self):
+        """
+        Get OCP object of lvm cluster and sets self.lvmcluster
+
+        """
+        lvmc_cop = OCP(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind="lvmcluster",
+            resource_name=get_lvm_cluster_name(),
+        )
+        lvmc_ocs = lvmc_cop.data
+        self.lvmcluster = lvmc_ocs
+
+    def get_lvm_version(self):
+        """
+        Get redhat-operators version (4.10, 4.11)
+        returns:
+            (str) lvmo version
+        """
+        redhat_operators_catalogesource_ocp = OCP(
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            kind="catalogsource",
+            resource_name="redhat-operators",
+        )
+        redhat_operators_catalogesource_ocs = OCS(
+            **redhat_operators_catalogesource_ocp.data
+        )
+        image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
+        full_version = image.split(":")[1]
+        pattern = re.compile(r"([^\.]*\.[^\.]*)")
+        result = pattern.search(full_version)
+        short_ver = result.group(1)
+        self.version = short_ver
+
+    def get_lvm_thin_pool_config_overprovision_ratio(self):
+        """
+        Get overprovisionRatio from lvmcluster
+        returns:
+            (int) overprovisionRatio
+
+        """
+
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "overprovisionRatio"
+        ]
+
+    def get_lvm_thin_pool_config_size_percent(self):
+        """
+        get sizePercent from lvmcluster
+        returns:
+            (int) sizePercent
+        """
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "sizePercent"
+        ]
+
+    def get_lvm_thin_pool(self):
+        """
+        get thinpool name.
+        returns:
+            (str) thinpool name
+        """
+        return self.lvmcluster["spec"]["storage"]["deviceClasses"][0]["thinPoolConfig"][
+            "name"
+        ]
+
+    def get_and_parse_pvs(self):
+        """
+        get "pvs --reportformat json" from server and parse some data, sets self.pv_data
+
+        """
+        cmd = "sudo pvs --reportformat json"
+        pvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
+
+        pvs_json = json.loads(pvs_output)
+        items = pvs_json["report"][0]["pv"]
+        self.pv_data = {"pv_number": len(items)}
+        char_to_replace_in_size = {"<": "", "g": ""}
+        self.pv_data["pv_list"] = []
+        for pv in items:
+            size = pv["pv_size"].translate(str.maketrans(char_to_replace_in_size))
+            self.pv_data[pv["pv_name"]] = {"pv_size": size, "vg_name": pv["vg_name"]}
+            self.pv_data["pv_list"].append(pv["pv_name"])
+
+    def get_and_parse_lvs(self):
+        """
+        get "lvs --reportformat json" from server and parse some data, sets self.lv_data
+
+        """
+        cmd = "sudo lvs --reportformat json"
+        lvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
+        lvs_json = json.loads(lvs_output)
+        items = lvs_json["report"][0]["lv"]
+        self.lv_data = {"lv_number": len(items)}
+        char_to_replace_in_size = {"<": "", "g": ""}
+        self.lv_data["lv_list"] = []
+        for lv in items:
+            size = lv["lv_size"].translate(str.maketrans(char_to_replace_in_size))
+            self.lv_data[lv["lv_name"]] = {
+                "lv_size": size,
+                "vg_name": lv["vg_name"],
+                "lv_attr": lv["lv_attr"],
+                "pool_lv": lv["pool_lv"],
+                "origin": lv["origin"],
+                "data_percent": lv["data_percent"],
+                "metadata_percent": lv["metadata_percent"],
+                "move_pv": lv["move_pv"],
+                "mirror_log": lv["mirror_log"],
+                "copy_percent": lv["copy_percent"],
+                "convert_lv": lv["convert_lv"],
+            }
+            self.lv_data["lv_list"].append(lv["lv_name"])
+
+    def get_thin_pool_metadata(self):
+        """
+        Get thin pool metdata percent
+        Returns:
+            (str) metadata percent
+
+        """
+        self.get_and_parse_lvs()
+        return self.lv_data["thin-pool-1"]["metadata_percent"]
+
+    def get_and_parse_vgs(self):
+        """
+        get "vgs --reportformat json" from server and parse some data, sets self.vg_data
+
+        """
+        cmd = "sudo vgs --reportformat json"
+        lvs_output = self.exec_cmd_on_cluster_node(cmd=cmd)
+        lvs_json = json.loads(lvs_output)
+        char_to_replace_in_size = {"<": "", "g": ""}
+        items = lvs_json["report"][0]["vg"]
+        self.vg_data = {}
+        for vg in items:
+            vg_size = vg["vg_size"].translate(str.maketrans(char_to_replace_in_size))
+            vg_free = vg["vg_free"].translate(str.maketrans(char_to_replace_in_size))
+            self.vg_data[vg["vg_name"]] = {
+                "pv_count": vg["pv_count"],
+                "lv_count": vg["lv_count"],
+                "snap_count": vg["snap_count"],
+                "vg_attr": vg["vg_attr"],
+                "vg_size": vg_size,
+                "vg_free": vg_free,
+            }
+
+    def fstrim(self):
+        """
+        perform fstrim on all disks
+
+        """
+        cmd = "sudo fstrim -av"
+        self.exec_cmd_on_cluster_node(cmd)
+
+    def compare_thin_pool_data_percent(
+        self,
+        data_percent,
+        sampler=True,
+        timeout=10,
+        wait=1,
+        fail=True,
+        diff_allowed=0.5,
+    ):
+        """
+        Check thin pool data percent against data_percent
+        Args:
+            data_percent (float): The expected data percent
+            sampler (bool): use sampler for compare
+            timeout (int): the time the sampler should run
+            wait (int): wait between sampling
+            fail (bool): if to fail the test or just give warning
+            diff_allowed (float): The difference allowed between expected and real data percentage
+
+        """
+
+        if not sampler:
+            timeout = 1
+            wait = 0
+        thin_util_data = 0
+        try:
+            for thin_util_data in TimeoutSampler(
+                timeout=timeout, sleep=wait, func=self.get_thin_pool1_data_percent
+            ):
+                if float(abs(float(thin_util_data) - float(data_percent))) <= float(
+                    diff_allowed
+                ):
+                    logger.info(
+                        f"✅ Expected thin pool utility is {data_percent} and real {thin_util_data}"
+                    )
+                    break
+                else:
+                    logger.info(
+                        f"⌛❎ Written percent data for thin pool should be {data_percent}  but is  "
+                        f"{thin_util_data} "
+                    )
+        except TimeoutExpiredError:
+            if fail:
+                raise ThinPoolUtilityWrong(
+                    f"❌ Thin pool utility expected {data_percent} "
+                    f"but real utility {thin_util_data}\nlv data is {self.lv_data}"
+                    f"Lv list is {self.lv_data['lv_list']}"
+                )
+            else:
+                logger.info(
+                    f"❌ Written percent data for thin pool should be {data_percent}  but is  "
+                    f"{thin_util_data}\nlv data is {self.lv_data}, still not failing because fail=False"
+                )
+
+    def get_vg_size(self):
+        """
+        gets vgs size
+        Returns:
+            (str) vg_size
+
+        """
+        self.get_and_parse_vgs()
+        return self.vg_data["vg1"]["vg_size"]
+
+    def get_vg_free(self):
+        """
+        gets vg free
+        Returns:
+            (str) vg_free
+
+        """
+        self.get_and_parse_vgs()
+        return self.vg_data["vg1"]["vg_free"]
+
+    def get_lv_data_percent_of_pvc(self, pvc_obj):
+        """
+        Get lv data percent by pvc obj
+        Args:
+            pvc_obj (PVC,OCS): pvc, snapshot or restored pvc obj
+        Returns:
+            (str): data percent of lv under pvc
+        """
+        self.get_and_parse_lvs()
+        pvc_obj.reload()
+        pv_volume_handle = ""
+        if type(pvc_obj) is PVC:
+            pv_volume_handle = pvc_obj.get_pv_volume_handle_name
+        elif type(pvc_obj) is OCS:
+            pv_volume_handle_dummy = self.get_lv_name_from_snapshot(pvc_obj)
+            pv_volume_handle = self.lv_data[pv_volume_handle_dummy]["origin"]
+
+        return self.lv_data[pv_volume_handle]["data_percent"]
+
+    def get_lv_size_of_pvc(self, pvc_obj):
+        """
+        Get lv size by pvc obj
+        Args:
+            pvc_obj (PVC,OCS): pvc, snapshot or restored pvc obj
+        Returns:
+            (str): size of lv under pvc
+        """
+
+        self.get_and_parse_lvs()
+        pvc_obj.reload()
+        pv_volume_handle = ""
+        if type(pvc_obj) is PVC:
+            pv_volume_handle = pvc_obj.get_pv_volume_handle_name
+        elif type(pvc_obj) is OCS:
+            pv_volume_handle_dummy = self.get_lv_name_from_snapshot(pvc_obj)
+            pv_volume_handle = self.lv_data[pv_volume_handle_dummy]["origin"]
+        return self.lv_data[pv_volume_handle]["lv_size"]
+
+    def get_thin_pool1_size(self):
+        """
+        gets thin-pool size
+        Returns:
+            (str) thin pool size
+
+        """
+        return self.lv_data["thin-pool-1"]["lv_size"]
+
+    def get_thin_pool1_data_percent(self):
+        """
+        Get thin-pool-1 data percent
+        Returns:
+            (str) of the data percent
+        """
+        self.get_and_parse_lvs()
+        return self.lv_data["thin-pool-1"]["data_percent"]
+
+    def get_lv_name_from_pvc(self, pvc_obj):
+        """
+        Get lv name by pvc obj
+        Args:
+            pvc_obj (PVC,OCS): pvc, snapshot or restored pvc obj
+        Returns:
+            (str): lv name under pvc
+
+        """
+        self.get_and_parse_lvs()
+        pvc_obj.reload()
+
+        return pvc_obj.get_pv_volume_handle_name
+
+    @staticmethod
+    def get_lv_name_from_snapshot(snap_obj):
+        """
+        Get lv name by snapshot obj
+        Args:
+            snap_obj (OCS): snapshot to find lv name
+        Returns:
+            (str): lv name
+
+        """
+
+        snapcontent_name = snap_obj.data["status"]["boundVolumeSnapshotContentName"]
+        snapcontent = OCP(
+            kind=constants.VOLUMESNAPSHOTCONTENT, resource_name=snapcontent_name
+        )
+        return snapcontent.data["status"]["snapshotHandle"]
+
+    def compare_percent_data_from_pvc(self, pvc_obj, data_size):
+        """
+        Compare data percentage from data send to lv data measure in lvs
+        Args:
+            pvc_obj (PVC, OCS): pvc or snaphost or restored pvc
+            data_size (float): the expected data to have on the pvc
+        Raise:
+            (exception): LvDataPercentSizeWrong
+
+
+        """
+        pvc_data_percent_float = self.get_lv_data_percent_of_pvc(pvc_obj=pvc_obj)
+        pvc_size = 0
+        if type(pvc_obj) is PVC:
+            raw_size = pvc_obj.data["spec"]["resources"]["requests"]["storage"]
+            if raw_size.isdigit():
+                pvc_size = (
+                    float(pvc_obj.data["spec"]["resources"]["requests"]["storage"])
+                    / 1024
+                    / 1024
+                    / 1024
+                )
+            else:
+                pvc_size = float("".join([i for i in raw_size if i.isdigit()]))
+        if type(pvc_obj) is OCS:
+            snapcontent_name = pvc_obj.data["status"]["boundVolumeSnapshotContentName"]
+            snapcontent = OCP(
+                kind=constants.VOLUMESNAPSHOTCONTENT, resource_name=snapcontent_name
+            )
+            sp_content_restored_size = snapcontent.data["status"]["restoreSize"]
+            pvc_size = sp_content_restored_size / 1024 / 1024 / 1024
+        pvc_expected_data_percent = data_size / pvc_size * 100
+
+        pvc_data_percent = float(pvc_data_percent_float)
+        if abs(pvc_expected_data_percent - pvc_data_percent) > 0.5:
+            failed_lv_name = self.get_lv_name_from_pvc(pvc_obj=pvc_obj)
+            raise LvDataPercentSizeWrong(
+                f"❌ Written percent data for pvc {pvc_obj.name} should be "
+                f"{pvc_expected_data_percent} but is lv {failed_lv_name} data percent"
+                f"is {pvc_data_percent}"
+            )
+        else:
+            logger.info(
+                f"✅ Pvc {pvc_obj.name} utilization is {pvc_data_percent} and expected is {pvc_expected_data_percent}"
+            )
+
+    def cluster_ip(self):
+        """
+        Get cluster ip address for ssh connections, sets self.ip
+
+        """
+        node_ip_dict = get_node_ip_addresses(ipkind="InternalIP")
+        self.ip = node_ip_dict[constants.SNO_NODE_NAME]
+
+    def create_ssh_object(self):
+        """
+        Get ssh object ready, sets self.node_ssh
+        """
+        self.node_ssh = Connection(
+            host=self.ip,
+            user="core",
+            private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+            stdout=True,
+        )
+
+    def exec_cmd_on_cluster_node(self, cmd):
+        """
+        Exec cmd on SNO node with ssh
+        Args:
+            cmd (str): command to send to server
+        Return:
+            (str) output from server.
+        """
+        if not self.node_ssh:
+            self.create_ssh_object()
+        return_output = self.node_ssh.exec_cmd(cmd=cmd)
+        return_stdout = return_output[1]
+        return return_stdout
+
+    def get_thin_provisioning_alerts(self):
+        """
+        Get the list of alerts that active in the cluster
+
+        Returns:
+            list: alrets name
+
+        """
+        if not isinstance(self.new_prom, PrometheusAPI):
+            self.init_prom()
+
+        alert_full = self.new_prom.get("alerts")
+        alerts_data = alert_full.json().get("data").get("alerts")
+        alerts_names = list()
+        for entity in alerts_data:
+            logger.debug(entity.get("labels").get("alertname"))
+            alerts_names.append(entity.get("labels").get("alertname"))
+
+        return alerts_names
+
+    def check_for_alert(self, alert_name):
+        """
+        Check to see if a given alert is available
+
+        Args:
+            alert_name (str): Alert name
+
+        Returns:
+            bool: True if alert is available else False
+
+        """
+        if alert_name in self.get_thin_provisioning_alerts():
+            return True
+
+        return False
+
+    def parse_topolvm_metrics(self, metrics):
+        """
+        Returns the name and value of topolvm metrics
+
+        Args:
+            metric_name (list): metrics name to be paesed
+
+        Returns:
+            dict: topolvm metrics by: names: value
+        """
+        if not isinstance(self.new_prom, PrometheusAPI):
+            self.init_prom()
+
+        metrics_short = dict()
+        for metric_name in metrics:
+            metric_full = self.new_prom.query(metric_name)
+            metric_value = metric_full[0].get("value")[1]
+            logger.info(f"metric: {metric_name} : {metric_value}")
+            metrics_short[metric_name] = metric_value
+
+        return metrics_short
+
+    def validate_metrics_vs_operating_system_stats(self, metric, expected_os_value):
+        """
+        Validate metrics vs operating system stats
+
+        Args:
+            metric (str): tololvm metric name
+            expected_os_value (str): linux "lvs" equivalent value
+
+        Returns:
+            bool: True if metric equals expected_os_value, False otherwise
+
+        """
+        logger.info(f"Comparing {metric} vs linux lvs output")
+        metric_value = self.parse_topolvm_metrics(constants.TOPOLVM_METRICS).get(metric)
+        converted_metric_value = convert_bytes_to_unit(metric_value)
+        if (abs(float(metric_value) - float(expected_os_value)) < 0.2) or (
+            abs(float(converted_metric_value[:-2]) - float(expected_os_value)) < 0.2
+        ):
+            return True
+        else:
+            logger.error(f"{metric} is not equal to os stat: {expected_os_value}")
+            return False
+
+
+def check_clusters():
+    """
+    Test if lvm or cephcluster is installed and set config.RUN values for conditions
+
+    """
+
+    try:
+        lvmcluster_obj = OCP(
+            kind="lvmcluster",
+            resource_name=get_lvm_cluster_name(),
+            namespace=config.ENV_DATA["cluster_namespace"],
+            silent=True,
+        )
+        if isinstance(lvmcluster_obj.data, dict):
+            config.RUN["lvm"] = True
+            logger.info("Detected LVMcluster is installed")
+    except CommandFailed:
+        config.RUN["lvm"] = False
+    except FileNotFoundError:
+        if "install_lvmo" in config.DEPLOYMENT:
+            config.RUN["lvm"] = True
+        else:
+            config.RUN["lvm"] = False
+    try:
+        cephcluster_obj = OCP(
+            kind="cephcluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            silent=True,
+        )
+        if isinstance(cephcluster_obj.data, dict):
+            config.RUN["cephcluster"] = True
+            logger.info("Detected CephCluster is installed")
+    except CommandFailed:
+        config.RUN["cephcluster"] = False
+    except FileNotFoundError:
+        logger.info(
+            "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
+        )
+        if config.ENV_DATA["skip_ocs_deployment"]:
+            config.RUN["cephcluster"] = False
+        else:
+            config.RUN["cephcluster"] = True
+
+
+def get_lvm_full_version():
+    """
+    Get redhat-operators version (4.11-xxx)
+    returns:
+        (str) lvmo full version
+    """
+    redhat_operators_catalogesource_ocp = OCP(
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        kind="catalogsource",
+        resource_name="redhat-operators",
+    )
+    redhat_operators_catalogesource_ocs = OCS(
+        **redhat_operators_catalogesource_ocp.data
+    )
+    image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
+    full_version = image.split(":")[1]
+    return full_version
+
+
+def get_mds_standby_replay_info():
+    """Return information about the Ceph MDS standby replay node.
+
+    Returns:
+        dict: A dictionary containing information about the standby-replay MDS daemon,
+        including the following keys in case of success, otherwise None.
+        - "node_ip": The IP address of the node running the standby-replay MDS daemon.
+        - "mds_daemon": The name of the MDS daemon.
+        - "standby_replay_pod": The name of the standby replay pod.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+
+    # Find ceph daemon state as 'standby-replay'
+    ceph_daemon_name = next(
+        (
+            daemon["name"]
+            for daemon in ceph_mdsmap["mdsmap"]
+            if daemon["state"] == "standby-replay"
+        ),
+        None,
+    )
+
+    if ceph_daemon_name is None:
+        logger.error("No standby-replay MDS daemon found")
+        return None
+
+    logger.info(f"Found standby-replay MDS daemon: {ceph_daemon_name}")
+
+    # Find ceph MDS pod running 'standby-replay' daemon.
+    mds_pods = get_mds_pods()
+    standby_replay_pod = next(
+        (srp for srp in mds_pods if ceph_daemon_name in srp.name), None
+    )
+
+    if standby_replay_pod is None:
+        logger.error(
+            f"No standby-replay MDS Pod found with running daemon '{ceph_daemon_name}'"
+        )
+        return None
+
+    logger.info(f"Found standby-replay MDS pod: {standby_replay_pod.name}")
+
+    # Get the node name of running pod.
+    node_ip = standby_replay_pod.data["status"].get("hostIP")
+    if not node_ip:
+        logger.error(
+            f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
+        )
+        return None
+
+    return {
+        "node_ip": node_ip,
+        "mds_daemon": ceph_daemon_name,
+        "standby_replay_pod": standby_replay_pod.name,
+    }
+
+
+def set_osd_op_complaint_time(osd_op_complaint_time_val: float) -> dict:
+    """
+    Set osd_op_complaint_time to the given value
+
+    Args:
+        osd_op_complaint_time_val (float): Value in seconds to set osd_op_complaint_time to
+
+    Returns:
+        dict: output of the command
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    return ct_pod.exec_ceph_cmd(
+        f"ceph config set osd osd_op_complaint_time {osd_op_complaint_time_val}"
+    )
+
+
+def get_full_ratio_from_osd_dump():
+    """
+    Get the full ratio value from osd map
+
+    Returns:
+        float: full ratio value
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    logger.info("Checking the values of ceph osd full ratios in osd map")
+    osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
+    return float(osd_dump_dict["full_ratio"])

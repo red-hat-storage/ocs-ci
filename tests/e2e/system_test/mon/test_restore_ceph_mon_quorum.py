@@ -2,12 +2,14 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
     skipif_ocs_version,
     ignore_leftovers,
     skipif_external_mode,
+    magenta_squad,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
@@ -29,6 +31,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @ignore_leftovers
 @system_test
 @skipif_ocs_version("<4.9")
@@ -83,10 +86,10 @@ class TestRestoreCephMonQuorum(E2ETest):
         def finalizer():
             op_obj = OCP(
                 kind=constants.DEPLOYMENT,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             pod_obj = OCP(
-                kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
             )
             operator_obj = op_obj.get(resource_name=constants.ROOK_CEPH_OPERATOR)
             if operator_obj.get("spec").get("replicas") != 1:

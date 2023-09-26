@@ -3,25 +3,31 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier2,
     polarion_id,
+    bugzilla,
     skipif_ocp_version,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.ocs.resources import pod as res_pod
+
 
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @polarion_id("OCS-2353")
+@bugzilla(2042318)
 class TestCloneWhenFull(ManageTest):
     """
     Tests to verify PVC clone when PVC is full
@@ -90,6 +96,44 @@ class TestCloneWhenFull(ManageTest):
         log.info("Creating clone of the PVCs")
         cloned_pvcs = [pvc_clone_factory(pvc_obj) for pvc_obj in self.pvcs]
         log.info("Created clone of the PVCs. Cloned PVCs are Bound")
+        for pvc_obj in self.pvcs:
+            if pvc_obj.backed_sc == constants.CEPHFILESYSTEM_SC:
+                pv_obj = pvc_obj.backed_pv_obj
+                subvolumname = (
+                    pv_obj.get()
+                    .get("spec")
+                    .get("csi")
+                    .get("volumeAttributes")
+                    .get("subvolumeName")
+                )
+                pend_msg = f"{subvolumname}: clone from snapshot is pending"
+
+        # Bug 2042318
+        for clone_pvc in cloned_pvcs:
+            if clone_pvc.backed_sc == constants.CEPHFILESYSTEM_SC:
+                pv = clone_pvc.get().get("spec").get("volumeName")
+                error_msg = f"{pv} failed to create clone from subvolume"
+                csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    selector=["csi-cephfsplugin-provisioner"],
+                )
+            relevant_pod_logs = None
+            for pod_obj in csi_cephfsplugin_pod_objs:
+                pod_log = res_pod.get_pod_logs(
+                    pod_name=pod_obj.name, container="csi-cephfsplugin"
+                )
+
+                if pv in pod_log:
+                    relevant_pod_logs = pod_log
+                    log.info(f"Found '{pv}' on pod {pod_obj.name}")
+                    break
+        assert (
+            error_msg in relevant_pod_logs
+        ), f"Logs should contain the error message '{error_msg}'"
+        assert (
+            pend_msg in relevant_pod_logs
+        ), f"Logs should contain the pending message'{pend_msg}'"
+        log.info(f"Logs contain the messages '{error_msg}' and '{pend_msg}'")
 
         # Attach the cloned PVCs to pods
         log.info("Attach the cloned PVCs to pods")

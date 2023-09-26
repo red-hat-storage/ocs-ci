@@ -1,10 +1,13 @@
 import json
 import logging
+import os
 import random
 import time
 import traceback
+import tempfile
 
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -282,14 +285,17 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     """
     osd_pod = osd_deployment.pods[0]
     osd_data = osd_pod.get()
-    osd_containers = osd_data["spec"]["containers"]
-    original_osd_cmd = " ".join(osd_containers[0].get("command"))
-    original_osd_args = osd_containers[0].get("args")
-    original_osd_args = [",".join(arg.split()) for arg in original_osd_args]
-    original_osd_args.remove("--foreground")
-    original_osd_args = " ".join(original_osd_args)
-    logger.info(f"Original args for osd deployment: {original_osd_args}")
     osd_id = osd_data["metadata"]["labels"]["ceph-osd-id"]
+
+    bluefs_container = None
+    for i_container in osd_data["spec"]["initContainers"]:
+        if i_container["name"] == "expand-bluefs":
+            bluefs_container = i_container
+            break
+    else:
+        raise ValueError("expand-bluefs container is missing")
+    ceph_image = bluefs_container["image"]
+    bridge_name = bluefs_container["volumeMounts"][0]["name"]
 
     ct_pod = pod.get_ceph_tools_pod()
     logger.info("Setting osd noout flag")
@@ -298,28 +304,105 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
     ct_pod.exec_ceph_cmd("ceph osd set noscrub")
     logger.info("Setting osd nodeep-scrub flag")
     ct_pod.exec_ceph_cmd("ceph osd set nodeep-scrub")
-    patch_changes = [
-        '[{"op": "remove", "path": "/spec/template/spec/containers/0/args"}]',
-        '[{"op": "remove", "path": "/spec/template/spec/containers/0/livenessProbe"}]',
-        '[{"op": "replace", "path": "/spec/template/spec/containers/0/command", '
-        '"value" : ["/bin/bash", "-c", "sleep infinity"]}]',
-        '[{"op": "remove", "path": "/spec/template/spec/containers/0/startupProbe"}]',
-    ]
-    for change in patch_changes:
-        osd_deployment.ocp.patch(
-            resource_name=osd_deployment.name, params=change, format_type="json"
-        )
 
     logger.info(f"Looking for Placement Group ID with {pool_object} object")
     pgid = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")["pgid"]
     logger.info(f"Found Placement Group ID: {pgid}")
 
-    osd_deployment.wait_for_available_replicas()
-    osd_pod = osd_deployment.pods[0]
-    osd_pod.exec_sh_cmd_on_pod(
-        f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
-        f"{osd_id} --pgid {pgid} {pool_object} "
-        f"set-bytes /etc/shadow --no-mon-config"
+    # Update osd deployment with an initContainer that breaks the pool before
+    # the ceph daemon is loaded.
+    patch_change = (
+        '[{"op": "add", "path": "/spec/template/spec/initContainers/-", "value": '
+        f'{{ "args": ["--data-path", "/var/lib/ceph/osd/ceph-{osd_id}", "--pgid", '
+        f'"{pgid}", "{pool_object}", "set-bytes", "/etc/shadow", "--no-mon-config"], '
+        f'"command": [ "ceph-objectstore-tool" ], "image": "{ceph_image}", "imagePullPolicy": '
+        '"IfNotPresent", "name": "corrupt-pg", "securityContext": {"privileged": true, '
+        f'"runAsUser": 0}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-0", '
+        f'"name": "{bridge_name}", "subPath": "ceph-0"}}]}}}}]'
     )
-    osd_pod.exec_cmd_on_pod(original_osd_cmd + " " + original_osd_args)
+    osd_deployment.ocp.patch(
+        resource_name=osd_deployment.name, params=patch_change, format_type="json"
+    )
     ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
+
+
+def inject_corrupted_dups_into_pg_via_cot(
+    osd_deployments, pgid, injected_dups_file_name_prefix="text"
+):
+    """
+    Inject corrupted dups into a pg via COT
+
+    Args:
+        osd_deployments (OCS): List of OSD deployment OCS instances
+        pgid (str): pgid for a pool eg: '1.55'
+        injected_dups_file_name_prefix (str): File name prefix for injecting dups
+
+    """
+    # Create a text.json file with dup entries in it
+    txt = (
+        '[{"reqid": "client.4177.0:0", "version": "111\'999999999", "user_version": "0", '
+        '"generate": "7000", "return_code": "0"},]'
+    )
+    tmpfile = tempfile.NamedTemporaryFile(
+        prefix=f"{injected_dups_file_name_prefix}", suffix=".json", delete=False
+    )
+    with open(tmpfile.name, "w") as f:
+        f.write(txt)
+    # Copy the dups entries file to the osd running node and inject corrupted dups into the pg via COT
+    for deployment in osd_deployments:
+        osd_pod = deployment.pods[0]
+        osd_id = osd_pod.labels["ceph-osd-id"]
+        logger.info(
+            f"Inject corrupted dups into the pgid:{pgid} for osd:{osd_id} using json file data /n {txt}"
+        )
+        target_path = f"/tmp/{os.path.basename(tmpfile.name)}"
+        osd_pod.copy_to_pod_cat(tmpfile.name, target_path)
+        osd_pod.exec_sh_cmd_on_pod(
+            f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
+            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+            f"{osd_id} --pgid {pgid} --op pg-log-inject-dups --file {target_path}",
+            shell=True,
+        )
+
+
+def get_pg_log_dups_count_via_cot(osd_deployments, pgid):
+    """
+    Get the pg log dup entries count via COT
+
+    Args:
+        osd_deployments (OCS): List of OSD deployment OCS instances
+        pgid (str): pgid for a pool eg: '1.55'
+
+    Return:
+        list: List of total number of pg dups per osd
+
+    """
+    osd_pg_log_dups = []
+    for deployment in osd_deployments:
+        osd_pod = deployment.pods[0]
+        osd_id = osd_pod.labels["ceph-osd-id"]
+        logger.info(
+            f"Get the pg dup entries count injected into pgid:{pgid} for osd:{osd_id}"
+        )
+        osd_pod.exec_sh_cmd_on_pod(
+            f"CEPH_ARGS='--no_mon_config --osd_pg_log_dups_tracked=999999999999' "
+            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+            f"{osd_id} --op log --pgid {pgid}  > /var/log/ceph/pg_log_{pgid}.txt"
+        )
+        logger.info(
+            "Copy current pg log dups file to local folder and parse dups number"
+        )
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix=f"pg_log_{pgid}", delete=True
+        )
+        osd_pod.copy_from_pod_oc_exec(
+            target_path=temp_file.name, src_path=f"/var/log/ceph/pg_log_{pgid}.txt"
+        )
+        res = exec_cmd(
+            f"cat {temp_file.name} | jq  '(.pg_log_t.log|length),(.pg_log_t.dups|length)'",
+            shell=True,
+        )
+        total_dups = int(res.stdout.decode("utf-8").split("\n")[1])
+        osd_pg_log_dups.append(total_dups)
+
+    return osd_pg_log_dups

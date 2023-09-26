@@ -8,16 +8,21 @@ from ocs_ci.framework.testlib import (
     post_ocs_upgrade,
     ManageTest,
     skipif_external_mode,
+    skipif_ms_consumer,
     post_ocp_upgrade,
     bugzilla,
 )
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import get_mon_pdb
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+)
 
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 class TestToCheckPDBPostUpgrade(ManageTest):
     """
     Validate post ocs upgrade mon pdb count
@@ -26,6 +31,7 @@ class TestToCheckPDBPostUpgrade(ManageTest):
 
     @post_ocs_upgrade
     @skipif_external_mode
+    @skipif_ms_consumer
     @pytest.mark.polarion_id("OCS-2449")
     def test_check_mon_pdb_post_upgrade(self):
         """

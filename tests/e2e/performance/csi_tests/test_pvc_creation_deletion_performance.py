@@ -10,7 +10,8 @@ import statistics
 import tempfile
 import yaml
 
-from ocs_ci.framework.testlib import performance
+from ocs_ci.framework.pytest_customization.marks import grey_squad
+from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
@@ -35,7 +36,9 @@ Interface_Info = {
 Operations_Mesurment = ["create", "delete", "csi_create", "csi_delete"]
 
 
+@grey_squad
 @performance
+@performance_a
 class TestPVCCreationDeletionPerformance(PASTest):
     """
     Test(s) to verify performance of PVC creation and deletion
@@ -307,7 +310,8 @@ class TestPVCCreationDeletionPerformance(PASTest):
         rec_policy = performance_lib.run_oc_command(
             f'get sc {Interface_Info[self.interface]["sc"]} -o jsonpath="'
             + '{.reclaimPolicy}"'
-        )
+        )[0].strip('"')
+
         if rec_policy == constants.RECLAIM_POLICY_DELETE:
             log.info("Wait for all PVC(s) backed PV(s) to be deleted")
             # Timeout for each PV to be deleted is 20 sec.

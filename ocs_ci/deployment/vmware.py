@@ -6,30 +6,57 @@ import glob
 import json
 import logging
 import os
-from shutil import rmtree
+from shutil import rmtree, copyfile
+from subprocess import TimeoutExpired
 import time
-
+import requests
+import base64
+from ping3 import ping
 import tempfile
 import hcl2
 import yaml
+import re
+import shutil
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    ExternalCluster,
+    get_external_cluster_client,
+    remove_csi_users,
+)
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
+from ocs_ci.ocs import constants, defaults, exceptions
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    RDMDiskNotFound,
+    PassThroughEnabledDeviceNotFound,
+)
 from ocs_ci.ocs.node import (
     get_node_ips,
     get_typed_worker_nodes,
     remove_nodes,
     wait_for_nodes_status,
 )
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility import templating, version
+from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import (
+    get_mon_pods,
+    get_deployment_name,
+    get_osd_pods,
+    get_osd_prepare_pods,
+    delete_pods,
+)
+from ocs_ci.ocs.resources.pv import get_all_pvs
+from ocs_ci.ocs.resources.pvc import (
+    delete_pvcs,
+    get_all_pvc_objs,
+)
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
@@ -63,6 +90,9 @@ from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from semantic_version import Version
 from .deployment import Deployment
 from .flexy import FlexyVSPHEREUPI
+from ocs_ci.utility.vsphere import VSPHERE
+from ocs_ci.utility.connection import Connection
+from ocs_ci.ocs.exceptions import ConnectivityFail
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +104,15 @@ __all__ = ["VSPHEREUPI", "VSPHEREIPI"]
 class VSPHEREBASE(Deployment):
 
     # default storage class for StorageCluster CRD on VmWare platform
-    DEFAULT_STORAGECLASS = "thin"
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_13:
+        if config.ENV_DATA.get("use_custom_sc_in_deployment"):
+            CUSTOM_STORAGE_CLASS_PATH = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
+            )
+        else:
+            DEFAULT_STORAGECLASS = "thin-csi"
+    else:
+        DEFAULT_STORAGECLASS = "thin"
 
     def __init__(self):
         """
@@ -195,14 +233,17 @@ class VSPHEREBASE(Deployment):
             rhel_module = "RHEL_WORKER_LIST"
 
         # Add nodes using terraform
-        scaleup_terraform = Terraform(vsphere_dir)
+        scaleup_terraform_tfstate = os.path.join(
+            scaleup_terraform_data_dir, "terraform.tfstate"
+        )
+        scaleup_terraform = Terraform(
+            vsphere_dir, state_file_path=scaleup_terraform_tfstate
+        )
         previous_dir = os.getcwd()
         os.chdir(scaleup_terraform_data_dir)
         scaleup_terraform.initialize()
         scaleup_terraform.apply(self.scale_up_terraform_var)
-        scaleup_terraform_tfstate = os.path.join(
-            scaleup_terraform_data_dir, "terraform.tfstate"
-        )
+
         out = scaleup_terraform.output(scaleup_terraform_tfstate, rhel_module)
         if config.ENV_DATA["folder_structure"]:
             rhel_worker_nodes = out.strip().replace('"', "").split(",")
@@ -225,9 +266,12 @@ class VSPHEREBASE(Deployment):
 
     def delete_disks(self):
         """
-        Delete the extra disks from all the worker nodes
+        Delete the extra disks from all the worker nodes and is sno delete it from sno nodes which is compute also
         """
-        vms = self.get_compute_vms(self.datacenter, self.cluster)
+        if config.ENV_DATA["sno"]:
+            vms = self.get_vms_by_string(self.datacenter, self.cluster, "sno")
+        else:
+            vms = self.get_compute_vms(self.datacenter, self.cluster)
         if vms:
             for vm in vms:
                 self.vsphere.remove_disks(vm)
@@ -253,6 +297,27 @@ class VSPHEREBASE(Deployment):
                 config.ENV_DATA.get("cluster_name"), dc, cluster
             )
             return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
+
+    def get_vms_by_string(self, dc, cluster, vm_string_to_match):
+        """
+        Gets the sno VM's from resource pool
+
+        Args:
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+            vm_string_to_match (str): string to match the VM's like "compute", "sno" etc
+
+        Returns:
+            list: VM instance
+
+        """
+        if self.vsphere.is_resource_pool_exist(
+            config.ENV_DATA["cluster_name"], self.datacenter, self.cluster
+        ):
+            vms = self.vsphere.get_all_vms_in_pool(
+                config.ENV_DATA.get("cluster_name"), dc, cluster
+            )
+            return [vm for vm in vms if vm_string_to_match in vm.name]
 
     def add_rdm_disks(self):
         """
@@ -295,6 +360,33 @@ class VSPHEREBASE(Deployment):
 
         """
         self.vsphere.add_rdm_disk(vm, device_name)
+
+    def add_pci_devices(self):
+        """
+        Attach PCI devices to compute nodes
+
+        Raises:
+            PassThroughEnabledDeviceNotFound: In case there is no passthrough enabled device
+                not found on host
+
+        """
+        logger.info("Adding PCI devices to all compute nodes")
+        compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
+        for vm in compute_vms:
+            passthrough_enabled_device = self.vsphere.get_passthrough_enabled_devices(
+                vm
+            )[0]
+            if not passthrough_enabled_device:
+                raise PassThroughEnabledDeviceNotFound
+
+            # power off the VM before adding PCI device
+            self.vsphere.poweroff_vms([vm])
+
+            # add PCI device
+            self.vsphere.add_pci_device(vm, passthrough_enabled_device)
+
+            # power on the VM
+            self.vsphere.poweron_vms([vm])
 
     def post_destroy_checks(self):
         """
@@ -403,10 +495,14 @@ class VSPHEREUPI(VSPHEREBASE):
             """
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
             # generate manifests
-            self.generate_manifests()
+            if not self.sno:
+                self.generate_manifests()
 
             # create chrony resource
-            if Version.coerce(get_ocp_version()) >= Version.coerce("4.5"):
+            if (
+                Version.coerce(get_ocp_version()) >= Version.coerce("4.5")
+                and not self.sno
+            ):
                 add_chrony_to_ocp_deployment()
 
             # create ignitions
@@ -442,16 +538,330 @@ class VSPHEREUPI(VSPHEREBASE):
             if config.ENV_DATA.get("sync_time_with_host"):
                 sync_time_with_host(vm_file, True)
 
+        def create_sno_iso_and_upload(self):
+            """
+            Creating iso file with values for SNO deployment
+
+            """
+            # Getting ip from ipam
+            ipam = IPAM(
+                "address", config.ENV_DATA["ipam"], config.ENV_DATA["ipam_token"]
+            )
+            subnet = config.ENV_DATA["machine_cidr"].split("/")[0]
+            config.ENV_DATA["vm_ip_address"] = ipam.assign_ip(
+                f"{constants.SNO_NODE_NAME}.{config.ENV_DATA['cluster_name']}", subnet
+            )
+            logger.info(f"IP from ipam: {config.ENV_DATA['vm_ip_address']}")
+            self.change_ignition_ip_and_hostname(config.ENV_DATA["vm_ip_address"])
+            os.chdir(self.cluster_path)
+            iso_url_data = run_cmd(f"{self.installer} coreos print-stream-json")
+            resp = json.loads(iso_url_data)
+            iso_url = resp["architectures"]["x86_64"]["artifacts"]["metal"]["formats"][
+                "iso"
+            ]["disk"]["location"]
+            sno_image_name = f"{self.cluster_name}.iso"
+            logger.info(f"Downloading rh-cos is {iso_url}")
+            run_cmd(f"curl -L -o {sno_image_name} {iso_url}")
+
+            # Installing and compiling coreos-installer with prereq
+            run_cmd(f"curl -o {self.cluster_path}/rustup.sh {constants.RUST_URL} -sSf")
+            os.chmod(f"{self.cluster_path}/rustup.sh", 448)
+            run_cmd(f"{self.cluster_path}/rustup.sh -y")
+            os.environ["PATH"] += os.pathsep + f"{os.path.expanduser('~')}/.cargo/bin"
+            os.chdir(f"{constants.EXTERNAL_DIR}")
+            coreos_installer_repo_path = os.path.join(
+                constants.EXTERNAL_DIR,
+                "coreos-installer",
+            )
+            clone_repo(
+                url=constants.COREOS_INSTALLER_REPO,
+                location=coreos_installer_repo_path,
+                branch="main",
+            )
+            if os.path.isdir(f"{constants.EXTERNAL_DIR}/coreos-install"):
+                shutil.rmtree(f"{constants.EXTERNAL_DIR}/coreos-install")
+            os.mkdir(f"{constants.EXTERNAL_DIR}/coreos-install")
+            os.chdir(f"{constants.EXTERNAL_DIR}/coreos-installer/")
+            run_cmd("git checkout tags/v0.14.0")
+            run_cmd("make")
+            run_cmd(f"make install DESTDIR={constants.EXTERNAL_DIR}/coreos-install/")
+            os.chdir(f"{self.cluster_path}")
+            coreos_installer_exec = (
+                f"{constants.EXTERNAL_DIR}/coreos-install/usr/bin/coreos-installer"
+            )
+            logger.info("coreos-installler installed successfully")
+            run_cmd(
+                f"{coreos_installer_exec} iso ignition embed -fi iso.ign {sno_image_name}"
+            )
+
+            # connecteing to vsanDataStore and uploading iso file
+            vsphere = VSPHERE(
+                config.ENV_DATA["vsphere_server"],
+                config.ENV_DATA["vsphere_user"],
+                config.ENV_DATA["vsphere_password"],
+            )
+
+            vsphere_content = vsphere.get_content
+            client_cookie = vsphere_content.propertyCollector._stub.soapStub.cookie
+            logger.info(f"this is the client cookie {client_cookie}")
+            remote_file = sno_image_name
+            resource = "/folder/ISO/" + remote_file
+            params = {
+                "dsName": config.ENV_DATA["vsphere_datastore"],
+                "dcPath": config.ENV_DATA["vsphere_datacenter"],
+            }
+            http_url = (
+                "https://" + config.ENV_DATA["vsphere_server"] + ":443" + resource
+            )
+            cookie_name = client_cookie.split("=", 1)[0]
+            cookie_value = client_cookie.split("=", 1)[1].split(";", 1)[0]
+            cookie_path = (
+                client_cookie.split("=", 1)[1]
+                .split(";", 1)[1]
+                .split(";", 1)[0]
+                .lstrip()
+            )
+            cookie_text = " " + cookie_value + "; $" + cookie_path
+            # # Make a cookie
+            cookie = dict()
+            cookie[cookie_name] = cookie_text
+            logger.info(cookie)
+            verify_cert = False
+            headers = {"Content-Type": "application/octet-stream"}
+            with open(f"{self.cluster_path}/{sno_image_name}", "rb") as file_data:
+                requests.put(
+                    http_url,
+                    params=params,
+                    data=file_data,
+                    headers=headers,
+                    cookies=cookie,
+                    verify=verify_cert,
+                )
+            logger.info(f"{sno_image_name} uploaded successfully to the VsanDataStore")
+            logger.info(f"Removing iso {sno_image_name} from {self.cluster_path}")
+            full_sno_image_path = os.path.join(self.cluster_path, sno_image_name)
+            os.remove(full_sno_image_path)
+
+        def change_ignition_ip_and_hostname(self, ip_address):
+            """
+            Embed into iso.ign ip address and hostname (sno-edge-0)
+            args:
+                ip_address (str): ip address we got from IPAM to embed inside iso"
+
+            """
+            logger.info(f"Changing {constants.SNO_BOOTSTRAP_IGN}")
+            with open(f"{self.cluster_path}/{constants.SNO_BOOTSTRAP_IGN}", "r") as fn:
+                ign_data = json.load(fn)
+            gw = config.ENV_DATA["gateway"]
+            dns = config.ENV_DATA["dns"]
+            logger.info(f"adding {ip_address} and hostname into bootkube.sh")
+            bootkube_source = []
+            new_files = []
+            for file in ign_data["storage"]["files"]:
+                if file["path"] == "/usr/local/bin/bootkube.sh":
+                    bootkube_source.append(
+                        f'nmcli connection modify "Wired connection 1" '
+                        f"ifname ens192 ipv4.method manual ipv4.addresses"
+                        f" {ip_address}/23 gw4 {gw} ipv4.dns {dns}"
+                        f' ipv4.dns-search "{self.cluster_name}.qe.rh-ocs.com"'
+                    )
+                    bootkube_source.append(
+                        'nmcli con up "Wired connection 1" ifname ens192'
+                    )
+                    bootkube_source.append(
+                        f"hostnamectl set-hostname {constants.SNO_NODE_NAME}"
+                    )
+                    pattern = re.compile(".*base64,(.*)")
+                    result = pattern.search(file["contents"]["source"])
+                    bootkube_base64_enc = result.group(1)
+                    bootkube_base64_enc_encode_ascii = bootkube_base64_enc.encode(
+                        "ascii"
+                    )
+                    bootkube_base64_decode = base64.b64decode(
+                        bootkube_base64_enc_encode_ascii
+                    )
+                    bootkube_base64_enc_encode_clean = bootkube_base64_decode.decode(
+                        "ascii"
+                    )
+                    bootkube_base64_script_array = (
+                        bootkube_base64_enc_encode_clean.split("\n")
+                    )
+                    final_script_array = []
+                    for script_line in bootkube_base64_script_array:
+                        if "#!/usr/bin/env bash" in script_line:
+                            final_script_array.append(script_line)
+                            for nmcli_line in bootkube_source:
+                                final_script_array.append(nmcli_line)
+                            continue
+                        final_script_array.append(script_line)
+                    final_script = "\n".join(final_script_array)
+                    final_script_ascii_enc = final_script.encode("ascii")
+                    final_script_base64_ascii_encode = base64.b64encode(
+                        final_script_ascii_enc
+                    )
+                    final_script_ready = final_script_base64_ascii_encode.decode(
+                        "ascii"
+                    )
+                    source_new_content = (
+                        f"data:text/plain;charset=utf-8;base64,{final_script_ready}"
+                    )
+                    file["contents"]["source"] = source_new_content
+                    new_files.append(file)
+                    continue
+                new_files.append(file)
+            ign_data["storage"]["files"] = new_files
+            logger.info(f"adding {ip_address} to system network-manager")
+            all_lines = []
+            ens_file = open(
+                f"{constants.TEMPLATE_DIR}/ocp-deployment/ens192.nmconnection", "r"
+            )
+            for line in ens_file:
+                line = line.strip()
+                line = line.replace("address=", f"address={ip_address}/23,{gw}")
+                line = line.replace("dns=", f"dns={dns}")
+                all_lines.append(line)
+            one_line_ens = "\n".join(all_lines)
+            one_line_ens_bytes = one_line_ens.encode("utf-8")
+            base64ens = base64.b64encode(one_line_ens_bytes).decode("utf-8")
+
+            ens_json_to_add = (
+                f'{{"overwrite": True, "path": "'
+                f'/etc/NetworkManager/system-connections/Wired connection 1.nmconnection"'
+                f', "user": {{"name": "root"}}, "contents": {{"source": "data:text/plain;'
+                f'charset=utf-8;base64,{base64ens}"}}, "mode": 420}}'
+            )
+            ens_dict = eval(ens_json_to_add)
+            ign_data["storage"]["files"].append(ens_dict)
+            hostname = constants.SNO_NODE_NAME
+            logger.info(f"Adding hostname {hostname} to /etc/hostname")
+            encode_hostname = hostname.encode("utf-8")
+            encode64_hostname = base64.b64encode(encode_hostname).decode("utf-8")
+            hostname_json_to_add = (
+                f'{{"overwrite": True, "path": "/etc/hostname",'
+                f' "user": {{"name": "root"}}, "contents": {{"source": "data'
+                f':text/plain;charset=utf-8;base64,{encode64_hostname}"}}, "mode": 420}}'
+            )
+            hostname_dict = eval(hostname_json_to_add)
+
+            ign_data["storage"]["files"].append(hostname_dict)
+
+            with open(f"{self.cluster_path}/iso.ign", "w") as ign_new_file:
+                json.dump(ign_data, ign_new_file)
+
+        def wait_for_sno_second_boot_change_ip_and_hostname(self, ip_address):
+            """
+            After second boot ocp is booting with the right ip address but after a while the ip is changed to dhcp.
+            We monitor the ip address and when it changed we ssh to the node and change back the ip address and hostname
+            args:
+                ip_address (str): The ip address given from the IPAM server
+            raises:
+                ConnectivityFail: Incase after the change we ping the ip_address. If it doesn't reply we raise.
+
+            """
+
+            # Connect to Vcenter
+            vsphere = VSPHERE(
+                config.ENV_DATA["vsphere_server"],
+                config.ENV_DATA["vsphere_user"],
+                config.ENV_DATA["vsphere_password"],
+            )
+            # Get the VM object
+            vm = vsphere.get_vm_in_pool_by_name(
+                name=constants.SNO_NODE_NAME,
+                dc=config.ENV_DATA["vsphere_datacenter"],
+                cluster=config.ENV_DATA["vsphere_cluster"],
+                pool=self.cluster_name,
+            )
+            gw = config.ENV_DATA["gateway"]
+            dns = config.ENV_DATA["dns"]
+            # Check the ip if it changes and when, there are few stages. first boot, None when server reboots,
+            # then second boot starts with defined ip but can be changed and we monitor that.
+            # If the ip is not changed after 20 retries we just change the hostname.
+            boot_got_ip_address = 0
+            got_none = 0
+            destination_boot_counter = 0
+            for i in range(0, 250):
+                ips = vsphere.get_vms_ips([vm])
+                ip = ips[0]
+                logger.info(f"try num {i} the ip is {ip}")
+                if ip == ip_address:
+                    boot_got_ip_address = 1
+
+                if ip is None and boot_got_ip_address == 1:
+                    got_none = 1
+                if got_none == 1 and ip == ip_address:
+                    destination_boot_counter += 1
+                if destination_boot_counter > 20:
+                    logger.info(
+                        f"{constants.SNO_NODE_NAME} stayed with same ip address {ip_address}- changing hostname"
+                    )
+                    node_ssh = Connection(
+                        host=ip,
+                        user="core",
+                        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+                    )
+                    node_ssh.exec_cmd('echo "sleep 3" > changenet.sh')
+                    node_ssh.exec_cmd(
+                        f'echo "hostnamectl set-hostname {constants.SNO_NODE_NAME}" >> changenet.sh'
+                    )
+                    node_ssh.exec_cmd("chmod 700 changenet.sh")
+                    node_ssh.exec_cmd(
+                        "sudo nohup ./changenet.sh </dev/null &>/dev/null &"
+                    )
+                    break
+                if ip != ip_address and ip is not None and boot_got_ip_address == 1:
+                    node_ssh = Connection(
+                        host=ip,
+                        user="core",
+                        private_key=f"{os.path.expanduser('~')}/.ssh/openshift-dev.pem",
+                    )
+                    node_ssh.exec_cmd('echo "sleep 3" > changenet.sh')
+                    node_ssh.exec_cmd(
+                        f"echo \"nmcli connection modify 'Wired connection 1' "
+                        f"ifname ens192 ipv4.method manual ipv4.addresses"
+                        f" {ip_address}/23 gw4 {gw} ipv4.dns {dns}"
+                        f" ipv4.dns-search '{self.cluster_name}.qe.rh-ocs.com'\" >> changenet.sh"
+                    )
+                    node_ssh.exec_cmd(
+                        "echo \"nmcli con up 'Wired connection 1' ifname ens192\" >> changenet.sh"
+                    )
+
+                    node_ssh.exec_cmd(
+                        f'echo "hostnamectl set-hostname {constants.SNO_NODE_NAME}" >> changenet.sh'
+                    )
+                    node_ssh.exec_cmd("chmod 700 changenet.sh")
+                    node_ssh.exec_cmd(
+                        "sudo nohup ./changenet.sh </dev/null &>/dev/null &"
+                    )
+                    break
+                time.sleep(1)
+
+            for i in range(0, 20):
+                result = ping(ip_address)
+                if result is not None:
+                    logger.info(f"ip is changed to {ip_address}")
+                    break
+                time.sleep(1)
+                if i == 20:
+                    raise ConnectivityFail(f"ip {ip_address} is not reachable")
+
         def create_config(self):
             """
             Creates the OCP deploy config for the vSphere
             """
             # Generate install-config from template
             _templating = Templating()
-            ocp_install_template = (
-                f"install-config-{self.deployment_platform}-"
-                f"{self.deployment_type}.yaml.j2"
-            )
+
+            if self.sno:
+                ocp_install_template = (
+                    f"install-config-{self.deployment_platform}-"
+                    f"{self.deployment_type}-sno.yaml.j2"
+                )
+            else:
+                ocp_install_template = (
+                    f"install-config-{self.deployment_platform}-"
+                    f"{self.deployment_type}.yaml.j2"
+                )
             ocp_install_template_path = os.path.join(
                 "ocp-deployment", ocp_install_template
             )
@@ -461,12 +871,61 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # Parse the rendered YAML so that we can manipulate the object directly
             install_config_obj = yaml.safe_load(install_config_str)
-            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_10:
+            if (
+                version.get_semantic_ocp_version_from_config() >= version.VERSION_4_10
+                and not self.sno
+            ):
                 install_config_obj["platform"]["vsphere"]["network"] = config.ENV_DATA[
                     "vm_network"
                 ]
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
+            # prepare configuration for disconnected deployment (including deployment behind proxy)
+            if config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"):
+                # set non-existing gateway, to make the cluster disconnected
+                config.ENV_DATA["gateway"] = config.DEPLOYMENT.get(
+                    "disconnected_false_gateway", "${cidrhost(var.machine_cidr, 1)}"
+                )
+                # set DNS server accessible from the disconnected/proxy env
+                config.ENV_DATA["dns"] = config.DEPLOYMENT["disconnected_dns_server"]
+
+                cluster_domain = (
+                    f"{config.ENV_DATA.get('cluster_name')}."
+                    f"{config.ENV_DATA.get('base_domain')}"
+                )
+                if config.DEPLOYMENT.get("proxy"):
+                    install_config_obj["proxy"] = {
+                        "httpProxy": config.DEPLOYMENT["proxy_http_proxy"],
+                        "httpsProxy": config.DEPLOYMENT.get(
+                            "proxy_https_proxy",
+                            config.DEPLOYMENT["proxy_http_proxy"],
+                        ),
+                        "noProxy": ",".join(
+                            [
+                                cluster_domain,
+                                config.DEPLOYMENT.get("disconnected_no_proxy", ""),
+                            ],
+                        ),
+                    }
+                if config.DEPLOYMENT.get("disconnected"):
+                    install_config_obj["proxy"] = {
+                        "httpProxy": config.DEPLOYMENT["disconnected_http_proxy"],
+                        "httpsProxy": config.DEPLOYMENT.get(
+                            "disconnected_https_proxy",
+                            config.DEPLOYMENT["disconnected_http_proxy"],
+                        ),
+                        "noProxy": ",".join(
+                            [
+                                cluster_domain,
+                                config.DEPLOYMENT.get("disconnected_no_proxy", ""),
+                            ],
+                        ),
+                    }
+                    install_config_obj.update(
+                        yaml.safe_load(config.RUN["imageContentSources"])
+                    )
+                    with open(get_root_ca_cert(), "r") as fd:
+                        install_config_obj["additionalTrustBundle"] = fd.read()
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             with open(install_config, "w") as f:
@@ -504,10 +963,25 @@ class VSPHEREUPI(VSPHEREBASE):
             Creates the ignition files
             """
             logger.info("creating ignition files for the cluster")
-            run_cmd(
-                f"{self.installer} create ignition-configs "
-                f"--dir {self.cluster_path} "
-            )
+            if not self.sno:
+                run_cmd(
+                    f"{self.installer} create ignition-configs "
+                    f"--dir {self.cluster_path} "
+                )
+            else:
+                copyfile(
+                    f"{self.cluster_path}/install-config.yaml",
+                    f"{self.cluster_path}/install-config.yaml.bck",
+                )
+                run_cmd(
+                    f"{self.installer} create single-node-ignition-config "
+                    f"--dir {self.cluster_path} "
+                )
+                copyfile(
+                    f"{self.cluster_path}/install-config.yaml.bck",
+                    f"{self.cluster_path}/install-config.yaml",
+                )
+                self.create_sno_iso_and_upload()
 
         @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
         def configure_storage_for_image_registry(self, kubeconfig):
@@ -536,74 +1010,118 @@ class VSPHEREUPI(VSPHEREBASE):
             os.chdir(self.terraform_data_dir)
             self.terraform.initialize()
             self.terraform.apply(self.terraform_var)
-            os.chdir(self.previous_dir)
-            logger.info("waiting for bootstrap to complete")
-            try:
+            if config.ENV_DATA["sno"]:
+                self.wait_for_sno_second_boot_change_ip_and_hostname(
+                    config.ENV_DATA["vm_ip_address"]
+                )
                 run_cmd(
-                    f"{self.installer} wait-for bootstrap-complete "
-                    f"--dir {self.cluster_path} "
+                    f"{self.installer} wait-for install-complete"
+                    f" --dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
                     timeout=3600,
                 )
-            except CommandFailed as e:
-                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
-                    try:
-                        gather_bootstrap()
-                    except Exception as ex:
-                        logger.error(ex)
-                raise e
+                vsphere = VSPHERE(
+                    config.ENV_DATA["vsphere_server"],
+                    config.ENV_DATA["vsphere_user"],
+                    config.ENV_DATA["vsphere_password"],
+                )
+                vm = vsphere.get_vm_in_pool_by_name(
+                    name=constants.SNO_NODE_NAME,
+                    dc=config.ENV_DATA["vsphere_datacenter"],
+                    cluster=config.ENV_DATA["vsphere_cluster"],
+                    pool=config.ENV_DATA["cluster_name"],
+                )
 
-            if self.folder_structure:
-                # comment bootstrap module
-                comment_bootstrap_in_lb_module()
+                vsphere.add_disks(
+                    config.DEPLOYMENT["lvmo_disks"],
+                    vm,
+                    config.DEPLOYMENT["lvmo_disks_size"],
+                )
 
-                # remove bootstrap IP in load balancer and
-                # restart haproxy
-                lb = LoadBalancer()
-                lb.rename_haproxy_conf_and_reload()
-                lb.remove_boostrap_in_proxy()
-                lb.restart_haproxy()
-
-            # remove bootstrap node
-            if not config.DEPLOYMENT["preserve_bootstrap_node"]:
-                logger.info("removing bootstrap node")
-                os.chdir(self.terraform_data_dir)
-                if self.folder_structure:
-                    self.terraform.destroy_module(
-                        self.terraform_var, constants.BOOTSTRAP_MODULE
+            os.chdir(self.previous_dir)
+            if not self.sno:
+                logger.info("waiting for bootstrap to complete")
+                try:
+                    run_cmd(
+                        f"{self.installer} wait-for bootstrap-complete "
+                        f"--dir {self.cluster_path} "
+                        f"--log-level {log_cli_level}",
+                        timeout=3600,
                     )
-                else:
-                    self.terraform.apply(self.terraform_var, bootstrap_complete=True)
-                os.chdir(self.previous_dir)
+                except (CommandFailed, TimeoutExpired) as e:
+                    if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                        try:
+                            gather_bootstrap()
+                        except Exception as ex:
+                            logger.error(ex)
+                    raise e
+
+                if self.folder_structure:
+                    # comment bootstrap module
+                    # comment_bootstrap_in_lb_module()
+
+                    logger.debug(
+                        "Remove bootstrap IP from load balancer and restart haproxy"
+                    )
+                    # remove bootstrap IP in load balancer and
+                    # restart haproxy
+                    lb = LoadBalancer()
+                    lb.rename_haproxy_conf_and_reload()
+                    lb.remove_boostrap_in_proxy()
+                    lb.restart_haproxy()
+
+                # remove bootstrap node
+                if not config.DEPLOYMENT["preserve_bootstrap_node"]:
+                    logger.info("removing bootstrap node")
+                    bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE_413
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        < version.VERSION_4_13
+                    ):
+                        bootstrap_module_to_remove = constants.BOOTSTRAP_MODULE
+                    os.chdir(self.terraform_data_dir)
+                    if self.folder_structure:
+                        self.terraform.destroy_module(
+                            self.terraform_var, bootstrap_module_to_remove
+                        )
+                    else:
+                        self.terraform.apply(
+                            self.terraform_var, bootstrap_complete=True
+                        )
+                    os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
+            if not config.ENV_DATA["sno"]:
+                timeout = 1800
+                # wait for all nodes to generate CSR
+                # From OCP version 4.4 and above, we have to approve CSR manually
+                # for all the nodes
+                ocp_version = get_ocp_version()
+                if Version.coerce(ocp_version) >= Version.coerce("4.4"):
+                    wait_for_all_nodes_csr_and_approve(timeout=1500, sleep=10)
 
-            # wait for all nodes to generate CSR
-            # From OCP version 4.4 and above, we have to approve CSR manually
-            # for all the nodes
-            ocp_version = get_ocp_version()
-            if Version.coerce(ocp_version) >= Version.coerce("4.4"):
-                wait_for_all_nodes_csr_and_approve(timeout=1500, sleep=10)
+                # wait for image registry to show-up
+                co = "image-registry"
+                wait_for_co(co)
 
-            # wait for image registry to show-up
-            co = "image-registry"
-            wait_for_co(co)
+                # patch image registry to null
+                self.configure_storage_for_image_registry(self.kubeconfig)
 
-            # patch image registry to null
-            self.configure_storage_for_image_registry(self.kubeconfig)
+                # wait for install to complete
+                logger.info("waiting for install to complete")
+                run_cmd(
+                    f"{self.installer} wait-for install-complete "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=timeout,
+                )
 
-            # wait for install to complete
-            logger.info("waiting for install to complete")
-            run_cmd(
-                f"{self.installer} wait-for install-complete "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}",
-                timeout=1800,
-            )
+                # Approving CSRs here in-case if any exists
+                approve_pending_csr()
 
-            # Approving CSRs here in-case if any exists
-            approve_pending_csr()
-
+            # Update kubeconfig with proxy-url (if client_http_proxy
+            # configured) to redirect client access through proxy server.
+            update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
@@ -642,6 +1160,18 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info("Removing RHCOS compute nodes from a cluster")
             remove_nodes(rhcos_nodes)
 
+            # remove ingress-router for RHCOS compute nodes on load balancer
+            # set the tfstate file
+            config.ENV_DATA["terraform_state_file"] = os.path.join(
+                config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
+            )
+            lb = LoadBalancer()
+            lb.remove_compute_node_in_proxy()
+            lb.restart_haproxy()
+
+            # sleep for few seconds after restarting haproxy
+            time.sleep(self.wait_time)
+
         if config.DEPLOYMENT.get("thick_sc"):
             sc_data = templating.load_yaml(constants.VSPHERE_THICK_STORAGECLASS_YAML)
             sc_data_yaml = tempfile.NamedTemporaryFile(
@@ -667,20 +1197,8 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # Download terraform binary based on terraform version
         # in terraform.log
-        terraform_log_path = os.path.join(
-            config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
-        )
 
-        # check for terraform.log, this check is for partially
-        # deployed clusters
-        try:
-            with open(terraform_log_path, "r") as fd:
-                logger.debug(f"Reading terraform version from {terraform_log_path}")
-                version_line = fd.readline()
-                terraform_version = version_line.split()[-1]
-        except FileNotFoundError:
-            logger.debug(f"{terraform_log_path} file not found")
-            terraform_version = config.DEPLOYMENT["terraform_version"]
+        terraform_version = Terraform.get_terraform_version()
 
         terraform_installer = get_terraform(version=terraform_version)
         config.ENV_DATA["terraform_installer"] = terraform_installer
@@ -693,6 +1211,14 @@ class VSPHEREUPI(VSPHEREBASE):
             set_aws_region()
             self.folder_structure = True
             config.ENV_DATA["folder_structure"] = self.folder_structure
+
+        # removing mon and osd pods and also removing PVC's to avoid stale CNS volumes
+        try:
+            self.scale_down_pods_and_remove_pvcs()
+        except Exception as err:
+            logger.warning(
+                f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
+            )
 
         # delete the extra disks
         self.delete_disks()
@@ -727,6 +1253,8 @@ class VSPHEREUPI(VSPHEREBASE):
         )
 
         clone_openshift_installer()
+        if config.ENV_DATA["sno"]:
+            add_var_folder()
 
         # comment sensitive variable as current terraform version doesn't support
         if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
@@ -754,14 +1282,25 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.debug("deleting csi users")
             # In some cases where deployment of external cluster is failed, external tool box doesn't exist
             try:
-                toolbox = pod.get_ceph_tools_pod(skip_creating_pod=True)
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-node")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-cephfs-provisioner")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-node")
-                toolbox.exec_cmd_on_pod("ceph auth del client.csi-rbd-provisioner")
+                # remove csi users
+                remove_csi_users()
+
+                # get all PV's
+                pvs = get_all_pvs()
+                pvs_to_delete = [
+                    each_pv["spec"]["csi"]["volumeAttributes"]["imageName"]
+                    for each_pv in pvs["items"]
+                    if each_pv["spec"]["csi"]["volumeAttributes"]["pool"] == "rbd"
+                ]
+
             except exceptions.CephToolBoxNotFoundException:
                 logger.warning(
                     "Failed to setup the Ceph toolbox pod. Probably due to installation was not successful"
+                )
+            except CommandFailed:
+                logger.warning(
+                    "Failed to remove CSI users. Probably ceph toolbox is not in running state due to "
+                    "installation was not successful or it is not configured correctly"
                 )
 
         # terraform initialization and destroy cluster
@@ -771,44 +1310,71 @@ class VSPHEREUPI(VSPHEREBASE):
             # Download terraform ignition provider. For OCP upgrade clusters,
             # ignition provider doesn't exist, so downloading in destroy job
             # as well
+            terraform_provider_ignition_version = None
             terraform_plugins_path = ".terraform/plugins/linux_amd64/"
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_11:
                 terraform_provider_ignition_file = "terraform-provider-ignition_v2.1.2"
             else:
                 terraform_provider_ignition_file = "terraform-provider-ignition"
-            terraform_ignition_provider_path = os.path.join(
-                terraform_data_dir,
-                terraform_plugins_path,
-                terraform_provider_ignition_file,
-            )
 
             # check the upgrade history of cluster and checkout to the
             # original installer release. This is due to the issue of not
             # supporting terraform state of OCP 4.5 in installer
             # release of 4.6 branch. More details in
             # https://github.com/red-hat-storage/ocs-ci/issues/2941
-            is_cluster_upgraded = False
             try:
                 upgrade_history = get_ocp_upgrade_history()
                 if len(upgrade_history) > 1:
-                    is_cluster_upgraded = True
                     original_installed_ocp_version = upgrade_history[-1]
+                    original_installed_ocp_version_major_minor_obj = (
+                        version.get_semantic_version(
+                            original_installed_ocp_version, only_major_minor=True
+                        )
+                    )
+                    original_installed_ocp_version_major_minor = str(
+                        original_installed_ocp_version_major_minor_obj
+                    )
                     installer_release_branch = (
-                        f"release-{original_installed_ocp_version[0:3]}"
+                        f"release-{original_installed_ocp_version_major_minor}"
                     )
                     clone_repo(
-                        constants.VSPHERE_INSTALLER_REPO,
-                        upi_repo_path,
-                        installer_release_branch,
+                        url=constants.VSPHERE_INSTALLER_REPO,
+                        location=upi_repo_path,
+                        branch=installer_release_branch,
+                        force_checkout=True,
                     )
+
+                    # comment sensitive variable as current terraform version doesn't support
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        >= version.VERSION_4_11
+                    ):
+                        comment_sensitive_var()
+
+                    if (
+                        original_installed_ocp_version_major_minor_obj
+                        == version.VERSION_4_10
+                    ):
+                        config.ENV_DATA[
+                            "original_installed_ocp_version_major_minor_obj"
+                        ] = version.VERSION_4_10
+                        terraform_provider_ignition_version = (
+                            constants.TERRAFORM_IGNITION_PROVIDER_VERSION
+                        )
+                        terraform_provider_ignition_file = "terraform-provider-ignition"
             except Exception as ex:
                 logger.error(ex)
 
-            if not (
-                os.path.exists(terraform_ignition_provider_path) or is_cluster_upgraded
-            ):
+            terraform_ignition_provider_path = os.path.join(
+                terraform_data_dir,
+                terraform_plugins_path,
+                terraform_provider_ignition_file,
+            )
+            if not os.path.exists(terraform_ignition_provider_path):
                 get_terraform_ignition_provider(
-                    terraform_data_dir, version=get_ignition_provider_version()
+                    terraform_data_dir,
+                    version=terraform_provider_ignition_version
+                    or get_ignition_provider_version(),
                 )
             terraform.initialize()
         else:
@@ -816,8 +1382,73 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform.destroy(tfvars, refresh=(not self.folder_structure))
         os.chdir(previous_dir)
 
+        if config.DEPLOYMENT["external_mode"]:
+            try:
+                rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+                # get external cluster details
+                host, user, password, ssh_key = get_external_cluster_client()
+                external_cluster = ExternalCluster(host, user, password, ssh_key)
+                external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
+            except Exception as ex:
+                logger.warning(
+                    f"Failed to remove rbd images, probably due to installation was not successful. Error: {ex}"
+                )
+
+        # release IPAM ip from sno
+        if config.ENV_DATA["sno"]:
+            ipam = IPAM(appiapp="address")
+            hosts = [f"{constants.SNO_NODE_NAME}.{config.ENV_DATA['cluster_name']}"]
+            ipam.release_ips(hosts)
+
         # post destroy checks
         self.post_destroy_checks()
+
+    def scale_down_pods_and_remove_pvcs(self):
+        """
+        Removes the mon and osd pods and also removes PVC's
+        """
+        # scale down mon pods
+        namespace = config.ENV_DATA["cluster_namespace"]
+        mon_pod_obj_list = get_mon_pods()
+        for mon_pod_obj in mon_pod_obj_list:
+            mon_deployment_name = get_deployment_name(mon_pod_obj.name)
+            run_cmd(
+                f"oc scale deployment {mon_deployment_name} --replicas=0 -n {namespace}"
+            )
+
+        # scale down osd pods
+        osd_pod_obj_list = get_osd_pods()
+        for osd_pod_obj in osd_pod_obj_list:
+            osd_deployment_name = get_deployment_name(osd_pod_obj.name)
+            run_cmd(
+                f"oc scale deployment {osd_deployment_name} --replicas=0 -n {namespace}"
+            )
+
+        # delete osd-prepare pods
+        osd_prepare_pod_obj_list = get_osd_prepare_pods()
+        delete_pods(osd_prepare_pod_obj_list)
+
+        # delete PVC's
+        pvcs_objs = get_all_pvc_objs(namespace=namespace)
+        for pvc_obj in pvcs_objs:
+            if pvc_obj.backed_sc == "thin-csi" or pvc_obj.backed_sc == "thin-csi-odf":
+                pvc_name = pvc_obj.name
+                pv_name = pvc_obj.backed_pv
+
+                # set finalizers to null for both pvc and pv
+                pvc_patch_cmd = (
+                    f"oc patch pvc {pvc_name} -n {namespace} -p "
+                    '\'{"metadata":{"finalizers":null}}\''
+                )
+                run_cmd(pvc_patch_cmd)
+                pv_patch_cmd = (
+                    f"oc patch pv {pv_name} -n {namespace} -p "
+                    '\'{"metadata":{"finalizers":null}}\''
+                )
+                run_cmd(pv_patch_cmd)
+
+                time.sleep(10)
+                delete_pvcs([pvc_obj])
 
     def destroy_scaleup_nodes(
         self, scale_up_terraform_data_dir, scale_up_terraform_var
@@ -848,7 +1479,12 @@ class VSPHEREUPI(VSPHEREBASE):
                 "vsphere",
             )
 
-        terraform_scale_up = Terraform(vsphere_dir)
+        scaleup_terraform_tfstate = os.path.join(
+            scale_up_terraform_data_dir, "terraform.tfstate"
+        )
+        terraform_scale_up = Terraform(
+            vsphere_dir, state_file_path=scaleup_terraform_tfstate
+        )
         os.chdir(scale_up_terraform_data_dir)
         terraform_scale_up.initialize(upgrade=True)
         terraform_scale_up.destroy(scale_up_terraform_var)
@@ -929,15 +1565,22 @@ class VSPHEREIPI(VSPHEREBASE):
                     f"{self.installer} create cluster "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=7200,
                 )
-            except CommandFailed as e:
+            except (CommandFailed, TimeoutExpired) as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                     try:
                         gather_bootstrap()
                     except Exception as ex:
                         logger.error(ex)
-                raise e
+                    raise e
+                if "Waiting up to" in str(e):
+                    run_cmd(
+                        f"{self.installer} wait-for install-complete "
+                        f"--dir {self.cluster_path} "
+                        f"--log-level {log_cli_level}",
+                        timeout=3600,
+                    )
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
@@ -1089,18 +1732,46 @@ def clone_openshift_installer():
     ocp_version = get_ocp_version()
     # supporting folder structure from ocp4.5
     if Version.coerce(ocp_version) >= Version.coerce("4.5"):
-        clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
-        )
+        if config.ENV_DATA["sno"]:
+            constants.VSPHERE_INSTALLER_REPO = (
+                "https://gitlab.cee.redhat.com/srozen/installer.git"
+            )
+            clone_repo(
+                url=constants.VSPHERE_INSTALLER_REPO,
+                location=upi_repo_path,
+                branch="master",
+                clone_type="normal",
+            )
+        else:
+            # due to failure domain changes in 4.13, use 4.12 branch till
+            # we incorporate changes
+            # Once https://github.com/openshift/installer/issues/6810 issue is fixed,
+            # we need to revert the changes
+            if version.get_semantic_version(
+                ocp_version
+            ) == version.get_semantic_version("4.13"):
+                clone_repo(
+                    url=constants.VSPHERE_INSTALLER_REPO,
+                    location=upi_repo_path,
+                    branch="release-4.12",
+                )
+            else:
+                clone_repo(
+                    url=constants.VSPHERE_INSTALLER_REPO,
+                    location=upi_repo_path,
+                    branch=f"release-{ocp_version}",
+                )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO,
-            upi_repo_path,
-            constants.VSPHERE_INSTALLER_BRANCH,
+            url=constants.VSPHERE_INSTALLER_REPO,
+            location=upi_repo_path,
+            branch=constants.VSPHERE_INSTALLER_BRANCH,
         )
     else:
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path, f"release-{ocp_version}"
+            url=constants.VSPHERE_INSTALLER_REPO,
+            location=upi_repo_path,
+            branch=f"release-{ocp_version}",
         )
 
 
@@ -1279,7 +1950,10 @@ def generate_terraform_vars_and_update_machine_conf():
         # update the machine configurations
         update_machine_conf(folder_structure)
 
-        if Version.coerce(ocp_version) >= Version.coerce("4.5"):
+        if (
+            Version.coerce(ocp_version) >= Version.coerce("4.5")
+            and not config.ENV_DATA["sno"]
+        ):
             modify_haproxyservice()
     else:
         # generate terraform variable file
@@ -1301,21 +1975,22 @@ def generate_terraform_vars_with_folder():
     )
     config.ENV_DATA["cluster_domain"] = cluster_domain
 
-    # Form the ignition paths
-    bootstrap_ignition_path = os.path.join(
-        config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
-    )
-    control_plane_ignition_path = os.path.join(
-        config.ENV_DATA["cluster_path"], constants.MASTER_IGN
-    )
-    compute_ignition_path = os.path.join(
-        config.ENV_DATA["cluster_path"], constants.WORKER_IGN
-    )
+    if not config.ENV_DATA["sno"]:
+        # Form the ignition paths
+        bootstrap_ignition_path = os.path.join(
+            config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
+        )
+        control_plane_ignition_path = os.path.join(
+            config.ENV_DATA["cluster_path"], constants.MASTER_IGN
+        )
+        compute_ignition_path = os.path.join(
+            config.ENV_DATA["cluster_path"], constants.WORKER_IGN
+        )
 
-    # Update ignition paths to ENV_DATA
-    config.ENV_DATA["bootstrap_ignition_path"] = bootstrap_ignition_path
-    config.ENV_DATA["control_plane_ignition_path"] = control_plane_ignition_path
-    config.ENV_DATA["compute_ignition_path"] = compute_ignition_path
+        # Update ignition paths to ENV_DATA
+        config.ENV_DATA["bootstrap_ignition_path"] = bootstrap_ignition_path
+        config.ENV_DATA["control_plane_ignition_path"] = control_plane_ignition_path
+        config.ENV_DATA["compute_ignition_path"] = compute_ignition_path
 
     # Copy DNS address to vm_dns_addresses
     config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA["dns"]
@@ -1333,8 +2008,13 @@ def generate_terraform_vars_with_folder():
     # This use-case is mainly used for early RHCOS testing
     if config.ENV_DATA.get("vm_template_overwrite"):
         config.ENV_DATA["vm_template"] = config.ENV_DATA["vm_template_overwrite"]
+    if config.ENV_DATA["sno"]:
+        config.ENV_DATA["iso_file"] = f"ISO/{config.ENV_DATA['cluster_name']}.iso"
+        config.ENV_DATA["vm_template"] = "sno_template1"
 
-    create_terraform_var_file("terraform_4_5.tfvars.j2")
+        create_terraform_var_file("terraform_4_5_sno.tfvars.j2")
+    else:
+        create_terraform_var_file("terraform_4_5.tfvars.j2")
 
 
 def create_terraform_var_file(terraform_var_template):
@@ -1347,6 +2027,9 @@ def create_terraform_var_file(terraform_var_template):
     """
     _templating = Templating()
     terraform_var_template_path = os.path.join("ocp-deployment", terraform_var_template)
+    if "\\" in config.ENV_DATA["vsphere_user"]:
+        vsphere_user = config.ENV_DATA["vsphere_user"]
+        config.ENV_DATA["vsphere_user"] = vsphere_user.replace("\\", "\\\\")
     terraform_config_str = _templating.render_template(
         terraform_var_template_path, config.ENV_DATA
     )
@@ -1433,6 +2116,40 @@ def modify_haproxyservice():
     execstop = f"{to_change}\nExecStop=/bin/podman rm -f haproxy"
 
     replace_content_in_file(constants.TERRAFORM_HAPROXY_SERVICE, to_change, execstop)
+
+    if config.DEPLOYMENT.get("proxy"):
+        http_proxy = config.DEPLOYMENT["proxy_http_proxy"]
+        https_proxy = config.DEPLOYMENT.get(
+            "proxy_https_proxy",
+            config.DEPLOYMENT["proxy_http_proxy"],
+        )
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "[Service]",
+            (
+                "[Service]\n"
+                f'Environment="http_proxy={http_proxy}"\n'
+                f'Environment="https_proxy={https_proxy}"'
+            ),
+        )
+
+    if config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
+        "haproxy_router_image"
+    ):
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "quay.io/openshift/origin-haproxy-router",
+            config.DEPLOYMENT["haproxy_router_image"],
+        )
+        replace_content_in_file(
+            constants.TERRAFORM_HAPROXY_SERVICE,
+            "podman pull",
+            (
+                "podman pull --tls-verify=false "
+                f"--creds {config.DEPLOYMENT['mirror_registry_user']}:"
+                f"{config.DEPLOYMENT['mirror_registry_password']}"
+            ),
+        )
 
 
 def assign_ips(num_of_vips):

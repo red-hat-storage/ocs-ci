@@ -1,11 +1,13 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
     E2ETest,
     tier2,
+    skipif_external_mode,
 )
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.constants import (
@@ -18,6 +20,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @tier2
 class TestCompressedSCAndSupportSnapClone(E2ETest):
     """
@@ -99,6 +102,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
             log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
             pvc_obj.resize_pvc(pvc_size_new, True)
 
+    @skipif_external_mode
     @skipif_ocs_version("<4.6")
     @skipif_ocp_version("<4.6")
     @pytest.mark.parametrize(
@@ -157,6 +161,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
             multi_pvc_clone_factory,
         )
 
+    @skipif_external_mode
     @skipif_ocs_version("<4.9")
     @skipif_ocp_version("<4.9")
     @pytest.mark.parametrize(

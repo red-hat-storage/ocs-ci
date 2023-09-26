@@ -1,10 +1,11 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod as Pod
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.helpers.helpers import (
     default_storage_class,
@@ -16,6 +17,7 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
+@orange_squad
 @scale
 @pytest.mark.parametrize(
     argnames=["interface"],
@@ -37,7 +39,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
     """
 
     @pytest.fixture()
-    def base_setup(self, interface, pvc_factory, pod_factory):
+    def base_setup(self, teardown_factory, interface, pvc_factory, pod_factory):
         """
         A setup phase for the test:
         get all the ceph pods information,
@@ -75,7 +77,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         io_size_gb = 400 if io_size_gb >= 400 else io_size_gb
 
         pod_objs = get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             selector=["noobaa", "rook-ceph-osd-prepare", "rook-ceph-drain-canary"],
             exclude_selector=True,
         )
@@ -88,6 +90,8 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
             storageclass=self.sc,
             size=pvc_size_gb,
         )
+        self.pvc_obj.reload()
+        teardown_factory(self.pvc_obj)
 
         self.pod_obj = pod_factory(interface=interface, pvc=self.pvc_obj)
 
@@ -129,7 +133,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
             assert validate_pods_are_running_and_not_restarted(
                 pod_name=pod_name,
                 pod_restart_count=restart_count,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             ), f"Pod {pod_name} is either not running or restarted while running IOs"
 
         # Check ceph health is OK

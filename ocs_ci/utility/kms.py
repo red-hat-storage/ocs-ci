@@ -8,6 +8,7 @@ import os
 
 import requests
 import json
+import platform
 import shlex
 import tempfile
 import subprocess
@@ -27,18 +28,25 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     KMSConnectionDetailsError,
     HPCSDeploymentError,
+    KMIPDeploymentError,
+    KMIPOperationError,
+    UnsupportedOSType,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import (
+    download_file,
+    delete_file,
     load_auth_config,
     run_cmd,
     get_vault_cli,
     get_running_cluster_id,
     get_default_if_keyval_empty,
     get_cluster_name,
+    get_ocp_version,
     encode,
+    prepare_bin_dir,
 )
 
 
@@ -190,6 +198,11 @@ class Vault(KMS):
 
         if not self.vault_namespace_exists(self.vault_namespace):
             self.create_namespace(self.vault_namespace)
+
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = (
+                f"{constants.VAULT_HCP_NAMESPACE}/{self.vault_namespace}"
+            )
         os.environ["VAULT_NAMESPACE"] = self.vault_namespace
 
     def vault_namespace_exists(self, vault_namespace):
@@ -203,7 +216,10 @@ class Vault(KMS):
             bool: True if exists else False
 
         """
-        cmd = f"vault namespace lookup {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace lookup -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace lookup {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
@@ -243,7 +259,10 @@ class Vault(KMS):
             VaultOperationError: If namespace is not created successfully
 
         """
-        cmd = f"vault namespace create {vault_namespace}"
+        if config.ENV_DATA.get("vault_hcp"):
+            cmd = f"vault namespace create -namespace={constants.VAULT_HCP_NAMESPACE} {vault_namespace}"
+        else:
+            cmd = f"vault namespace create {vault_namespace}"
         proc = subprocess.Popen(
             shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -306,12 +325,15 @@ class Vault(KMS):
         self.create_resource(ca_data, prefix="ca")
 
         if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+            self.client_cert_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
+            )
+            self.client_key_name = get_default_if_keyval_empty(
+                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
+            )
             # create client cert secret
             client_cert_data = templating.load_yaml(
                 constants.EXTERNAL_VAULT_CLIENT_CERT
-            )
-            self.client_cert_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
             )
             client_cert_data["metadata"]["name"] = self.client_cert_name
             client_cert_data["data"]["cert"] = self.client_cert_base64
@@ -319,9 +341,6 @@ class Vault(KMS):
 
             # create client key secert
             client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
-            self.client_key_name = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
-            )
             client_key_data["metadata"]["name"] = self.client_key_name
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
@@ -336,16 +355,16 @@ class Vault(KMS):
 
         """
         ocp_obj = ocp.OCP()
-        cmd = f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} sa {sa_name}"
+        cmd = f"create -n {config.ENV_DATA['cluster_namespace']} sa {sa_name}"
         ocp_obj.exec_oc_cmd(command=cmd)
         self.vault_cwd_kms_sa_name = sa_name
         logger.info(f"Created serviceaccount {sa_name}")
 
         cmd = (
-            f"create -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"create -n {config.ENV_DATA['cluster_namespace']} "
             "clusterrolebinding vault-tokenreview-binding "
             "--clusterrole=system:auth-delegator "
-            f"--serviceaccount={constants.OPENSHIFT_STORAGE_NAMESPACE}:{sa_name}"
+            f"--serviceaccount={config.ENV_DATA['cluster_namespace']}:{sa_name}"
         )
         ocp_obj.exec_oc_cmd(command=cmd)
         logger.info("Created the clusterrolebinding vault-tokenreview-binding")
@@ -370,12 +389,12 @@ class Vault(KMS):
                 token_reviewer_name=self.vault_cwd_kms_sa_name,
             )
             self.create_vault_kube_auth_role(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 role_name=self.vault_kube_auth_role,
                 sa_name="rook-ceph-system,rook-ceph-osd,noobaa",
             )
             self.create_vault_kube_auth_role(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 role_name="odf-rook-ceph-osd",
                 sa_name="rook-ceph-osd",
             )
@@ -573,7 +592,10 @@ class Vault(KMS):
 
         """
         if self.vault_deploy_mode == "external":
-            vault_conf = load_auth_config()["vault"]
+            if config.ENV_DATA.get("use_vault_namespace"):
+                vault_conf = load_auth_config()["vault_hcp"]
+            else:
+                vault_conf = load_auth_config()["vault"]
             return vault_conf
 
     def get_vault_connection_info(self, resource_name=None):
@@ -587,7 +609,7 @@ class Vault(KMS):
         connection_details = ocp.OCP(
             kind="ConfigMap",
             resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         return connection_details.get().get("data")[resource_name]
 
@@ -635,7 +657,7 @@ class Vault(KMS):
             vault_token = ocp.OCP(
                 kind="Secret",
                 resource_name=constants.VAULT_KMS_TOKEN_RESOURCE,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             token = vault_token.get().get("data")["token"]
             self.vault_path_token = base64.b64decode(token).decode()
@@ -650,7 +672,7 @@ class Vault(KMS):
             ocs_kms_configmap = ocp.OCP(
                 kind="ConfigMap",
                 resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             self.vault_kube_auth_role = ocs_kms_configmap.get().get("data")[
                 "VAULT_AUTH_KUBERNETES_ROLE"
@@ -676,15 +698,24 @@ class Vault(KMS):
                     self.vault_policy_name = policy
                     logger.info(f"setting vault_policy_name = {self.vault_policy_name}")
 
-    def remove_vault_backend_path(self):
+    def remove_vault_backend_path(self, vault_namespace=None):
         """
         remove vault path
 
+        Args:
+            vault_namespace (str): Namespace in Vault, if exists, where the backend path is created
         """
-        cmd = f"vault secrets disable {self.vault_backend_path}"
+
+        if vault_namespace:
+            cmd = f"vault secrets disable -namespace={vault_namespace} {self.vault_backend_path}"
+        else:
+            cmd = f"vault secrets disable {self.vault_backend_path}"
         subprocess.check_output(shlex.split(cmd))
         # Check if path doesn't appear in the list
-        cmd = "vault secrets list --format=json"
+        if vault_namespace:
+            cmd = f"vault secrets list -namespace={vault_namespace} --format=json"
+        else:
+            cmd = "vault secrets list --format=json"
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         for path in json_out.keys():
@@ -694,15 +725,26 @@ class Vault(KMS):
                 )
         logger.info(f"Vault path {self.vault_backend_path} deleted")
 
-    def remove_vault_policy(self):
+    def remove_vault_policy(self, vault_namespace=None):
         """
         Cleanup the policy we used
 
+        Args:
+            vault namespace (str): Namespace in Vault, if exists, where the backend path is created
         """
-        cmd = f"vault policy delete {self.vault_policy_name} "
+
+        if vault_namespace:
+            cmd = f"vault policy delete -namespace={vault_namespace} {self.vault_policy_name} "
+        else:
+            cmd = f"vault policy delete {self.vault_policy_name}"
         subprocess.check_output(shlex.split(cmd))
+
         # Check if policy still exists
-        cmd = "vault policy list --format=json"
+        if vault_namespace:
+            cmd = f"vault policy list -namespace={vault_namespace} --format=json"
+        else:
+            cmd = "vault policy list --format=json"
+
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         if self.vault_policy_name in json_out:
@@ -721,8 +763,14 @@ class Vault(KMS):
         """
         # Unset namespace from environment
         # else delete will look for namespace within namespace
-        os.environ.pop("VAULT_NAMESPACE")
-        cmd = f"vault namespace delete {self.vault_namespace}/"
+        if os.environ.get("VAULT_NAMESPACE"):
+            os.environ.pop("VAULT_NAMESPACE")
+
+        if config.ENV_DATA.get("vault_hcp"):
+            self.vault_namespace = self.vault_namespace.replace("admin/", "")
+            cmd = f"vault namespace delete -namespace={constants.VAULT_HCP_NAMESPACE} {self.vault_namespace}/"
+        else:
+            cmd = f"vault namespace delete {self.vault_namespace}/"
         subprocess.check_output(shlex.split(cmd))
         if self.vault_namespace_exists(self.vault_namespace):
             raise KMSResourceCleaneupError(
@@ -839,13 +887,17 @@ class Vault(KMS):
             logger.error("KMS not enabled on storage cluster")
             raise NotFoundError("KMS flag not found")
 
-    def create_vault_csi_kms_token(
-        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-    ):
+    def create_vault_csi_kms_token(self, namespace=None):
         """
         create vault specific csi kms secret resource
 
+        Args:
+            namespace (str) the namespace of the resource. If None is provided
+                then value from config will be used.
+
         """
+        if namespace is None:
+            namespace = config.ENV_DATA["cluster_namespace"]
         csi_kms_token = templating.load_yaml(constants.EXTERNAL_VAULT_CSI_KMS_TOKEN)
         csi_kms_token["data"]["token"] = base64.b64encode(
             self.vault_path_token.encode()
@@ -857,13 +909,15 @@ class Vault(KMS):
         self,
         kv_version,
         vault_auth_method=constants.VAULT_TOKEN,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=None,
     ):
         """
         Create vault specific csi kms connection details
         configmap resource
 
         """
+        if namespace is None:
+            namespace = config.ENV_DATA["cluster_namespace"]
 
         csi_kms_conn_details = templating.load_yaml(
             constants.EXTERNAL_VAULT_CSI_KMS_CONNECTION_DETAILS
@@ -897,12 +951,21 @@ class Vault(KMS):
             buf["vaultCAFromSecret"] = get_default_if_keyval_empty(
                 config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
             )
-            buf["vaultClientCertFromSecret"] = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_CERT", defaults.VAULT_DEFAULT_CLIENT_CERT
-            )
-            buf["vaultClientCertKeyFromSecret"] = get_default_if_keyval_empty(
-                config.ENV_DATA, "VAULT_CLIENT_KEY", defaults.VAULT_DEFAULT_CLIENT_KEY
-            )
+            if not config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                buf["vaultClientCertFromSecret"] = get_default_if_keyval_empty(
+                    config.ENV_DATA,
+                    "VAULT_CLIENT_CERT",
+                    defaults.VAULT_DEFAULT_CLIENT_CERT,
+                )
+                buf["vaultClientCertKeyFromSecret"] = get_default_if_keyval_empty(
+                    config.ENV_DATA,
+                    "VAULT_CLIENT_KEY",
+                    defaults.VAULT_DEFAULT_CLIENT_KEY,
+                )
+            else:
+                buf.pop("vaultClientCertFromSecret")
+                buf.pop("vaultClientCertKeyFromSecret")
+
             if self.vault_namespace:
                 buf["vaultNamespace"] = self.vault_namespace
             if self.vault_kube_auth_path:
@@ -1015,24 +1078,27 @@ class Vault(KMS):
         """
 
         # Get secret name from serviceaccount
-        logger.info("Retrieving secret name from serviceaccount ")
-        cmd = (
-            f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
-        )
-        secrets = run_cmd(cmd=cmd).split()
-        secret_name = ""
-        for secret in secrets:
-            if "-token-" in secret and "docker" not in secret:
-                secret_name = secret
-        if not secret_name:
-            raise NotFoundError("Secret name not found")
+        if Version.coerce(get_ocp_version()) < Version.coerce("4.11"):
+            logger.info("Retrieving secret name from serviceaccount ")
+            cmd = (
+                f"oc get sa {token_reviewer_name} -o jsonpath='{{.secrets[*].name}}'"
+                f" -n {config.ENV_DATA['cluster_namespace']}"
+            )
+            secrets = run_cmd(cmd=cmd).split()
+            secret_name = ""
+            for secret in secrets:
+                if "-token-" in secret and "docker" not in secret:
+                    secret_name = secret
+            if not secret_name:
+                raise NotFoundError("Secret name not found")
+        else:
+            secret_name = helpers.create_sa_token_secret(sa_name=token_reviewer_name)
 
         # Get token from secrets
         logger.info(f"Retrieving token from {secret_name}")
         cmd = (
             rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'token\']}}\""
-            f" -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f" -n {config.ENV_DATA['cluster_namespace']}"
         )
         token = base64.b64decode(run_cmd(cmd=cmd)).decode()
         token_file = tempfile.NamedTemporaryFile(
@@ -1045,7 +1111,7 @@ class Vault(KMS):
         # Get ca.crt from secret
         logger.info(f"Retrieving CA cert from {secret_name}")
         ca_regex = r"{.data['ca\.crt']}"
-        cmd = f'oc get secret -n {constants.OPENSHIFT_STORAGE_NAMESPACE} {secret_name} -o jsonpath="{ca_regex}"'
+        cmd = f'oc get secret -n {config.ENV_DATA["cluster_namespace"]} {secret_name} -o jsonpath="{ca_regex}"'
         ca_crt = base64.b64decode(run_cmd(cmd=cmd)).decode()
         ca_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="test", dir=".", delete=True
@@ -1060,6 +1126,7 @@ class Vault(KMS):
         # enable kubernetes auth method
         if auth_path and auth_namespace:
             self.vault_kube_auth_namespace = auth_namespace
+            self.vault_kube_auth_path = auth_path
             cmd = f"vault auth enable -namespace={auth_namespace} -path={auth_path} kubernetes"
 
         elif auth_path:
@@ -1240,7 +1307,7 @@ class HPCS(KMS):
             hpcs_conf = load_auth_config()["hpcs"]
             return hpcs_conf
 
-    def create_ibm_kp_kms_secret(self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    def create_ibm_kp_kms_secret(self, namespace=config.ENV_DATA["cluster_namespace"]):
         """
         create hpcs specific csi kms secret resource
 
@@ -1261,7 +1328,7 @@ class HPCS(KMS):
         return ibm_kp_kms_secret["metadata"]["name"]
 
     def create_hpcs_csi_kms_connection_details(
-        self, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        self, namespace=config.ENV_DATA["cluster_namespace"]
     ):
         """
         Create hpcs specific csi kms connection details
@@ -1381,7 +1448,356 @@ class HPCS(KMS):
             raise NotFoundError("KMS flag not found")
 
 
-kms_map = {"vault": Vault, "hpcs": HPCS}
+class KMIP(KMS):
+    """
+    A class which handles deployment and other
+    configs related to KMIP (Thales CipherTrust Manager)
+
+    """
+
+    def __init__(self):
+        super().__init__("kmip")
+        self.kmip_secret_name = None
+        self.kmip_key_identifier = None
+        self.kmsid = None
+        logger.info("Loading KMIP details from auth config")
+        self.kmip_conf = load_auth_config()["kmip"]
+        self.kmip_endpoint = self.kmip_conf["KMIP_ENDPOINT"]
+        self.kmip_ciphertrust_user = self.kmip_conf["KMIP_CTM_USER"]
+        self.kmip_ciphertrust_pwd = self.kmip_conf["KMIP_CTM_PWD"]
+        self.kmip_port = self.kmip_conf["KMIP_PORT"]
+        self.kmip_ca_cert_base64 = self.kmip_conf["KMIP_CA_CERT_BASE64"]
+        self.kmip_client_cert_base64 = self.kmip_conf["KMIP_CLIENT_CERT_BASE64"]
+        self.kmip_client_key_base64 = self.kmip_conf["KMIP_CLIENT_KEY_BASE64"]
+        self.kmip_tls_server_name = self.kmip_conf["KMIP_TLS_SERVER_NAME"]
+
+    def deploy(self):
+        """
+        This function delegates the deployment of KMS using KMIP.
+        Thales CipherTrust Manager is the only supported vendor for now.
+
+        """
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+            self.deploy_kmip_ciphertrust()
+        else:
+            raise KMIPDeploymentError(
+                "Use of KMIP is not supported on clusters below ODF 4.12"
+            )
+
+    def deploy_kmip_ciphertrust(self):
+        """
+        This function configures the resources required to use Thales CipherTrust Manager with ODF
+
+        """
+        self.update_kmip_env_vars()
+        get_ksctl_cli()
+        self.create_odf_kmip_resources()
+
+    def update_kmip_env_vars(self):
+        """
+        Set the environment variable for CipherTrust to allow running ksctl CLI cmds
+
+        """
+        logger.info("Updating environment variables for KMIP")
+        os.environ["KSCTL_USERNAME"] = self.kmip_ciphertrust_user
+        os.environ["KSCTL_PASSWORD"] = self.kmip_ciphertrust_pwd
+        os.environ["KSCTL_URL"] = f"https://{self.kmip_endpoint}"
+        os.environ["KSCTL_NOSSLVERIFY"] = "true"
+
+    def create_odf_kmip_resources(self):
+        """
+        Create secret containing certs and the ocs-kms-connection-details confignmap
+
+        """
+        self.kmip_secret_name = self.create_kmip_secret()
+        connection_data = templating.load_yaml(
+            constants.KMIP_OCS_KMS_CONNECTION_DETAILS
+        )
+        connection_data["data"][
+            "KMIP_ENDPOINT"
+        ] = f"{self.kmip_endpoint}:{self.kmip_port}"
+        connection_data["data"]["KMIP_SECRET_NAME"] = self.kmip_secret_name
+        connection_data["data"]["TLS_SERVER_NAME"] = self.kmip_tls_server_name
+        self.create_resource(connection_data, prefix="kms-connection")
+
+    def create_kmip_secret(self, type="ocs"):
+        """
+        Create secret containing the certificates and unique identifier (only for PV encryption)
+        from CipherTrust Manager KMS
+
+        Args:
+            type (str): csi, if the secret is being created for PV/Storageclass encryption
+                        ocs, if the secret is for clusterwide encryption
+
+        Returns:
+            (str): name of the kmip secret
+
+        """
+
+        logger.info(f"Creating {type} KMIP secret ")
+        if type == "csi":
+            kmip_kms_secret = templating.load_yaml(constants.KMIP_CSI_KMS_SECRET)
+            self.kmip_key_identifier = self.create_ciphertrust_key(key_name=self.kmsid)
+            kmip_kms_secret["data"]["UNIQUE_IDENTIFIER"] = encode(
+                self.kmip_key_identifier
+            )
+
+        elif type == "ocs":
+            kmip_kms_secret = templating.load_yaml(constants.KMIP_OCS_KMS_SECRET)
+
+        else:
+            raise ValueError("The value should be either 'ocs' or 'csi'")
+
+        kmip_kms_secret["data"]["CA_CERT"] = self.kmip_ca_cert_base64
+        kmip_kms_secret["data"]["CLIENT_CERT"] = self.kmip_client_cert_base64
+        kmip_kms_secret["data"]["CLIENT_KEY"] = self.kmip_client_key_base64
+        kmip_kms_secret["metadata"]["name"] = helpers.create_unique_resource_name(
+            "thales-kmip", type
+        )
+        self.create_resource(kmip_kms_secret, prefix="thales-kmip-secret")
+        logger.info(f"KMIP secret {kmip_kms_secret['metadata']['name']} created")
+        return kmip_kms_secret["metadata"]["name"]
+
+    def create_ciphertrust_key(self, key_name):
+        """
+        Create a key in Ciphertrust Manager to be used for PV encryption
+
+        Args:
+            key_name (str): Name of the key to be created
+
+        Returns:
+            (str): ID of the key created in CipherTrust
+
+        """
+        logger.info(f"Creating key {key_name} in CipherTrust")
+        cmd = f"ksctl keys create --name {key_name} --alg AES --size 256"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            raise KMIPOperationError("KMIP: Key creation failed", err)
+        key_info = json.loads(out)
+        return key_info["id"]
+
+    def delete_ciphertrust_key(self, key_id):
+        """
+        Delete key from CipherTrust Manager
+
+        Args:
+            key_id (str): ID of the key to be deleted
+        """
+
+        logger.info(f"Deleting key with ID {key_id}")
+        cmd = f"ksctl keys delete --type id --name {key_id}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "Resource not found" in err.decode():
+                logger.warning(f"Key with ID {key_id} does not exist")
+                return
+            else:
+                raise KMIPOperationError
+
+        if self.check_key_exists_in_ciphertrust(key_id):
+            raise KMSResourceCleaneupError(f"Key deletion failed for ID {key_id}")
+        logger.info(f"Key deletion successful for key ID: {key_id}")
+
+    def check_key_exists_in_ciphertrust(self, key_id):
+        """
+        Check if a key with the key_id is present in CipherTrust Manager
+
+        Args:
+            key_id (str): ID of the key to be checked for
+
+        Returns:
+            (bool): True, if the key exists in CipherTrust Manager
+
+        """
+        cmd = f"ksctl keys get --type id --name {key_id}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "Resource not found" in err.decode():
+                return False
+        return True
+
+    def get_key_info_ciphertrust(self, key_id):
+        """
+        Retrieve information about a given key
+
+        Args:
+            key_id (str): ID of the key in CipherTrust
+
+        Returns
+            (dict): Dictionary with key details
+
+        """
+        logger.info(f"Retrieving key info for key ID {key_id}")
+        cmd = f"ksctl keys get info --type id --name {key_id}"
+        proc = subprocess.Popen(
+            shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            if "Resource not found" in err.decode():
+                raise NotFoundError(f"KMIP: Key with ID {key_id} not found")
+        else:
+            return json.loads(out)
+
+    def get_key_list_ciphertrust(self):
+        """
+        Lists all keys in CipherTrust Manager
+
+        Returns:
+            (list): list containing the IDs of the keys
+
+        """
+        key_id_list = []
+        cmd = "ksctl keys list"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+        if json_out["total"] == 0:
+            raise NotFoundError("No keys found")
+        else:
+            for key in json_out["resources"]:
+                key_id_list.append(key["id"])
+            return key_id_list
+
+    def get_osd_key_ids(self):
+        """
+        Retrieve the key ID used for OSD encryption stored in their respective secrets
+
+        Returns:
+            (list): list of key IDs from all OSDs
+
+        """
+        key_ids = []
+        osds = pod.get_osd_pods()
+        for osd in osds:
+            pvc = (
+                osd.get()
+                .get("metadata")
+                .get("labels")
+                .get(constants.CEPH_ROOK_IO_PVC_LABEL)
+            )
+            cmd = (
+                rf"oc get secret rook-ceph-osd-encryption-key-{pvc} -o jsonpath=\"{{.data[\'dmcrypt-key\']}}\""
+                f" -n {config.ENV_DATA['cluster_namespace']}"
+            )
+            key_ids.append(base64.b64decode(run_cmd(cmd=cmd)).decode())
+        return key_ids
+
+    def get_noobaa_key_id(self):
+        """
+        Retrieve the key ID used for encryption by Noobaa
+
+        Returns:
+            (str): Key ID used by NooBaa for encryption
+
+        """
+        cmd = (
+            rf"oc get cm ocs-kms-connection-details -o jsonpath=\"{{.data[\'KMIP_SECRET_NAME\']}}\""
+            f" -n {config.ENV_DATA['cluster_namespace']}"
+        )
+        secret_name = run_cmd(cmd=cmd)
+
+        cmd = (
+            rf"oc get secret {secret_name} -o jsonpath=\"{{.data[\'UniqueIdentifier\']}}\""
+            f" -n {config.ENV_DATA['cluster_namespace']}"
+        )
+        noobaa_key_id = base64.b64decode(run_cmd(cmd=cmd)).decode()
+        return noobaa_key_id
+
+    def post_deploy_verification(self):
+        """
+        Verify ODF deployment using KMIP
+
+        """
+        self.validate_ciphertrust_deployment()
+
+    def validate_ciphertrust_deployment(self):
+        """
+        Verify whether OSD and NooBaa keys are stored in CipherTrust Manager
+
+        """
+        self.update_kmip_env_vars()
+        key_id_list = self.get_key_list_ciphertrust()
+
+        # Check for OSD keys
+        osd_key_ids = self.get_osd_key_ids()
+        if all(id in key_id_list for id in osd_key_ids):
+            logger.info("KMIP: All OSD keys found in CipherTrust Manager")
+        else:
+            logger.error(
+                "KMIP: Only some or no OSD keys found in CipherTrust Manager"
+                f"Keys found in CipherTrust Manager: {key_id_list}"
+                f"OSD keys from the ODF cluster: {osd_key_ids}"
+            )
+            raise NotFoundError(
+                "KMIP: Only some or no OSD keys found in CipherTrust Manager"
+            )
+
+        # Check for NOOBAA key
+        noobaa_key_id = self.get_noobaa_key_id()
+        if noobaa_key_id in key_id_list:
+            logger.info("KMIP: Noobaa encryption key found in CipherTrust Manager")
+        else:
+            raise NotFoundError(
+                "KMIP: Noobaa encryption key found in CipherTrust Manager"
+            )
+
+        # Check kms enabled
+        if not is_kms_enabled():
+            logger.error("KMS not enabled on storage cluster")
+            raise NotFoundError("KMS flag not found")
+
+    def create_kmip_csi_kms_connection_details(
+        self, namespace=config.ENV_DATA["cluster_namespace"]
+    ):
+        """
+        Create KMIP specific csi-kms-connection-details
+        configmap resource
+
+        """
+
+        csi_kms_conn_details = templating.load_yaml(
+            constants.KMIP_CSI_KMS_CONNECTION_DETAILS
+        )
+        conn_str = csi_kms_conn_details["data"]["1-kmip"]
+        buf = json.loads(conn_str)
+        buf["KMIP_ENDPOINT"] = f"{self.kmip_endpoint}:{self.kmip_port}"
+        buf["KMIP_SECRET_NAME"] = self.kmip_secret_name
+        buf["TLS_SERVER_NAME"] = self.kmip_tls_server_name
+
+        csi_kms_conn_details["data"]["1-kmip"] = json.dumps(buf)
+        csi_kms_conn_details["metadata"]["namespace"] = namespace
+        self.create_resource(csi_kms_conn_details, prefix="csikmsconn")
+
+    def cleanup(self):
+        """
+        Cleanup for KMIP
+
+        """
+        self.update_kmip_env_vars()
+
+        # Retrieve OSD and NooBaa keys for deletion and delete
+        key_ids = self.get_osd_key_ids()
+        key_ids.append(self.get_noobaa_key_id())
+        if not key_ids:
+            logger.warning("No keys found to be deleted from CipherTrust")
+
+        else:
+            for key in key_ids:
+                self.delete_ciphertrust_key(key)
+            logger.info("Keys deleted from CipherTrust Manager")
+
+
+kms_map = {"vault": Vault, "hpcs": HPCS, "kmip": KMIP}
 
 
 def update_csi_kms_vault_connection_details(update_config):
@@ -1399,7 +1815,7 @@ def update_csi_kms_vault_connection_details(update_config):
     csi_kms_conf = ocp.OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     try:
@@ -1421,6 +1837,11 @@ def update_csi_kms_vault_connection_details(update_config):
 
 def get_kms_deployment():
     provider = config.ENV_DATA["KMS_PROVIDER"]
+    if not config.ENV_DATA.get("encryption_at_rest"):
+        raise KMSNotSupported(
+            "Encryption should be enabled for KMS Deployments. "
+            "Choose vault config file from https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci"
+        )
     try:
         return kms_map[provider]()
     except KeyError:
@@ -1501,7 +1922,7 @@ def get_encryption_kmsid():
     csi_kms_conf = ocp.OCP(
         resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
         kind="ConfigMap",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     try:
         csi_kms_conf.get()
@@ -1528,7 +1949,7 @@ def remove_kmsid(kmsid):
     ocp_obj = ocp.OCP()
     patch = f'\'[{{"op": "remove", "path": "/data/{kmsid}"}}]\''
     patch_cmd = (
-        f"patch -n {constants.OPENSHIFT_STORAGE_NAMESPACE} cm "
+        f"patch -n {config.ENV_DATA['cluster_namespace']} cm "
         f"{constants.VAULT_KMS_CSI_CONNECTION_DETAILS} --type json -p " + patch
     )
     ocp_obj.exec_oc_cmd(command=patch_cmd)
@@ -1545,9 +1966,44 @@ def remove_token_reviewer_resources():
     """
 
     run_cmd(
-        f"oc delete sa {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME} -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        f"oc delete sa {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME} -n {config.ENV_DATA['cluster_namespace']}"
     )
     run_cmd(f"oc delete ClusterRole {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME}")
     run_cmd(
         f"oc delete ClusterRoleBinding {constants.RBD_CSI_VAULT_TOKEN_REVIEWER_NAME}"
     )
+
+
+def get_ksctl_cli(bin_dir=None):
+    """
+    Download ksctl to interact with CipherTrust Manager via CLI
+
+    Args:
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+
+    """
+
+    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    system = platform.system()
+    if "Darwin" not in system and "Linux" not in system:
+        raise UnsupportedOSType("Not a supported platform")
+
+    system = system.lower()
+    zip_file = "ksctl_images.zip"
+    ksctl_cli_filename = "ksctl"
+    ksctl_binary_path = os.path.join(bin_dir, ksctl_cli_filename)
+    if os.path.isfile(ksctl_binary_path):
+        logger.info(
+            f"ksctl CLI binary already exists {ksctl_binary_path}, skipping download."
+        )
+    else:
+        logger.info("Downloading ksctl cli")
+        prepare_bin_dir()
+        url = f"https://{load_auth_config()['kmip']['KMIP_ENDPOINT']}/downloads/{zip_file}"
+        download_file(url, zip_file, verify=False)
+        run_cmd(f"unzip -d {bin_dir} {zip_file}")
+        run_cmd(f"mv {bin_dir}/ksctl-{system}-amd64 {bin_dir}/{ksctl_cli_filename}")
+        delete_file(zip_file)
+
+    ksctl_ver = run_cmd(f"{ksctl_binary_path} version")
+    logger.info(f"ksctl cli version: {ksctl_ver}")

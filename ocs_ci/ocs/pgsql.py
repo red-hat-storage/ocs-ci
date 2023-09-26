@@ -82,6 +82,7 @@ class Postgresql(BenchmarkOperator):
                 pgsql_sset["spec"]["volumeClaimTemplates"][0]["spec"][
                     "storageClassName"
                 ] = sc_name
+            utils.update_container_with_mirrored_image(pgsql_sset)
             self.pgsql_service = OCS(**pgsql_service)
             self.pgsql_service.create()
             self.pgsql_cmap = OCS(**pgsql_cmap)
@@ -319,11 +320,9 @@ class Postgresql(BenchmarkOperator):
             output = run_cmd(f"oc logs {pgbench_pod.name} -n {BMO_NAME}")
             pg_output = utils.parse_pgsql_logs(output)
             log.info("*******PGBench output log*********\n" f"{pg_output}")
-            # for data in all_pgbench_pods_output:
             for data in pg_output:
                 run_id = list(data.keys())
-                latency_avg = data[run_id[0]]["latency_avg"]
-                if not latency_avg:
+                if "latency_avg" not in data[run_id[0]].keys():
                     raise UnexpectedBehaviour(
                         "PGBench failed to run, " "no data found on latency_avg"
                     )
@@ -536,16 +535,15 @@ class Postgresql(BenchmarkOperator):
             self.pgsql_cmap.delete()
             self.pgsql_service._is_deleted = False
             self.pgsql_service.delete()
-        log.info("Deleting pgbench pods")
-        pods_obj = self.get_pgbench_pods()
-        pvcs_obj = self.get_postgres_pvc()
-        for pod in pods_obj:
-            pod.delete()
-            pod.ocp.wait_for_delete(pod.name)
-        for pvc in pvcs_obj:
-            pvc.delete()
-            pvc.ocp.wait_for_delete(pvc.name)
-            validate_pv_delete(pvc.backed_pv)
+            pods_obj = self.get_pgbench_pods()
+            pvcs_obj = self.get_postgres_pvc()
+            for pod in pods_obj:
+                pod.delete()
+                pod.ocp.wait_for_delete(pod.name)
+            for pvc in pvcs_obj:
+                pvc.delete()
+                pvc.ocp.wait_for_delete(pvc.name)
+                validate_pv_delete(pvc.backed_pv)
         log.info("Deleting benchmark operator configuration")
         BenchmarkOperator.cleanup(self)
 
@@ -582,6 +580,7 @@ class Postgresql(BenchmarkOperator):
                         "persistentVolumeClaim": {"claimName": f"{pvc_obj.name}"},
                     }
                 ]
+                utils.update_container_with_mirrored_image(pgsql_sset)
                 pgsql_sset = OCS(**pgsql_sset)
                 pgsql_sset.create()
                 pgsql_obj_list.append(pgsql_sset)

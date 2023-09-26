@@ -3,6 +3,7 @@ import logging
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from tests.fixtures import create_project
@@ -10,6 +11,7 @@ from tests.fixtures import create_project
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @pytest.mark.usefixtures(
     create_project.__name__,

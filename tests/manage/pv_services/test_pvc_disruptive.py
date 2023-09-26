@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, ignore_leftover_label
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 
+@green_squad
 @pytest.mark.skip(
     reason="This test is disabled because this scenario is covered in the test "
     "test_resource_deletion_during_pvc_pod_creation_and_io.py"

@@ -1,0 +1,5 @@
+---
+ENV_DATA:
+  # MS cluster on custom secondary-1 subnet
+  subnet_type: 'secondary_mcidr1'
+  machine_cidr: '10.206.60.0/22'

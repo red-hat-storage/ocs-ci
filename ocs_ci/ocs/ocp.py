@@ -24,7 +24,8 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import exec_cmd, run_cmd, update_container_with_mirrored_image
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.utility import version
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 
 
@@ -49,9 +50,12 @@ class OCP(object):
         selector=None,
         field_selector=None,
         cluster_kubeconfig="",
+        threading_lock=None,
+        silent=False,
+        skip_tls_verify=False,
     ):
         """
-        Initializer function
+        Initializer function. Avoid shallow request, func is resource consuming
 
         Args:
             api_version (str): TBD
@@ -63,6 +67,11 @@ class OCP(object):
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
             cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
+            threading_lock (threading.Lock): threading.Lock object that is used
+                for handling concurrent oc commands
+            silent (bool): If True will silent errors from the server, default false
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command for
+                exec_oc_cmd
         """
         self._api_version = api_version
         self._kind = kind
@@ -72,6 +81,9 @@ class OCP(object):
         self.selector = selector
         self.field_selector = field_selector
         self.cluster_kubeconfig = cluster_kubeconfig
+        self.threading_lock = threading_lock
+        self.silent = silent
+        self.skip_tls_verify = skip_tls_verify
 
     @property
     def api_version(self):
@@ -90,10 +102,12 @@ class OCP(object):
         return self._resource_name
 
     @property
-    def data(self):
+    def data(self, silent=False):
         if self._data:
             return self._data
-        self._data = self.get()
+        if self.silent:
+            silent = True
+        self._data = self.get(silent=silent)
         return self._data
 
     def reload_data(self):
@@ -109,6 +123,9 @@ class OCP(object):
         secrets=None,
         timeout=600,
         ignore_error=False,
+        silent=False,
+        cluster_config=None,
+        skip_tls_verify=False,
         **kwargs,
     ):
         """
@@ -125,6 +142,10 @@ class OCP(object):
             timeout (int): timeout for the oc_cmd, defaults to 600 seconds
             ignore_error (bool): True if ignore non zero return code and do not
                 raise the exception.
+            silent (bool): If True will silent errors from the server, default false
+            cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
+                executions
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -132,20 +153,26 @@ class OCP(object):
 
         """
         oc_cmd = "oc "
-        env_kubeconfig = os.getenv("KUBECONFIG")
+        env_kubeconfig = None
+        if not cluster_config:
+            cluster_config = config
+            env_kubeconfig = os.getenv("KUBECONFIG")
         kubeconfig_path = (
             self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
         )
 
         if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
             cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+                cluster_config.ENV_DATA["cluster_path"],
+                cluster_config.RUN.get("kubeconfig_location"),
             )
             if os.path.exists(cluster_dir_kubeconfig):
                 oc_cmd += f"--kubeconfig {cluster_dir_kubeconfig} "
 
         if self.namespace:
             oc_cmd += f"-n {self.namespace} "
+        if skip_tls_verify or self.skip_tls_verify:
+            command += " --insecure-skip-tls-verify"
 
         oc_cmd += command
         out = run_cmd(
@@ -153,6 +180,9 @@ class OCP(object):
             secrets=secrets,
             timeout=timeout,
             ignore_error=ignore_error,
+            threading_lock=self.threading_lock,
+            silent=silent,
+            cluster_config=cluster_config,
             **kwargs,
         )
 
@@ -166,7 +196,7 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
+    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300, namespace=None):
         """
         Function to execute "oc debug" command on OCP node
 
@@ -174,6 +204,7 @@ class OCP(object):
             node (str): Node name where the command to be executed
             cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
+            namespace (str): Namespace name which will be used to create debug pods
 
         Returns:
             out (str): Returns output of the executed command/commands
@@ -186,7 +217,11 @@ class OCP(object):
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        debug_cmd = f'debug nodes/{node} -- chroot /host /bin/bash -c "{cmd}"'
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
+        debug_cmd = (
+            f"debug nodes/{node} --to-namespace={namespace} "
+            f' -- chroot /host /bin/bash -c "{cmd}"'
+        )
         out = str(
             self.exec_oc_cmd(command=debug_cmd, out_yaml_format=False, timeout=timeout)
         )
@@ -204,7 +239,10 @@ class OCP(object):
         retry=0,
         wait=3,
         dont_raise=False,
+        silent=False,
         field_selector=None,
+        cluster_config=None,
+        skip_tls_verify=False,
     ):
         """
         Get command - 'oc get <resource>'
@@ -219,6 +257,7 @@ class OCP(object):
             dont_raise (bool): If True will raise when get is not found
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
+            skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
 
         Example:
             get('my-pv1')
@@ -228,6 +267,8 @@ class OCP(object):
             None: Incase dont_raise is True and get is not found
 
         """
+        if not cluster_config:
+            cluster_config = config
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
         field_selector = field_selector if field_selector else self.field_selector
@@ -247,15 +288,22 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                return self.exec_oc_cmd(command)
-            except CommandFailed as ex:
-                log.warning(
-                    f"Failed to get resource: {resource_name} of kind: "
-                    f"{self.kind}, selector: {selector}, Error: {ex}"
+                return self.exec_oc_cmd(
+                    command,
+                    silent=silent,
+                    cluster_config=cluster_config,
+                    skip_tls_verify=skip_tls_verify,
                 )
+            except CommandFailed as ex:
+                if not silent:
+                    log.warning(
+                        f"Failed to get resource: {resource_name} of kind: "
+                        f"{self.kind}, selector: {selector}, Error: {ex}"
+                    )
                 retry -= 1
                 if not retry:
-                    log.warning("Number of attempts to get resource reached!")
+                    if not silent:
+                        log.warning("Number of attempts to get resource reached!")
                     if not dont_raise:
                         raise
                     else:
@@ -320,7 +368,9 @@ class OCP(object):
         log.debug(f"{yaml.dump(output)}")
         return output
 
-    def delete(self, yaml_file=None, resource_name="", wait=True, force=False):
+    def delete(
+        self, yaml_file=None, resource_name="", wait=True, force=False, timeout=600
+    ):
         """
         Deletes a resource
 
@@ -332,6 +382,7 @@ class OCP(object):
                 completion
             force (bool): True for force deletion with --grace-period=0,
                 False otherwise
+            timeout (int): timeout for the oc_cmd, defaults to 600 seconds
 
         Returns:
             dict: Dictionary represents a returned yaml file
@@ -354,7 +405,7 @@ class OCP(object):
         # oc default for wait is True
         if not wait:
             command += " --wait=false"
-        return self.exec_oc_cmd(command)
+        return self.exec_oc_cmd(command, timeout=timeout)
 
     def apply(self, yaml_file):
         """
@@ -407,7 +458,19 @@ class OCP(object):
         status = self.exec_oc_cmd(command)
         return status
 
-    def new_project(self, project_name):
+    def remove_label(self, resource_name, label):
+        """
+        Remove label from the resource.
+
+        Args:
+            resource_name (str): Name of the resource you want to remove label.
+            label (str): Label Name to be remove.
+        """
+        command = f"label {self.kind} {resource_name} {label}-"
+        status = self.exec_oc_cmd(command)
+        return status
+
+    def new_project(self, project_name, policy=constants.PSA_BASELINE):
         """
         Creates a new project
 
@@ -417,8 +480,24 @@ class OCP(object):
         Returns:
             bool: True in case project creation succeeded, False otherwise
         """
-        command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(f"{command}"):
+        ocp = OCP(kind="namespace")
+        exec_output = run_cmd(
+            f"oc new-project {project_name}", threading_lock=self.threading_lock
+        )
+        if any(
+            pattern in exec_output
+            for pattern in [
+                f'Now using project "{project_name}"',
+                f'Already on project "{project_name}"',
+            ]
+        ):
+            if version.get_semantic_ocp_running_version() >= version.VERSION_4_12:
+                label = (
+                    "security.openshift.io/scc.podSecurityLabelSync=false "
+                    f"pod-security.kubernetes.io/enforce={policy} "
+                    f"pod-security.kubernetes.io/warn={policy} --overwrite"
+                )
+                ocp.add_label(resource_name=project_name, label=label)
             return True
         return False
 
@@ -439,7 +518,9 @@ class OCP(object):
 
         """
         command = f"oc delete project {project_name}"
-        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+        if f' "{project_name}" deleted' in run_cmd(
+            f"{command}", threading_lock=self.threading_lock
+        ):
             return True
         raise CommandFailed(f"{project_name} was not deleted")
 
@@ -456,12 +537,16 @@ class OCP(object):
 
         """
         command = ["oc", "login", "-u", user, "-p", password]
-        status = exec_cmd(command, secrets=[password])
+        status = exec_cmd(
+            command, secrets=[password], threading_lock=self.threading_lock
+        )
         # if on Proxy environment and if ENV_DATA["client_http_proxy"] is
         # defined, update kubeconfig file with proxy-url parameter to redirect
         # client access through proxy server
         if (
-            config.DEPLOYMENT.get("proxy") or config.DEPLOYMENT.get("disconnected")
+            config.DEPLOYMENT.get("proxy")
+            or config.DEPLOYMENT.get("disconnected")
+            or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
             kubeconfig = os.getenv("KUBECONFIG")
             if not kubeconfig or not os.path.exists(kubeconfig):
@@ -483,7 +568,7 @@ class OCP(object):
         command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
-        status = run_cmd(command)
+        status = run_cmd(command, threading_lock=self.threading_lock)
         return status
 
     def get_user_token(self):
@@ -569,7 +654,6 @@ class OCP(object):
             for sample in TimeoutSampler(
                 timeout, sleep, self.get, resource_name, True, selector
             ):
-
                 # Only 1 resource expected to be returned
                 if resource_name:
                     retry = int(timeout / sleep if sleep else timeout / 1)
@@ -764,17 +848,41 @@ class OCP(object):
             wait=wait,
             selector=selector,
         )
+        resource = re.split(r"\s{2,}", resource)
+        exception_list = ["RWO", "RWX", "ROX"]
         # get the list of titles
-        titles = re.sub(r"\s{2,}", ",", resource)  # noqa: W605
-        titles = titles.split(",")
-        # Get the index of column
-        column_index = titles.index(column)
-        resource = shlex.split(resource)
+        titles = [i for i in resource if (i.isupper() and i not in exception_list)]
+
         # Get the values from the output including access modes in capital
         # letters
         resource_info = [
-            i for i in resource if (not i.isupper() or i in ("RWO", "RWX", "ROX"))
+            i for i in resource if (not i.isupper() or i in exception_list)
         ]
+
+        temp_list = shlex.split(resource_info.pop(0))
+
+        for i in temp_list:
+            if i.isupper():
+                titles.append(i)
+                temp_list.remove(i)
+        resource_info = temp_list + resource_info
+
+        # Fix for issue:
+        # https://github.com/red-hat-storage/ocs-ci/issues/6503
+        title_last_item = shlex.split(titles[-1])
+        updated_last_title_item = []
+        if len(title_last_item) > 1:
+            for i in title_last_item:
+                if i.isupper() and i not in exception_list:
+                    updated_last_title_item.append(i)
+                else:
+                    resource_info.insert(0, i)
+        if updated_last_title_item:
+            titles[-1] = " ".join(updated_last_title_item)
+
+        # Get the index of column
+        column_index = titles.index(column)
+
         # WA, Failed to parse "oc get build" command
         # https://github.com/red-hat-storage/ocs-ci/issues/2312
         try:
@@ -1007,6 +1115,28 @@ class OCP(object):
             )
             return False
 
+    def annotate(self, annotation, resource_name="", overwrite=True):
+        """
+        Update the annotations on resource.
+
+        Args:
+            annotation (str): Annotation string (key=value pair or key- for
+                removing annotation) E.g: 'cluster.x-k8s.io/paused=""'
+            resource_name (str): Name of the resource you want to label
+            overwrite (bool): Overwrite existing annotation with the same key,
+                (default: True)
+
+        Returns:
+            dict: Dictionary represents a returned yaml file
+        """
+        resource_name = resource_name or self.resource_name
+        cmd = f"annotate {self.kind} {resource_name} {annotation}"
+        if overwrite:
+            cmd += " --overwrite"
+        log.info(f"Annotate {self.kind} {resource_name} with '{annotation}'")
+        result = self.exec_oc_cmd(cmd)
+        return result
+
 
 def get_all_resource_names_of_a_kind(kind):
     """
@@ -1123,7 +1253,7 @@ def switch_to_default_rook_cluster_project():
     Returns:
         bool: True on success, False otherwise
     """
-    return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+    return switch_to_project(config.ENV_DATA["cluster_namespace"])
 
 
 def rsync(src, dst, node, dst_node=True, extra_params=""):
@@ -1183,7 +1313,7 @@ def get_images(data, images=None):
         # Check if we have those keys: 'name' and 'value' in the data dict.
         # If yes and the value ends with '_IMAGE' we found the image.
         if set(("name", "value")) <= data.keys() and (
-            type(data["name"]) == str and data["name"].endswith("_IMAGE")
+            isinstance(data["name"], str) and data["name"].endswith("_IMAGE")
         ):
             image_name = data["name"].rstrip("_IMAGE").lower()
             image = data["value"]
@@ -1510,3 +1640,78 @@ def get_ocp_url():
     log.info(f"OCP URL: {url}")
 
     return str(url)
+
+
+def clear_overprovision_spec(ignore_errors=False):
+    """
+    Remove cluster overprovision policy.
+
+    Args:
+       ignore_errors (bool): Flag to report errors.
+    Return:
+          bool: True on success and False on error.
+    """
+    log.info("Removing overprovisionControl from storage cluster.")
+    storagecluster_obj = OCP(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    params = '[{"op": "remove", path: "/spec/overprovisionControl"}]'
+    try:
+        storagecluster_obj.patch(params=params, format_type="json")
+    except Exception as e:
+        log.error(e)
+        if not ignore_errors:
+            return False
+
+    log.info("Verify storagecluster on Ready state")
+    from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+
+    verify_storage_cluster()
+    return True
+
+
+def set_overprovision_policy(capacity, quota_name, sc_name, label):
+    """
+    Set OverProvisionControl Policy.
+
+    Args:
+        capacity (str): storage capacity e.g. 50Gi
+        quota_name (str): quota name.
+        sc_name (str): storage class name
+        label (dict): storage quota labels.
+
+    Return:
+        bool: True on success and False on error.
+    """
+    log.info("Add 'overprovisionControl' section to storagecluster yaml file")
+    params = (
+        '{"spec": {"overprovisionControl": [{"capacity": "' + capacity + '",'
+        '"storageClassName":"' + sc_name + '", "quotaName": "' + quota_name + '",'
+        '"selector": {"labels": {"matchLabels": '
+        + label.__str__().replace("'", '"')
+        + "}}}]}}"
+    )
+
+    storagecluster_obj = OCP(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    try:
+        storagecluster_obj.patch(
+            params=params,
+            format_type="merge",
+        )
+    except Exception as e:
+        log.error(e)
+        return False
+
+    log.info("Verify storagecluster on Ready state")
+    from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+
+    verify_storage_cluster()
+    return True

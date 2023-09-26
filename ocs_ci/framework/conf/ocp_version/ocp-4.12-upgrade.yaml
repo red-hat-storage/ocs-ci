@@ -1,0 +1,6 @@
+---
+# Use this config for upgrading of OCP 4.11 to 4.12 cluster
+UPGRADE:
+  ocp_upgrade_version: "4.12.0-0.nightly"
+  ocp_upgrade_path: "registry.ci.openshift.org/ocp/release"
+  ocp_channel: "stable-4.12"

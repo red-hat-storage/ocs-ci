@@ -2,11 +2,16 @@ import collections
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    skipif_ocs_version,
+    brown_squad,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_external_mode,
+    skipif_mcg_only,
     post_ocs_upgrade,
     skipif_managed_service,
     runs_on_provider,
@@ -15,14 +20,16 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import get_mds_cache_memory_limit
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 
 
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier1
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")
@@ -103,7 +110,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         """
         cm_obj = OCP(
             kind="configmap",
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
         )
         config_data = cm_obj.get()["data"]["config"]
@@ -113,14 +120,23 @@ class TestCephDefaultValuesCheck(ManageTest):
             "confiMap, match the ones stored in ocs-ci"
         )
         ocs_version = version.get_semantic_ocs_version_from_config()
+
         if ocs_version == version.VERSION_4_8:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
         elif ocs_version == version.VERSION_4_9:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
-        elif ocs_version >= version.VERSION_4_10:
+        elif ocs_version == version.VERSION_4_10:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_410.split("\n")
+        elif ocs_version == version.VERSION_4_11:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_411.split("\n")
+        elif ocs_version == version.VERSION_4_12 or ocs_version == version.VERSION_4_13:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
+        elif ocs_version >= version.VERSION_4_14:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_414.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
+        log.info(f"OCS version is {ocs_version}")
+        log.info(f"Stored values are {stored_values}")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
@@ -130,6 +146,7 @@ class TestCephDefaultValuesCheck(ManageTest):
 
     @post_ocs_upgrade
     @skipif_external_mode
+    @skipif_mcg_only
     @bugzilla("1951348")
     @bugzilla("1944148")
     @pytest.mark.polarion_id("OCS-2554")
@@ -139,6 +156,12 @@ class TestCephDefaultValuesCheck(ManageTest):
 
         """
         mds_cache_memory_limit = get_mds_cache_memory_limit()
+        mds_cache_memory_limit = retry(
+            (IOError),
+            tries=6,
+            delay=20,
+            backoff=1,
+        )(get_mds_cache_memory_limit)()
         expected_mds_value = 4294967296
         expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
         assert mds_cache_memory_limit == expected_mds_value, (
@@ -153,6 +176,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
+    @skipif_ocs_version("<4.9")
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Validate noobaa postgres configmap post OCS upgrade
@@ -161,7 +185,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         cm_obj = OCP(
             kind=constants.CONFIGMAP,
             resource_name=constants.NOOBAA_POSTGRES_CONFIGMAP,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         config_data = cm_obj.get().get("data").get("noobaa-postgres.conf")
         config_data = config_data.split("\n")
@@ -171,11 +195,12 @@ class TestCephDefaultValuesCheck(ManageTest):
             "match the ones stored in ocs-ci"
         )
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version <= version.VERSION_4_9:
+        log.info(f"ocs version----{ocs_version}")
+        if ocs_version <= version.VERSION_4_8:
             stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES.split("\n")
             stored_values.remove("")
-        elif ocs_version >= version.VERSION_4_10:
-            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_10.split("\n")
+        elif ocs_version >= version.VERSION_4_9:
+            stored_values = constants.NOOBAA_POSTGRES_TUNING_VALUES_4_9.split("\n")
             stored_values.remove("")
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "

@@ -1,0 +1,8 @@
+DEPLOYMENT:
+  kms_deployment: true
+
+ENV_DATA:
+  encryption_at_rest: true
+  KMS_PROVIDER: kmip
+  KMS_SERVICE_NAME: ciphertrust
+  KMIP_SECRET_NAME: thales-kmip-ocs

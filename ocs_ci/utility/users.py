@@ -46,7 +46,7 @@ def create_htpasswd_secret(htpasswd_path, replace=False):
         f"--kubeconfig {kubeconfig}"
     )
     if replace:
-        secret_data = exec_cmd(f"{cmd} --dry-run -o yaml").stdout
+        secret_data = exec_cmd(f"{cmd} --dry-run=client -o yaml").stdout
         with NamedTemporaryFile(prefix="htpasswd_secret_") as secret_file:
             secret_file.write(secret_data)
             secret_file.flush()
@@ -125,7 +125,7 @@ def user_factory(request, htpasswd_path):
             ocp_obj = ocp.OCP(
                 kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
             )
-            secret = ocp_obj.get(resource_name="htpass-secret") or None
+            secret = ocp_obj.get(resource_name="htpass-secret", dont_raise=True) or None
             if secret:
                 create_htpasswd_secret(htpasswd_path, replace=True)
             else:

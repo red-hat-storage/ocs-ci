@@ -2,12 +2,13 @@ import base64
 import json
 import logging
 import os
+import platform
+import re
 import stat
 import tempfile
 from time import sleep
 
 import boto3
-import requests
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
@@ -22,25 +23,23 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CredReqSecretNotFound,
-    NoobaaCliChecksumFailedException,
     TimeoutExpiredError,
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
-from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd, get_attr_chain
+from ocs_ci.utility.utils import (
+    get_attr_chain,
+    get_ocs_build_number,
+    exec_cmd,
+    TimeoutSampler,
+)
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
-    calc_local_file_md5_sum,
     retrieve_default_ingress_crt,
-    storagecluster_independent_check,
     wait_for_resource_state,
 )
 import subprocess
@@ -84,7 +83,17 @@ class MCG:
         wait_for_resource_state(
             resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
         )
-        self.retrieve_noobaa_cli_binary()
+
+        if (
+            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            or self.get_mcg_cli_version().minor
+            != version.get_semantic_ocs_version_from_config().minor
+        ):
+            logger.info(
+                "The expected MCG CLI binary could not be found,"
+                " downloading the expected version"
+            )
+            self.retrieve_noobaa_cli_binary()
 
         """
         The certificate will be copied on each mcg_obj instantiation since
@@ -169,43 +178,6 @@ class MCG:
                 endpoint_url="https://s3.amazonaws.com",
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key,
-            )
-
-        if (
-            config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS
-            or storagecluster_independent_check()
-        ):
-            if (
-                not config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
-                and not config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                and (
-                    version.get_semantic_ocs_version_from_config() > version.VERSION_4_5
-                )
-            ):
-                logger.info("Checking whether RGW pod is not present")
-                pods = pod.get_pods_having_label(
-                    label=constants.RGW_APP_LABEL, namespace=self.namespace
-                )
-                assert (
-                    not pods
-                ), "RGW pods should not exist in the current platform/cluster"
-
-        elif (
-            config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
-            and not config.ENV_DATA["mcg_only_deployment"]
-        ):
-            rgw_count = get_rgw_count(
-                config.ENV_DATA["ocs_version"], check_if_cluster_was_upgraded(), None
-            )
-            logger.info(
-                f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform'
-            )
-            rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
-            assert rgw_pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=constants.RGW_APP_LABEL,
-                resource_count=rgw_count,
-                timeout=60,
             )
 
     def retrieve_nb_token(self):
@@ -372,18 +344,20 @@ class MCG:
             The server's response
 
         """
-        logger.info(f"Sending MCG RPC query:\n{api} {method} {params}")
-        payload = {
-            "api": api,
-            "method": method,
-            "params": params,
-            "auth_token": self.noobaa_token,
-        }
-        return requests.post(
-            url=self.mgmt_endpoint,
-            data=json.dumps(payload),
-            verify=retrieve_verification_mode(),
+
+        logger.info(f"Sending MCG RPC query via mcg-cli:\n{api} {method} {params}")
+
+        cli_output = self.exec_mcg_cmd(
+            f"api {api} {method} '{json.dumps(params)}' -ojson"
         )
+
+        # This class is needed to add a json method to the response dict
+        # which is needed to support existing usage
+        class CLIResponseDict(dict):
+            def json(self):
+                return self
+
+        return CLIResponseDict({"reply": json.loads(cli_output.stdout)})
 
     def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
@@ -715,7 +689,10 @@ class MCG:
 
         if replication_policy:
             bc_data["spec"].setdefault(
-                "replicationPolicy", json.dumps(replication_policy)
+                "replicationPolicy",
+                json.dumps(replication_policy)
+                if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
+                else json.dumps({"rules": replication_policy}),
             )
 
         return create_resource(**bc_data)
@@ -750,7 +727,11 @@ class MCG:
             if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7
             else ""
         )
-
+        if (
+            replication_policy is not None
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12
+        ):
+            replication_policy = {"rules": replication_policy}
         with tempfile.NamedTemporaryFile(
             delete=True, mode="wb", buffering=0
         ) as replication_policy_file:
@@ -880,7 +861,7 @@ class MCG:
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
+    def exec_mcg_cmd(self, cmd, namespace=None, use_yes=False, **kwargs):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -898,106 +879,101 @@ class MCG:
             kubeconfig = f"--kubeconfig {kubeconfig} "
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
-        result = exec_cmd(
-            f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}", **kwargs
-        )
+
+        if use_yes:
+            result = exec_cmd(
+                [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                shell=True,
+                **kwargs,
+            )
+        else:
+            result = exec_cmd(
+                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                **kwargs,
+            )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
 
+    def get_architecture_path(self):
+        """
+        Return path of MCG CLI Binary in the image.
+        """
+        system = platform.system()
+        machine = platform.machine()
+        noobaa = "noobaa"
+        path = "/usr/share/mcg/"
+        if system == "Linux":
+            path = os.path.join(path, "linux")
+            if machine == "x86_64":
+                path = os.path.join(path, f"{noobaa}-amd64")
+            elif machine == "ppc64le":
+                path = os.path.join(path, f"{noobaa}-ppc64le")
+            elif machine == "s390x":
+                path = os.path.join(path, f"{noobaa}-s390x")
+        elif system == "Darwin":  # Mac
+            path = os.path.join(path, "macosx", noobaa)
+        return path
+
     @retry(
-        (NoobaaCliChecksumFailedException, CommandFailed, subprocess.TimeoutExpired),
+        (CommandFailed, subprocess.TimeoutExpired),
         tries=5,
         delay=15,
         backoff=1,
     )
     def retrieve_noobaa_cli_binary(self):
         """
-        Copy the NooBaa CLI binary from the operator pod
-        if it wasn't found locally, or if the hashes between
-        the two don't match.
+        Download the MCG-CLI binary and store it locally.
 
         Raises:
-            NoobaaCliChecksumFailedException: If checksum doesn't match.
-            AssertionError: In the case CLI binary doesn't exist.
+            AssertionError: In the case the CLI binary is not executable.
 
         """
-
-        def _compare_cli_hashes():
-            """
-            Verify that the remote and local CLI binaries are the same
-            in order to make sure the local bin is up to date
-
-            Returns:
-                bool: Whether the local and remote hashes are identical
-
-            """
-            remote_cli_bin_md5 = cal_md5sum(
-                self.operator_pod, constants.NOOBAA_OPERATOR_POD_CLI_PATH
-            )
-            logger.info(f"Remote noobaa cli md5 hash: {remote_cli_bin_md5}")
-            local_cli_bin_md5 = calc_local_file_md5_sum(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            )
-            logger.info(f"Local noobaa cli md5 hash: {local_cli_bin_md5}")
-            return remote_cli_bin_md5 == local_cli_bin_md5
-
+        semantic_version = version.get_semantic_ocs_version_from_config()
+        remote_path = self.get_architecture_path()
+        remote_mcg_cli_basename = os.path.basename(remote_path)
+        local_mcg_cli_dir = os.path.dirname(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
         if (
-            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            or not _compare_cli_hashes()
+            config.DEPLOYMENT["live_deployment"]
+            and semantic_version >= version.VERSION_4_13
         ):
+            image = f"{constants.MCG_CLI_IMAGE}:v{semantic_version}"
+        else:
+            image = f"{constants.MCG_CLI_IMAGE_PRE_4_13}:{get_ocs_build_number()}"
+
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+        if not os.path.isfile(pull_secret_path):
             logger.info(
-                f"The MCG CLI binary could not be found in {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH},"
-                " attempting to copy it from the MCG operator pod"
+                f"Extracting pull-secret and placing it under {pull_secret_path}"
             )
-            local_mcg_cli_dir = os.path.dirname(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            exec_cmd(
+                f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+                f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+                shell=True,
             )
-            remote_mcg_cli_basename = os.path.basename(
-                constants.NOOBAA_OPERATOR_POD_CLI_PATH
-            )
-            # The MCG CLI retrieval process is known to be flaky
-            # and there's an active BZ regardaing it -
-            # https://bugzilla.redhat.com/show_bug.cgi?id=2011845
-            # rsync should be more reliable than cp, thus the use of oc rsync.
-            if version.get_semantic_ocs_version_from_config() > version.VERSION_4_5:
-                cmd = (
-                    f"oc rsync -n {self.namespace} {self.operator_pod.name}:"
-                    f"{constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                    f" {local_mcg_cli_dir}"
-                )
-                exec_cmd(cmd)
-                os.rename(
-                    os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
-                    constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                )
-            else:
-                cmd = (
-                    f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                    f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                    f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-                )
-                proc = subprocess.run(cmd, shell=True, capture_output=True)
-                logger.info(
-                    f"MCG CLI copying process stdout:{proc.stdout.decode()}, stderr: {proc.stderr.decode()}"
-                )
-            # Add an executable bit in order to allow usage of the binary
-            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            os.chmod(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-                current_file_permissions.st_mode | stat.S_IEXEC,
-            )
-            # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-            ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            assert os.access(
-                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
-            ), "The MCG CLI binary does not have execution permissions"
-            if not _compare_cli_hashes():
-                raise NoobaaCliChecksumFailedException(
-                    "Binary hash doesn't match the one on the operator pod"
-                )
+        exec_cmd(
+            f"oc image extract --registry-config {pull_secret_path} "
+            f"{image} --confirm "
+            f"--path {self.get_architecture_path()}:{local_mcg_cli_dir}"
+        )
+        os.rename(
+            os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+        )
+        # Add an executable bit in order to allow usage of the binary
+        current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+        os.chmod(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+            current_file_permissions.st_mode | stat.S_IEXEC,
+        )
+        # Make sure the binary was copied properly and has the correct permissions
+        assert os.path.isfile(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+        ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+        assert os.access(
+            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
+        ), "The MCG CLI binary does not have execution permissions"
 
     @property
     @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
@@ -1025,3 +1001,44 @@ class MCG:
             == get_default_bc["status"]["phase"]
             == STATUS_READY
         )
+
+    def get_mcg_cli_version(self):
+        """
+        Get the MCG CLI version by parsing the output of the `mcg-cli version` command.
+
+        Example output of the mcg-cli version command:
+
+            INFO[0000] CLI version: 5.12.0
+            INFO[0000] noobaa-image: noobaa/noobaa-core:master-20220913
+            INFO[0000] operator-image: noobaa/noobaa-operator:5.12.0
+
+        Returns:
+            semantic_version.base.Version: Object of semantic version.
+
+        """
+
+        # mcg-cli sends the output to stderr in this case
+        cmd_output = self.exec_mcg_cmd("version").stderr
+
+        # \s* captures any number of spaces
+        # \S+ captures any number of non-space characters
+        regular_expression = r"CLI version:\s*(\S+)"
+
+        # group(1) is the first capturing group, which is the version string
+        mcg_cli_version_str = re.search(
+            regular_expression, cmd_output, re.IGNORECASE
+        ).group(1)
+
+        return version.get_semantic_version(mcg_cli_version_str, only_major_minor=True)
+
+    def reset_core_pod(self):
+        """
+        Delete the noobaa-core pod and wait for it to come up again
+
+        """
+
+        self.core_pod.delete(wait=True)
+        self.core_pod = Pod(
+            **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
+        )
+        wait_for_resource_state(self.core_pod, constants.STATUS_RUNNING)

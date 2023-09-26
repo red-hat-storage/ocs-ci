@@ -12,12 +12,14 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.utility.utils import ocsci_log_path
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest, polarion_id
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 
 log = logging.getLogger(__name__)
 
 
+@orange_squad
 @scale
 class TestPVCCreationDeletionScale(E2ETest):
     """

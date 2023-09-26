@@ -1,6 +1,8 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -12,7 +14,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.node import (
     get_node_objs,
@@ -31,6 +33,7 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
+@red_squad
 @tier4b
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2374")
@@ -101,7 +104,9 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
             worker_node_list = get_worker_nodes()
             node_names = list(set(worker_node_list) - set(noobaa_pod_node.name.split()))
             unschedule_nodes(node_names=node_names)
-            ocp_obj = OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+            ocp_obj = OCP(
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+            )
             rgw_pod_obj[0].delete()
             ocp_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
@@ -155,7 +160,7 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
 
                 # Validate new rgw pod spun
                 ocp_obj = OCP(
-                    kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                    kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
                 )
                 ocp_obj.wait_for_resource(
                     condition=constants.STATUS_RUNNING,

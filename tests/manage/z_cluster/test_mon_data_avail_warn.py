@@ -8,8 +8,15 @@ import random
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import E2ETest, tier2, bugzilla, skipif_ocs_version
-from ocs_ci.ocs import node, defaults
+from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    tier2,
+    bugzilla,
+    skipif_ocs_version,
+    skipif_external_mode,
+)
+from ocs_ci.ocs import node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import utils
@@ -24,6 +31,7 @@ DD_BLOCK_SIZE = 16
 DD_COUNT = 64
 
 
+@brown_squad
 @tier2
 @bugzilla("1964055")
 @pytest.mark.polarion_id("OCS-2733")
@@ -50,7 +58,7 @@ class TestMonDataAvailWarn(E2ETest):
         """
         if config.DEPLOYMENT.get("local_storage"):
             self.worker_node = node.get_worker_nodes()[0]
-            self.oc_cmd = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+            self.oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
             mon_pod_name = self.oc_cmd.exec_oc_debug_cmd(
                 node=self.worker_node,
                 cmd_list=["ls /var/lib/rook/ | grep mon"],
@@ -59,11 +67,11 @@ class TestMonDataAvailWarn(E2ETest):
 
             mon_pods_info = pod.get_pods_having_label(
                 label=f"ceph_daemon_id={mon_pod_id}",
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             self.mon_pod = pod.get_pod_obj(
                 name=mon_pods_info[0]["metadata"]["name"],
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
         else:
             self.mon_pod = random.choice(pod.get_mon_pods())
@@ -119,6 +127,7 @@ class TestMonDataAvailWarn(E2ETest):
             self.mon_pod.exec_sh_cmd_on_pod(command=write_cmd, sh="sh")
         self.dd_seek_count += 1
 
+    @skipif_external_mode
     @pytest.mark.usefixtures(workloads_dir_setup.__name__)
     def test_mon_data_avail_warn(self):
         """

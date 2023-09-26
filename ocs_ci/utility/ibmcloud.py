@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     NodeHasNoAttachedVolume,
     TimeoutExpiredError,
 )
+from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
 
@@ -36,6 +37,9 @@ def login():
     account_id = ibm_config.get("account_id")
     if account_id:
         login_cmd += f" -c {account_id}"
+    api_endpoint = ibm_config.get("api_endpoint")
+    if api_endpoint:
+        login_cmd += f" -a {api_endpoint}"
     region = config.ENV_DATA.get("region")
     if region:
         login_cmd += f" -r {region}"
@@ -220,12 +224,17 @@ def add_deployment_dependencies():
     """
     Adding dependencies for IBM Cloud deployment
     """
-    ocp_version = get_ocp_version()
+    ocp_version = util_version.get_semantic_ocp_version_from_config()
+    if ocp_version >= util_version.VERSION_4_9:
+        logger.info(
+            "IBM Cloud dependencies like volumesnapshot CRs will not be created"
+        )
+        return
     cr_base_url = (
         "https://raw.githubusercontent.com/openshift/csi-external-snapshotter/"
         f"release-{ocp_version}/"
     )
-    if float(ocp_version) < 4.6:
+    if ocp_version < util_version.VERSION_4_6:
         cr_base_url = f"{cr_base_url}config/crd/"
     else:
         cr_base_url = f"{cr_base_url}client/config/crd/"
@@ -256,15 +265,11 @@ class IBMCloud(object):
         provider_id = nodes[0].get()["spec"]["providerID"]
         cluster_id = provider_id.split("/")[5]
 
-        cmd = f"ibmcloud ks workers --cluster {cluster_id} --output json"
-        out = run_ibmcloud_cmd(cmd)
-        worker_nodes = json.loads(out)
-
-        if len(worker_nodes) > 0:
-            for node in worker_nodes:
-                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {node['id']} -f"
-                out = run_ibmcloud_cmd(cmd)
-                logger.info(f"Node restart command output: {out}")
+        for node in nodes:
+            worker_id = node.get()["spec"]["providerID"].split("/")[-1]
+            cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {worker_id} -f"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node restart command output: {out}")
 
     def attach_volume(self, volume, node):
         """

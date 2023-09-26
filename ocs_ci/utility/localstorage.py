@@ -19,6 +19,7 @@ from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
+from ocs_ci.utility.version import get_semantic_version
 
 logger = logging.getLogger(__name__)
 
@@ -213,16 +214,33 @@ def get_lso_channel():
         resource_name=constants.LOCAL_STORAGE_CSV_PREFIX, selector=selector
     )
     channels = package_manifest.get_channels()
-    channel_names = [channel["name"] for channel in channels]
 
-    # Ensure channel_names is sorted
-    versions = [LooseVersion(name) for name in channel_names if name != "stable"]
+    versions = []
+    stable_channel_found = False
+    for channel in channels:
+        if ocp_version == channel["name"]:
+            return ocp_version
+        else:
+            if channel["name"] != "stable":
+                versions.append(LooseVersion(channel["name"]))
+            else:
+                logger.debug(f"channel with name {channel['name']} found")
+                stable_channel_found = True
+                stable_channel_full_version = channel["currentCSVDesc"]["version"]
+                stable_channel_version = get_semantic_version(
+                    stable_channel_full_version, only_major_minor=True
+                )
+
+    # Ensure versions are sorted
     versions.sort()
     sorted_versions = [v.vstring for v in versions]
 
-    if ocp_version in channel_names:
-        # Use channel corresponding to OCP version
-        return ocp_version
-    else:
+    if len(sorted_versions) >= 1:
         # Use latest channel
-        return sorted_versions[-1]
+        if stable_channel_found:
+            if stable_channel_version > get_semantic_version(sorted_versions[-1]):
+                return "stable"
+            else:
+                return sorted_versions[-1]
+    else:
+        return channels[-1]["name"]

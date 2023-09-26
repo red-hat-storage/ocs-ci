@@ -10,6 +10,7 @@ import yaml
 
 import io
 import configparser
+from pathlib import Path
 from semantic_version import Version
 import subprocess
 from subprocess import CalledProcessError
@@ -18,6 +19,7 @@ import shutil
 
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.utils import (
     clone_repo,
@@ -33,6 +35,8 @@ from ocs_ci.utility.flexy import (
     configure_allowed_domains_in_proxy,
     load_cluster_info,
 )
+from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +146,7 @@ class FlexyBase(object):
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             config.FLEXY["LAUNCHER_VARS"].update(
                 {
+                    "dynamic_bastion_host": "no",
                     "iaas_name": "vsphere_config",
                     "rhcos_image": config.ENV_DATA["vm_template"],
                 }
@@ -168,6 +173,7 @@ class FlexyBase(object):
                 cluster_domain = f".{cluster_name}.{base_domain}"
                 config.FLEXY["LAUNCHER_VARS"].update(
                     {
+                        "extract_installer_from_mirror_release_image": "yes",
                         "http_proxy": config.DEPLOYMENT["disconnected_http_proxy"],
                         "https_proxy": config.DEPLOYMENT.get(
                             "disconnected_https_proxy",
@@ -219,6 +225,7 @@ class FlexyBase(object):
                                 "CIDR": config.ENV_DATA["machine_cidr"],
                                 "internal_CIDR": config.ENV_DATA["machine_cidr"],
                                 "network": config.ENV_DATA["vm_network"],
+                                "internal_network": config.ENV_DATA["vm_network"],
                             },
                             "create_opts": {
                                 "type": ":clone",
@@ -348,9 +355,9 @@ class FlexyBase(object):
 
         """
         clone_repo(
-            self.flexy_private_conf_url,
-            self.flexy_host_private_conf_dir_path,
-            self.flexy_private_conf_branch,
+            url=self.flexy_private_conf_url,
+            location=self.flexy_host_private_conf_dir_path,
+            branch=self.flexy_private_conf_branch,
         )
         # prepare flexy private repo keyfile (if it is base64 encoded)
         keyfile = os.path.expanduser(constants.FLEXY_GIT_CRYPT_KEYFILE)
@@ -463,12 +470,13 @@ class FlexyBase(object):
         """
         # change ownership of flexy-dir back to current user
         chown_cmd = f"sudo chown -R {os.getuid()}:{os.getgid()} {self.flexy_host_dir}"
-        exec_cmd(chown_cmd)
+
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(chown_cmd)
         chmod_cmd = f"sudo chmod -R a+rX {self.flexy_host_dir}"
-        exec_cmd(chmod_cmd)
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(chmod_cmd)
         # mirror flexy work dir to cluster path
         rsync_cmd = f"rsync -av {self.flexy_host_dir} {self.cluster_path}/"
-        exec_cmd(rsync_cmd, timeout=1200)
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(rsync_cmd, timeout=3600)
 
         # mirror install-dir to cluster path (auth directory, metadata.json
         # file and other files)
@@ -476,7 +484,7 @@ class FlexyBase(object):
             self.flexy_host_dir, constants.FLEXY_RELATIVE_CLUSTER_DIR
         )
         rsync_cmd = f"rsync -av {install_dir}/ {self.cluster_path}/"
-        exec_cmd(rsync_cmd)
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(rsync_cmd)
 
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             # copy terraform.tfvars and terraform.tfstate files to
@@ -488,7 +496,15 @@ class FlexyBase(object):
             terraform_data_dir = os.path.join(
                 self.cluster_path, constants.TERRAFORM_DATA_DIR
             )
-            for _file in ("terraform.tfstate", "terraform.tfvars"):
+            # related to flexy-templates changes 4a4099541
+            if version.get_semantic_ocp_running_version() >= version.VERSION_4_11:
+                files_to_copy = (
+                    "upi_on_vsphere-terraform-scripts/terraform.tfstate",
+                    "terraform.tfvars",
+                )
+            else:
+                files_to_copy = ("terraform.tfstate", "terraform.tfvars")
+            for _file in files_to_copy:
                 shutil.copy2(
                     os.path.join(flexy_terraform_dir, _file), terraform_data_dir
                 )
@@ -580,6 +596,10 @@ class FlexyBase(object):
         # only works with 'debug' option
         if log_level:
             pass
+        # create empty metadata.json file in cluster dir, to ensure, that
+        # destroy job will be properly triggered even when the deployment fails
+        # and metadata.json file will not be created
+        Path(os.path.join(self.cluster_path, "metadata.json")).touch()
         cmd = self.build_install_cmd()
         # Ensure that flexy workdir will be copied to cluster dir even when
         # Flexy itself fails.

@@ -65,7 +65,8 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
     """
 
     es_operator_group = ocp.OCP(
-        kind=constants.OPERATOR_GROUP, namespace="openshift-operators-redhat"
+        kind=constants.OPERATOR_GROUP,
+        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
 
     es_operator_group.create(yaml_file=yaml_file)
@@ -98,9 +99,12 @@ def set_rbac(yaml_file, resource_name):
 
     """
 
-    rbac_role = ocp.OCP(kind=constants.ROLE, namespace="openshift-operators-redhat")
+    rbac_role = ocp.OCP(
+        kind=constants.ROLE, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
+    )
     rbac_rolebinding = ocp.OCP(
-        kind=constants.ROLEBINDING, namespace="openshift-operators-redhat"
+        kind=constants.ROLEBINDING,
+        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
 
     rbac_role.create(yaml_file=yaml_file, out_yaml_format=False)
@@ -125,7 +129,7 @@ def get_elasticsearch_subscription():
         resource_name (str): Name of the subscription
 
     Returns:
-        dict: Contains all the details of the subscription
+        bool: Subscription exists or not
 
     Example:
         create_elasticsearch_subscription(constants.EO_SUB_YAML)
@@ -133,14 +137,18 @@ def get_elasticsearch_subscription():
     """
 
     es_subscription = ocp.OCP(
-        kind=constants.SUBSCRIPTION, namespace="openshift-operators-redhat"
+        kind=constants.SUBSCRIPTION,
+        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
-    subscription_info = es_subscription.get(out_yaml_format=True)
-    if subscription_info:
-        logger.info("The Subscription is created successfully")
-    else:
-        logger.error("The subscription is not installed properly")
-    return subscription_info
+    es_sub_info = es_subscription.get(out_yaml_format=True)
+    es_sub = es_subscription.check_resource_existence(
+        resource_name=constants.ELASTICSEARCH_SUBSCRIPTION,
+        should_exist=True,
+        timeout=200,
+    )
+    if es_sub:
+        logger.info(es_sub_info)
+    return bool(es_sub)
 
 
 def create_clusterlogging_operator_group(yaml_file):
@@ -164,7 +172,7 @@ def create_clusterlogging_operator_group(yaml_file):
     """
 
     operator_group = ocp.OCP(
-        kind=constants.OPERATOR_GROUP, namespace="openshift-logging"
+        kind=constants.OPERATOR_GROUP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
 
     operator_group.create(yaml_file=yaml_file)
@@ -188,7 +196,7 @@ def get_clusterlogging_subscription():
         resource_name (str): Name of the subscription
 
     Returns:
-        dict: Contains all the details of the subscription.
+        bool: Subscription exists or not
 
     Example:
         cl_create_subscription(yaml_file=constants.CL_SUB_YAML)
@@ -196,16 +204,17 @@ def get_clusterlogging_subscription():
     """
 
     clusterlogging_subscription = ocp.OCP(
-        kind=constants.SUBSCRIPTION, namespace="openshift-logging"
+        kind=constants.SUBSCRIPTION, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    subscription_info = clusterlogging_subscription.get(
-        resource_name="cluster-logging", out_yaml_format=True
+    subscription_info = clusterlogging_subscription.get(out_yaml_format=True)
+    logging_sub = clusterlogging_subscription.check_resource_existence(
+        resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
+        timeout=120,
+        should_exist=True,
     )
-    if subscription_info:
-        logger.info("The Subscription is created successfully")
-    else:
-        logger.error("The subscription is not installed properly")
-    return subscription_info
+    if logging_sub:
+        logger.info(subscription_info)
+    return bool(logging_sub)
 
 
 def create_instance_in_clusterlogging():
@@ -240,16 +249,20 @@ def create_instance_in_clusterlogging():
     else:
         logger.error("Instance for clusterlogging is not created properly")
 
-    pod_obj = ocp.OCP(kind=constants.POD, namespace="openshift-logging")
+    pod_obj = ocp.OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
     pod_status = pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         resource_count=2 + es_node_count + nodes_in_cluster,
-        timeout=500,
-        sleep=2,
+        timeout=800,
+        sleep=20,
     )
     assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")
-    pvc_obj = ocp.OCP(kind=constants.PVC, namespace="openshift-logging")
+    pvc_obj = ocp.OCP(
+        kind=constants.PVC, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
     pvc_status = pvc_obj.wait_for_resource(
         condition=constants.STATUS_BOUND,
         resource_count=es_node_count,
@@ -275,13 +288,15 @@ def check_health_of_clusterlogging():
     """
 
     pod_list = []
-    pods = get_all_pods(namespace="openshift-logging")
+    pods = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
     logger.info("Pods that are created by the instance")
     for pod in pods:
         pod_list.append(pod.name)
     logger.info(pod_list)
     elasticsearch_pod = [pod for pod in pod_list if pod.startswith("elasticsearch")]
-    pod_obj = get_pod_obj(name=elasticsearch_pod[0], namespace="openshift-logging")
+    pod_obj = get_pod_obj(
+        name=elasticsearch_pod[0], namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
     status_check = pod_obj.exec_cmd_on_pod(
         command="es_util --query=_cluster/health?pretty", out_yaml_format=False
     )

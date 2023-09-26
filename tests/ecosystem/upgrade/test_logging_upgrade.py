@@ -11,13 +11,12 @@ from ocs_ci.utility.deployment_openshift_logging import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.framework.pytest_customization.marks import post_ocp_upgrade, magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_ocp_version, run_cmd
 from tests.conftest import install_logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +145,9 @@ def upgrade_info(channel):
     )
 
 
-@post_ocp_upgrade
+@pytest.mark.skip(
+    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/6610"
+)
 @magenta_squad
 @pytest.mark.usefixtures(install_logging.__name__)
 @pytest.mark.polarion_id("OCS-2201")

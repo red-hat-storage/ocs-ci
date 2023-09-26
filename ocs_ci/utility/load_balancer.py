@@ -35,7 +35,16 @@ class LoadBalancer(object):
         self.private_key = private_key or os.path.expanduser(
             config.DEPLOYMENT["ssh_key_private"]
         )
-        self.lb = Connection(self.host, self.user, self.private_key)
+        jump_host = (
+            config.DEPLOYMENT.get("ssh_jump_host")
+            if (config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"))
+            else None
+        )
+        if jump_host:
+            jump_host["private_key"] = self.private_key
+        self.lb = Connection(
+            self.host, self.user, self.private_key, jump_host=jump_host
+        )
 
     def _get_host(self):
         """
@@ -45,9 +54,7 @@ class LoadBalancer(object):
              str: IP Address of load balancer
 
         """
-        self.terraform_state_file = os.path.join(
-            config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
-        )
+        self.terraform_state_file = config.ENV_DATA["terraform_state_file"]
 
         if not os.path.isfile(self.terraform_state_file):
             raise FileNotFoundError(
@@ -98,6 +105,24 @@ class LoadBalancer(object):
         # remove bootstrap IP
         cmd = f"sudo sed -i '/{bootstrap_ip}/d' {constants.HAPROXY_LOCATION}"
         self.lb.exec_cmd(cmd)
+
+    def remove_compute_node_in_proxy(self):
+        """
+        Removes compute node IP's from haproxy.conf
+        """
+        compute_ips = get_module_ip(self.terraform_state_file, constants.COMPUTE_MODULE)
+        # backup the conf file
+        cmd = (
+            f"sudo cp {constants.HAPROXY_LOCATION}"
+            f" {constants.HAPROXY_LOCATION}_backup"
+        )
+        self.lb.exec_cmd(cmd)
+
+        # remove compute IPs
+        logger.debug(f"removing {compute_ips} from {constants.HAPROXY_LOCATION}")
+        for each_compute_ip in compute_ips:
+            cmd = f"sudo sed -i '/{each_compute_ip}/d' {constants.HAPROXY_LOCATION}"
+            self.lb.exec_cmd(cmd)
 
     def update_haproxy_with_nodes(self, nodes):
         """

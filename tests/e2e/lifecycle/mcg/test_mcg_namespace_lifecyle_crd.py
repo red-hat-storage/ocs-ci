@@ -9,6 +9,7 @@ import botocore.exceptions as boto3exception
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     skipif_managed_service,
+    red_squad,
 )
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -39,11 +40,8 @@ from ocs_ci.ocs.resources.bucket_policy import (
 
 logger = logging.getLogger(__name__)
 
-MCG_NS_RESULT_DIR = "/result"
-MCG_NS_ORIGINAL_DIR = "/original"
 
-
-def setup_base_objects(awscli_pod, amount=2):
+def setup_base_objects(awscli_pod, origin_dir, amount=2):
     """
     Prepares two directories and populate one of them with objects
 
@@ -52,17 +50,14 @@ def setup_base_objects(awscli_pod, amount=2):
         amount (Int): Number of test objects to create
 
     """
-    awscli_pod.exec_cmd_on_pod(
-        command=f"mkdir {MCG_NS_ORIGINAL_DIR} {MCG_NS_RESULT_DIR}"
-    )
-
-    for i in range(amount):
+    for _ in range(amount):
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         awscli_pod.exec_cmd_on_pod(
-            f"dd if=/dev/urandom of={MCG_NS_ORIGINAL_DIR}/{object_key}.txt bs=1M count=1 status=none"
+            f"dd if=/dev/urandom of={origin_dir}/{object_key}.txt bs=1M count=1 status=none"
         )
 
 
+@red_squad
 @skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.7")
@@ -103,7 +98,14 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         ],
     )
     def test_mcg_namespace_lifecycle_crd(
-        self, mcg_obj, cld_mgr, awscli_pod, bucket_factory, bucketclass_dict
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod,
+        bucket_factory,
+        namespace_store_factory,
+        test_directory_setup,
+        bucketclass_dict,
     ):
         """
         Test MCG namespace resource/bucket lifecycle using CRDs
@@ -150,21 +152,39 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         logger.info(f"Namespace bucket: {ns_bucket.name} created")
 
         # Noobaa S3 account
-        user = NoobaaAccount(
-            mcg_obj, name=user_name, email=email, buckets=[ns_bucket.name]
-        )
+        user = NoobaaAccount(mcg_obj, name=user_name, email=email)
         logger.info(f"Noobaa account: {user.email_id} with S3 access created")
 
-        bucket_policy_generated = gen_bucket_policy(
+        get_allow_bucket_policy_generated = gen_bucket_policy(
+            user_list=[user.email_id],
+            actions_list=["GetObject"],
+            resources_list=[f'{ns_bucket.name}/{"*"}'],
+        )
+
+        put_allow_bucket_policy_generated = gen_bucket_policy(
+            user_list=[user.email_id],
+            actions_list=["PutObject"],
+            resources_list=[f'{ns_bucket.name}/{"*"}'],
+        )
+
+        delete_deny_bucket_policy_generated = gen_bucket_policy(
             user_list=[user.email_id],
             actions_list=["DeleteObject"],
             effect="Deny",
             resources_list=[f'{ns_bucket.name}/{"*"}'],
         )
-        bucket_policy = json.dumps(bucket_policy_generated)
-        logger.info(
-            f"Creating bucket policy on bucket: {ns_bucket.name} with wildcard (*) Principal"
+
+        bucket_policy_dict = get_allow_bucket_policy_generated
+        bucket_policy_dict["Statement"].append(
+            put_allow_bucket_policy_generated["Statement"][0]
         )
+        bucket_policy_dict["Statement"].append(
+            delete_deny_bucket_policy_generated["Statement"][0]
+        )
+        bucket_policy = json.dumps(bucket_policy_dict)
+
+        logger.info(f"Creating bucket policy on bucket: {ns_bucket.name}")
+
         put_policy = put_bucket_policy(mcg_obj, ns_bucket.name, bucket_policy)
         logger.info(f"Put bucket policy response from Admin: {put_policy}")
 
@@ -216,7 +236,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             ), "Delete object operation was granted access, when it should have denied"
 
         logger.info("Setting up test files for upload, to the bucket/resources")
-        setup_base_objects(awscli_pod, amount=3)
+        setup_base_objects(awscli_pod, test_directory_setup.origin_dir, amount=3)
 
         # Upload files directly to NS resources
         logger.info(
@@ -224,7 +244,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         )
         sync_object_directory(
             awscli_pod,
-            src=MCG_NS_ORIGINAL_DIR,
+            src=test_directory_setup.origin_dir,
             target=f"s3://{aws_target_bucket}",
             signed_request_creds=s3_creds,
         )
@@ -236,17 +256,22 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         sync_object_directory(
             awscli_pod,
             src=f"s3://{aws_target_bucket}",
-            target=MCG_NS_RESULT_DIR,
+            target=test_directory_setup.result_dir,
             signed_request_creds=s3_creds,
         )
+
+        alternative_namespacestore = namespace_store_factory(
+            bucketclass_dict["interface"],
+            bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"],
+        )[0].name
 
         # Edit namespace bucket
         logger.info(f"Editing the namespace resource bucket: {ns_bucket.name}")
         namespace_bucket_update(
             mcg_obj,
             bucket_name=ns_bucket.name,
-            read_resource=[aws_target_bucket],
-            write_resource=aws_target_bucket,
+            read_resource=[alternative_namespacestore],
+            write_resource=alternative_namespacestore,
         )
 
         # Verify Download after editing bucket
@@ -256,7 +281,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         sync_object_directory(
             awscli_pod,
             src=f"s3://{ns_bucket.name}",
-            target=MCG_NS_RESULT_DIR,
+            target=test_directory_setup.result_dir,
             s3_obj=mcg_obj,
         )
 
@@ -266,9 +291,19 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         )
         rm_object_recursive(awscli_pod, ns_bucket.name, mcg_obj)
 
+        # Edit namespace bucket to use the previous namespace resource
+        original_namespacestore = ns_bucket.bucketclass.namespacestores[0].name
+        logger.info(f"Editing the namespace resource bucket: {ns_bucket.name}")
+        namespace_bucket_update(
+            mcg_obj,
+            bucket_name=ns_bucket.name,
+            read_resource=[original_namespacestore],
+            write_resource=original_namespacestore,
+        )
+
         # Namespace resource delete
-        logger.info(f"Deleting the resource: {aws_target_bucket}")
-        mcg_obj.delete_ns_resource(ns_resource_name=aws_target_bucket)
+        logger.info(f"Deleting the resource: {alternative_namespacestore}")
+        mcg_obj.delete_ns_resource(ns_resource_name=alternative_namespacestore)
 
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
@@ -315,7 +350,13 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
     @skipif_ocs_version("<4.8")
     @pytest.mark.polarion_id("OCS-2471")
     def test_mcg_cache_lifecycle(
-        self, mcg_obj, cld_mgr, awscli_pod, bucket_factory, bucketclass_dict
+        self,
+        mcg_obj,
+        cld_mgr,
+        awscli_pod,
+        bucket_factory,
+        test_directory_setup,
+        bucketclass_dict,
     ):
         """
         Test MCG cache bucket lifecycle
@@ -368,16 +409,19 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
 
         # Write to hub and read from cache
         logger.info("Setting up test files for upload")
-        setup_base_objects(awscli_pod, amount=3)
+        setup_base_objects(awscli_pod, test_directory_setup.origin_dir, amount=3)
         logger.info(f"Uploading objects to ns target: {target_bucket}")
         sync_object_directory(
             awscli_pod,
-            src=MCG_NS_ORIGINAL_DIR,
+            src=test_directory_setup.origin_dir,
             target=f"s3://{target_bucket}",
             signed_request_creds=s3_creds,
         )
         sync_object_directory(
-            awscli_pod, f"s3://{ns_bucket.name}", MCG_NS_RESULT_DIR, mcg_obj
+            awscli_pod,
+            f"s3://{ns_bucket.name}",
+            test_directory_setup.result_dir,
+            mcg_obj,
         )
 
         # Read cached object

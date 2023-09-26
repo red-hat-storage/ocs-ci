@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -15,6 +16,7 @@ from ocs_ci.helpers.helpers import wait_for_resource_state, create_pods
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier1
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
@@ -76,6 +78,7 @@ class TestRbdBlockPvcSnapshot(ManageTest):
                 size=f"{self.pvc_size - 1}G",
                 io_direction="write",
                 runtime=60,
+                direct=1,
             )
         log.info("IO started on all pods")
 
@@ -203,7 +206,7 @@ class TestRbdBlockPvcSnapshot(ManageTest):
         # Run IO on new pods
         log.info("Starting IO on new pods")
         for pod_obj in restore_pod_objs:
-            pod_obj.run_io(storage_type="block", size="500M", runtime=15)
+            pod_obj.run_io(storage_type="block", size="500M", runtime=15, direct=1)
 
         # Wait for IO completion on new pods
         log.info("Waiting for IO completion on new pods")

@@ -1,7 +1,6 @@
 """
 Pillowfight Class to run various workloads and scale tests
 """
-import time
 import logging
 import tempfile
 import re
@@ -59,12 +58,11 @@ class PillowFight(object):
         self.logs = tempfile.mkdtemp(prefix="pf_logs_")
 
     def run_pillowfights(
-        self, replicas=1, num_items=None, num_threads=None, timeout=1800
+        self, replicas=1, num_items=None, num_threads=None, num_of_cycles=None
     ):
         """
         loop through all the yaml files extracted from the pillowfight repo
-        and run them.  Run oc logs on the results and save the logs in self.logs
-        directory
+        and run them.
 
         Args:
             replicas (int): Number of pod replicas
@@ -72,7 +70,6 @@ class PillowFight(object):
             num_threads (int): Number of threads
 
         """
-        ocp_local = OCP(namespace=self.namespace)
         self.replicas = replicas
         for i in range(self.replicas):
             # for basic-fillowfight.yaml
@@ -87,15 +84,28 @@ class PillowFight(object):
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][4] = (
                 str(num_items) if num_items else "20000"
             )
+            # num of cycles
+            pfight["spec"]["template"]["spec"]["containers"][0]["command"][10] = (
+                str(num_of_cycles) if num_of_cycles else "5"
+            )
             # num of threads
             pfight["spec"]["template"]["spec"]["containers"][0]["command"][13] = (
                 str(num_threads) if num_threads else "20"
             )
             lpillowfight = OCS(**pfight)
             lpillowfight.create()
-            time.sleep(15)
-        self.pods_info = {}
 
+    def wait_for_pillowfights_to_complete(self, timeout=1800):
+        """
+        Wait for the pillowfights to complete.
+        Run oc logs on the results and save the logs in self.logs directory
+
+        Raises:
+            Exception: If pillowfight fails to reach completed state
+
+        """
+        self.pods_info = {}
+        ocp_local = OCP(namespace=self.namespace)
         for pillowfight_pods in TimeoutSampler(
             timeout,
             9,

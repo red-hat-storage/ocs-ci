@@ -14,13 +14,18 @@ from elasticsearch import Elasticsearch, exceptions as esexp
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import BaseTest
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
-from ocs_ci.ocs.exceptions import CommandFailed, MissingRequiredConfigKeyError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    MissingRequiredConfigKeyError,
+    PVCNotCreated,
+    PodNotCreated,
+)
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
@@ -123,6 +128,9 @@ class PASTest(BaseTest):
                 time.sleep(120)
                 still_going_down = True
         log.info("Storage usage was cleandup")
+
+        # Add delay of 15 sec. after each test.
+        time.sleep(10)
 
     def initialize_test_crd(self):
         """
@@ -243,7 +251,7 @@ class PASTest(BaseTest):
             log.warning(f"Node type ({node_type}) is invalid")
             return
 
-        oc_cmd = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        oc_cmd = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         self.environment[f"{node_type}_nodes_num"] = len(nodes)
         self.environment[f"{node_type}_nodes_cpu_num"] = oc_cmd.exec_oc_debug_cmd(
             node=nodes[0],
@@ -720,7 +728,7 @@ class PASTest(BaseTest):
 
         # Check if it is Arbiter cluster
         my_obj = OCP(
-            kind="StorageCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind="StorageCluster", namespace=config.ENV_DATA["cluster_namespace"]
         )
         arbiter = (
             my_obj.data.get("items")[0].get("spec").get("arbiter").get("enable", False)
@@ -763,7 +771,7 @@ class PASTest(BaseTest):
             osd_pod_obj = OCP(
                 kind="POD",
                 resource_name=osd_pod,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             log.info(f"The First OSD pod nams is {osd_pod}")
 
@@ -774,7 +782,7 @@ class PASTest(BaseTest):
             osd_pvc_obj = OCP(
                 kind="PersistentVolumeClaim",
                 resource_name=osd_pvc_name,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
 
             odf_back_storage = osd_pvc_obj.get()["spec"]["storageClassName"]
@@ -858,7 +866,7 @@ class PASTest(BaseTest):
         """
         Creating new project (namespace) for performance test
         """
-        self.namespace = "pas-test-namespace"
+        self.namespace = helpers.create_unique_resource_name("pas-test", "namespace")
         log.info(f"Creating new namespace ({self.namespace}) for the test")
         try:
             self.proj = helpers.create_project(project_name=self.namespace)
@@ -931,3 +939,87 @@ class PASTest(BaseTest):
         self.pod_yaml_file = tempfile.NamedTemporaryFile(prefix="PerfPod")
         with open(self.pod_yaml_file.name, "w") as temp:
             yaml.dump(pod_data, temp)
+
+    def create_testing_pvc_and_wait_for_bound(self):
+        log.info("Creating PVC for the test")
+        try:
+            self.pvc_obj = helpers.create_pvc(
+                sc_name=self.sc_obj.name,
+                pvc_name="pvc-pas-test",
+                size=f"{self.pvc_size}Gi",
+                namespace=self.namespace,
+                # access_mode=Interfaces_info[self.interface]["accessmode"],
+            )
+        except Exception as e:
+            log.exception(f"The PVC was not created, exception [{str(e)}]")
+            raise PVCNotCreated("PVC did not reach BOUND state.")
+        # Wait for the PVC to be Bound
+        performance_lib.wait_for_resource_bulk_status(
+            "pvc", 1, self.namespace, constants.STATUS_BOUND, 600, 5
+        )
+        log.info(f"The PVC {self.pvc_obj.name} was created and in Bound state.")
+
+    def cleanup_testing_pvc(self):
+        try:
+            pv = self.pvc_obj.get("spec")["spec"]["volumeName"]
+            self.pvc_obj.delete()
+            # Wait for the PVC to be deleted
+            performance_lib.wait_for_resource_bulk_status(
+                "pvc", 0, self.namespace, constants.STATUS_BOUND, 60, 5
+            )
+            log.info("The PVC was deleted successfully")
+        except Exception:
+            log.warning("The PVC failed to delete")
+            pass
+
+        # Delete the backend PV of the PVC
+        try:
+            log.info(f"Try to delete the backend PV : {pv}")
+            performance_lib.run_oc_command(f"delete pv {pv}")
+        except Exception as ex:
+            err_msg = f"cannot delete PV [{ex}]"
+            log.error(err_msg)
+
+    def create_testing_pod_and_wait_for_completion(self, **kwargs):
+        # Creating pod yaml file to run as a Job, the command to run on the pod and
+        # arguments to it will replace in the create_pod function
+        self.create_fio_pod_yaml(
+            pvc_size=int(self.pvc_size), filesize=kwargs.pop("filesize", "1M")
+        )
+        # Create a pod
+        log.info(f"Creating Pod with pvc {self.pvc_obj.name}")
+
+        try:
+            self.pod_object = helpers.create_pod(
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+                interface_type=self.interface,
+                pod_name="pod-pas-test",
+                pod_dict_path=self.pod_yaml_file.name,
+                **kwargs,
+            )
+        except Exception as e:
+            log.exception(
+                f"Pod attached to PVC {self.pod_object.name} was not created, exception [{str(e)}]"
+            )
+            raise PodNotCreated("Pod attached to PVC was not created.")
+
+        # Confirm that pod is running on the selected_nodes
+        log.info("Checking whether the pod is running")
+        helpers.wait_for_resource_state(
+            resource=self.pod_object,
+            state=constants.STATUS_COMPLETED,
+            timeout=600,
+        )
+
+    def cleanup_testing_pod(self):
+        try:
+            self.pod_object.delete()
+            # Wait for the POD to be deleted
+            performance_lib.wait_for_resource_bulk_status(
+                "pod", 0, self.namespace, constants.STATUS_RUNNING, 60, 5
+            )
+            log.info("The POD was deleted successfully")
+        except Exception:
+            log.warning("The POD failed to delete")
+            pass

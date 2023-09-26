@@ -9,17 +9,23 @@ import random
 import re
 import shlex
 import smtplib
+import socket
 import string
 import subprocess
 import time
 import traceback
+from typing import Match
 import stat
+import shutil
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import pandas as pd
 from scipy.stats import tmean, scoreatpercentile
 from shutil import which, move, rmtree
 import pexpect
+import pytest
+import unicodedata
 
 import hcl2
 import requests
@@ -29,7 +35,7 @@ from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
-from tempfile import NamedTemporaryFile, mkdtemp
+from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -45,10 +51,13 @@ from ocs_ci.ocs.exceptions import (
     UnknownCloneTypeException,
     UnsupportedOSType,
     InteractivePromptException,
+    NotFoundError,
+    CephToolBoxNotFoundException,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
+from psutil._common import bytes2human
 
 
 log = logging.getLogger(__name__)
@@ -438,7 +447,16 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def run_cmd(
+    cmd,
+    secrets=None,
+    timeout=600,
+    ignore_error=False,
+    threading_lock=None,
+    silent=False,
+    cluster_config=None,
+    **kwargs,
+):
     """
     *The deprecated form of exec_cmd.*
     Run an arbitrary command locally
@@ -451,6 +469,9 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
+        silent (bool): If True will silent errors from the server, default false
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -458,7 +479,16 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     Returns:
         (str) Decoded stdout of command
     """
-    completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+    completed_process = exec_cmd(
+        cmd,
+        secrets,
+        timeout,
+        ignore_error,
+        threading_lock,
+        silent=silent,
+        cluster_config=cluster_config,
+        **kwargs,
+    )
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
@@ -544,9 +574,22 @@ def run_cmd_multicluster(
     return completed_process
 
 
-def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+def exec_cmd(
+    cmd,
+    secrets=None,
+    timeout=600,
+    ignore_error=False,
+    threading_lock=None,
+    silent=False,
+    use_shell=False,
+    cluster_config=None,
+    **kwargs,
+):
     """
     Run an arbitrary command locally
+
+    If the command is grep and matching pattern is not found, then this function
+    returns "command terminated with exit code 1" in stderr.
 
     Args:
         cmd (str): command to run
@@ -556,6 +599,12 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
+        threading_lock (threading.Lock): threading.Lock object that is used
+            for handling concurrent oc commands
+        silent (bool): If True will silent errors from the server, default false
+        use_shell (bool): If True will pass the cmd without splitting
+        cluster_config (MultiClusterConfig): In case of multicluster environment this object
+                will be non-null
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -571,8 +620,14 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
-    if isinstance(cmd, str):
+    if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
+    if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
+        kubepath = cluster_config.RUN["kubeconfig"]
+        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
+        cmd = list_insert_at_position(cmd, 2, [kubepath])
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.acquire()
     completed_process = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -581,6 +636,8 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs,
     )
+    if threading_lock and cmd[0] == "oc":
+        threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
@@ -589,16 +646,54 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
 
     masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
     if len(completed_process.stderr) > 0:
-        log.warning(f"Command stderr: {masked_stderr}")
+        if not silent:
+            log.warning(f"Command stderr: {masked_stderr}")
     else:
         log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
-        raise CommandFailed(
-            f"Error during execution of command: {masked_cmd}."
-            f"\nError is {masked_stderr}"
-        )
+        masked_stderr = bin_xml_escape(filter_out_emojis(masked_stderr))
+        if (
+            "grep" in masked_cmd
+            and b"command terminated with exit code 1" in completed_process.stderr
+        ):
+            log.info(f"No results found for grep command: {masked_cmd}")
+        else:
+            raise CommandFailed(
+                f"Error during execution of command: {masked_cmd}."
+                f"\nError is {masked_stderr}"
+            )
     return completed_process
+
+
+def bin_xml_escape(arg):
+    """
+    Visually escape invalid XML characters.
+
+    For example, transforms 'hello\aworld\b' into 'hello#x07world#x08'
+
+    Args:
+        arg (object) Object on top of which the invalid XML characters will be escaped
+
+    Returns:
+        str: string with escaped invalid characters
+
+    """
+
+    def repl(matchobj: Match[str]) -> str:
+        i = ord(matchobj.group())
+        if i <= 0xFF:
+            return "#x%02X" % i
+        else:
+            return "#x%04X" % i
+
+    # The spec range of valid chars is:
+    # Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+    # For an unknown(?) reason, we disallow #x7F (DEL) as well.
+    illegal_xml_re = (
+        "[^\u0009\u000A\u000D\u0020-\u007E\u0080-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
+    )
+    return re.sub(illegal_xml_re, repl, str(arg))
 
 
 def download_file(url, filename, **kwargs):
@@ -690,9 +785,19 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
-    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir = os.path.abspath(bin_dir_rel_path)
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
+    client_binary_path = os.path.join(bin_dir, "oc")
+    client_exist = os.path.isfile(client_binary_path)
+    custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
+    if not client_exist:
+        get_openshift_client()
+        config.RUN["custom_client_downloaded_from_installer"] = True
+    if custom_ocp_image:
+        extract_ocp_binary_from_image("openshift-install", custom_ocp_image, bin_dir)
+        return installer_binary_path
     if os.path.isfile(installer_binary_path) and force_download:
         delete_file(installer_binary_path)
     if os.path.isfile(installer_binary_path):
@@ -806,10 +911,45 @@ def get_rosa_cli(
         rosa_binary_path,
         current_file_permissions.st_mode | stat.S_IEXEC,
     )
-    rosa_version = run_cmd(f"{rosa_binary_path} version")
+    rosa_version = run_cmd(
+        f"{rosa_binary_path} version", ignore_error=True, timeout=1800
+    )
     log.info(f"rosa version: {rosa_version}")
 
     return rosa_binary_path
+
+
+def extract_ocp_binary_from_image(binary, image, bin_dir):
+    """
+    Extract binary (oc client or openshift installer) from custom OCP image
+
+    Args:
+        binary (str): type of binary (oc or openshift-install)
+        image (str): image URL
+        bin_dir (str): path to bin folder where to extract the binary
+
+    """
+    binary_path = os.path.join(bin_dir, binary)
+    binary_path_exists = os.path.isfile(binary_path)
+    with TemporaryDirectory() as temp_dir:
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        cmd = f'oc adm release extract -a {pull_secret_path} --to {temp_dir} --command={binary} "{image}"'
+        exec_cmd(cmd)
+        temp_binary = os.path.join(temp_dir, binary)
+        if binary_path_exists:
+            backup_file = f"{binary_path}.bak"
+            os.rename(binary_path, backup_file)
+            try:
+                shutil.move(temp_binary, binary_path)
+                delete_file(backup_file)
+                log.info("Deleted backup binaries.")
+            except FileNotFoundError as ex:
+                log.error(
+                    f"Something went wrong with copying binary, reverting backup file. Exception: {ex}"
+                )
+                shutil.move(backup_file, binary_path)
+        else:
+            shutil.move(temp_binary, binary_path)
 
 
 def get_openshift_client(
@@ -832,7 +972,8 @@ def get_openshift_client(
 
     """
     version = version or config.RUN["client_version"]
-    bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+    bin_dir = os.path.abspath(bin_dir_rel_path)
     client_binary_path = os.path.join(bin_dir, "oc")
     kubectl_binary_path = os.path.join(bin_dir, "kubectl")
     download_client = True
@@ -845,9 +986,21 @@ def get_openshift_client(
         download_client = False
         force_download = False
 
+    client_exist = os.path.isfile(client_binary_path)
+    custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
+    skip_if_client_downloaded_from_installer = config.RUN.get(
+        "custom_client_downloaded_from_installer"
+    )
+    if (
+        client_exist
+        and custom_ocp_image
+        and not skip_if_client_downloaded_from_installer
+    ):
+        extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
+        return
     if force_download:
         log.info("Forcing client download.")
-    elif os.path.isfile(client_binary_path) and not skip_comparison:
+    elif client_exist and not skip_comparison:
         current_client_version = get_client_version(client_binary_path)
         if current_client_version != version:
             log.info(
@@ -883,12 +1036,12 @@ def get_openshift_client(
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball} oc kubectl")
         delete_file(tarball)
-
+        if custom_ocp_image and not skip_if_client_downloaded_from_installer:
+            extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
         try:
             client_version = run_cmd(f"{client_binary_path} version --client")
         except CommandFailed:
             log.error("Unable to get version from downloaded client.")
-
         if client_version:
             try:
                 delete_file(client_binary_backup)
@@ -1508,6 +1661,34 @@ def move_summary_to_top(soup):
         main_header.insert_after(tag)
 
 
+def add_mem_stats(soup):
+    """
+    Add performance summary to the soup to print the table:
+    columns = ['TC name', 'Peak total RAM consumed', 'Peak total VMS consumed', 'RAM leak']
+    """
+    if "memory" in config.RUN and isinstance(config.RUN["memory"], pd.DataFrame):
+        mem_table = config.RUN["memory"]
+        mem_table["Peak RAM consumed"] = mem_table["Peak total RAM consumed"].apply(
+            bytes2human
+        )
+        mem_table["Peak VMS consumed"] = mem_table["Peak total VMS consumed"].apply(
+            bytes2human
+        )
+        mem_div = soup.new_tag("div")
+        mem_h2_tag = soup.new_tag("h2")
+        mem_h2_tag.string = "Memory Test Performance:"
+        mem_div.append(mem_h2_tag)
+        mem_div.append(
+            pd.DataFrame(config.RUN["memory"]).to_markdown(
+                headers="keys", index=False, tablefmt="grid"
+            )
+        )
+    else:
+        log.debug(
+            "No memory records was found, skip Memory Test Performance email reporting"
+        )
+
+
 def email_reports(session):
     """
     Email results of test run
@@ -1551,6 +1732,7 @@ def email_reports(session):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
     part1 = MIMEText(soup, "html")
+    add_mem_stats(soup)
     msg.attach(part1)
     try:
         s = smtplib.SMTP(config.REPORTING["email"]["smtp_server"])
@@ -1559,6 +1741,27 @@ def email_reports(session):
         log.info(f"Results have been emailed to {recipients}")
     except Exception:
         log.exception("Sending email with results failed!")
+
+
+def save_reports():
+    """
+    Save reports of test run to logs directory
+
+    """
+    try:
+        if (
+            "memory" in config.RUN
+            and isinstance(config.RUN["memory"], pd.DataFrame)
+            and not config.RUN["memory"].empty
+        ):
+            stats_dir = create_stats_dir()
+            mem_report_file = os.path.join(stats_dir, "session_mem_report_file")
+            config.RUN["memory"].to_csv(mem_report_file, index=False)
+            log.info(f"Memory performance report saved to '{mem_report_file}'")
+        else:
+            log.info("Memory performance report not saved - no data")
+    except Exception:
+        log.exception("Failed save reports to logs directory")
 
 
 def get_cluster_version_info():
@@ -1600,7 +1803,7 @@ def get_ocs_build_number():
         operator_name = defaults.OCS_OPERATOR_NAME
     ocs_csvs = get_csvs_start_with_prefix(
         operator_name,
-        defaults.ROOK_CLUSTER_NAMESPACE,
+        config.ENV_DATA["cluster_namespace"],
     )
     try:
         ocs_csv = ocs_csvs[0]
@@ -1698,25 +1901,32 @@ def get_csi_versions():
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
 
-    ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    csi_provisioners = ["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"]
-    for provisioner in csi_provisioners:
-        csi_provisioner_pod = run_cmd(
-            f"oc -n {config.ENV_DATA['cluster_namespace']} get pod -l "
-            f"'app={provisioner}' -o jsonpath='{{.items[0].metadata.name}}'"
+    for provisioner in [
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+    ]:
+        ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=provisioner,
         )
-        desc = ocp_pod_obj.get(csi_provisioner_pod)
-        for container in desc["spec"]["containers"]:
-            name = container["name"]
-            version = container["image"].split("/")[-1].split(":")[1]
-            csi_versions[name] = version
+        for container in ocp_pod_obj.data["items"][0]["spec"]["containers"]:
+            try:
+                name = container["name"]
+                version = container["image"].split("/")[-1].split(":")[1]
+                csi_versions[name] = version
+            except ValueError:
+                raise NotFoundError(
+                    f"items | spec | containers " f"not found:\n {str(container)}"
+                )
     return csi_versions
 
 
 def get_ocp_version(seperator=None):
     """
+    *The deprecated form of 'get current ocp version'*
+    Use ocs_ci/utility/version.py:get_semantic_ocp_version_from_config()
+
     Get current ocp version
 
     Args:
@@ -1732,10 +1942,22 @@ def get_ocp_version(seperator=None):
 
     """
     char = seperator if seperator else "."
+    raw_version = config.DEPLOYMENT["installer_version"]
     if config.ENV_DATA.get("skip_ocp_deployment"):
-        raw_version = json.loads(run_cmd("oc version -o json"))["openshiftVersion"]
-    else:
-        raw_version = config.DEPLOYMENT["installer_version"]
+        try:
+            raw_version = json.loads(run_cmd("oc version -o json"))["openshiftVersion"]
+        except KeyError:
+            if (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            ):
+                # In IBM ROKS, there is some issue that openshiftVersion is not available
+                # after fresh deployment. As W/A we are taking the version from config only if not found.
+                log.warning(
+                    "openshiftVersion key not found! Taking OCP version from config."
+                )
+            else:
+                raise
     version = Version.coerce(raw_version)
     return char.join([str(version.major), str(version.minor)])
 
@@ -1793,6 +2015,24 @@ def get_ocp_repo(rhel_major_version=None):
     return path
 
 
+def get_running_acm_version():
+    """
+    Get the currently deployed ACM version
+
+    Returns:
+        string: ACM version
+
+    """
+    occmd = "oc get mch multiclusterhub -n open-cluster-management -o json"
+    jq_cmd = "jq -r .status.currentVersion"
+    json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
+    acm_version = subprocess.Popen(
+        shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
+    )
+    json_out.stdout.close()
+    return acm_version.communicate()[0].decode()
+
+
 def parse_pgsql_logs(data):
     """
     Parse the pgsql benchmark data from ripsaw and return
@@ -1818,41 +2058,41 @@ def parse_pgsql_logs(data):
     """
     match = data.split("PGBench Results")
     list_data = []
-    for i in range(2, len(match)):
+    for i in range(1, len(match)):
         log = "".join(match[i].split("\n"))
         pgsql_data = dict()
-        pgsql_data[i - 1] = {}
+        pgsql_data[i] = {}
         clients = re.search(r"scaling_factor\':\s+(\d+),", log)
         if clients and clients.group(1):
-            pgsql_data[i - 1]["scaling_factor"] = clients.group(1)
+            pgsql_data[i]["scaling_factor"] = clients.group(1)
         clients = re.search(r"number_of_clients\':\s+(\d+),", log)
         if clients and clients.group(1):
-            pgsql_data[i - 1]["num_clients"] = clients.group(1)
+            pgsql_data[i]["num_clients"] = clients.group(1)
         threads = re.search(r"number_of_threads\':\s+(\d+)", log)
         if threads and threads.group(1):
-            pgsql_data[i - 1]["num_threads"] = threads.group(1)
+            pgsql_data[i]["num_threads"] = threads.group(1)
         clients = re.search(r"number_of_transactions_per_client\':\s+(\d+),", log)
         if clients and clients.group(1):
-            pgsql_data[i - 1]["number_of_transactions_per_client"] = clients.group(1)
+            pgsql_data[i]["number_of_transactions_per_client"] = clients.group(1)
         clients = re.search(
             r"number_of_transactions_actually_processed\':\s+(\d+),", log
         )
         if clients and clients.group(1):
-            pgsql_data[i - 1][
-                "number_of_transactions_actually_processed"
-            ] = clients.group(1)
+            pgsql_data[i]["number_of_transactions_actually_processed"] = clients.group(
+                1
+            )
         lat_avg = re.search(r"latency_average_ms\':\s+(\d+)", log)
         if lat_avg and lat_avg.group(1):
-            pgsql_data[i - 1]["latency_avg"] = lat_avg.group(1)
+            pgsql_data[i]["latency_avg"] = lat_avg.group(1)
         lat_stddev = re.search(r"latency_stddev_ms\':\s+(\d+)", log)
         if lat_stddev and lat_stddev.group(1):
-            pgsql_data[i - 1]["lat_stddev"] = lat_stddev.group(1)
+            pgsql_data[i]["lat_stddev"] = lat_stddev.group(1)
         tps_incl = re.search(r"tps_incl_con_est\':\s+(\w+)", log)
         if tps_incl and tps_incl.group(1):
-            pgsql_data[i - 1]["tps_incl"] = tps_incl.group(1)
+            pgsql_data[i]["tps_incl"] = tps_incl.group(1)
         tps_excl = re.search(r"tps_excl_con_est\':\s+(\w+)", log)
         if tps_excl and tps_excl.group(1):
-            pgsql_data[i - 1]["tps_excl"] = tps_excl.group(1)
+            pgsql_data[i]["tps_excl"] = tps_excl.group(1)
         list_data.append(pgsql_data)
 
     return list_data
@@ -1867,6 +2107,18 @@ def create_directory_path(path):
         os.makedirs(path)
     else:
         log.debug(f"{path} already exists")
+
+
+def create_stats_dir():
+    """
+    create directory for Test run performance stats
+    """
+    stats_log_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"stats_log_dir_{config.RUN['run_id']}",
+    )
+    create_directory_path(stats_log_dir)
+    return stats_log_dir
 
 
 def ocsci_log_path():
@@ -1925,7 +2177,13 @@ def get_testrun_name():
         )
         if baremetal_config:
             testrun_name = f"LSO {baremetal_config} {testrun_name}"
-
+        if config.ENV_DATA.get("sno"):
+            testrun_name = f"{testrun_name} SNO"
+        if config.ENV_DATA.get("lvmo"):
+            testrun_name = f"{testrun_name} LVMO"
+        post_upgrade = config.REPORTING.get("post_upgrade", "")
+        if post_upgrade:
+            post_upgrade = "post-upgrade"
         testrun_name = (
             f"{testrun_name}"
             f"{get_az_count()}AZ "
@@ -1933,7 +2191,7 @@ def get_testrun_name():
             f"{lso_deployment}"
             f"{config.ENV_DATA.get('master_replicas')}M "
             f"{config.ENV_DATA.get('worker_replicas')}W "
-            f"{markers}"
+            f"{markers} {post_upgrade}".rstrip()
         )
     testrun_name = (
         f"{ocs_version_string} {us_ds} {ocp_version_string} " f"{testrun_name}"
@@ -2007,23 +2265,60 @@ def ceph_health_check_base(namespace=None):
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    run_cmd(
-        f"oc wait --for condition=ready pod "
-        f"-l app=rook-ceph-tools "
-        f"-n {namespace} "
-        f"--timeout=120s"
-    )
-    tools_pod = run_cmd(
-        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
-        f"-o jsonpath='{{.items[0].metadata.name}}'",
-        timeout=60,
-    )
-    health = run_cmd(f"oc -n {namespace} exec {tools_pod} -- ceph health")
+    health = run_ceph_health_cmd(namespace)
+
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
         raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+
+
+def create_ceph_health_cmd(namespace):
+    """
+    Forms the ceph health command
+
+    Args:
+        namespace (str): Namespace of OCS
+
+    Returns:
+        str: ceph health command
+
+    """
+    tools_pod = run_cmd(
+        f"oc -n {namespace} get pod -l '{constants.TOOL_APP_LABEL}' "
+        f"-o jsonpath='{{.items[0].metadata.name}}'",
+        timeout=60,
+    )
+    ceph_health_cmd = f"oc -n {namespace} exec {tools_pod} -- ceph health"
+    return ceph_health_cmd
+
+
+def run_ceph_health_cmd(namespace):
+    """
+    Run the ceph health command
+
+    Args:
+        namespace: Namespace of OCS
+
+    Raises:
+        CommandFailed: In case the rook-ceph-tools pod failed to reach the Ready state.
+
+    Returns:
+        str: The output of the ceph health command
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    try:
+        ct_pod = get_ceph_tools_pod(namespace=namespace)
+    except (AssertionError, CephToolBoxNotFoundException) as ex:
+        raise CommandFailed(ex)
+
+    return ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
+    )
 
 
 def get_rook_repo(branch="master", to_checkout=None):
@@ -2054,7 +2349,15 @@ def get_rook_repo(branch="master", to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
 
 
-def clone_repo(url, location, branch="master", to_checkout=None, clone_type="shallow"):
+def clone_repo(
+    url,
+    location,
+    tmp_repo=False,
+    branch="master",
+    to_checkout=None,
+    clone_type="shallow",
+    force_checkout=False,
+):
     """
     Clone a repository or checkout latest changes if it already exists at
         specified location.
@@ -2062,11 +2365,14 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
     Args:
         url (str): location of the repository to clone
         location (str): path where the repository will be cloned to
+        tmp_repo (bool): temporary repo, means it will be copied to temp path, to 'location'
         branch (str): branch name to checkout
         to_checkout (str): commit id or tag to checkout
         clone_type (str): type of clone (shallow, blobless, treeless and normal)
             By default, shallow clone will be used. For normal clone use
             clone_type as "normal".
+        force_checkout (bool): True for force checkout to branch.
+            force checkout will ignore the unmerged entries.
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -2085,8 +2391,26 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         git_params = ""
     else:
         raise UnknownCloneTypeException
+    """
+    Workaround as a temp solution since sno installer git is different from ocp installer if directory already exist
+    it checks if the repo already exist from SNO but the git is OCP it delete the installer directory and
+    the other way around
+    """
+    installer_path_exist = os.path.isdir(location)
+    if ("installer" in location) and installer_path_exist:
+        if "coreos" not in location:
+            installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
+            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            if (("srozen" in remote_output) and ("openshift" in url)) or (
+                ("openshift" in remote_output) and ("srozen" in url)
+            ):
+                shutil.rmtree(installer_dir)
+                log.info(
+                    f"Waiting for 5 seconds to get all files and folder deleted from {installer_dir}"
+                )
+                time.sleep(5)
 
-    if not os.path.isdir(location):
+    if not os.path.isdir(location) or (tmp_repo and os.path.isdir(location)):
         log.info("Cloning repository into %s", location)
         run_cmd(f"git clone {git_params} {url} {location}")
     else:
@@ -2094,7 +2418,10 @@ def clone_repo(url, location, branch="master", to_checkout=None, clone_type="sha
         log.info("Fetching latest changes from repository")
         run_cmd("git fetch --all", cwd=location)
     log.info("Checking out repository to specific branch: %s", branch)
-    run_cmd(f"git checkout {branch}", cwd=location)
+    if force_checkout:
+        run_cmd(f"git checkout --force {branch}", cwd=location)
+    else:
+        run_cmd(f"git checkout {branch}", cwd=location)
     log.info("Reset branch: %s with latest changes", branch)
     run_cmd(f"git reset --hard origin/{branch}", cwd=location)
     if to_checkout:
@@ -2214,7 +2541,7 @@ def load_auth_config():
 
     """
     log.info("Retrieving the authentication config dictionary")
-    auth_file = os.path.join(constants.TOP_DIR, "data", constants.AUTHYAML)
+    auth_file = os.path.join(constants.DATA_DIR, constants.AUTHYAML)
     try:
         with open(auth_file) as f:
             return yaml.safe_load(f)
@@ -2440,13 +2767,14 @@ def dump_config_to_file(file_path):
         yaml.safe_dump(config_copy, fs)
 
 
-def create_rhelpod(namespace, pod_name, timeout=300):
+def create_rhelpod(namespace, pod_name, rhel_version=8, timeout=300):
     """
     Creates the RHEL pod
 
     Args:
         namespace (str): Namespace to create RHEL pod
         pod_name (str): Pod name
+        rhel_version (int): RHEL version to be used for ansible
         timeout (int): wait time for RHEL pod to be in Running state
 
     Returns:
@@ -2455,12 +2783,19 @@ def create_rhelpod(namespace, pod_name, timeout=300):
     """
     # importing here to avoid dependencies
     from ocs_ci.helpers import helpers
+    from ocs_ci.ocs.utils import label_pod_security_admission
 
-    # TODO: This method should be updated to add argument to change RHEL version
+    label_pod_security_admission(namespace=namespace)
+
+    if rhel_version >= 8:
+        rhel_pod_yaml = constants.RHEL_8_7_POD_YAML
+    else:
+        rhel_pod_yaml = constants.RHEL_7_7_POD_YAML
+
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,
-        pod_dict_path=constants.RHEL_7_7_POD_YAML,
+        pod_dict_path=rhel_pod_yaml,
     )
     helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING, timeout)
     return rhelpod_obj
@@ -2679,7 +3014,13 @@ def get_ocs_version_from_image(image):
 
     """
     try:
-        version = image.rsplit(":", 1)[1].lstrip("latest-").lstrip("stable-")
+        version = (
+            image.rsplit(":", 1)[1]
+            .lstrip("latest-")
+            .lstrip("stable-")
+            .lstrip("rc-")
+            .lstrip("upgrade-")
+        )
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
     except ValueError:
@@ -2809,14 +3150,17 @@ class AZInfo(object):
         return prev
 
 
-def convert_device_size(unformatted_size, units_to_covert_to):
+def convert_device_size(unformatted_size, units_to_covert_to, convert_size=1000):
     """
     Convert a string representing a size to an int according to the given units
     to convert to
 
     Args:
         unformatted_size (str): The size to convert (i.e, '1Gi'/'100Mi')
+            acceptable units are: "Ti", "Gi", "Mi", "Ki", "Bi"
         units_to_covert_to (str): The units to convert the size to (i.e, TB/GB/MB)
+            acceptable units are: "TB", "GB", "MB", "KB", "BY"
+        convert_size (int): set convert by 1000 or 1024
 
     Returns:
         int: The converted size
@@ -2824,14 +3168,113 @@ def convert_device_size(unformatted_size, units_to_covert_to):
     """
     units = unformatted_size[-2:]
     abso = int(unformatted_size[:-2])
-    conversion = {
-        "TB": {"Ti": abso, "Gi": abso / 1000, "Mi": abso / 1e6, "Ki": abso / 1e9},
-        "GB": {"Ti": abso * 1000, "Gi": abso, "Mi": abso / 1000, "Ki": abso / 1e6},
-        "MB": {"Ti": abso * 1e6, "Gi": abso * 1000, "Mi": abso, "Ki": abso / 1000},
-        "KB": {"Ti": abso * 1e9, "Gi": abso * 1e6, "Mi": abso * 1000, "Ki": abso},
-        "B": {"Ti": abso * 1e12, "Gi": abso * 1e9, "Mi": abso * 1e6, "Ki": abso * 1000},
+    conversion_1000 = {
+        "TB": {
+            "Ti": abso,
+            "Gi": abso / 1000,
+            "Mi": abso / 1e6,
+            "Ki": abso / 1e9,
+            "Bi": abso / 1e12,
+        },
+        "GB": {
+            "Ti": abso * 1000,
+            "Gi": abso,
+            "Mi": abso / 1000,
+            "Ki": abso / 1e6,
+            "Bi": abso / 1000,
+        },
+        "MB": {
+            "Ti": abso * 1e6,
+            "Gi": abso * 1000,
+            "Mi": abso,
+            "Ki": abso / 1000,
+            "Bi": abso / 1e6,
+        },
+        "KB": {
+            "Ti": abso * 1e9,
+            "Gi": abso * 1e6,
+            "Mi": abso * 1000,
+            "Ki": abso,
+            "Bi": abso / 1000,
+        },
+        "BY": {
+            "Ti": abso * 1e12,
+            "Gi": abso * 1e9,
+            "Mi": abso * 1e6,
+            "Ki": abso * 1000,
+            "Bi": abso,
+        },
     }
-    return conversion[units_to_covert_to][units]
+    conversion_1024 = {
+        "TB": {
+            "Ti": abso,
+            "Gi": abso / 1024,
+            "Mi": abso / 1024**2,
+            "Ki": abso / 1024**3,
+            "Bi": abso / 1024**4,
+        },
+        "GB": {
+            "Ti": abso * 1024,
+            "Gi": abso,
+            "Mi": abso / 1024,
+            "Ki": abso / 1024**2,
+            "Bi": abso / 1024**3,
+        },
+        "MB": {
+            "Ti": abso * 1024**2,
+            "Gi": abso * 1024,
+            "Mi": abso,
+            "Ki": abso / 1024,
+            "Bi": abso / 1024**2,
+        },
+        "KB": {
+            "Ti": abso * 1024**3,
+            "Gi": abso * 1024**2,
+            "Mi": abso * 1024,
+            "Ki": abso,
+            "Bi": abso / 1024,
+        },
+        "BY": {
+            "Ti": abso * 1024**4,
+            "Gi": abso * 1024**3,
+            "Mi": abso * 1024**2,
+            "Ki": abso * 1024,
+            "Bi": abso,
+        },
+    }
+    if convert_size == 1000:
+        return conversion_1000[units_to_covert_to][units]
+    elif convert_size == 1024:
+        return conversion_1024[units_to_covert_to][units]
+
+
+def convert_bytes_to_unit(bytes_to_convert):
+    """
+    Convert bytes to bigger units like Kb, Mb, Gb or Tb.
+
+    Args:
+        bytes_to_convert (str): The bytes to convert.
+
+    Returns:
+        str: The converted bytes as biggest unit possible
+
+    """
+    if not isinstance(bytes_to_convert, str):
+        log.error("Unable to convert, expected string")
+    if float(bytes_to_convert) < constants.BYTES_IN_KB:
+        return f"{bytes_to_convert}B"
+    if constants.BYTES_IN_KB <= float(bytes_to_convert) < constants.BYTES_IN_MB:
+        size = float(bytes_to_convert) / constants.BYTES_IN_KB
+        return f"{size:.2f}KB"
+    if constants.BYTES_IN_MB <= float(bytes_to_convert) < constants.BYTES_IN_GB:
+        size = float(bytes_to_convert) / constants.BYTES_IN_MB
+        return f"{size:.2f}MB"
+    if constants.BYTES_IN_GB <= float(bytes_to_convert) < constants.BYTES_IN_TB:
+        size = float(bytes_to_convert) / constants.BYTES_IN_GB
+        return f"{size:.2f}GB"
+    if constants.BYTES_IN_TB <= float(bytes_to_convert):
+        size = float(bytes_to_convert) / constants.BYTES_IN_TB
+        return f"{size:.2f}TB"
 
 
 def prepare_customized_pull_secret(images=None):
@@ -2848,10 +3291,10 @@ def prepare_customized_pull_secret(images=None):
 
     """
     log.debug(f"Prepare customized pull-secret for images: {images}")
-    if type(images) == str:
+    if isinstance(images, str):
         images = [images]
     # load pull-secret file to pull_secret dict
-    pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     with open(pull_secret_path) as pull_secret_fo:
         pull_secret = json.load(pull_secret_fo)
 
@@ -2883,22 +3326,28 @@ def prepare_customized_pull_secret(images=None):
     return authfile_fo
 
 
-def inspect_image(image, authfile_fo):
+def inspect_image(image, authfile_fo, cluster_config=None):
     """
     Inspect image
 
     Args:
         image (str): image to inspect
         authfile_fo (NamedTemporaryFile): pull-secret required for pulling the given image
+        cluster_config (MultiClusterConfig): Holds the context of a cluster
 
     Returns:
         dict: json object of the inspected image
 
     """
     # pull original image (to be able to inspect it)
-    exec_cmd(f"podman image pull {image} --authfile {authfile_fo.name}")
+    exec_cmd(
+        f"podman image pull {image} --authfile {authfile_fo.name}",
+        cluster_config=cluster_config,
+    )
     # inspect the image
-    cmd_result = exec_cmd(f"podman image inspect {image}")
+    cmd_result = exec_cmd(
+        f"podman image inspect {image}", cluster_config=cluster_config
+    )
     image_inspect = json.loads(cmd_result.stdout)
     return image_inspect
 
@@ -2934,7 +3383,7 @@ def get_image_with_digest(image):
         )
 
 
-def login_to_mirror_registry(authfile):
+def login_to_mirror_registry(authfile, cluster_config=None):
     """
     Login to mirror registry
 
@@ -2942,45 +3391,58 @@ def login_to_mirror_registry(authfile):
         authfile (str): authfile (pull-secret) path
 
     """
+    if not cluster_config:
+        cluster_config = config
     # load cluster info
-    load_cluster_info()
+    load_cluster_info(cluster_config)
 
-    mirror_registry = config.DEPLOYMENT["mirror_registry"]
-    mirror_registry_user = config.DEPLOYMENT["mirror_registry_user"]
-    mirror_registry_password = config.DEPLOYMENT["mirror_registry_password"]
+    mirror_registry = cluster_config.DEPLOYMENT["mirror_registry"]
+    mirror_registry_user = cluster_config.DEPLOYMENT["mirror_registry_user"]
+    mirror_registry_password = cluster_config.DEPLOYMENT["mirror_registry_password"]
     login_cmd = (
         f"podman login --authfile {authfile} "
         f"{mirror_registry} -u {mirror_registry_user} "
         f"-p {mirror_registry_password} --tls-verify=false"
     )
-    exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+    exec_cmd(
+        login_cmd,
+        (mirror_registry_user, mirror_registry_password),
+        cluster_config=cluster_config,
+    )
 
 
-def mirror_image(image):
+def mirror_image(image, cluster_config=None):
     """
     Mirror image to mirror image registry.
 
     Args:
         image (str): image to be mirrored, can be defined just with name or
             with full url, with or without tag or digest
+        cluster_config (MultiClusterConfig): Config object if single cluster, if its multicluster scenario
+            then we will have MultiClusterConfig object
 
     Returns:
         str: the mirrored image link
 
     """
+    if not cluster_config:
+        cluster_config = config
+    mirror_registry = cluster_config.DEPLOYMENT["mirror_registry"]
+    if image.startswith(mirror_registry):
+        log.debug(f"Skipping mirror of image {image}, it is already mirrored.")
+        return image
     with prepare_customized_pull_secret(image) as authfile_fo:
         # login to mirror registry
-        login_to_mirror_registry(authfile_fo.name)
+        login_to_mirror_registry(authfile_fo.name, cluster_config)
 
         # if there is any tag specified, use it in the full image url,
         # otherwise use url with digest
-        image_inspect = inspect_image(image, authfile_fo)
+        image_inspect = inspect_image(image, authfile_fo, cluster_config)
         if image_inspect[0].get("RepoTags"):
             orig_image_full = image_inspect[0]["RepoTags"][0]
         else:
             orig_image_full = image_inspect[0]["RepoDigests"][0]
         # prepare mirrored image url
-        mirror_registry = config.DEPLOYMENT["mirror_registry"]
         mirrored_image = mirror_registry + re.sub(r"^[^/]*", "", orig_image_full)
         # mirror the image
         log.info(
@@ -2988,7 +3450,8 @@ def mirror_image(image):
         )
         exec_cmd(
             f"oc image mirror --insecure --registry-config"
-            f" {authfile_fo.name} {orig_image_full} {mirrored_image}"
+            f" {authfile_fo.name} {orig_image_full} {mirrored_image}",
+            cluster_config=cluster_config,
         )
     return mirrored_image
 
@@ -3060,6 +3523,11 @@ def set_selinux_permissions(workers=None):
     if not workers:
         from ocs_ci.ocs.node import get_typed_worker_nodes
 
+        if "rhel7" not in config.ENV_DATA.get("rhel_template", "None"):
+            log.debug(
+                f"selinux permission are not needed for {config.ENV_DATA.get('rhel_template')}"
+            )
+            return
         worker_nodes = get_typed_worker_nodes(os_id="rhel")
     else:
         worker_nodes = workers
@@ -3199,10 +3667,14 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
     run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
+    # If the cluster is upgraded from OCP 4.10, target_terraform_ignition_provider should
+    # be terraform_ignition_provider
     create_directory_path(terraform_plugins_path)
     if (
         version_module.get_semantic_ocp_version_from_config()
         >= version_module.VERSION_4_11
+        and config.ENV_DATA.get("original_installed_ocp_version_major_minor_obj")
+        != version_module.VERSION_4_10
     ):
         target_terraform_ignition_provider = terraform_plugins_path
     else:
@@ -3285,7 +3757,7 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=900):
+def wait_for_machineconfigpool_status(node_type, timeout=900, skip_tls_verify=False):
     """
     Check for Machineconfigpool status
 
@@ -3294,6 +3766,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
             status is updated.
             e.g: worker, master and all if we want to check for all nodes
         timeout (int): Time in seconds to wait
+        skip_tls_verify (bool): True if allow skipping TLS verification
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -3307,7 +3780,11 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
 
     for role in node_types:
         log.info(f"Checking machineconfigpool status for {role} nodes")
-        ocp_obj = ocp.OCP(kind=constants.MACHINECONFIGPOOL, resource_name=role)
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL,
+            resource_name=role,
+            skip_tls_verify=skip_tls_verify,
+        )
         machine_count = ocp_obj.get()["status"]["machineCount"]
 
         assert ocp_obj.wait_for_resource(
@@ -3622,7 +4099,17 @@ def enable_huge_pages():
     exec_cmd(f"oc apply -f {constants.HUGE_PAGES_TEMPLATE}")
     time.sleep(10)
     log.info("Waiting for machine config will be applied with huge pages")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+    # Wait for Master nodes ready state when Compact mode 3M 0W config
+    from ocs_ci.ocs.node import get_nodes
+
+    if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
+        wait_for_machineconfigpool_status(
+            node_type=constants.MASTER_MACHINE, timeout=1200
+        )
+    else:
+        wait_for_machineconfigpool_status(
+            node_type=constants.WORKER_MACHINE, timeout=1200
+        )
 
 
 def disable_huge_pages():
@@ -3669,3 +4156,274 @@ def decode(encoded_message):
     decoded_base64_bytes = base64.b64decode(encoded_message_bytes)
     decoded_message = decoded_base64_bytes.decode("ascii")
     return decoded_message
+
+
+def get_root_disk(node):
+    """
+    Fetches the root (boot) disk for node
+
+    Args:
+        node (str): Node name
+
+    Returns:
+        str: Root disk
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    cmd = 'lsblk -n -o "KNAME,PKNAME,MOUNTPOINT" --json'
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    disk_info_json = json.loads(out)
+    for blockdevice in disk_info_json["blockdevices"]:
+        if blockdevice["mountpoint"] == "/boot":
+            root_disk = blockdevice["pkname"]
+            break
+    log.info(f"root disk for {node}: {root_disk}")
+    return root_disk
+
+
+def wipe_partition(node, disk_path):
+    """
+    Wipes out partition for disk using sgdisk
+
+    Args:
+        node (str): Name of the node (OCP Node)
+        disk_path (str): Disk to wipe partition
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    log.info(f"wiping partition for disk {disk_path} on {node}")
+    cmd = f"sgdisk --zap-all {disk_path}"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    log.info(out)
+
+
+def wipe_all_disk_partitions_for_node(node):
+    """
+    Wipes out partition for all disks which has "nvme" prefix
+
+    Args:
+        node (str): Name of the node (OCP Node)
+
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs import ocp
+
+    ocp_obj = ocp.OCP()
+
+    # get the root disk
+    root_disk = get_root_disk(node)
+
+    cmd = "lsblk -nd -o NAME --json"
+    out = ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=[cmd])
+    lsblk_json = json.loads(out)
+    for blockdevice in lsblk_json["blockdevices"]:
+        if "nvme" in blockdevice["name"]:
+            disk_to_wipe = blockdevice["name"]
+            # double check if disk to wipe is not root disk
+            if disk_to_wipe != root_disk:
+                disk_path = f"/dev/{disk_to_wipe}"
+                wipe_partition(node, disk_path)
+
+
+def convert_hostnames_to_ips(hostnames):
+    """
+    Gets the IP's from hostname with FQDN
+
+    Args:
+        hostnames (list): List of host names with FQDN
+
+    Returns:
+        list: Host IP's
+
+    """
+    return [socket.gethostbyname(host) for host in hostnames]
+
+
+def string_chunkify(cstring, csize):
+    """
+    Create string chunks of size csize from cstring and
+    yield chunk by chunk
+
+    Args:
+        cstring (str): Original string which need to be chunkified
+        csize (int): size of each chunk
+
+    """
+    i = 0
+    while len(cstring[i:]) > csize:
+        yield cstring[i : i + csize]
+        i += csize
+    yield cstring[i:]
+
+
+def get_pytest_fixture_value(request, fixture_name):
+    """
+    Get the value of a fixture name from the request
+
+    Args:
+        request (_pytest.fixtures.SubRequest'): The pytest request fixture
+        fixture_name: Fixture for which this request is being performed
+
+    Returns:
+        Any: The fixture value
+
+    """
+    if fixture_name not in request.fixturenames:
+        return None
+
+    return request.getfixturevalue(fixture_name)
+
+
+def switch_to_correct_cluster_at_setup(request):
+    """
+    Switch to the correct cluster index at setup, according to the 'cluster_type' fixture parameter
+    provided in the test.
+
+    Args:
+        request (_pytest.fixtures.SubRequest'): The pytest request fixture
+
+    """
+    from ocs_ci.ocs.cluster import is_managed_service_cluster
+
+    cluster_type = get_pytest_fixture_value(request, "cluster_type")
+    if not cluster_type:
+        log.info(
+            "The cluster type is not provided in the request params. "
+            "Continue the test with the current cluster"
+        )
+        return
+
+    if not is_managed_service_cluster():
+        if cluster_type == constants.NON_MS_CLUSTER_TYPE:
+            log.info(
+                "The cluster is a non-MS cluster. Continue the test with the current cluster"
+            )
+            return
+        else:
+            pytest.skip(
+                f"The test will not run on a non-MS cluster with the cluster type '{cluster_type}'"
+            )
+
+    # If the cluster is an MS cluster
+    if not config.is_cluster_type_exist(cluster_type):
+        pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
+
+    # Switch to the correct cluster type
+    log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
+    config.switch_to_cluster_by_cluster_type(cluster_type)
+
+
+def list_insert_at_position(lst, index, element):
+    """
+    Insert an element into the list at a specific index
+    while shifting all the element one setp right to the index
+
+    """
+    return lst[:index] + element + lst[index:]
+
+
+def get_latest_acm_tag_unreleased(version):
+    """
+    Get Latest tag for acm unreleased image
+
+     Args:
+        version (str): version of acm for getting latest tag
+
+    Returns:
+        str: image tag for the specified version
+
+    Raises:
+        TagNotFoundException: When the given version is not found
+
+
+    """
+    params = {
+        "onlyActiveTags": "true",
+        "limit": "100",
+    }
+    response = requests.get(
+        "https://quay.io/api/v1/repository/acm-d/acm-custom-registry/tag/",
+        params=params,
+    )
+    responce_data = response.json()
+    for data in responce_data["tags"]:
+        if version in data["name"] and "v" not in data["name"]:
+            log.info(f"Found Image Tag {data['name']}")
+            return data["name"]
+
+    raise TagNotFoundException("Couldn't find given ACM tag!")
+
+
+def is_emoji(char):
+    # Check if a character belongs to the "So" (Symbol, Other) Unicode category
+    return unicodedata.category(char) == "So"
+
+
+def filter_out_emojis(plaintext):
+    """
+    Filter out emojis from a string
+
+    Args:
+        string (str): String to filter out emojis from
+
+    Returns:
+        str: Filtered string
+
+    """
+
+    # Create a list of characters that are not emojis
+    filtered_chars = [char for char in plaintext if not is_emoji(char)]
+    # Join the characters back together to form the filtered string
+    filtered_string = "".join(filtered_chars)
+    return filtered_string
+
+
+def remove_ceph_crashes(toolbox_pod):
+    """
+    Deletes the Ceph crashes
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    """
+    ceph_crash_ids = get_ceph_crashes(toolbox_pod)
+    archive_ceph_crashes(toolbox_pod)
+    log.info(f"Removing all ceph crashes {ceph_crash_ids}")
+    for each_ceph_crash in ceph_crash_ids:
+        toolbox_pod.exec_ceph_cmd(f"ceph crash rm {each_ceph_crash}")
+
+
+def get_ceph_crashes(toolbox_pod):
+    """
+    Gets all Ceph crashes
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    Returns:
+        list: List of ceph crash ID's
+
+    """
+    ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
+    return [each_crash["crash_id"] for each_crash in ceph_crashes]
+
+
+def archive_ceph_crashes(toolbox_pod):
+    """
+    Archive all Ceph crashes
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    """
+    log.info("Archiving all ceph crashes")
+    toolbox_pod.exec_ceph_cmd("ceph crash archive-all")

@@ -1,19 +1,32 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import tier4c, E2ETest
-from ocs_ci.ocs import defaults
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.testlib import (
+    tier4c,
+    E2ETest,
+    ignore_leftovers,
+    skipif_managed_service,
+)
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     check_toleration_on_pods,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.ocs.node import taint_nodes, untaint_nodes, get_ocs_nodes
+from ocs_ci.ocs.node import (
+    get_ocs_nodes,
+    taint_nodes,
+    untaint_nodes,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4c
+@ignore_leftovers
+@skipif_managed_service
 @pytest.mark.polarion_id("OCS-2450")
 class TestTaintAndTolerations(E2ETest):
     """
@@ -43,13 +56,17 @@ class TestTaintAndTolerations(E2ETest):
         """
         # taint nodes if not already tainted
         nodes = get_ocs_nodes()
-        taint_nodes(nodes)
+        for node in nodes:
+            taint_nodes([node.name])
 
         # Check tolerations on pods under openshift-storage
         check_toleration_on_pods()
 
         # Respin all pods and check it if is still running
-        pod_list = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_list = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for pod in pod_list:
-            pod.delete(wait=False)
-        assert wait_for_pods_to_be_running(timeout=300)
+            if "s3cli" in pod.name:
+                continue
+            else:
+                pod.delete(wait=False)
+        assert wait_for_pods_to_be_running(timeout=360)

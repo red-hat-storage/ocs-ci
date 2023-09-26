@@ -1,9 +1,11 @@
 import logging
 import pytest
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
     skipif_ocs_version,
+    ignore_leftover_label,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_osd_deployments
@@ -17,8 +19,10 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4c
 @skipif_ocs_version("<4.10")
+@ignore_leftover_label(constants.OSD_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3731")
 @pytest.mark.bugzilla("2032656")
 class TestDeleteOSDDeployment(ManageTest):
@@ -32,17 +36,17 @@ class TestDeleteOSDDeployment(ManageTest):
     def test_delete_rook_ceph_osd_deployment(self):
         osd_deployments = get_osd_deployments()
         deployment_obj = OCP(
-            kind=constants.DEPLOYMENT, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
         pod_obj = OCP(
-            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
         for osd_deployment in osd_deployments:
             # Get rook-ceph-osd pod name associated with the deployment
             osd_deployment_name = osd_deployment.name
             old_osd_pod = get_pod_name_by_pattern(
                 pattern=osd_deployment_name,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
 
             logger.info(f"Deleting OSD deployment: {osd_deployment_name}")
@@ -57,13 +61,16 @@ class TestDeleteOSDDeployment(ManageTest):
 
             # Wait for new OSD deployment to be Ready
             deployment_obj.wait_for_resource(
-                condition="1/1", resource_name=osd_deployment_name, column="READY"
+                condition="1/1",
+                resource_name=osd_deployment_name,
+                column="READY",
+                timeout=120,
             )
 
             # Check if a new OSD pod is created
             new_osd_pod = get_pod_name_by_pattern(
                 pattern=osd_deployment_name,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
             assert old_osd_pod != new_osd_pod, "New OSD pod not created"
 

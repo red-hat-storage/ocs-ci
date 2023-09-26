@@ -1,5 +1,0 @@
----
-# Use this config for upgrading of OCP 4.9 GA cluster
-UPGRADE:
-  ocp_channel: "stable-4.9"
-  ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"

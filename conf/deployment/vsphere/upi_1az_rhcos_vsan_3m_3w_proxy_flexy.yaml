@@ -1,0 +1,20 @@
+---
+# This config will work on _vSphere DC-ECO, DC-CP, DC-PS and vSphere7 DC-CP_
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  proxy: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  flexy_deployment: true
+  flexy_template: 'upi-on-vsphere/versioned-installer-http_proxy'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2635'

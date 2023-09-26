@@ -4,9 +4,10 @@
 
 ## Prerequisites
 
-1. Python version >= 3.7
+1. Python version >= 3.8
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
-   - gcc, git, openssl-devel, python3-devel (or similar packages for ubuntu).
+   - gcc, git, openssl-devel, python3-devel or python specific version packages 
+   depends on Python version installed e.g. python38-devel (or similar packages for ubuntu).
 3. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
@@ -35,6 +36,22 @@ mirror_openshift:
   user: "USERNAME"
   password: "PASSWORD"
 ```
+
+#### vSphere UPI
+For vSphere UPI deployments, RHCOS templates must be present on Cluster in Datacenter
+
+Till OCP version 4.9, download RHCOS templates from [here](https://raw.githubusercontent.com/openshift/installer/release-4.9/data/data/rhcos.json)
+e.g: From above url, form the exact download path using baseURI + vmware (in images section )
+
+[link](https://rhcos-redirector.apps.art.xq1c.p1.openshiftapps.com/art/storage/releases/rhcos-4.9/49.84.202110081407-0/x86_64/rhcos-49.84.202110081407-0-vmware.x86_64.ova) to download OCP 4.9 RHCOS template
+
+From OCP 4.10 version, download RHCOS templates from [here](https://github.com/openshift/installer/blob/release-4.10/data/data/coreos/rhcos.json)
+
+e.g: [link](https://rhcos-redirector.apps.art.xq1c.p1.openshiftapps.com/art/storage/releases/rhcos-4.10/410.84.202205191234-0/x86_64/rhcos-410.84.202205191234-0-vmware.x86_64.ova) to download OCP 4.10 RHCOS template
+
+For GA'ed version, download RHCOS templates from [here](https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.10/4.10.3/)
+
+Follow this [procedure](https://docs.vmware.com/en/VMware-vSphere/7.0/com.vmware.vsphere.vm_admin.doc/GUID-17BEDA21-43F6-41F4-8FB2-E01D275FE9B4.html) to deploy ova/ovf template in vCenter.
 
 #### vSphere IPI
 Since vSphere IPI deployment require access to vCenter, we must add vCenter’s trusted root CA certificates to the
@@ -65,14 +82,28 @@ necessary dependencies
     [https://github.com/red-hat-storage/ocs-ci](https://github.com/red-hat-storage/ocs-ci)
     via cmd `git clone git@github.com:red-hat-storage/ocs-ci.git`.
 2. Go to ocs-ci folder `cd ocs-ci`.
-3. Setup a python 3.7 virtual environment. This is actually quite easy to do
+3. Setup a python 3.8 virtual environment. This is actually quite easy to do
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
     ignoring this in flake8 configuration in tox.
 
-    * `python3.7 -m venv <path/to/venv>`
+    * `python3.8 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
+
+** On Python3.8, there is a bug on numpy with setuptools 65.6.0 https://github.com/numpy/numpy/issues/22623
+WA : `pip install setuptools==65.5.0`
+
+Expected Error:
+```
+  from . import ccompiler
+  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/ccompiler.py", line 20, in <module>
+    from numpy.distutils import log
+  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/log.py", line 4, in <module>
+    from distutils.log import Log as old_Log
+  ImportError: cannot import name 'Log' from 'distutils.log' /
+    (ocs-ci/venv/lib/python3.8/site-packages/setuptools/_distutils/log.py)
+```
 5. Install requirements with `pip install -r requirements.txt`
 6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
 

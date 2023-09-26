@@ -7,18 +7,23 @@ import time
 
 
 import boto3
+from botocore.exceptions import WaiterError
 import yaml
 import ovirtsdk4.types as types
 
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
+    comment_sensitive_var,
+    get_ignition_provider_version,
     update_machine_conf,
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
+    UnknownOperationForTerraformVariableUpdate,
     NotAllNodesCreated,
     RebootEventNotFoundException,
+    ResourceWrongStatusException,
 )
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
@@ -34,6 +39,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility import version as version_module
 from ocs_ci.utility.csr import (
     get_nodes_csr,
     wait_for_all_nodes_csr_and_approve,
@@ -49,10 +55,10 @@ from ocs_ci.utility.utils import (
     delete_file,
     AZInfo,
     download_file_from_git_repo,
-    get_running_ocp_version,
     set_aws_region,
     run_cmd,
     get_module_ip,
+    get_terraform_ignition_provider,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
@@ -84,15 +90,19 @@ class PlatformNodesFactory:
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
             "rosa": AWSNodes,
+            "vsphere_upi": VMWareUPINodes,
+            "fusion_aas": AWSNodes,
         }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA["platform"]
         if platform == constants.VSPHERE_PLATFORM:
+            deployment_type = config.ENV_DATA["deployment_type"]
             if cluster.is_lso_cluster():
                 platform += "_lso"
-            elif config.ENV_DATA["deployment_type"] == "ipi":
-                platform += "_ipi"
+            elif deployment_type in ("ipi", "upi"):
+                platform += f"_{deployment_type}"
+
         return self.cls_map[platform]()
 
 
@@ -193,6 +203,21 @@ class NodesBase(object):
     def terminate_nodes(self, nodes, wait=True):
         raise NotImplementedError("terminate nodes functionality is not implemented")
 
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
 
 class VMWareNodes(NodesBase):
     """
@@ -227,7 +252,7 @@ class VMWareNodes(NodesBase):
         vms_in_pool = self.vsphere.get_all_vms_in_pool(
             self.cluster_name, self.datacenter, self.cluster
         )
-        node_names = [node.get().get("metadata").get("name") for node in nodes]
+        node_names = [node.name for node in nodes]
         vms = []
         for node in node_names:
             node_vms = [vm for vm in vms_in_pool if vm.name in node]
@@ -468,6 +493,37 @@ class VMWareNodes(NodesBase):
         node_cls_obj = node_cls(node_conf, node_type, num_nodes)
         node_cls_obj.add_node()
 
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VMs.
+        The VMs will be deleted only from the inventory and not from the disk.
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the VMs to terminate,
+            False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        self.vsphere.remove_vms_from_inventory(vms)
+        if wait:
+            for vm in vms:
+                self.vsphere.wait_for_vm_delete(vm)
+
+    def get_vm_from_ips(self, node_ips, dc):
+        """
+        Fetches VM objects from given IP's
+
+        Args:
+            node_ips (list): List of node IP's
+            dc (str): Datacenter name
+
+        Returns:
+            list: List of VM objects
+
+        """
+        return [self.vsphere.get_vm_by_ip(ip, dc) for ip in node_ips]
+
 
 class AWSNodes(NodesBase):
     """
@@ -530,21 +586,22 @@ class AWSNodes(NodesBase):
         assert nodes, f"Failed to find the OCS object for EC2 instance {instance_id}"
         return nodes[0]
 
-    def stop_nodes(self, nodes, wait=True):
+    def stop_nodes(self, nodes, wait=True, force=True):
         """
         Stop EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to stop, False otherwise
-
+            force (bool): True for force stopping the instances abruptly, False otherwise
 
         """
+
         instances = self.get_ec2_instances(nodes)
         assert (
             instances
         ), f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
-        self.aws.stop_ec2_instances(instances=instances, wait=wait)
+        self.aws.stop_ec2_instances(instances=instances, wait=wait, force=force)
 
     def start_nodes(self, instances=None, nodes=None, wait=True):
         """
@@ -931,7 +988,9 @@ class AWSNodes(NodesBase):
         # TODO: This method is creating only RHEL 7 pod. Once we would like to use
         # different version of RHEL for running openshift ansible playbook, we need
         # to update this method!
-        rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name, 600)
+        rhel_pod_obj = create_rhelpod(
+            constants.DEFAULT_NAMESPACE, rhel_pod_name, timeout=600
+        )
         timeout = 4000  # For ansible-playbook
 
         # copy openshift-dev.pem to RHEL ansible pod
@@ -1011,7 +1070,7 @@ class AWSNodes(NodesBase):
             self.cluster_path, config.RUN.get("kubeconfig_location")
         )
         pod.upload(rhel_pod_obj.name, kubeconfig, "/")
-        pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         pod.upload(rhel_pod_obj.name, pull_secret_path, "/tmp/")
         host_file = self.build_ansible_inventory(hosts)
         pod.upload(rhel_pod_obj.name, host_file, "/")
@@ -1135,6 +1194,73 @@ class AWSNodes(NodesBase):
         instance_id = self.aws.get_instance_id_from_private_dns_name(node_name)
         stack_name = self.aws.get_stack_name_by_instance_id(instance_id)
         return stack_name
+
+    def wait_for_nodes_to_stop(self, nodes):
+        """
+        Wait for the nodes to reach status stopped
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Raises:
+            ResourceWrongStatusException: In case of the nodes didn't reach the expected status stopped.
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        if not instances:
+            raise ValueError(
+                f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+            )
+        try:
+            self.aws.wait_for_instances_to_stop(instances=instances)
+        except WaiterError as e:
+            logger.info("Failed to reach the expected status stopped")
+            raise ResourceWrongStatusException(e)
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        """
+        Wait for the nodes to reach status terminated
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Raises:
+            ResourceWrongStatusException: In case of the nodes didn't reach the expected status terminated.
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        if not instances:
+            raise ValueError(
+                f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+            )
+        try:
+            self.aws.wait_for_instances_to_terminate(instances=instances)
+        except WaiterError as e:
+            logger.info("Failed to reach the expected status terminated")
+            raise ResourceWrongStatusException(e)
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        """
+        Wait for the nodes to reach status stopped or terminated
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Raises:
+            ResourceWrongStatusException: In case of the nodes didn't reach the expected
+                status stopped or terminated.
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        if not instances:
+            raise ValueError(
+                f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+            )
+        try:
+            self.aws.wait_for_instances_to_stop_or_terminate(instances=instances)
+        except WaiterError as e:
+            logger.info("Failed to reach the expected status stopped or terminated")
+            raise ResourceWrongStatusException(e)
 
 
 class AWSUPINode(AWSNodes):
@@ -1528,10 +1654,11 @@ class VSPHEREUPINode(VMWareNodes):
         terraform_binary_path = os.path.join(bin_dir, terraform_filename)
         config.ENV_DATA["terraform_installer"] = terraform_binary_path
 
-        # get OCP version
-        ocp_version = get_running_ocp_version()
         self.folder_structure = False
-        if Version.coerce(ocp_version) >= Version.coerce("4.5"):
+        if (
+            version_module.get_semantic_ocp_running_version()
+            >= version_module.VERSION_4_5
+        ):
             set_aws_region()
             self.folder_structure = True
             config.ENV_DATA["folder_structure"] = True
@@ -1552,22 +1679,7 @@ class VSPHEREUPINode(VMWareNodes):
         """
         Update terraform variables
         """
-        logger.debug("Updating terraform variables")
-        compute_str = "compute_count ="
-        updated_compute_str = f'{compute_str} "{self.target_compute_count}"'
-        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
-
-        # backup the terraform variable file
-        original_file = f"{self.terraform_var}_{int(time.time())}"
-        shutil.copyfile(self.terraform_var, original_file)
-        logger.info(f"original terraform file: {original_file}")
-
-        replace_content_in_file(
-            self.terraform_var,
-            compute_str,
-            updated_compute_str,
-            match_and_replace_line=True,
-        )
+        self.update_terraform_tfvars_compute_count(type="add", count=self.compute_count)
 
     def _update_machine_conf(self):
         """
@@ -1585,6 +1697,38 @@ class VSPHEREUPINode(VMWareNodes):
 
         # update the machine configurations
         update_machine_conf(self.folder_structure)
+
+    def update_terraform_tfvars_compute_count(self, type, count):
+        """
+        Update terraform tfvars file for compute count
+
+        Args:
+             type (str): Type of operation. Either add or remove
+             count (int): Number to add or remove to the exiting compute count
+
+        """
+        logger.debug("Updating terraform variables")
+        compute_str = "compute_count ="
+        if type == "add":
+            target_compute_count = self.current_count_in_tfvars + count
+        elif type == "remove":
+            target_compute_count = self.current_count_in_tfvars - count
+        else:
+            raise UnknownOperationForTerraformVariableUpdate
+        updated_compute_str = f'{compute_str} "{target_compute_count}"'
+        logger.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+
+        # backup the terraform variable file
+        original_file = f"{self.terraform_var}_{int(time.time())}"
+        shutil.copyfile(self.terraform_var, original_file)
+        logger.info(f"original terraform file: {original_file}")
+
+        replace_content_in_file(
+            self.terraform_var,
+            compute_str,
+            updated_compute_str,
+            match_and_replace_line=True,
+        )
 
     @retry(
         (NoValidConnectionsError, AuthenticationException),
@@ -1630,6 +1774,14 @@ class VSPHEREUPINode(VMWareNodes):
             pre_count_csr = len(existing_csr_data)
             logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
 
+            # get VM names from vSphere before adding node
+            compute_vms = self.vsphere.get_compute_vms_in_pool(
+                self.cluster_name, self.datacenter, self.cluster
+            )
+            compute_node_names = [compute_vm.name for compute_vm in compute_vms]
+            compute_node_names.sort()
+            logger.info(f"VM names before adding nodes: {compute_node_names}")
+
             if use_terraform:
                 self.add_nodes_with_terraform()
             else:
@@ -1644,7 +1796,34 @@ class VSPHEREUPINode(VMWareNodes):
             else:
                 nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
 
-            wait_for_all_nodes_csr_and_approve(expected_node_num=nodes_approve_csr_num)
+            # get vm names from vSphere after adding node
+            compute_vms_after_adding_node = self.vsphere.get_compute_vms_in_pool(
+                self.cluster_name, self.datacenter, self.cluster
+            )
+            compute_node_names_after_adding_node = [
+                compute_vm.name for compute_vm in compute_vms_after_adding_node
+            ]
+            compute_node_names_after_adding_node.sort()
+            logger.info(
+                f"VM names after adding node: {compute_node_names_after_adding_node}"
+            )
+
+            # get newly added VM name
+            new_node = list(
+                set(compute_node_names_after_adding_node) - set(compute_node_names)
+            )[0]
+
+            # If CSR exists for new node, create dictionary with the csr info
+            # e.g: {'compute-1': ['csr-64vkw']}
+            ignore_existing_csr = None
+            if new_node in existing_csr_data:
+                nodes_approve_csr_num -= 1
+                ignore_existing_csr = {new_node: existing_csr_data[new_node]}
+
+            wait_for_all_nodes_csr_and_approve(
+                expected_node_num=nodes_approve_csr_num,
+                ignore_existing_csr=ignore_existing_csr,
+            )
 
     def add_nodes_with_terraform(self):
         """
@@ -1662,6 +1841,24 @@ class VSPHEREUPINode(VMWareNodes):
         clone_openshift_installer()
         self._update_terraform()
         self._update_machine_conf()
+
+        # comment sensitive variable as current terraform version doesn't support
+        if (
+            version_module.get_semantic_ocp_running_version()
+            >= version_module.VERSION_4_11
+        ):
+            comment_sensitive_var()
+            ignition_provider_version = get_ignition_provider_version()
+            terraform_plugins_path = ".terraform/plugins/linux_amd64/"
+            terraform_ignition_provider_path = os.path.join(
+                self.terraform_data_dir,
+                terraform_plugins_path,
+                f"terraform-provider-ignition_{ignition_provider_version}",
+            )
+            if not os.path.isfile(terraform_ignition_provider_path):
+                get_terraform_ignition_provider(
+                    self.terraform_data_dir, version=ignition_provider_version
+                )
 
         # initialize terraform and apply
         os.chdir(self.terraform_data_dir)
@@ -1766,6 +1963,43 @@ class VSPHEREUPINode(VMWareNodes):
             for node_count in range(1, count + 1)
         ]
 
+    def change_terraform_statefile_after_remove_vm(self, vm_name):
+        """
+        Remove the records from the state file, so that terraform will no longer be tracking the
+        corresponding remote objects of the vSphere VM object we removed.
+
+        Args:
+            vm_name (str): The VM name
+
+        """
+        if vm_name.startswith("compute-"):
+            module = "compute_vm"
+        else:
+            module = "control_plane_vm"
+        instance = f"{vm_name}.{config.ENV_DATA.get('cluster_name')}.{config.ENV_DATA.get('base_domain')}"
+
+        os.chdir(self.terraform_data_dir)
+        logger.info(f"Modifying terraform state file of the removed vm {vm_name}")
+        self.terraform.change_statefile(
+            module=module,
+            resource_type="vsphere_virtual_machine",
+            resource_name="vm",
+            instance=instance,
+        )
+        os.chdir(self.previous_dir)
+
+    def change_terraform_tfvars_after_remove_vm(self, num_nodes_removed=1):
+        """
+        Update the compute count after removing node from cluster
+
+        Args:
+             num_nodes_removed (int): Number of nodes removed from cluster
+
+        """
+        self.update_terraform_tfvars_compute_count(
+            type="remove", count=num_nodes_removed
+        )
+
 
 class BaremetalNodes(NodesBase):
     """
@@ -1811,7 +2045,7 @@ class BaremetalNodes(NodesBase):
         """
         self.baremetal.restart_baremetal_machines(nodes, force=force)
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all BMs are up by the end of the test
 
@@ -2659,7 +2893,7 @@ class VMWareIPINodes(VMWareNodes):
 
         """
         vms_in_dc = self.vsphere.get_all_vms_in_dc(self.datacenter)
-        node_names = set([node.get().get("metadata").get("name") for node in nodes])
+        node_names = set([node.name for node in nodes])
         vms = []
         for vm in vms_in_dc:
             try:
@@ -2674,9 +2908,21 @@ class VMWareIPINodes(VMWareNodes):
 
         return vms
 
+
+class VMWareUPINodes(VMWareNodes):
+    """
+    VMWare UPI nodes class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
     def terminate_nodes(self, nodes, wait=True):
         """
-        Terminate the VMs
+        Terminate the VMs.
+        The VMs will be deleted only from the inventory and not from the disk.
+        After deleting the VMs, it will also modify terraform state file of the removed VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
@@ -2684,8 +2930,21 @@ class VMWareIPINodes(VMWareNodes):
             False otherwise
 
         """
+        # Save the names of the VMs before removing them
         vms = self.get_vms(nodes)
-        self.vsphere.remove_vms_from_inventory(vms)
-        if wait:
-            for vm in vms:
-                self.vsphere.wait_for_vm_delete(vm)
+        vm_names = [vm.name for vm in vms]
+
+        logger.info(f"Terminating nodes: {vm_names}")
+        super().terminate_nodes(nodes, wait)
+
+        if config.ENV_DATA.get("rhel_user"):
+            node_type = constants.RHEL_OS
+        else:
+            node_type = constants.RHCOS
+        node_cls_obj = VSPHEREUPINode(
+            node_conf={}, node_type=node_type, compute_count=0
+        )
+        logger.info(f"Modifying terraform state file of the removed VMs {vm_names}")
+        for vm_name in vm_names:
+            node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
+            node_cls_obj.change_terraform_tfvars_after_remove_vm()

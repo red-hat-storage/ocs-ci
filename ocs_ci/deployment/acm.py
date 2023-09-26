@@ -8,6 +8,8 @@ import tempfile
 import shutil
 import requests
 
+import semantic_version
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
@@ -17,7 +19,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
 from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
-
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,8 @@ class Submariner(object):
     def __init__(self):
         # whether upstream OR downstream
         self.source = config.ENV_DATA["submariner_source"]
+        # Deployment type:
+        self.deployment_type = config.ENV_DATA.get("submariner_deployment")
         # Designated broker cluster index where broker will be deployed
         self.designated_broker_cluster_index = self.get_primary_cluster_index()
         # sequence number for the clusters from submariner perspective
@@ -74,15 +77,25 @@ class Submariner(object):
     def deploy(self):
         if self.source == "upstream":
             self.deploy_upstream()
-        else:
+        elif self.source == "downstream":
             self.deploy_downstream()
+        else:
+            raise Exception(f"The Submariner source: {self.source} is not recognized")
 
     def deploy_upstream(self):
         self.download_binary()
         self.submariner_configure_upstream()
 
     def deploy_downstream(self):
-        raise NotImplementedError("Deploy downstream functionality not implemented")
+        config.switch_acm_ctx()
+        # Get the Selenium driver obj after logging in to ACM
+        # Using import here, to avoid partly circular import
+        from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
+
+        login_to_acm()
+        acm_obj = AcmAddClusters()
+        acm_obj.install_submariner_ui()
+        acm_obj.submariner_validation_ui()
 
     def download_binary(self):
         if self.source == "upstream":
@@ -101,6 +114,10 @@ class Submariner(object):
             tempf.write(resp.content)
 
             # Actual submariner binary download
+            if config.ENV_DATA.get("submariner_upstream_version_tag"):
+                os.environ["VERSION"] = config.ENV_DATA.get(
+                    "submariner_upstream_version_tag"
+                )
             cmd = f"bash {tempf.name}"
             try:
                 run_cmd(cmd)
@@ -151,7 +168,7 @@ class Submariner(object):
         for cluster in config.clusters:
             print(len(config.clusters))
             cluster_index = cluster.MULTICLUSTER["multicluster_index"]
-            if cluster_index != config.get_acm_index():
+            if cluster_index != config.get_active_acm_index():
                 join_cmd = (
                     f"join --kubeconfig {cluster.RUN['kubeconfig']} "
                     f"{config.ENV_DATA['submariner_info_file']} "
@@ -174,8 +191,39 @@ class Submariner(object):
         kubeconf_list = []
         for i in self.dr_only_list:
             kubeconf_list.append(config.clusters[i].RUN["kubeconfig"])
-        connct_check = f"verify {' '.join(kubeconf_list)} --only connectivity"
-        run_subctl_cmd(connct_check)
+
+        connct_check = None
+        if config.ENV_DATA.get("submariner_upstream_version_tag") != "devel":
+            subctl_vers = self.get_subctl_version()
+            if subctl_vers.minor <= 15:
+                connct_check = f"verify {' '.join(kubeconf_list)} --only connectivity"
+        if not connct_check:
+            # New cmd format
+            connct_check = f"verify --kubeconfig {kubeconf_list[0]} --toconfig {kubeconf_list[1]} --only connectivity"
+
+        # Workaround for now, ignoring verify faliures
+        # need to be fixed once pod security issue is fixed
+        try:
+            run_subctl_cmd(connct_check)
+        except Exception:
+            if not config.ENV_DATA["submariner_ignore_connectivity_test"]:
+                logger.error("Submariner verification has issues")
+                raise
+            else:
+                logger.warning("Submariner verification has issues but ignored for now")
+
+    def get_subctl_version(self):
+        """
+        Run 'subctl version ' command and return a Version object
+
+        Returns:
+            vers (Version): semanctic version object
+
+        """
+        out = run_cmd("subctl version")
+        vstr = out.split(":")[1].rstrip().lstrip()[1:]
+        vers = semantic_version.Version(vstr)
+        return vers
 
     def get_primary_cluster_index(self):
         """

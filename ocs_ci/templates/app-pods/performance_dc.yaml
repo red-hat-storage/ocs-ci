@@ -1,0 +1,45 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: perfpod
+  labels:
+    app: perfpod
+spec:
+  template:
+    metadata:
+      labels:
+        name: perfpod
+    spec:
+      securityContext:
+        fsGroup: 2000
+      serviceAccountName: admin
+      restartPolicy: Always
+      volumes:
+      - name: perf-vol
+        persistentVolumeClaim:
+          claimName: test-2
+      containers:
+      - name: perf
+        image: quay.io/ocsci/perf:latest
+        resources:
+          limits:
+            memory: "2048Mi"
+            cpu: "150m"
+        command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /mnt
+          name: perf-vol
+        livenessProbe:
+          exec:
+            command:
+            - 'sh'
+            - '-ec'
+            - 'df /mnt'
+          initialDelaySeconds: 3
+          timeoutSeconds: 3
+
+  replicas: 1
+  triggers:
+    - type: ConfigChange
+  paused: false

@@ -4,14 +4,17 @@ import os
 import platform
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotFoundError,
     UnsupportedOSType,
 )
 from ocs_ci.utility.utils import (
+    clone_repo,
     download_file,
     exec_cmd,
+    get_ocp_version,
     get_url_content,
     prepare_bin_dir,
 )
@@ -77,3 +80,33 @@ def get_opm_tool():
         exec_cmd(cmd)
         opm_version = exec_cmd("opm version")
     logger.info(f"opm tool is available: {opm_version.stdout.decode('utf-8')}")
+
+
+def get_oc_mirror_tool():
+    """
+    Download and install oc mirror tool.
+
+    """
+    try:
+        oc_mirror_version = exec_cmd("oc mirror version")
+    except (CommandFailed, FileNotFoundError):
+        logger.info("oc-mirror tool is not available, installing it")
+        prepare_bin_dir()
+        bin_dir = os.path.expanduser(config.RUN["bin_dir"])
+        # it would be better to directly download pre-build binary, but it is
+        # not available yet, so we have to build it from source from
+        # https://github.com/openshift/oc-mirror
+        oc_mirror_repo = "https://github.com/openshift/oc-mirror.git"
+        oc_mirror_dir = os.path.join(constants.EXTERNAL_DIR, "oc-mirror")
+        oc_mirror_branch = f"release-{get_ocp_version()}"
+        clone_repo(url=oc_mirror_repo, location=oc_mirror_dir, branch=oc_mirror_branch)
+        # build oc-mirror tool
+        exec_cmd("make build", cwd=oc_mirror_dir)
+        os.rename(
+            os.path.join(oc_mirror_dir, "bin/oc-mirror"),
+            os.path.join(bin_dir, "oc-mirror"),
+        )
+        oc_mirror_version = exec_cmd("oc mirror version")
+    logger.info(
+        f"oc-mirror tool is available: {oc_mirror_version.stdout.decode('utf-8')}"
+    )

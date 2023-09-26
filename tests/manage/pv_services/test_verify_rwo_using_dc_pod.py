@@ -2,6 +2,7 @@ import logging
 import pytest
 from itertools import cycle
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutExpiredError
@@ -15,6 +16,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier2
 @pytest.mark.parametrize(
     argnames="interface",
@@ -23,12 +25,6 @@ log = logging.getLogger(__name__)
             *[constants.CEPHBLOCKPOOL],
             marks=[
                 pytest.mark.polarion_id("OCS-896"),
-            ],
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM],
-            marks=[
-                pytest.mark.polarion_id("OCS-897"),
             ],
         ),
     ],

@@ -157,6 +157,30 @@ class VSPHEREHELPERS(object):
                 ]
 
             dump_data_to_temp_yaml(dict_data, default_map_path)
+
+            str_to_modify = "var.AWS_CREDS"
+            target_str = (
+                f'{str_to_modify}\n  profile = "{config.DEPLOYMENT["aws_profile"]}"'
+            )
+
+            replace_content_in_file(
+                constants.SCALEUP_VSPHERE_ROUTE53,
+                str_to_modify,
+                target_str,
+            )
+
+            replace_content_in_file(
+                constants.SCALEUP_VSPHERE_ROUTE53,
+                str_to_modify,
+                f'"{os.path.expanduser(config.DEPLOYMENT["aws_cred_path"])}"',
+            )
+
+            replace_content_in_file(
+                constants.SCALEUP_VSPHERE_ROUTE53,
+                "us-east-1",
+                f"{config.ENV_DATA.get('region')}",
+            )
+
         else:
             # remove access and secret key from constants.SCALEUP_VSPHERE_MAIN
             access_key = 'access_key       = "${var.aws_access_key}"'

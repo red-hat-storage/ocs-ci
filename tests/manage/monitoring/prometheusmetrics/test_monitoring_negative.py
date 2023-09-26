@@ -8,7 +8,13 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier3, skipif_managed_service
+from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.testlib import (
+    bugzilla,
+    tier3,
+    skipif_managed_service,
+    skipif_external_mode,
+)
 from ocs_ci.ocs import metrics
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 
@@ -16,14 +22,16 @@ from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_en
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @tier3
 @pytest.mark.polarion_id("OCS-1306")
 @skipif_managed_service
-def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
+@skipif_external_mode
+def test_monitoring_shows_mon_down(measure_stop_ceph_mon, threading_lock):
     """
     Make sure simple problems with MON daemons are reported via OCP Prometheus.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
     # time (in seconds) for monitoring to notice the change
     expected_delay = 60
     # query resolution step used in this test case (number of seconds)
@@ -87,14 +95,16 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
     assert mon_sample_size >= min_mon_samples
 
 
+@blue_squad
 @tier3
 @pytest.mark.polarion_id("OCS-1307")
 @skipif_managed_service
-def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
+@skipif_external_mode
+def test_monitoring_shows_osd_down(measure_stop_ceph_osd, threading_lock):
     """
     Make sure simple problems with OSD daemons are reported via OCP Prometheus.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
     # time (in seconds) for monitoring to notice the change
     expected_delay = 60
 
@@ -157,17 +167,19 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
     assert osd_in_validation, osd_in_msg
 
 
+@blue_squad
 @tier3
+@bugzilla("2203795")
 @pytest.mark.polarion_id("OCS-2734")
 @skipif_managed_service
-def test_ceph_metrics_presence_when_osd_down(measure_stop_ceph_osd):
+def test_ceph_metrics_presence_when_osd_down(measure_stop_ceph_osd, threading_lock):
     """
     Since ODF 4.9 ceph metrics covering disruptions will be available only
     when there are some disruptions to report, as noted in BZ 2028649.
 
     This test case covers this behaviour for one stopped/disabled OSD.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
     metrics_expected = list(metrics.ceph_metrics_healthy)
     # metrics which should be present with one OSD down
     for mtr in ("ceph_pg_degraded", "ceph_pg_undersized"):

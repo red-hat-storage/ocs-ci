@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -37,16 +38,27 @@ if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
 else:
     kmsprovider = constants.VAULT_KMS_PROVIDER
     argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
-    argvalues = [
-        pytest.param(
-            "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2650")
-        ),
-        pytest.param(
-            "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2651")
-        ),
-    ]
+    if config.ENV_DATA.get("vault_hcp"):
+        argvalues = [
+            pytest.param(
+                "v1", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3971")
+            ),
+            pytest.param(
+                "v2", kmsprovider, True, marks=pytest.mark.polarion_id("OCS-3972")
+            ),
+        ]
+    else:
+        argvalues = [
+            pytest.param(
+                "v1", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2650")
+            ),
+            pytest.param(
+                "v2", kmsprovider, False, marks=pytest.mark.polarion_id("OCS-2651")
+            ),
+        ]
 
 
+@green_squad
 @tier1
 @skipif_ocs_version("<4.8")
 @skipif_ocp_version("<4.8")

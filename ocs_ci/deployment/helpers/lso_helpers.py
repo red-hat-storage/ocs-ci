@@ -19,6 +19,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     run_cmd,
     wait_for_machineconfigpool_status,
+    wipe_all_disk_partitions_for_node,
 )
 
 
@@ -43,51 +44,7 @@ def setup_local_storage(storageclass):
     ocs_version = version.get_semantic_ocs_version_from_config()
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
-        optional_operators_data = list(
-            templating.load_yaml(
-                constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
-            )
-        )
-        optional_operators_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="optional_operators", delete=False
-        )
-        if config.DEPLOYMENT.get("optional_operators_image"):
-            for _dict in optional_operators_data:
-                if _dict.get("kind").lower() == "catalogsource":
-                    _dict["spec"]["image"] = config.DEPLOYMENT.get(
-                        "optional_operators_image"
-                    )
-        if config.DEPLOYMENT.get("disconnected"):
-            # in case of disconnected environment, we have to mirror all the
-            # optional_operators images
-            icsp = None
-            for _dict in optional_operators_data:
-                if _dict.get("kind").lower() == "catalogsource":
-                    index_image = _dict["spec"]["image"]
-                if _dict.get("kind").lower() == "imagecontentsourcepolicy":
-                    icsp = _dict
-            mirrored_index_image = (
-                f"{config.DEPLOYMENT['mirror_registry']}/"
-                f"{index_image.split('/', 1)[-1]}"
-            )
-            prune_and_mirror_index_image(
-                index_image,
-                mirrored_index_image,
-                constants.DISCON_CL_REQUIRED_PACKAGES,
-                icsp,
-            )
-            _dict["spec"]["image"] = mirrored_index_image
-        templating.dump_data_to_temp_yaml(
-            optional_operators_data, optional_operators_yaml.name
-        )
-        with open(optional_operators_yaml.name, "r") as f:
-            logger.info(f.read())
-        logger.info(
-            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
-        )
-        run_cmd(f"oc create -f {optional_operators_yaml.name}")
-        logger.info("Sleeping for 60 sec to start update machineconfigpool status")
-        wait_for_machineconfigpool_status("all")
+        create_optional_operators_catalogsource_non_ga()
 
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(
@@ -240,7 +197,13 @@ def setup_local_storage(storageclass):
         run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     storage_class_device_count = 1
-    if platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
+    if (
+        platform == constants.AWS_PLATFORM
+        and lso_type == constants.AWS_EBS
+        and (config.DEPLOYMENT.get("arbiter_deployment", False))
+    ):
+        storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
+    elif platform == constants.AWS_PLATFORM and not lso_type == constants.AWS_EBS:
         storage_class_device_count = 2
     elif platform == constants.IBM_POWER_PLATFORM:
         numberofstoragedisks = config.ENV_DATA.get("number_of_storage_disks", 1)
@@ -249,7 +212,69 @@ def setup_local_storage(storageclass):
         # extra_disks is used in vSphere attach_disk() method
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
     expected_pvs = len(worker_names) * storage_class_device_count
-    verify_pvs_created(expected_pvs, storageclass)
+    if platform == constants.BAREMETAL_PLATFORM:
+        verify_pvs_created(expected_pvs, storageclass, False)
+    else:
+        verify_pvs_created(expected_pvs, storageclass)
+
+
+def create_optional_operators_catalogsource_non_ga(force=False):
+    """
+    Creating optional operators CatalogSource and ImageContentSourcePolicy
+    for non-ga OCP.
+
+    Args:
+        force (bool): enable/disable lso catalog setup
+
+    """
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    ocp_ga_version = get_ocp_ga_version(ocp_version)
+    if ocp_ga_version and not force:
+        return
+    optional_operators_data = list(
+        templating.load_yaml(
+            constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
+        )
+    )
+    optional_operators_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="optional_operators", delete=False
+    )
+    if config.DEPLOYMENT.get("optional_operators_image"):
+        for _dict in optional_operators_data:
+            if _dict.get("kind").lower() == "catalogsource":
+                _dict["spec"]["image"] = config.DEPLOYMENT.get(
+                    "optional_operators_image"
+                )
+    if config.DEPLOYMENT.get("disconnected"):
+        # in case of disconnected environment, we have to mirror all the
+        # optional_operators images
+        icsp = None
+        for _dict in optional_operators_data:
+            if _dict.get("kind").lower() == "catalogsource":
+                index_image = _dict["spec"]["image"]
+            if _dict.get("kind").lower() == "imagecontentsourcepolicy":
+                icsp = _dict
+        mirrored_index_image = (
+            f"{config.DEPLOYMENT['mirror_registry']}/"
+            f"{index_image.split('/', 1)[-1]}"
+        )
+        prune_and_mirror_index_image(
+            index_image,
+            mirrored_index_image,
+            constants.DISCON_CL_REQUIRED_PACKAGES,
+            icsp,
+        )
+        _dict["spec"]["image"] = mirrored_index_image
+    templating.dump_data_to_temp_yaml(
+        optional_operators_data, optional_operators_yaml.name
+    )
+    with open(optional_operators_yaml.name, "r") as f:
+        logger.info(f.read())
+    logger.info(
+        "Creating optional operators CatalogSource and ImageContentSourcePolicy"
+    )
+    run_cmd(f"oc create -f {optional_operators_yaml.name}")
+    wait_for_machineconfigpool_status("all")
 
 
 def get_device_paths(worker_names):
@@ -310,17 +335,23 @@ def _get_disk_by_id(worker):
         str: stdout of disk by-id command
 
     """
-    cmd = f"oc debug nodes/{worker} " f"-- chroot /host ls -la /dev/disk/by-id/"
+    cmd = (
+        f"oc debug nodes/{worker} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+        f"-- chroot /host ls -la /dev/disk/by-id/"
+    )
     return run_cmd(cmd)
 
 
 @retry(AssertionError, 120, 10, 1)
-def verify_pvs_created(expected_pvs, storageclass):
+def verify_pvs_created(expected_pvs, storageclass, exact_count_pvs=True):
     """
     Verify that PVs were created and are in the Available state
 
     Args:
         expected_pvs (int): number of PVs to verify
+        storageclass (str): Name of storageclass
+        exact_count_pvs (bool): True if expected_pvs should match exactly with PVs created,
+            False, if PVs created is more than or equal to expected_pvs
 
     Raises:
         AssertionError: if any PVs are not in the Available state or if the
@@ -349,8 +380,12 @@ def verify_pvs_created(expected_pvs, storageclass):
 
     # check number of PVs created
     num_pvs = len(available_pvs)
+    if exact_count_pvs:
+        condition_to_check = num_pvs == expected_pvs
+    else:
+        condition_to_check = num_pvs >= expected_pvs
     assert (
-        num_pvs == expected_pvs
+        condition_to_check
     ), f"{num_pvs} PVs created but we are expecting {expected_pvs}"
 
     logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
@@ -382,9 +417,13 @@ def add_disk_for_vsphere_platform():
             )
 
         if lso_type == constants.DIRECTPATH:
-            raise NotImplementedError(
-                "LSO Deployment for VMDirectPath is not implemented"
-            )
+            logger.info(f"LSO Deployment type: {constants.DIRECTPATH}")
+            vsphere_base.add_pci_devices()
+
+            # wipe partition table on newly added PCI devices
+            compute_nodes = get_compute_node_names()
+            for compute_node in compute_nodes:
+                wipe_all_disk_partitions_for_node(compute_node)
 
 
 def add_disk_for_rhv_platform():

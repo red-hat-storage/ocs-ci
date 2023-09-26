@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     workloads,
@@ -22,6 +23,7 @@ from ocs_ci.utility.retry import retry
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @workloads
 @ignore_leftovers
 class TestRegistryShutdownAndRecoveryNode(E2ETest):
@@ -89,7 +91,7 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
             )(wait_for_nodes_status)(timeout=900)
 
         # Validate all storage pods are running
-        wait_for_storage_pods()
+        retry(CommandFailed)(wait_for_storage_pods)(timeout=900)
 
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check(tries=40)

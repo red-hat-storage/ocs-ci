@@ -1,14 +1,17 @@
 import logging
 import pytest
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
     ManageTest,
     ipi_deployment_required,
     ignore_leftovers,
+    skipif_external_mode,
+    skipif_ibm_cloud,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import machine, constants, defaults
+from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
 from ocs_ci.utility.utils import ceph_health_check
@@ -31,12 +34,14 @@ from ocs_ci.ocs.node import (
     get_another_osd_node_in_same_rack_or_zone,
     get_node_pods,
     wait_for_nodes_racks_or_zones,
+    wait_for_nodes_status,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4b
 @ipi_deployment_required
@@ -210,9 +215,11 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         self.sanity_helpers.health_check(tries=tries)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4a
 @ipi_deployment_required
+@skipif_ibm_cloud
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
@@ -270,6 +277,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             pytest.param(False, marks=pytest.mark.polarion_id("OCS-2190")),
         ],
     )
+    @skipif_external_mode
     def test_automated_recovery_from_stopped_node_and_start(
         self, nodes, additional_node
     ):
@@ -318,7 +326,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         temp_osd = get_node_pods(self.osd_worker_node.name, pods_to_search=osd_pods)[0]
         osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
 
-        nodes.stop_nodes([self.osd_worker_node], wait=True)
+        nodes.stop_nodes([self.osd_worker_node])
         log.info(f"Successfully powered off node: {self.osd_worker_node.name}")
 
         timeout = 420
@@ -330,7 +338,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         )
 
         # Validate that the OSD in terminate state has a new OSD in Pending
-        all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        all_pod_obj = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         new_osd = None
         for pod_obj in all_pod_obj:
             if osd_real_name == "-".join(pod_obj.name.split("-")[:-1]) and (
@@ -341,7 +349,8 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
         nodes.start_nodes(nodes=[self.osd_worker_node], wait=True)
         log.info(f"Successfully powered on node: {self.osd_worker_node.name}")
-        wait_for_resource_state(new_osd, constants.STATUS_RUNNING, timeout=180)
+        wait_for_nodes_status(timeout=600)
+        wait_for_resource_state(new_osd, constants.STATUS_RUNNING, timeout=360)
         if additional_node:
             new_osd_node = get_pod_node(new_osd)
             assert (

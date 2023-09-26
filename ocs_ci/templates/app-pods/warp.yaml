@@ -1,0 +1,32 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: warppod
+  labels:
+    app: warppod
+spec:
+  template:
+    metadata:
+      labels:
+        app: warppod
+    spec:
+      securityContext:
+        fsGroup: 2000
+      serviceAccountName: admin
+      restartPolicy: Always
+      volumes:
+      - name: warp-vol
+        persistentVolumeClaim:
+          claimName: warp-s3
+      containers:
+      - name: warp
+        image: quay.io/ocsci/warp:latest
+        resources:
+          limits:
+            memory: "2048Mi"
+            cpu: "150m"
+        command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /mnt
+          name: warp-vol

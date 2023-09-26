@@ -15,7 +15,7 @@ https://github.com/openshift/ocs-operator/blob/de48c9c00f8964f0f8813d7b3ddd25f7b
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
-
+GATHER_COMMANDS_LOG = "gather-debug.log"
 GATHER_COMMANDS_CEPH = [
     "ceph_auth_list",
     "ceph_balancer_status",
@@ -722,10 +722,8 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "noobaa-db-pg-0-pod-describe.txt",
     "noobaa-endpoint-scc-describe.txt",
     "NooBaaList_crs.yaml",
-    "noobaa-scc-describe.txt",
     "obc_list",
     "subscription",
-    "odf-csi-addons-operator.yaml",
     "odf-operator.yaml",
 ]
 
@@ -777,9 +775,12 @@ GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE = [
     "odf-operator.yaml",
     "noobaa-db-pg-0.yaml",
     "db-noobaa-db-pg-0.yaml",
-    "noobaa-scc-describe.txt",
     "db-noobaa-db-pg-0-pvc-describe.txt",
 ]
+
+GATHER_COMMANDS_OTHERS_EXCLUDE_4_11 = ["odf-csi-addons-operator.yaml"]
+
+GATHER_COMMANDS_OTHERS_EXCLUDE_4_13 = ["noobaa-db-pg-0-init.log"]
 
 if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
     GATHER_COMMANDS_OTHERS = list(
@@ -858,9 +859,92 @@ GATHER_COMMANDS_VERSION = {
     4.11: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
-        "OTHERS": GATHER_COMMANDS_OTHERS
-        + GATHER_COMMANDS_OTHERS_4_7
-        + GATHER_COMMANDS_OTHERS_4_10,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_EXCLUDE_4_11)
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    4.12: {
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_EXCLUDE_4_11)
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    4.13: {
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    4.14: {
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
+        ),
         "OTHERS_MANAGED_SERVICES": list(
             set(
                 GATHER_COMMANDS_OTHERS

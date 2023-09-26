@@ -7,6 +7,7 @@ networking:
     - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
       hostPrefix: {{ cluster_host_prefix | default(23) }}
   machineCIDR: '{{ machine_cidr }}'
+  networkType: {{ network_type | default('OVNKubernetes') }}
   serviceNetwork:
     - {{ service_network_cidr | default('172.30.0.0/16') }}
 {% if fips %}
@@ -15,6 +16,7 @@ fips: {{ fips }}
 platform:
   vsphere:
     datacenter: {{ vsphere_datacenter }}
+    cluster: {{ vsphere_cluster }}
     defaultDatastore: {{ vsphere_datastore }}
     password: {{ vsphere_password }}
     username: {{ vsphere_user }}

@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     tier2,
     skipif_managed_service,
+    red_squad,
 )
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -86,7 +87,7 @@ def get_list_and_verify(
         assert listed_versions.sort() == keys.sort(), "List mismatch"
 
 
-def multipart_setup(pod_obj):
+def multipart_setup(pod_obj, origin_dir, result_dir):
     """
     Creates directories and files needed for multipart upload
 
@@ -98,18 +99,16 @@ def multipart_setup(pod_obj):
 
     """
     mpu_key = "MpuKey-" + str(uuid.uuid4().hex)
-    origin_dir = "/aws/objectdir"
-    res_dir = "/aws/partsdir"
     # Creates a 500MB file and splits it into multiple parts
     pod_obj.exec_cmd_on_pod(
-        f'sh -c "mkdir {origin_dir}; mkdir {res_dir}; '
-        f"dd if=/dev/urandom of={origin_dir}/{mpu_key} bs=1MB count=500; "
-        f'split -a 1 -b 41m {origin_dir}/{mpu_key} {res_dir}/part"'
+        f'sh -c "dd if=/dev/urandom of={origin_dir}/{mpu_key} bs=1MB count=500; '
+        f'split -a 1 -b 41m {origin_dir}/{mpu_key} {result_dir}/part"'
     )
-    parts = pod_obj.exec_cmd_on_pod(f'sh -c "ls -1 {res_dir}"').split()
-    return mpu_key, origin_dir, res_dir, parts
+    parts = pod_obj.exec_cmd_on_pod(f'sh -c "ls -1 {result_dir}"').split()
+    return mpu_key, origin_dir, result_dir, parts
 
 
+@red_squad
 @pytest.mark.polarion_id("OCS-2296")
 @skipif_managed_service
 @skipif_aws_creds_are_missing
@@ -120,9 +119,6 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
     Test various supported S3 operations on namespace buckets
 
     """
-
-    MCG_NS_RESULT_DIR = "/result"
-    MCG_NS_ORIGINAL_DIR = "/original"
 
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
@@ -590,7 +586,12 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         ids=["AWS-OC-Single", "Azure-OC-Single", "RGW-OC-Single", "AWS-OC-Cache"],
     )
     def test_mcg_namespace_mpu_crd(
-        self, mcg_obj, awscli_pod, bucket_factory, bucketclass_dict
+        self,
+        mcg_obj,
+        awscli_pod,
+        bucket_factory,
+        bucketclass_dict,
+        test_directory_setup,
     ):
         """
         Test multipart upload S3 operations on namespace buckets(created by CRDs)
@@ -610,7 +611,9 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         logger.info(
             f"Setting up test files for mpu and aborting any mpu on bucket: {ns_bucket}"
         )
-        mpu_key, origin_dir, res_dir, parts = multipart_setup(awscli_pod)
+        mpu_key, origin_dir, res_dir, parts = multipart_setup(
+            awscli_pod, test_directory_setup.origin_dir, test_directory_setup.result_dir
+        )
         bucket_utils.abort_all_multipart_upload(mcg_obj, ns_bucket, COPY_OBJ)
 
         # Initiate mpu, Upload part copy, List and Abort operations

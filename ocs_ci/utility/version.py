@@ -44,17 +44,23 @@ VERSION_4_8 = get_semantic_version("4.8", True)
 VERSION_4_9 = get_semantic_version("4.9", True)
 VERSION_4_10 = get_semantic_version("4.10", True)
 VERSION_4_11 = get_semantic_version("4.11", True)
+VERSION_4_12 = get_semantic_version("4.12", True)
+VERSION_4_13 = get_semantic_version("4.13", True)
+VERSION_4_14 = get_semantic_version("4.14", True)
 
 
-def get_semantic_ocs_version_from_config():
+def get_semantic_ocs_version_from_config(cluster_config=None):
     """
     Returning OCS semantic version from config.
 
     Returns:
        semantic_version.base.Version: Object of semantic version for OCS.
+       cluster_config (MultiClusterConfig): config related to specific cluster in case of multicluster
 
     """
-    return get_semantic_version(config.ENV_DATA["ocs_version"], True)
+    if not cluster_config:
+        cluster_config = config
+    return get_semantic_version(cluster_config.ENV_DATA["ocs_version"], True)
 
 
 def get_semantic_ocp_version_from_config():
@@ -66,6 +72,24 @@ def get_semantic_ocp_version_from_config():
 
     """
     return get_semantic_version(config.DEPLOYMENT["installer_version"], True)
+
+
+def get_semantic_ocp_running_version(separator=None):
+    """
+    Returning running OCP semantic version from cluster.
+
+    Args:
+        separator (str): String that would separate major and
+            minor version numbers
+
+    Returns:
+       semantic_version.base.Version: Object of semantic version for OCP.
+
+    """
+    # Importing here to avoid circular import
+    from ocs_ci.utility.utils import get_running_ocp_version
+
+    return get_semantic_version(get_running_ocp_version(separator), True)
 
 
 def get_ocs_version_from_csv(only_major_minor=False, ignore_pre_release=False):

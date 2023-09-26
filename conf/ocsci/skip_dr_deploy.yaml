@@ -1,0 +1,3 @@
+---
+ENV_DATA:
+  skip_dr_deployment: true

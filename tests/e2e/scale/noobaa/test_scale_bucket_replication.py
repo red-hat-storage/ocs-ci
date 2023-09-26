@@ -1,14 +1,15 @@
 import logging
 import pytest
-import json
 import time
 
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs import hsbench
-from ocs_ci.framework import config
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.bucket_utils import compare_bucket_object_list
+from ocs_ci.ocs.bucket_utils import (
+    compare_bucket_object_list,
+    patch_replication_policy_to_bucket,
+)
 from ocs_ci.ocs import scale_noobaa_lib
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ def s3bench(request):
     return s3bench
 
 
+@orange_squad
 @scale
 @skipif_ocs_version("<4.9")
 class TestScaleBucketReplication(E2ETest):
@@ -177,26 +179,8 @@ class TestScaleBucketReplication(E2ETest):
                 replication_policy=replication_policy,
                 verify_health=False,
             )[0]
-            replication_policy_patch_dict = {
-                "spec": {
-                    "additionalConfig": {
-                        "replicationPolicy": json.dumps(
-                            [
-                                {
-                                    "rule_id": "basic-replication-rule-2",
-                                    "destination_bucket": second_bucket.name,
-                                }
-                            ]
-                        )
-                    }
-                }
-            }
-            OCP(
-                kind="obc",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=bucket.name,
-            ).patch(
-                params=json.dumps(replication_policy_patch_dict), format_type="merge"
+            patch_replication_policy_to_bucket(
+                bucket.name, "basic-replication-rule-2", second_bucket.name
             )
             first_end_point = (
                 "http://"

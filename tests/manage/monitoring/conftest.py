@@ -19,7 +19,8 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
-from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
+from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def measure_stop_ceph_mgr(measurement_dir):
+def measure_stop_ceph_mgr(measurement_dir, threading_lock):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -42,7 +43,9 @@ def measure_stop_ceph_mgr(measurement_dir):
             Ceph Manager pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
     mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)["items"]
     mgr = mgr_deployments[0]["metadata"]["name"]
@@ -73,7 +76,12 @@ def measure_stop_ceph_mgr(measurement_dir):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_mgr, test_file, minimal_time=60 * 9)
+        measured_op = measure_operation(
+            stop_mgr,
+            test_file,
+            minimal_time=60 * 9,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
@@ -104,7 +112,7 @@ def create_mon_quorum_loss(create_mon_quorum_loss=False):
 
 
 @pytest.fixture
-def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
+def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_lock):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -114,7 +122,9 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
             Ceph Monitor pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)["items"]
     mons = [deployment["metadata"]["name"] for deployment in mon_deployments]
@@ -166,7 +176,12 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
             node.name for node in get_nodes(node_type=constants.WORKER_MACHINE)
         ]
         unschedule_nodes(worker_node_names)
-        measured_op = measure_operation(stop_mon, test_file, minimal_time=60 * 20)
+        measured_op = measure_operation(
+            stop_mon,
+            test_file,
+            minimal_time=60 * 20,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
         schedule_nodes(worker_node_names)
     else:
         measured_op = measure_operation(stop_mon, test_file)
@@ -195,13 +210,13 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss):
 
     # wait for ceph to return into HEALTH_OK state after mon deployment
     # is returned back to normal
-    ceph_health_check(tries=20, delay=15)
+    ceph_health_check(tries=40, delay=15)
 
     return measured_op
 
 
 @pytest.fixture
-def measure_stop_ceph_osd(measurement_dir):
+def measure_stop_ceph_osd(measurement_dir, threading_lock):
     """
     Downscales Ceph osd deployment, measures the time when it was
     downscaled and alerts that were triggered during this event.
@@ -211,7 +226,9 @@ def measure_stop_ceph_osd(measurement_dir):
             Ceph osd pod
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA.get("cluster_namespace")
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA.get("cluster_namespace"),
+        threading_lock=threading_lock,
     )
     osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get("items")
     osds = [deployment.get("metadata").get("name") for deployment in osd_deployments]
@@ -249,7 +266,12 @@ def measure_stop_ceph_osd(measurement_dir):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_osd, test_file, minimal_time=60 * 19)
+        measured_op = measure_operation(
+            stop_osd,
+            test_file,
+            minimal_time=60 * 19,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
@@ -257,7 +279,9 @@ def measure_stop_ceph_osd(measurement_dir):
 
     # wait for ceph to return into HEALTH_OK state after osd deployment
     # is returned back to normal
-    ceph_health_check(tries=20, delay=15)
+    # The check is increased to cover for slow ops events in case of larger clusters
+    # with uploaded data
+    ceph_health_check(tries=40, delay=15)
 
     return measured_op
 
@@ -317,10 +341,13 @@ def measure_corrupt_pg(request, measurement_dir):
     logger.info(f"Put object into {pool_name}")
     pool_object = "test_object"
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
+    logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
+    rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
 
-    def corrupt_pg():
+    def wait_with_corrupted_pg():
         """
-        Corrupt PG on one OSD in Ceph pool for 14 minutes and measure it.
+        PG on one OSD in Ceph pool should be corrupted at the time of execution
+        of this function. Measure it for 14 minutes.
         There should be only CephPGRepairTakingTooLong Pending alert as
         it takes 2 hours for it to become Firing.
         This configuration of alert can be observed in ceph-mixins which
@@ -332,14 +359,9 @@ def measure_corrupt_pg(request, measurement_dir):
         Returns:
             str: Name of corrupted pod
         """
+        nonlocal osd_deployment
         # run_time of operation
         run_time = 60 * 14
-        nonlocal pool_name
-        nonlocal pool_object
-        nonlocal osd_deployment
-
-        logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
-        rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return osd_deployment.name
@@ -349,9 +371,14 @@ def measure_corrupt_pg(request, measurement_dir):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(corrupt_pg, test_file, minimal_time=60 * 17)
+        measured_op = measure_operation(
+            wait_with_corrupted_pg,
+            test_file,
+            minimal_time=60 * 17,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
-        measured_op = measure_operation(corrupt_pg, test_file)
+        measured_op = measure_operation(wait_with_corrupted_pg, test_file)
 
     teardown()
 
@@ -455,7 +482,7 @@ def workload_storageutilization_85p_rbd(
 
 
 @pytest.fixture
-def workload_storageutilization_95p_rbd(
+def workload_storageutilization_97p_rbd(
     project,
     fio_pvc_dict,
     fio_job_dict,
@@ -464,7 +491,7 @@ def workload_storageutilization_95p_rbd(
     tmp_path,
     supported_configuration,
 ):
-    fixture_name = "workload_storageutilization_95p_rbd"
+    fixture_name = "workload_storageutilization_97p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -473,7 +500,7 @@ def workload_storageutilization_95p_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95,
+        target_percentage=0.97,
     )
     return measured_op
 
@@ -545,7 +572,7 @@ def workload_storageutilization_85p_cephfs(
 
 
 @pytest.fixture
-def workload_storageutilization_95p_cephfs(
+def workload_storageutilization_97p_cephfs(
     project,
     fio_pvc_dict,
     fio_job_dict,
@@ -554,7 +581,7 @@ def workload_storageutilization_95p_cephfs(
     tmp_path,
     supported_configuration,
 ):
-    fixture_name = "workload_storageutilization_95p_cephfs"
+    fixture_name = "workload_storageutilization_97p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         project,
@@ -563,7 +590,7 @@ def workload_storageutilization_95p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.95,
+        target_percentage=0.97,
     )
     return measured_op
 
@@ -619,12 +646,8 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     bucket_name = create_unique_resource_name(
         resource_description="bucket", resource_type="s3"
     )
-    bucket = MCGS3Bucket(bucket_name, mcg=mcg_obj)
-    mcg_obj.send_rpc_query(
-        "bucket_api",
-        "update_bucket",
-        {"name": bucket_name, "quota": {"unit": "GIGABYTE", "size": 2}},
-    )
+    quota = "2Gi"
+    bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota=quota)
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
     logger.info(f"Bucket {bucket.name} data: {bucket_info['data']}")
@@ -670,7 +693,11 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     test_file = os.path.join(
         measurement_dir, "measure_noobaa_exceed__bucket_quota.json"
     )
-    measured_op = measure_operation(exceed_bucket_quota, test_file)
+    measured_op = measure_operation(
+        exceed_bucket_quota,
+        test_file,
+        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+    )
 
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
@@ -687,7 +714,7 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
 
 
 @pytest.fixture
-def workload_idle(measurement_dir):
+def workload_idle(measurement_dir, threading_lock):
     """
     This workload represents a relative long timeframe when nothing special is
     happening, for test cases checking default status of various components
@@ -703,14 +730,11 @@ def workload_idle(measurement_dir):
     the workload in such case.
     """
 
+    @retry(CommandFailed, text_in_exception="failed to get OSD and MON pods")
     def count_ceph_components():
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_osd_ls_list = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd ls")
-        logger.debug(f"ceph osd ls output: {ceph_osd_ls_list}")
-        # the "+ 1" is a WORKAROUND for a bug in exec_ceph_cmd()
-        # https://github.com/red-hat-storage/ocs-ci/issues/1152
-        osd_num = len(ceph_osd_ls_list) + 1
-        mon_num = len(ct_pod.exec_ceph_cmd(ceph_cmd="ceph mon metadata"))
+        ceph_osd_ls_list = get_osd_pods()
+        osd_num = len(ceph_osd_ls_list)
+        mon_num = len(get_mon_pods())
         logger.info(f"There are {osd_num} OSDs, {mon_num} MONs")
         return osd_num, mon_num
 
@@ -764,7 +788,12 @@ def workload_idle(measurement_dir):
     else:
         logger.debug("io_in_bg not detected, good")
 
-    measured_op = measure_operation(do_nothing, test_file)
+    measured_op = measure_operation(
+        do_nothing,
+        test_file,
+        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        threading_lock=threading_lock,
+    )
     if restart_io_in_bg:
         logger.info("reverting load_status to resume io_in_bg")
         config.RUN["load_status"] = "to_be_resumed"
@@ -772,7 +801,7 @@ def workload_idle(measurement_dir):
 
 
 @pytest.fixture
-def measure_stop_rgw(measurement_dir, request, rgw_deployments):
+def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
     """
     Downscales RGW deployments, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -783,7 +812,9 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
 
     """
     oc = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        threading_lock=threading_lock,
     )
 
     def stop_rgw():
@@ -810,7 +841,12 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_rgw, test_file, minimal_time=60 * 8)
+        measured_op = measure_operation(
+            stop_rgw,
+            test_file,
+            minimal_time=60 * 8,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_rgw, test_file)
 
@@ -873,7 +909,11 @@ def measure_noobaa_ns_target_bucket_deleted(
         return ns_stores[0].uls_name
 
     test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
-    measured_op = measure_operation(delete_target_bucket, test_file)
+    measured_op = measure_operation(
+        delete_target_bucket,
+        test_file,
+        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+    )
     logger.info("Delete NS bucket, bucketclass and NS store so that alert is cleared")
     ns_bucket[0].delete()
     ns_bucket[0].bucketclass.delete()
@@ -932,7 +972,12 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         # It seems that it takes longer to propagate incidents to PagerDuty.
         # Adding 3 extra minutes
-        measured_op = measure_operation(stop_nodes, test_file, minimal_time=60 * 8)
+        measured_op = measure_operation(
+            stop_nodes,
+            test_file,
+            minimal_time=60 * 8,
+            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        )
     else:
         measured_op = measure_operation(stop_nodes, test_file)
     logger.info("Turning on nodes")

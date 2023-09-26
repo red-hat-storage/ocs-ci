@@ -1,0 +1,12 @@
+apiVersion: replication.storage.openshift.io/v1alpha1
+kind: VolumeReplicationClass
+metadata:
+  name: volume-replication-class-sample
+spec:
+  provisioner: example.provisioner.io
+  parameters:
+    mirroringMode: snapshot
+    replication.storage.openshift.io/replication-secret-name: secret-name
+    replication.storage.openshift.io/replication-secret-namespace: secret-namespace
+    schedulingInterval: 1m
+

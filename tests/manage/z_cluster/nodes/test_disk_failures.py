@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
@@ -11,6 +12,8 @@ from ocs_ci.framework.testlib import (
     vsphere_platform_required,
     bugzilla,
     skipif_ibm_cloud,
+    skipif_external_mode,
+    skipif_managed_service,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
@@ -28,6 +31,7 @@ from ocs_ci.ocs import osd_operations
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4a
 @ignore_leftovers
 class TestDiskFailures(ManageTest):
@@ -118,6 +122,7 @@ class TestDiskFailures(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @skipif_managed_service
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
     @bugzilla("1825675")
@@ -165,6 +170,7 @@ class TestDiskFailures(ManageTest):
         # TODO: Remove 'tries=100'
         self.sanity_helpers.health_check(tries=100)
 
+    @skipif_managed_service
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1086")
     @skipif_ibm_cloud
@@ -206,6 +212,7 @@ class TestDiskFailures(ManageTest):
     @bugzilla("1830702")
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2172")
+    @skipif_external_mode
     def test_recovery_from_volume_deletion(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):

@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -30,6 +31,7 @@ from ocs_ci.helpers import disruption_helpers
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @pytest.mark.skip(
     reason="This test is disabled because this scenario is covered in the "
     "test test_daemon_kill_during_pvc_pod_creation_deletion_and_io.py"
@@ -269,7 +271,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
 
         # Verify that the mount point is removed from nodes after deleting pod
         for node, pvs in node_pv_dict.items():
-            cmd = f"oc debug nodes/{node} -- df"
+            cmd = f"oc debug nodes/{node} --to-namespace={config.ENV_DATA['cluster_namespace']} -- df"
             df_on_node = run_cmd(cmd)
             for pv in pvs:
                 assert pv not in df_on_node, (

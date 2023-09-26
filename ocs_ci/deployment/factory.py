@@ -43,17 +43,26 @@ class DeploymentFactory(object):
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:
-            from .azure import AZUREIPI
+            from .azure import (
+                AZUREIPI,
+                AZUREAroManaged,
+            )
 
             self.cls_map["azure_ipi"] = AZUREIPI
+            self.cls_map["azure_managed"] = AZUREAroManaged
         elif self.deployment_platform == constants.GCP_PLATFORM:
             from .gcp import GCPIPI
 
             self.cls_map["gcp_ipi"] = GCPIPI
         elif self.deployment_platform == constants.IBMCLOUD_PLATFORM:
-            from ocs_ci.deployment.ibmcloud import IBMCloud
+            from ocs_ci.deployment.ibmcloud import IBMCloud, IBMCloudIPI
 
-            self.cls_map["ibm_cloud_managed"] = IBMCloud
+            self.cls_map.update(
+                {
+                    "ibm_cloud_ipi": IBMCloudIPI,
+                    "ibm_cloud_managed": IBMCloud,
+                }
+            )
         elif self.deployment_platform == constants.IBM_POWER_PLATFORM:
             from ocs_ci.deployment.ibm import IBMDeployment
 
@@ -75,6 +84,10 @@ class DeploymentFactory(object):
             from .rosa import ROSA
 
             self.cls_map["rosa_managed"] = ROSA
+        elif self.deployment_platform == constants.FUSIONAAS_PLATFORM:
+            from .fusion_aas import FUSIONAAS
+
+            self.cls_map["fusion_aas_managed"] = FUSIONAAS
         elif self.deployment_platform == constants.RHV_PLATFORM:
             from .rhv import RHVIPI
 

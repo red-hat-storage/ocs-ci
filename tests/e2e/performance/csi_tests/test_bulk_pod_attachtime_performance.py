@@ -7,8 +7,9 @@ import logging
 import pytest
 import pathlib
 import time
-
-from ocs_ci.framework.testlib import performance, polarion_id
+from datetime import datetime
+from ocs_ci.framework.pytest_customization.marks import grey_squad
+from ocs_ci.framework.testlib import performance, performance_a, polarion_id
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.perftests import PASTest
@@ -24,7 +25,9 @@ Interfaces_info = {
 }
 
 
+@grey_squad
 @performance
+@performance_a
 class TestBulkPodAttachPerformance(PASTest):
     """
     Test to measure performance of attaching pods to pvc in a bulk
@@ -67,7 +70,7 @@ class TestBulkPodAttachPerformance(PASTest):
         )
         log.info("All POD(s) was deleted")
 
-        # Deleting PVC(s) for deletion time mesurment
+        # Deleting PVC(s) for deletion time measurement
         log.info("Try to delete all created PVCs")
         for pvc_obj in self.pvc_objs:
             pvc_obj.delete()
@@ -129,6 +132,7 @@ class TestBulkPodAttachPerformance(PASTest):
 
         # Getting the test start time
         test_start_time = self.get_time()
+        csi_start_time = self.get_time("csi")
 
         log.info(f"Start creating bulk of new {bulk_size} PVCs")
         self.pvc_objs, _ = helpers.create_multiple_pvcs(
@@ -143,7 +147,7 @@ class TestBulkPodAttachPerformance(PASTest):
         performance_lib.wait_for_resource_bulk_status(
             "pvc", bulk_size, self.namespace, constants.STATUS_BOUND, timeout, 10
         )
-        # incase of creation faliure, the wait_for_resource_bulk_status function
+        # in case of creation failure, the wait_for_resource_bulk_status function
         # will raise an exception. so in this point the creation succeed
         log.info("All PVCs was created and in Bound state.")
 
@@ -177,10 +181,32 @@ class TestBulkPodAttachPerformance(PASTest):
         performance_lib.wait_for_resource_bulk_status(
             "pod", bulk_size, self.namespace, constants.STATUS_RUNNING, timeout, 2
         )
-        log.info("All POD(s) are in Running State.")
+        log.info("All the POD(s) are in Running State.")
         bulk_end_time = time.time()
         bulk_total_time = bulk_end_time - bulk_start_time
-        log.info(f"Bulk attach time of {bulk_size} pods is {bulk_total_time} seconds")
+
+        bulk_start_time_str = datetime.fromtimestamp(bulk_start_time).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )
+        bulk_end_time_str = datetime.fromtimestamp(bulk_end_time).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )
+        log.info(
+            f"Total bulk attach start time of {bulk_size} pods is {bulk_start_time_str}"
+        )
+        log.info(
+            f"Total bulk attach end time of {bulk_size} pods is {bulk_end_time_str})"
+        )
+        log.info(
+            f"Total bulk attach time of {bulk_size} pods is {bulk_total_time} seconds"
+        )
+
+        csi_bulk_total_time = performance_lib.pod_bulk_attach_csi_time(
+            self.interface, self.pvc_objs, csi_start_time, self.namespace
+        )
+        log.info(
+            f"CSI bulk attach time of {bulk_size} pods is {csi_bulk_total_time} seconds"
+        )
 
         # Collecting environment information
         self.get_env_info()
@@ -194,6 +220,7 @@ class TestBulkPodAttachPerformance(PASTest):
 
         full_results.add_key("storageclass", Interfaces_info[self.interface]["name"])
         full_results.add_key("pod_bulk_attach_time", bulk_total_time)
+        full_results.add_key("pod_csi_bulk_attach_time", csi_bulk_total_time)
         full_results.add_key("pvc_size", self.pvc_size)
         full_results.add_key("bulk_size", bulk_size)
 
@@ -212,7 +239,7 @@ class TestBulkPodAttachPerformance(PASTest):
             # write the ES link to the test results in the test log.
             log.info(f"The result can be found at : {res_link}")
 
-            # Create text file with results of all subtest (4 - according to the parameters)
+            # Create text file with results of all subtests (4 - according to the parameters)
             self.write_result_to_file(res_link)
 
     def test_bulk_pod_attach_results(self):

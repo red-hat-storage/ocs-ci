@@ -6,7 +6,10 @@ import pickle
 import re
 import time
 import traceback
+import subprocess
+import shlex
 from subprocess import TimeoutExpired
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
 from gevent import sleep
@@ -17,7 +20,7 @@ from libcloud.compute.types import Provider
 from paramiko.ssh_exception import SSHException
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
@@ -721,6 +724,37 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
+def get_namespce_name_by_pattern(
+    pattern="client",
+    filter=None,
+):
+    """
+    Find namespace names that match the given pattern
+
+    Args:
+        pattern (str): name of the namespace with given pattern
+        filter (str): namespace name to filter from the list
+
+    Returns:
+        list: Namespace names matching the pattern
+
+    """
+    ocp_obj = OCP(kind="namespace")
+    namespace_names = ocp_obj.exec_oc_cmd(
+        "get namespace -o name", out_yaml_format=False
+    )
+    namespace_names = namespace_names.split("\n")
+    namespace_list = []
+    for namespace_name in namespace_names:
+        if filter is not None and filter == namespace_name:
+            log.info(f"Namespace name filtered {namespace_name}")
+        elif re.search(pattern, namespace_name):
+            (_, name) = namespace_name.split("/")
+            log.info(f"namespace name match found appending {namespace_name}")
+            namespace_list.append(name)
+    return namespace_list
+
+
 def get_rook_version():
     """
     Get the rook image information from rook-ceph-operator pod
@@ -811,12 +845,44 @@ def setup_ceph_toolbox(force_setup=False):
                 "image"
             ] = get_rook_version()
             toolbox["metadata"]["name"] += "-multus"
+            # remove tini from multus tool box
+            if ocs_version >= version.VERSION_4_10:
+                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
+                    "/bin/bash"
+                ]
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
+
+            if ocsci_config.ENV_DATA["multus_create_public_net"]:
+                multus_net_name = ocsci_config.ENV_DATA["multus_public_net_name"]
+                multus_net_namespace = ocsci_config.ENV_DATA[
+                    "multus_public_net_namespace"
+                ]
+            elif ocsci_config.ENV_DATA["multus_create_cluster_net"]:
+                multus_net_name = ocsci_config.ENV_DATA["multus_cluster_net_name"]
+                multus_net_namespace = ocsci_config.ENV_DATA[
+                    "multus_cluster_net_namespace"
+                ]
+
             toolbox["spec"]["template"]["metadata"]["annotations"] = {
-                "k8s.v1.cni.cncf.io/networks": "openshift-storage/ocs-public"
+                "k8s.v1.cni.cncf.io/networks": f"{multus_net_namespace}/{multus_net_name}"
             }
             toolbox["spec"]["template"]["spec"]["hostNetwork"] = False
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
+            return
+
+        if (
+            ocsci_config.ENV_DATA.get("platform").lower()
+            == constants.FUSIONAAS_PLATFORM
+            and ocsci_config.ENV_DATA["cluster_type"].lower()
+            == constants.MS_CONSUMER_TYPE
+        ):
+            log.warning(
+                f"Skipping toolbox creation on {constants.MS_CONSUMER_TYPE} cluster on "
+                f"{constants.FUSIONAAS_PLATFORM} platform."
+            )
             return
 
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
@@ -869,7 +935,7 @@ def apply_oc_resource(
     occli.apply(cfg_file)
 
 
-def run_must_gather(log_dir_path, image, command=None):
+def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
     """
     Runs the must-gather tool against the cluster
 
@@ -877,6 +943,7 @@ def run_must_gather(log_dir_path, image, command=None):
         log_dir_path (str): directory for dumped must-gather logs
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
+        cluster_config (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
 
     Returns:
         mg_output (str): must-gather cli output
@@ -884,10 +951,18 @@ def run_must_gather(log_dir_path, image, command=None):
     """
     # Must-gather has many changes on 4.6 which add more time to the collection.
     # https://github.com/red-hat-storage/ocs-ci/issues/3240
+    if not cluster_config:
+        cluster_config = ocsci_config
     mg_output = ""
     ocs_version = version.get_semantic_ocs_version_from_config()
-    timeout = 1500 if ocs_version >= version.VERSION_4_6 else 600
-    must_gather_timeout = ocsci_config.REPORTING.get("must_gather_timeout", timeout)
+    if ocs_version >= version.VERSION_4_10:
+        timeout = 2100
+    elif ocs_version >= version.VERSION_4_6:
+        timeout = 1500
+    else:
+        timeout = 600
+
+    must_gather_timeout = cluster_config.REPORTING.get("must_gather_timeout", timeout)
 
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
@@ -899,28 +974,125 @@ def run_must_gather(log_dir_path, image, command=None):
     occli = OCP()
     try:
         mg_output = occli.exec_oc_cmd(
-            cmd, out_yaml_format=False, timeout=must_gather_timeout
+            cmd,
+            out_yaml_format=False,
+            timeout=must_gather_timeout,
+            cluster_config=cluster_config,
         )
     except CommandFailed as ex:
         log.error(
             f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
+        export_mg_pods_logs(log_dir_path=log_dir_path)
+
     except TimeoutExpired as ex:
         log.error(
-            f"Timeout {must_gather_timeout}s for must-gather reached, command"
-            f" exited with error: {ex}"
+            f"Failed during must gather logs! Error: {ex}"
             f"Must-Gather Output: {mg_output}"
         )
+        export_mg_pods_logs(log_dir_path=log_dir_path)
     return mg_output
 
 
-def collect_noobaa_db_dump(log_dir_path):
+def export_mg_pods_logs(log_dir_path):
+    """
+    Export must gather pods logs
+
+    Args:
+        log_dir_path (str): the path of copying the logs
+
+    """
+    get_logs_ocp_mg_pods(log_dir_path)
+    get_helper_pods_output(log_dir_path)
+
+
+def get_logs_ocp_mg_pods(log_dir_path):
+    """
+    Get logs from OCP Must Gather pods
+
+    Args:
+        log_dir_path (str): the path of copying the logs
+
+    """
+    from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_logs
+
+    namespaces = get_namespce_name_by_pattern(pattern="openshift-must-gather")
+    try:
+        for namespace in namespaces:
+            pods_mg_ns = get_all_pods(namespace=namespace)
+            for pod_mg_ns in pods_mg_ns:
+                log.info(
+                    f"*** ocp_mg_pod_name: {pod_mg_ns.name} ocp_mg_pod_namespace: {namespace} ***"
+                )
+
+                file_path_describe = os.path.join(
+                    log_dir_path, f"describe_ocp_mg_{pod_mg_ns.name}.log"
+                )
+                pod_mg_describe = pod_mg_ns.describe()
+                with open(file_path_describe, "w") as df:
+                    df.write(f"ocp mg pod describe:\n{pod_mg_describe}")
+                log.debug(f"ocp mg pod describe:\n{pod_mg_describe}")
+
+                ocp_mg_pod_logs = get_pod_logs(
+                    pod_name=pod_mg_ns.name, namespace=namespace, all_containers=True
+                )
+                file_path_describe = os.path.join(
+                    log_dir_path, f"log_ocp_mg_{pod_mg_ns.name}.log"
+                )
+                with open(file_path_describe, "w") as df:
+                    df.write(ocp_mg_pod_logs)
+                log.debug(f"ocp mg pod logs:\n{ocp_mg_pod_logs}")
+    except Exception as e:
+        log.error(e)
+
+
+def get_helper_pods_output(log_dir_path):
+    """
+    Get the output of "oc describe mg-helper pods"
+
+    Args:
+        log_dir_path (str): the path of copying the logs
+
+    """
+    from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
+
+    helper_pods = get_pod_name_by_pattern(pattern="helper")
+    for helper_pod in helper_pods:
+        try:
+            helper_pod_obj = get_pod_obj(
+                name=helper_pod, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+            )
+
+            describe_helper_pod = helper_pod_obj.describe()
+            file_path_describe = os.path.join(
+                log_dir_path, f"describe_ocs_mg_helper_pod_{helper_pod}.log"
+            )
+            with open(file_path_describe, "w") as df:
+                df.write(describe_helper_pod)
+            log.debug(
+                f"****helper pod {helper_pod} describe****\n{describe_helper_pod}\n"
+            )
+
+            log_helper_pod = get_pod_logs(pod_name=helper_pod)
+            file_path_describe = os.path.join(
+                log_dir_path, f"log_ocs_mg_helper_pod_{helper_pod}.log"
+            )
+            with open(file_path_describe, "w") as df:
+                df.write(log_helper_pod)
+            log.debug(f"****helper pod {helper_pod} logs***\n{log_helper_pod}")
+        except Exception as e:
+            log.error(e)
+
+
+def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
     """
     Collect the Noobaa DB dump
 
     Args:
         log_dir_path (str): directory for dumped Noobaa DB
+        cluster_config (MultiClusterConfig): If multicluster scenario then this object will have
+            specific cluster config
 
     """
     from ocs_ci.ocs.resources.pod import (
@@ -929,7 +1101,9 @@ def collect_noobaa_db_dump(log_dir_path):
         Pod,
     )
 
-    ocs_version = version.get_semantic_ocs_version_from_config()
+    ocs_version = version.get_semantic_ocs_version_from_config(
+        cluster_config=cluster_config
+    )
     nb_db_label = (
         constants.NOOBAA_DB_LABEL_46_AND_UNDER
         if ocs_version < version.VERSION_4_7
@@ -938,14 +1112,16 @@ def collect_noobaa_db_dump(log_dir_path):
     try:
         nb_db_pod = Pod(
             **get_pods_having_label(
-                label=nb_db_label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                label=nb_db_label,
+                namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                cluster_config=cluster_config,
             )[0]
         )
     except IndexError:
         log.warning(
             "Unable to find pod using label `%s` in namespace `%s`",
             nb_db_label,
-            defaults.ROOK_CLUSTER_NAMESPACE,
+            ocsci_config.ENV_DATA["cluster_namespace"],
         )
         return
     ocs_log_dir_path = os.path.join(log_dir_path, "noobaa_db_dump")
@@ -953,16 +1129,150 @@ def collect_noobaa_db_dump(log_dir_path):
     ocs_log_dir_path = os.path.join(ocs_log_dir_path, "nbcore.gz")
     if ocs_version < version.VERSION_4_7:
         cmd = "mongodump --archive=nbcore.gz --gzip --db=nbcore"
+        remote_path = "/opt/app-root/src/nbcore.gz"
     else:
-        cmd = 'bash -c "pg_dump nbcore | gzip > nbcore.gz"'
+        cmd = 'bash -c "pg_dump nbcore | gzip > /tmp/nbcore.gz"'
+        remote_path = "/tmp/nbcore.gz"
 
-    nb_db_pod.exec_cmd_on_pod(cmd)
+    nb_db_pod.exec_cmd_on_pod(cmd, cluster_config=cluster_config)
     download_file_from_pod(
         pod_name=nb_db_pod.name,
-        remotepath="/opt/app-root/src/nbcore.gz",
+        remotepath=remote_path,
         localpath=ocs_log_dir_path,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
     )
+
+
+def _collect_ocs_logs(
+    cluster_config, dir_name, ocp=True, ocs=True, mcg=False, status_failure=True
+):
+    """
+    This function runs in thread
+
+    """
+    log.info(
+        (
+            f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}"
+        )
+    )
+    if not (
+        cluster_config.RUN.get("kubeconfig", False)
+        or os.path.exists(os.path.expanduser("~/.kube/config"))
+    ):
+        log.warning(
+            "Cannot find $KUBECONFIG or ~/.kube/config; " "skipping log collection"
+        )
+        return
+    if status_failure:
+        log_dir_path = os.path.join(
+            os.path.expanduser(cluster_config.RUN["log_dir"]),
+            f"failed_testcase_ocs_logs_{cluster_config.RUN['run_id']}",
+            f"{dir_name}_ocs_logs",
+            f"{cluster_config.ENV_DATA['cluster_name']}",
+        )
+    else:
+        log_dir_path = os.path.join(
+            os.path.expanduser(cluster_config.RUN["log_dir"]),
+            f"{dir_name}_{cluster_config.RUN['run_id']}",
+            f"{cluster_config.ENV_DATA['cluster_name']}",
+        )
+
+    if ocs:
+        latest_tag = cluster_config.REPORTING.get(
+            "ocs_must_gather_latest_tag",
+            cluster_config.REPORTING.get(
+                "default_ocs_must_gather_latest_tag",
+                cluster_config.DEPLOYMENT["default_latest_tag"],
+            ),
+        )
+        ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
+        ocs_must_gather_image = cluster_config.REPORTING.get(
+            "ocs_must_gather_image",
+            cluster_config.REPORTING["default_ocs_must_gather_image"],
+        )
+        ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
+        if cluster_config.DEPLOYMENT.get("disconnected"):
+            ocs_must_gather_image_and_tag = mirror_image(
+                ocs_must_gather_image_and_tag, cluster_config
+            )
+        mg_output = run_must_gather(
+            ocs_log_dir_path,
+            ocs_must_gather_image_and_tag,
+            cluster_config=cluster_config,
+        )
+        if (
+            ocsci_config.DEPLOYMENT.get("disconnected")
+            and "cannot stat 'jq'" in mg_output
+        ):
+            raise ValueError(
+                f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
+            )
+    if ocp:
+        ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
+        ocp_must_gather_image = cluster_config.REPORTING["ocp_must_gather_image"]
+        if cluster_config.DEPLOYMENT.get("disconnected"):
+            ocp_must_gather_image = mirror_image(ocp_must_gather_image)
+        run_must_gather(
+            ocp_log_dir_path, ocp_must_gather_image, cluster_config=cluster_config
+        )
+        run_must_gather(
+            ocp_log_dir_path,
+            ocp_must_gather_image,
+            "/usr/bin/gather_service_logs worker",
+            cluster_config=cluster_config,
+        )
+    if mcg:
+        counter = 0
+        while counter < 5:
+            counter += 1
+            try:
+                if (
+                    ocsci_config.multicluster
+                    and ocsci_config.get_active_acm_index()
+                    == cluster_config.MULTICLUSTER["multicluster_index"]
+                ):
+                    break
+                collect_noobaa_db_dump(log_dir_path, cluster_config)
+                break
+            except CommandFailed as ex:
+                log.error(f"Failed to dump noobaa DB! Error: {ex}")
+                sleep(30)
+    # Collect ACM logs only from ACM
+    if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
+        if cluster_config.MULTICLUSTER.get("acm_cluster", False):
+            log.info("Collecting ACM logs")
+            image_prefix = '"acm_must_gather"'
+            acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
+            csv_cmd = (
+                f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
+                f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
+            )
+            jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
+            json_out = run_cmd(csv_cmd)
+            out = subprocess.run(
+                shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
+            )
+            acm_mustgather_image = out.stdout.decode()
+            run_must_gather(
+                acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
+            )
+
+        submariner_log_path = os.path.join(
+            log_dir_path,
+            "submariner",
+        )
+        run_cmd(f"mkdir -p {submariner_log_path}")
+        cwd = os.getcwd()
+        run_cmd(f"chmod -R 777 {submariner_log_path}")
+        os.chdir(submariner_log_path)
+        submariner_log_collect = (
+            f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+        )
+        log.info("Collecting submariner logs")
+        out = run_cmd(submariner_log_collect)
+        run_cmd(f"chmod -R 777 {submariner_log_path}")
+        os.chdir(cwd)
+        log.info(out)
 
 
 def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
@@ -979,71 +1289,28 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
             allows better naming for folders under logs directory
 
     """
-    if not (
-        "KUBECONFIG" in os.environ
-        or os.path.exists(os.path.expanduser("~/.kube/config"))
-    ):
-        log.warning(
-            "Cannot find $KUBECONFIG or ~/.kube/config; " "skipping log collection"
-        )
-        return
-    if status_failure:
-        log_dir_path = os.path.join(
-            os.path.expanduser(ocsci_config.RUN["log_dir"]),
-            f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
-            f"{dir_name}_ocs_logs",
-        )
-    else:
-        log_dir_path = os.path.join(
-            os.path.expanduser(ocsci_config.RUN["log_dir"]),
-            f"{dir_name}_{ocsci_config.RUN['run_id']}",
-        )
-
-    if ocs:
-        latest_tag = ocsci_config.REPORTING.get(
-            "ocs_must_gather_latest_tag",
-            ocsci_config.REPORTING.get(
-                "default_ocs_must_gather_latest_tag",
-                ocsci_config.DEPLOYMENT["default_latest_tag"],
-            ),
-        )
-        ocs_log_dir_path = os.path.join(log_dir_path, "ocs_must_gather")
-        ocs_must_gather_image = ocsci_config.REPORTING.get(
-            "ocs_must_gather_image",
-            ocsci_config.REPORTING["default_ocs_must_gather_image"],
-        )
-        ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
-        if ocsci_config.DEPLOYMENT.get("disconnected"):
-            ocs_must_gather_image_and_tag = mirror_image(ocs_must_gather_image_and_tag)
-        mg_output = run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
-        if (
-            ocsci_config.DEPLOYMENT.get("disconnected")
-            and "cannot stat 'jq'" in mg_output
-        ):
-            raise ValueError(
-                f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
+    results = None
+    with ThreadPoolExecutor() as executor:
+        results = [
+            executor.submit(
+                _collect_ocs_logs,
+                cluster,
+                dir_name=dir_name,
+                ocp=ocp,
+                ocs=ocs,
+                mcg=mcg,
+                status_failure=status_failure,
             )
-    if ocp:
-        ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
-        ocp_must_gather_image = ocsci_config.REPORTING["ocp_must_gather_image"]
-        if ocsci_config.DEPLOYMENT.get("disconnected"):
-            ocp_must_gather_image = mirror_image(ocp_must_gather_image)
-        run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
-        run_must_gather(
-            ocp_log_dir_path,
-            ocp_must_gather_image,
-            "/usr/bin/gather_service_logs worker",
-        )
-    if mcg:
-        counter = 0
-        while counter < 5:
-            counter += 1
-            try:
-                collect_noobaa_db_dump(log_dir_path)
-                break
-            except CommandFailed as ex:
-                log.error(f"Failed to dump noobaa DB! Error: {ex}")
-                sleep(30)
+            for cluster in ocsci_config.clusters
+        ]
+
+    for f in as_completed(results):
+        try:
+            log.info(f.result())
+        except Exception as e:
+            log.error("Must-gather collection failed")
+            log.error(e)
+            raise
 
 
 def collect_prometheus_metrics(
@@ -1231,7 +1498,7 @@ def enable_console_plugin():
         ocp_obj = OCP()
         patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
         patch_cmd = (
-            f"patch console.operator cluster -n {constants.OPENSHIFT_STORAGE_NAMESPACE}"
+            f"patch console.operator cluster -n {ocsci_config.ENV_DATA['cluster_namespace']}"
             f" --type json -p {patch}"
         )
         ocp_obj.exec_oc_cmd(command=patch_cmd)
@@ -1247,12 +1514,59 @@ def get_non_acm_cluster_config():
     """
     non_acm_list = []
     for i in range(len(ocsci_config.clusters)):
-        if i == ocsci_config.get_acm_index():
+        if i in get_all_acm_indexes():
             continue
         else:
             non_acm_list.append(ocsci_config.clusters[i])
 
     return non_acm_list
+
+
+def get_all_acm_indexes():
+    """
+    Get indexes fro all ACM clusters
+    This is more relevant in case of MDR scenario
+
+    Returns:
+        list: A list of ACM indexes
+
+    """
+    acm_indexes = []
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["acm_cluster"]:
+            acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return acm_indexes
+
+
+def enable_mco_console_plugin():
+    """
+    Enables console plugin for MCO
+    """
+    if (
+        "odf-multicluster-console"
+        in OCP(kind="console.operator", resource_name="cluster").get()["spec"][
+            "plugins"
+        ]
+    ):
+        log.info("MCO console plugin is enabled")
+    else:
+        patch = '\'[{"op": "add", "path": "/spec/plugins/-", "value": "odf-multicluster-console"}]\''
+        patch_cmd = (
+            f"patch console.operator cluster -n openshift-console"
+            f" --type json -p {patch}"
+        )
+        log.info("Enabling MCO console plugin")
+        ocp_obj = OCP()
+        ocp_obj.exec_oc_cmd(command=patch_cmd)
+
+
+def get_active_acm_index():
+    """
+    Get index of active acm cluster
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["active_acm_cluster"]:
+            return cluster.MULTICLUSTER["multicluster_index"]
 
 
 def get_primary_cluster_config():
@@ -1266,3 +1580,101 @@ def get_primary_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster
+
+
+def thread_init_class(class_init_operations, shutdown):
+    if len(class_init_operations) > 0:
+        executor = ThreadPoolExecutor(max_workers=len(class_init_operations))
+        futures = []
+        i = 0
+        for operation in class_init_operations:
+            i += 1
+            future = executor.map(operation)
+            futures.append(future)
+            if i == shutdown:
+                future.add_done_callback(executor.shutdown(wait=False))
+                return
+        if shutdown == 0:
+            executor.shutdown(wait=True)
+            return
+
+
+def label_pod_security_admission(namespace=None, upgrade_version=None):
+    """
+    Label PodSecurity admission
+
+    Args:
+        namespace (str): Namespace name
+        upgrade_version (semantic_version.Version): ODF semantic version for upgrade
+            if it's an upgrade run, otherwise None.
+    """
+    namespace = namespace or ocsci_config.ENV_DATA["cluster_namespace"]
+    log.info(f"Labelling namespace {namespace} for PodSecurity admission")
+    if version.get_semantic_ocp_running_version() >= version.VERSION_4_12 or (
+        upgrade_version and upgrade_version >= version.VERSION_4_12
+    ):
+        ocp_obj = OCP(kind="namespace")
+        label = (
+            "security.openshift.io/scc.podSecurityLabelSync=false "
+            f"pod-security.kubernetes.io/enforce={constants.PSA_PRIVILEGED} "
+            f"pod-security.kubernetes.io/warn={constants.PSA_BASELINE} "
+            f"pod-security.kubernetes.io/audit={constants.PSA_BASELINE} --overwrite"
+        )
+        ocp_obj.add_label(resource_name=namespace, label=label)
+
+
+def collect_pod_container_rpm_package(dir_name):
+    """
+    Collect information about rpm packages from all containers + go version
+
+    Args:
+        dir_name(str): directory to store container rpm package info
+
+    """
+    # Import pod here to avoid circular dependency issue
+    from ocs_ci.ocs.resources import pod
+
+    timestamp = time.time()
+    cluster_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+
+    log_dir_path = os.path.join(
+        os.path.expanduser(ocsci_config.RUN["log_dir"]),
+        f"{dir_name}_{ocsci_config.RUN['run_id']}",
+    )
+    package_log_dir_path = os.path.join(
+        log_dir_path, "rpm_package", f"rpm_list_{timestamp}"
+    )
+    create_directory_path(package_log_dir_path)
+    log.info(f"Directory path for rpm logs is {package_log_dir_path}")
+    pods = pod.get_all_pods(namespace=cluster_namespace)
+    ocp_obj = OCP(namespace=cluster_namespace)
+    for pod_obj in pods:
+        pod_object = pod_obj.get()
+        pod_containers = pod_object.get("spec").get("containers")
+        ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
+        pod_status = ocp_pod_obj.get_resource_status(pod_obj.name)
+        if pod_status == constants.STATUS_RUNNING:
+            for container in pod_containers:
+                container_output = ""
+                go_output = ""
+                container_name = container["name"]
+                command = f"exec -i {pod_obj.name} -c {container_name} -- rpm -qa"
+                go_command = (
+                    f"exec -i {pod_obj.name} -c {container_name} --"
+                    " /bin/bash -c '[ -f /go.version ] && cat /go.version || exit 0'"
+                )
+                try:
+                    container_output = ocp_obj.exec_oc_cmd(command)
+                    go_output = ocp_obj.exec_oc_cmd(go_command)
+                except Exception as e:
+                    log.warning(
+                        f"Following exception {e} was raised for pod {pod_obj.name} and container {container_name}"
+                    )
+                if container_output:
+                    log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-rpm.log"
+                    with open(log_file_name, "w") as f:
+                        f.write(container_output)
+                if go_output:
+                    go_log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-go-version.log"
+                    with open(go_log_file_name, "w") as f:
+                        f.write(go_output)

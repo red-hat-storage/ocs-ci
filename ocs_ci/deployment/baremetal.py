@@ -1,7 +1,9 @@
 import json
 import os
+import pytest
 import logging
 import tempfile
+import time
 from datetime import datetime
 from time import sleep
 
@@ -10,7 +12,7 @@ import requests
 from semantic_version import Version
 
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility import psiutils, aws
+from ocs_ci.utility import psiutils, aws, version
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
@@ -28,7 +30,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
     upload_file,
     get_ocp_version,
-    load_auth_config,
     wait_for_co,
     check_for_rhcos_images,
     get_infra_id,
@@ -51,8 +52,8 @@ class BAREMETALUPI(Deployment):
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super().__init__()
-            self.helper_node_details = load_auth_config()["baremetal"]
-            self.mgmt_details = load_auth_config()["ipmi"]
+            self.helper_node_details = config.AUTH["baremetal"]
+            self.mgmt_details = config.AUTH["ipmi"]
             self.aws = aws.AWS()
 
         def deploy_prereq(self):
@@ -63,9 +64,11 @@ class BAREMETALUPI(Deployment):
             # check for BM status
             logger.info("Checking BM Status")
             status = self.check_bm_status_exist()
-            assert (
-                status == constants.BM_STATUS_ABSENT
-            ), f"BM Cluster still present and locked by {self.get_locked_username()}"
+            if status == constants.BM_STATUS_PRESENT:
+                pytest.fail(
+                    f"BM Cluster still present and locked by {self.get_locked_username()}"
+                )
+
             # update BM status
             logger.info("Updating BM Status")
             result = self.update_bm_status(constants.BM_STATUS_PRESENT)
@@ -161,9 +164,6 @@ class BAREMETALUPI(Deployment):
                 cmd=cmd
             ), "Failed to create required folder"
 
-            cmd = f"rm -rf {self.helper_node_details['bm_dnsmasq_dir']}*"
-            assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Delete dir"
-
             # Install syslinux
             cmd = "yum install syslinux -y"
             assert self.helper_node_handler.exec_cmd(
@@ -176,18 +176,6 @@ class BAREMETALUPI(Deployment):
                 cmd=cmd
             ), "Failed to Copy required files"
 
-            upload_dict = {
-                constants.PXE_CONF_FILE: "dnsmasq.pxe.conf",
-                constants.COMMON_CONF_FILE: "dnsmasq.common.conf",
-            }
-            for key, val in zip(upload_dict.keys(), upload_dict.values()):
-                upload_file(
-                    self.host,
-                    key,
-                    os.path.join(self.helper_node_details["bm_dnsmasq_dir"], val),
-                    self.user,
-                    key_file=self.private_key,
-                )
             # Restarting dnsmasq service
             cmd = "systemctl restart dnsmasq"
             assert self.helper_node_handler.exec_cmd(
@@ -197,11 +185,23 @@ class BAREMETALUPI(Deployment):
                 rhcos_images_file = yaml.safe_load(file_stream)
             ocp_version = get_ocp_version()
             logger.info(rhcos_images_file)
-            image_data = rhcos_images_file[ocp_version]
+
             # Download installer_initramfs
-            initramfs_image_path = (
-                constants.coreos_url_prefix + image_data["installer_initramfs_url"]
-            )
+
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+                out = run_cmd(f"{self.installer} coreos print-stream-json")
+                coreos_print_stream_json = json.loads(out)
+            else:
+                image_data = rhcos_images_file[ocp_version]
+
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+                initramfs_image_path = coreos_print_stream_json["architectures"][
+                    "x86_64"
+                ]["artifacts"]["metal"]["formats"]["pxe"]["initramfs"]["location"]
+            else:
+                initramfs_image_path = (
+                    constants.coreos_url_prefix + image_data["installer_initramfs_url"]
+                )
             if check_for_rhcos_images(initramfs_image_path):
                 cmd = (
                     "wget -O "
@@ -215,9 +215,14 @@ class BAREMETALUPI(Deployment):
             else:
                 raise RhcosImageNotFound
             # Download installer_kernel
-            kernel_image_path = (
-                constants.coreos_url_prefix + image_data["installer_kernel_url"]
-            )
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+                kernel_image_path = coreos_print_stream_json["architectures"]["x86_64"][
+                    "artifacts"
+                ]["metal"]["formats"]["pxe"]["kernel"]["location"]
+            else:
+                kernel_image_path = (
+                    constants.coreos_url_prefix + image_data["installer_kernel_url"]
+                )
             if check_for_rhcos_images(kernel_image_path):
                 cmd = (
                     "wget -O "
@@ -249,10 +254,18 @@ class BAREMETALUPI(Deployment):
                     raise RhcosImageNotFound
 
             if Version.coerce(ocp_version) >= Version.coerce("4.6"):
-                # Download metal_bios
-                rootfs_image_path = (
-                    constants.coreos_url_prefix + image_data["live_rootfs_url"]
-                )
+                # Download rootfs
+                if (
+                    version.get_semantic_ocp_version_from_config()
+                    >= version.VERSION_4_12
+                ):
+                    rootfs_image_path = coreos_print_stream_json["architectures"][
+                        "x86_64"
+                    ]["artifacts"]["metal"]["formats"]["pxe"]["rootfs"]["location"]
+                else:
+                    rootfs_image_path = (
+                        constants.coreos_url_prefix + image_data["live_rootfs_url"]
+                    )
                 if check_for_rhcos_images(rootfs_image_path):
                     cmd = (
                         "wget -O "
@@ -281,16 +294,6 @@ class BAREMETALUPI(Deployment):
             worker_count = 0
             logger.info("Deploying OCP cluster for Bare Metal platform")
             logger.info(f"Openshift-installer will be using log level:{log_cli_level}")
-            upload_file(
-                self.host,
-                constants.COMMON_CONF_FILE,
-                os.path.join(
-                    self.helper_node_details["bm_dnsmasq_dir"], "dnsmasq.common.conf"
-                ),
-                self.user,
-                key_file=self.private_key,
-            )
-            logger.info("Uploading PXE files")
             ocp_version = get_ocp_version()
             for machine in self.mgmt_details:
                 if self.mgmt_details[machine].get("cluster_name") or self.mgmt_details[
@@ -299,12 +302,13 @@ class BAREMETALUPI(Deployment):
                     pxe_file_path = self.create_pxe_files(
                         ocp_version=ocp_version,
                         role=self.mgmt_details[machine].get("role"),
+                        disk_path=self.mgmt_details[machine].get("root_disk_id"),
                     )
                     upload_file(
                         server=self.host,
                         localpath=pxe_file_path,
                         remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                        f"/pxelinux.cfg/01-{self.mgmt_details[machine]['mac'].replace(':', '-')}",
+                        f"/pxelinux.cfg/01-{self.mgmt_details[machine]['private_mac'].replace(':', '-')}",
                         user=self.user,
                         key_file=self.private_key,
                     )
@@ -325,8 +329,11 @@ class BAREMETALUPI(Deployment):
             api_record_ip_list = []
             apps_record_ip_list = []
             response_list = []
-            cluster_name = f"{constants.BM_DEFAULT_CLUSTER_NAME}"
-            self.aws.delete_hosted_zone(cluster_name=cluster_name, delete_zone=False)
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            self.aws.delete_hosted_zone(
+                cluster_name=cluster_name,
+                delete_from_base_domain=True,
+            )
             for machine in self.mgmt_details:
                 if (
                     self.mgmt_details[machine].get("cluster_name")
@@ -357,7 +364,7 @@ class BAREMETALUPI(Deployment):
                         worker_count += 1
 
             logger.info("Configuring DNS records")
-            zone_id = self.aws.get_hosted_zone_id(cluster_name=cluster_name)
+            zone_id = self.aws.create_hosted_zone(cluster_name=cluster_name)
 
             if config.ENV_DATA["worker_replicas"] == 0:
                 apps_record_ip_list = api_record_ip_list
@@ -391,6 +398,26 @@ class BAREMETALUPI(Deployment):
                     )
                 )
 
+            ns_list = self.aws.get_ns_for_hosted_zone(zone_id)
+            dns_data_dict = {}
+            ns_list_values = []
+            for value in ns_list:
+                dns_data_dict["Value"] = value
+                ns_list_values.append(dns_data_dict.copy())
+            base_domain_zone_id = self.aws.get_hosted_zone_id_for_domain(
+                domain=config.ENV_DATA["base_domain"]
+            )
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=base_domain_zone_id,
+                    record_name=f"{cluster_name}",
+                    data=ns_list_values,
+                    type="NS",
+                    operation_type="Add",
+                    ttl=300,
+                    raw_data=True,
+                )
+            )
             logger.info("Waiting for Record Response")
             self.aws.wait_for_record_set(response_list=response_list)
             logger.info("Records Created Successfully")
@@ -447,7 +474,16 @@ class BAREMETALUPI(Deployment):
 
             self.test_cluster()
             logger.info("Performing Disk cleanup")
-            clean_disk()
+            ocp_obj = ocp.OCP()
+            policy = constants.PSA_BASELINE
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_12:
+                policy = constants.PSA_PRIVILEGED
+            ocp_obj.new_project(project_name=constants.BM_DEBUG_NODE_NS, policy=policy)
+            time.sleep(10)
+            workers = get_nodes(node_type="worker")
+            for worker in workers:
+                clean_disk(worker)
+            ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         def create_config(self):
             """
@@ -468,7 +504,7 @@ class BAREMETALUPI(Deployment):
             install_config_obj = yaml.safe_load(install_config_str)
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
-            install_config_obj["metadata"]["name"] = constants.BM_DEFAULT_CLUSTER_NAME
+            install_config_obj["metadata"]["name"] = config.ENV_DATA.get("cluster_name")
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             install_config_backup = os.path.join(
@@ -513,6 +549,11 @@ class BAREMETALUPI(Deployment):
             """
             Destroy OCP cluster specific to BM UPI
             """
+            self.aws.delete_hosted_zone(
+                cluster_name=config.ENV_DATA.get("cluster_name"),
+                delete_from_base_domain=True,
+            )
+
             logger.info("Updating BM status")
             result = self.update_bm_status(constants.BM_STATUS_ABSENT)
             assert (
@@ -576,7 +617,7 @@ class BAREMETALUPI(Deployment):
             )
             return response.json()["message"]
 
-        def create_pxe_files(self, ocp_version, role):
+        def create_pxe_files(self, ocp_version, role, disk_path):
             """
             Create pxe file for giver role
 
@@ -606,8 +647,9 @@ LABEL pxeboot
     MENU LABEL PXE Boot
     MENU DEFAULT
     KERNEL rhcos-installer-kernel-x86_64
-    APPEND ip=dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 console=tty0 coreos.inst=yes \
-coreos.inst.install_dev=sda {bm_metal_loc} coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
+    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 \
+console=tty0 coreos.inst.install_dev=/dev/disk/by-id/{disk_path} {bm_metal_loc} \
+coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
 {extra_data}
 LABEL disk0
   MENU LABEL Boot disk (0x80)
@@ -654,125 +696,55 @@ LABEL disk0
             run_cmd(cmd=cmd, secrets=secrets)
 
 
-def clean_disk():
+@retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
+def clean_disk(worker):
     """
     Perform disk cleanup
+
+    Args:
+        worker (object): worker node object
+
     """
-    lvm_to_clean = []
-    workers = get_nodes(node_type="worker")
     ocp_obj = ocp.OCP()
-    for worker in workers:
-        out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name, cmd_list=["lsblk -nd -e252,7 --output NAME --json"]
-        )
-        logger.info(out)
-        lsblk_output = json.loads(str(out))
-        lsblk_devices = lsblk_output["blockdevices"]
-        for lsblk_device in lsblk_devices:
-            base_cmd = (
-                """pvs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json"""
-                % lsblk_device["name"]
+    cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=worker.name, cmd_list=[cmd], namespace=constants.BM_DEBUG_NODE_NS
+    )
+    disk_to_ignore_cleanup_raw = json.loads(str(out))
+    disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
+    for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
+        if disk_to_ignore_cleanup["mountpoint"] == "/boot":
+            logger.info(
+                f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
             )
+            selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
+            # Adding break when root disk is found
+            break
+    out = ocp_obj.exec_oc_debug_cmd(
+        node=worker.name,
+        cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
+        namespace=constants.BM_DEBUG_NODE_NS,
+    )
+    lsblk_output = json.loads(str(out))
+    lsblk_devices = lsblk_output["blockdevices"]
 
-            cmd = f"debug nodes/{worker.name} " f"-- chroot /host {base_cmd}"
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
-            logger.info(out)
-            pvs_output = json.loads(str(out))
-            pvs_list = pvs_output["report"]
-            for pvs in pvs_list:
-                pv_list = pvs["pv"]
-                for pv in pv_list:
-                    logger.debug(pv)
-                    device_dict = {
-                        "hostname": f"{worker.name}",
-                        "pv_name": f"{pv['pv_name']}",
-                    }
-                    lvm_to_clean.append(device_dict)
-            base_cmd = (
-                """vgs --config "devices{filter = [ 'a|/dev/%s.*|', 'r|.*|' ] }" --reportformat json"""
-                % lsblk_device["name"]
-            )
-
-            cmd = f"debug nodes/{worker.name} " f"-- chroot /host {base_cmd}"
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
-            logger.info(out)
-            vgs_output = json.loads(str(out))
-            vgs_list = vgs_output["report"]
-            for vgs in vgs_list:
-                vg_list = vgs["vg"]
-                for vg in vg_list:
-                    logger.debug(vg)
-                    device_dict = {
-                        "hostname": f"{worker.name}",
-                        "vg_name": f"{vg['vg_name']}",
-                    }
-                    lvm_to_clean.append(device_dict)
-    for devices in lvm_to_clean:
-        if devices.get("vg_name"):
-            cmd = (
-                f"debug nodes/{devices['hostname']} "
-                f"-- chroot /host timeout 120 vgremove {devices['vg_name']} -y -f"
-            )
-            logger.info("Removing vg")
-            out = ocp_obj.exec_oc_cmd(
-                command=cmd,
-                out_yaml_format=False,
-            )
-            logger.info(out)
-    for devices in lvm_to_clean:
-        if devices.get("pv_name"):
-            out = ocp_obj.exec_oc_debug_cmd(
-                node=devices["hostname"], cmd_list=[f"pvremove {devices['pv_name']} -y"]
-            )
-            logger.info(out)
-
-    for worker in workers:
-        cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
-        out = ocp_obj.exec_oc_debug_cmd(node=worker.name, cmd_list=[cmd])
-        disk_to_ignore_cleanup_raw = json.loads(str(out))
-        disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
-        for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
-            if disk_to_ignore_cleanup["mountpoint"] == "/boot":
-                logger.info(
-                    f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
-                )
-                selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
-                # Adding break when root disk is found
-                break
-        out = ocp_obj.exec_oc_debug_cmd(
-            node=worker.name, cmd_list=["lsblk -nd -e252,7 --output NAME --json"]
-        )
-        lsblk_output = json.loads(str(out))
-        lsblk_devices = lsblk_output["blockdevices"]
-        for lsblk_device in lsblk_devices:
+    for lsblk_device in lsblk_devices:
+        if lsblk_device["name"] == str(selected_disk_to_ignore_cleanup):
+            pass
+        else:
+            logger.info(f"Cleaning up {lsblk_device['name']}")
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
-                cmd_list=[f"lsblk -b /dev/{lsblk_device['name']} --output NAME --json"],
+                cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
+                namespace=constants.BM_DEBUG_NODE_NS,
             )
-            lsblk_output = json.loads(str(out))
-            lsblk_devices_to_clean = lsblk_output["blockdevices"]
-            for device_to_clean in lsblk_devices_to_clean:
-                if device_to_clean["name"] == str(selected_disk_to_ignore_cleanup):
-                    logger.info(
-                        f"Skipping disk cleanup for {device_to_clean['name']} because it's a root disk"
-                    )
-                else:
-                    out = ocp_obj.exec_oc_debug_cmd(
-                        node=worker.name,
-                        cmd_list=[f"wipefs -a -f /dev/{device_to_clean['name']}"],
-                    )
-                    logger.info(out)
-                    out = ocp_obj.exec_oc_debug_cmd(
-                        node=worker.name,
-                        cmd_list=[f"sgdisk --zap-all /dev/{device_to_clean['name']}"],
-                    )
-                    logger.info(out)
+            logger.info(out)
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name,
+                cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
+                namespace=constants.BM_DEBUG_NODE_NS,
+            )
+            logger.info(out)
 
 
 class BaremetalPSIUPI(Deployment):
@@ -790,7 +762,7 @@ class BaremetalPSIUPI(Deployment):
             self.flexy_deployment = True
             super().__init__()
             self.flexy_instance = FlexyBaremetalPSI()
-            self.psi_conf = load_auth_config()["psi"]
+            self.psi_conf = config.AUTH["psi"]
             self.utils = psiutils.PSIUtils(self.psi_conf)
 
         def deploy_prereq(self):

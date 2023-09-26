@@ -12,6 +12,7 @@ DEPLOYMENT:
   arbiter_autodetect: false
   dummy_zone_node_labels: true
   network_split_setup: true
+  network_zone_latency: 5
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'

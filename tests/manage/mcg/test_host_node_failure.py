@@ -2,6 +2,8 @@ import logging
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.framework.testlib import (
     bugzilla,
     ignore_leftovers,
@@ -12,22 +14,23 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.helpers.helpers import (
-    wait_for_resource_state,
     storagecluster_independent_check,
 )
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_noobaa_pods,
     wait_for_pods_to_be_running,
+    wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
 
+@red_squad
 @tier4b
 @bugzilla("1853638")
 @ignore_leftovers
@@ -93,7 +96,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         """
         executor = ThreadPoolExecutor(max_workers=1)
         pod_obj = OCP(
-            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
         # Get noobaa statefulset pod and node where it is hosted
@@ -132,18 +135,25 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
 
         # Disrupt NooBaa operator
         if respin_noobaa_operator:
-            noobaa_operator_pod.delete(force=True)
+            try:
+                noobaa_operator_pod.delete(force=True)
+            except CommandFailed as e:
+                log.warning(
+                    f"Failed to delete the noobaa operator pod due to the exception: {str(e)}"
+                )
 
         # Check result of 'stop_thread'
         stop_thread.result()
 
-        # Wait for NooBaa operator pod to reach terminating state if on same node
-        # and not respun
-        if operator_on_same_node and not respin_noobaa_operator:
-            wait_for_resource_state(
-                resource=noobaa_operator_pod,
-                state=constants.STATUS_TERMINATING,
-                timeout=360,
+        # Wait for NooBaa operator pod to reach terminating state or to be deleted
+        # if on same node or respun
+        if operator_on_same_node or respin_noobaa_operator:
+            assert wait_for_pods_to_be_in_statuses(
+                [constants.STATUS_TERMINATING],
+                pod_names=[noobaa_operator_pod.name],
+                raise_pod_not_found_error=False,
+                timeout=420,
+                sleep=20,
             )
 
         # Wait for NooBaa operator pod to reach running state
@@ -151,6 +161,8 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map[constants.NOOBAA_OPERATOR_DEPLOYMENT],
             resource_count=1,
+            timeout=420,
+            sleep=20,
         )
 
         # Verify NooBaa statefulset pod reschedules on another node
@@ -198,7 +210,7 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         wait_for_pods_to_be_running(timeout=300)
 
         # Check cluster health
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
         # Creates bucket then writes, reads and deletes objects
         # TODO: Reduce timeout in future versions once 2028559 is fixed

@@ -9,16 +9,21 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     acceptance,
     performance,
+    skipif_mcg_only,
+    bugzilla,
+    red_squad,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
+from ocs_ci.ocs.resources.pod import get_pod_logs, get_operator_pods
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @skipif_managed_service
 class TestBucketCreation(MCGTest):
     """
@@ -32,7 +37,11 @@ class TestBucketCreation(MCGTest):
         argvalues=[
             pytest.param(
                 *[3, "S3", None],
-                marks=[pytest.mark.polarion_id("OCS-1298"), tier1, acceptance],
+                marks=[
+                    pytest.mark.polarion_id("OCS-1298"),
+                    tier1,
+                    acceptance,
+                ],
             ),
             pytest.param(
                 *[100, "S3", None],
@@ -52,7 +61,11 @@ class TestBucketCreation(MCGTest):
             ),
             pytest.param(
                 *[3, "OC", None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")],
+                marks=[
+                    tier1,
+                    acceptance,
+                    pytest.mark.polarion_id("OCS-1298"),
+                ],
             ),
             pytest.param(
                 *[100, "OC", None],
@@ -72,7 +85,11 @@ class TestBucketCreation(MCGTest):
             ),
             pytest.param(
                 *[3, "CLI", None],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")],
+                marks=[
+                    tier1,
+                    acceptance,
+                    pytest.mark.polarion_id("OCS-1298"),
+                ],
             ),
             pytest.param(
                 *[100, "CLI", None],
@@ -101,7 +118,7 @@ class TestBucketCreation(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
+                marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
             ),
             pytest.param(
                 *[
@@ -114,7 +131,7 @@ class TestBucketCreation(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2331")],
+                marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2331")],
             ),
         ],
         ids=[
@@ -177,3 +194,31 @@ class TestBucketCreation(MCGTest):
                 logger.info(
                     f"Create duplicate bucket {bucket_name} failed as" " expected"
                 )
+
+    @bugzilla("2179271")
+    @pytest.mark.parametrize(
+        argnames="amount,interface",
+        argvalues=[
+            pytest.param(
+                *[10, "OC"], marks=[tier1, pytest.mark.polarion_id("OCS-4930")]
+            ),
+        ],
+    )
+    def test_check_for_bucket_notification_error_in_rook_op_logs(
+        self, bucket_factory, amount, interface
+    ):
+        """
+        Test to check for bucket notification error 'malformed BucketHost "s3.openshift-storage.svc"
+        in rook operator logs post creation of noobaa obc
+
+        """
+
+        bucket_factory(amount, interface)
+
+        # Check rook-operator pod logs for the bucket notification error
+        unexpected_log = 'malformed BucketHost "s3.openshift-storage.svc": malformed subdomain name "s3"'
+        rook_op_pod = get_operator_pods()
+        pod_log = get_pod_logs(pod_name=rook_op_pod[0].name)
+        assert not (
+            unexpected_log in pod_log
+        ), f"Bucket notification errors found {unexpected_log}"

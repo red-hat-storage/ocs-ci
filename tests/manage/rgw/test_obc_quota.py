@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.ocp import OCP
@@ -11,11 +12,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     bugzilla,
     skipif_ocs_version,
+    red_squad,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @bugzilla("1940823")
 @skipif_ocs_version("<4.10")
 class TestOBCQuota:
@@ -84,6 +87,9 @@ class TestOBCQuota:
         cmd = f"patch obc {bucket_name} -p '{new_quota_str}' -n openshift-storage --type=merge"
         OCP().exec_oc_cmd(cmd)
         logger.info(f"Patched new quota to obc {bucket_name}")
+
+        # wait for few seconds to make sure the quota really gets applied
+        time.sleep(20)
 
         # check if the new quota applied works
         amount = new_quota - int(quota["maxObjects"])

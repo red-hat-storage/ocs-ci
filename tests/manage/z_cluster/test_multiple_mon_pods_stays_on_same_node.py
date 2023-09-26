@@ -4,6 +4,7 @@ import pytest
 import time
 from semantic_version import Version
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
@@ -38,6 +39,7 @@ log = logging.getLogger(__name__)
 POD_OBJ = OCP(kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE)
 
 
+@brown_squad
 @tier4c
 @ignore_leftovers
 @skipif_ocs_version("<4.8")

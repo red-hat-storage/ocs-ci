@@ -11,14 +11,12 @@ fixtures in ocs-ci.
 import json
 import logging
 import os
-import threading
 import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.utility.pagerduty import PagerDutyAPI
-from ocs_ci.utility.prometheus import PrometheusAPI
-
+from ocs_ci.utility.prometheus import PrometheusAlertSubscriber
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +40,8 @@ def measure_operation(
     minimal_time=None,
     metadata=None,
     measure_after=False,
-    pagerduty_service=None,
+    pagerduty_service_ids=None,
+    threading_lock=None,
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -64,8 +63,9 @@ def measure_operation(
             after the operation returns its state. This can be useful e.g.
             for capacity utilization testing where operation fills capacity
             and utilized data are measured after the utilization is completed
-        pagerduty_service (str): Service ID from PagerDuty system. This should
-            be unique for each cluster.
+        pagerduty_service_ids (list): Service IDs from PagerDuty system used
+            incidents query
+        threading_lock (threading.Lock): Lock used for synchronization of the threads in Prometheus calls
 
     Returns:
         dict: contains information about `start` and `stop` time of given
@@ -81,31 +81,6 @@ def measure_operation(
                 }
 
     """
-
-    def prometheus_log(info, prometheus_alert_list):
-        """
-        Log all alerts from Prometheus API every 3 seconds.
-
-        Args:
-            info (dict): Contains run key attribute that controls thread.
-                If `info['run'] == False` then thread will stop
-            prometheus_alert_list (list): List to be populated with alerts
-
-        """
-        prometheus = PrometheusAPI()
-        logger.info("Logging of all prometheus alerts started")
-        while info.get("run"):
-            alerts_response = prometheus.get(
-                "alerts", payload={"silenced": False, "inhibited": False}
-            )
-            msg = f"Request {alerts_response.request.url} failed"
-            assert alerts_response.ok, msg
-            for alert in alerts_response.json().get("data").get("alerts"):
-                if alert not in prometheus_alert_list:
-                    logger.info(f"Adding {alert} to alert list")
-                    prometheus_alert_list.append(alert)
-            time.sleep(3)
-        logger.info("Logging of all prometheus alerts stopped")
 
     # check if file with results for this operation already exists
     # if it exists then use it
@@ -129,15 +104,10 @@ def measure_operation(
             start_time = time.time()
 
         # init logging thread that checks for Prometheus alerts
-        # while workload is running
-        # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
-        info = {"run": True}
-        prometheus_alert_list = []
-
-        logging_thread_prometheus = threading.Thread(
-            target=prometheus_log, args=(info, prometheus_alert_list)
+        alert_subscriber = PrometheusAlertSubscriber(
+            threading_lock=threading_lock, interval=3
         )
-        logging_thread_prometheus.start()
+        alert_subscriber.subscribe()
 
         try:
             result = operation()
@@ -166,8 +136,10 @@ def measure_operation(
                     time.sleep(additional_time)
             # Dumping measurement results into result file.
             stop_time = time.time()
-            info["run"] = False
-            logging_thread_prometheus.join()
+
+            alert_subscriber.unsubscribe()
+            prometheus_alert_list = alert_subscriber.get_alerts()
+
             results = {
                 "start": start_time,
                 "stop": stop_time,
@@ -187,7 +159,7 @@ def measure_operation(
                 incidents_response = pagerduty.get(
                     "incidents",
                     payload={
-                        "service_ids[]": pagerduty_service,
+                        "service_ids[]": pagerduty_service_ids,
                         "since": time.strftime(
                             "%Y-%m-%d %H:%M:%S", time.gmtime(start_time)
                         ),

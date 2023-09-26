@@ -1,0 +1,28 @@
+---
+# This config is suppose to work on most of DCs we have.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  kms_deployment: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'ipi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+  encryption_at_rest: true
+  vault_deploy_mode: external
+  use_vault_namespace: true
+  KMS_PROVIDER: vault
+  KMS_SERVICE_NAME: vault
+  VAULT_AUTH_METHOD: token
+  VAULT_CACERT: "ocs-kms-ca-secret"
+  VAULT_CA_ONLY: true
+  VAULT_CLIENT_CERT: "ocs-kms-client-cert"
+  VAULT_CLIENT_KEY: "ocs-kms-client-key"
+  vault_hcp: true
+  VAULT_SKIP_VERIFY: false
+  VAULT_BACKEND: "v1"

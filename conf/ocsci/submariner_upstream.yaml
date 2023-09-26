@@ -4,5 +4,7 @@ ENV_DATA:
   submariner_info_file: "broker-info.subm"
   # Timeout for submeriner cli prompts
   submariner_prompt_timeout: 5
+  submariner_upstream_version_tag: "devel"
+  submariner_ignore_connectivity_test: True
 
 

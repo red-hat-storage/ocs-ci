@@ -12,7 +12,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
@@ -78,6 +78,7 @@ class PVC(OCS):
         data["kind"] = "PersistentVolume"
         data["metadata"] = {"name": self.backed_pv, "namespace": self.namespace}
         pv_obj = OCS(**data)
+        pv_obj.ocp.cluster_kubeconfig = self.ocp.cluster_kubeconfig
         pv_obj.reload()
         return pv_obj
 
@@ -152,6 +153,16 @@ class PVC(OCS):
         """
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
 
+    @property
+    def get_pv_volume_handle_name(self):
+        """
+        Fetch volume handle name from PV
+
+        Returns:
+            str: volume handle name from pv
+        """
+        return self.backed_pv_obj.get()["spec"]["csi"]["volumeHandle"]
+
     def resize_pvc(self, new_size, verify=False):
         """
         Modify the capacity of PVC
@@ -220,6 +231,8 @@ class PVC(OCS):
             OCS: Kind Snapshot
 
         """
+        from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
+
         assert self.provisioner in constants.OCS_PROVISIONERS, "Unknown provisioner"
         if self.provisioner == "openshift-storage.rbd.csi.ceph.com":
             snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
@@ -231,6 +244,18 @@ class PVC(OCS):
             snapshotclass = helpers.default_volumesnapshotclass(
                 constants.CEPHFILESYSTEM
             ).name
+        elif self.provisioner in [
+            constants.LVM_PROVISIONER_4_11,
+            constants.LVM_PROVISIONER,
+        ]:
+            lvm_name = get_lvm_cluster_name()
+            if "lvms" in lvm_name:
+                snap_yaml = constants.CSI_LVMS_SNAPSHOT_YAML
+                snapshotclass = constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVMS
+            else:
+                snap_yaml = constants.CSI_LVM_SNAPSHOT_YAML
+                snapshotclass = constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVM
+
         snapshot_name = snapshot_name or f"{self.name}-snapshot-{uuid4().hex}"
         snapshot_obj = create_pvc_snapshot(
             pvc_name=self.name,
@@ -257,6 +282,22 @@ class PVC(OCS):
             self.provisioner == constants.RBD_PROVISIONER
         ), "Only RBD PVC is supported"
         reclaim_space_job = helpers.create_reclaim_space_job(self.name)
+        return reclaim_space_job
+
+    def create_reclaim_space_cronjob(self, schedule=None):
+        """
+        Create ReclaimSpaceCronJob to invoke reclaim space operation on RBD volume
+
+        Returns:
+            ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceCronJob
+
+        """
+        assert (
+            self.provisioner == constants.RBD_PROVISIONER
+        ), "Only RBD PVC is supported"
+        reclaim_space_job = helpers.create_reclaim_space_cronjob(
+            self.name, schedule=schedule
+        )
         return reclaim_space_job
 
 
@@ -396,7 +437,10 @@ def create_pvc_snapshot(
     Returns:
         OCS object
     """
+    ocp_version = version.get_semantic_ocp_version_from_config()
     snapshot_data = templating.load_yaml(snap_yaml)
+    if ocp_version < version.VERSION_4_9:
+        snapshot_data["apiVersion"] = "snapshot.storage.k8s.io/v1beta1"
     snapshot_data["metadata"]["name"] = snap_name
     snapshot_data["metadata"]["namespace"] = namespace
     if sc_name:
@@ -513,14 +557,14 @@ def create_pvc_clone(
 
 def get_pvc_objs(
     pvc_names,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     Get the PVC objects of the specified names
 
     Args:
         pvc_names (list): The list of the pvc names to get their objects
-        namespace (str): Name of cluster namespace(default: defaults.ROOK_CLUSTER_NAMESPACE)
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
 
     Returns:
         list: The PVC objects of the specified names

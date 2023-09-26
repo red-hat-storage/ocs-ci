@@ -19,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.11.0-0.nightly'
+  client_version: '4.14.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   # Following chrome params are for openshift console UI testing
@@ -28,10 +28,15 @@ RUN:
   chrome_binary_path: "/usr/bin/chromium-browser"
   io_in_bg: False
   io_load: 30
+  io_verification_method: "crc32c"
   log_utilization: False
   # This config file disables scale app pods to use OCS workers
   use_ocs_worker_for_scale: False
   load_status: None
+  skip_reason_test_found: {}
+  skipped_tests_ceph_health: 0
+  number_of_tests: None
+
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -42,18 +47,18 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.11.0-0.nightly"
+  installer_version: "4.14.0-0.nightly"
   force_download_installer: True
   force_download_client: True
   skip_download_client: False
-  default_latest_tag: 'latest-stable-4.11'
+  default_latest_tag: 'latest-stable-4.14'
   # define if ceph is setup as external mode, default is false
   external_mode: False
   # You can overwrite csv channel version by following parameter
-  ocs_csv_channel: "stable-4.11"
+  ocs_csv_channel: "stable-4.14"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.11"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.14"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -70,11 +75,13 @@ DEPLOYMENT:
   # UI deployment is not part of this framework, it will just do preparation
   # steps for openshift-console.
   ui_deployment: False
+  # Import clusters to ACM via UI
+  ui_acm_import: False
   # Following options are defaults for deployment from live content
   live_deployment: False
   preserve_bootstrap_node: False
   # Terraform version
-  terraform_version: "0.12.26"
+  terraform_version: "1.0.11"
   # Following options are defaults for deployment with infra worker nodes
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
@@ -99,6 +106,15 @@ DEPLOYMENT:
   ingress_ssl_cert: "data/ingress-cert.crt"
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
+  api_ssl_cert: "data/api-cert.crt"
+  api_ssl_key: "data/api-cert.key"
+  api_ssl_ca_cert: "data/ca.crt"
+  install_lvmo: False
+  # Cloud Credential Operator Utility
+  ccoctl_version: "4.11.0"
+  # AWS profile ( profile must exist in ~/.aws/credentials )
+  aws_profile: "ocs_ci"
+  aws_cred_path: "~/.aws/credentials"
 
 
 # Section for reporting configuration
@@ -112,9 +128,9 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
-  ocs_live_must_gather_image: "registry.redhat.io/ocs4/ocs-must-gather-rhel8"
-  odf_live_must_gather_image: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
-  default_ocs_must_gather_latest_tag: 'latest-4.11'
+  odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
+  odf_live_must_gather_image_pre_4_13: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
+  default_ocs_must_gather_latest_tag: 'latest-4.14'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
   rp_client_log_level: "ERROR"
@@ -124,7 +140,9 @@ ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   storage_cluster_name: 'ocs-storagecluster'
   storage_device_sets_name: "storageDeviceSets"
+  sno: false
   cluster_namespace: 'openshift-storage'
+  service_namespace: 'openshift-storage'
   local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
   persistent-monitoring: true
@@ -132,7 +150,7 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'us-east-2'
   base_domain: 'qe.rh-ocs.com'
-  master_instance_type: 'm4.xlarge'
+  master_instance_type: 'm6i.xlarge'
   worker_instance_type: 'm5.4xlarge'
   # vm_type_bootstrap is used in AWS UPI deployments
   vm_type_bootstrap: 'i3.large'
@@ -140,12 +158,13 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  ocs_version: '4.11'
+  ocs_version: '4.14'
+  prometheus_version: "4.10.0"
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-49.84.202110081407-0-vmware.x86_64'
+  vm_template: 'rhcos-414.92.202303281555-0-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
@@ -195,37 +214,69 @@ ENV_DATA:
   # OCP version, we need to make sure to put rhel_version to the all ocp related version config files
   rhel_version: "8.4"
   # This RHEL version will be used for running ansible playbook for adding RHEL nodes
-  rhel_version_for_ansible: 7
+  rhel_version_for_ansible: 8
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
   cluster_type: ""
 
   # RHEL template which are used for vSphere platform
   rhel7_template: 'rhel79_ocs4qe'
-  rhel8_template: 'rhel85_ocs4qe'
+  rhel8_template: 'rhel87_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
-  default_acm_unreleased_image: "2.5.0-DOWNSTREAM-2022-04-22-19-53-05"
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.2'
+  rosa_cli_version: '1.2.16'
+  rosa_billing_model: 'standard'
+  appliance_mode: true
+  ms_osd_pod_memory: "6Gi"
+  ms_osd_pod_cpu: "1650m"
+
+  # used in external mode deployment
+  restricted-auth-permission: false
+
+  # used in heterogeneous architecture
+  num_workers_additional: 0
+
+  # Below parameter is used for using custom storage class ( thin-csi-odf ) in vSphere ODF deployment.
+  # thin-csi-odf is clone of thin-csi but with storage policy as "vSAN Default Storage Policy"
+  # This is used to save the storage in vSphere environment.
+  use_custom_sc_in_deployment: true
+
+  # Multus settings
+  multus_create_public_net: true
+  multus_public_net_name: "public-net"
+  multus_public_net_namespace: "openshift-storage"
+  multus_public_net_interface: "br-ex"
+  multus_public_net_range: "192.168.20.0/24"
+  multus_public_net_type: "macvlan"
+  multus_public_net_mode: "bridge"
+  multus_create_cluster_net: true
+  multus_cluster_net_name: "private-net"
+  multus_cluster_net_namespace: "openshift-storage"
+  multus_cluster_net_interface: "br-ex"
+  multus_cluster_net_range: "192.168.30.0/24"
+  multus_cluster_net_type: "macvlan"
+  multus_cluster_net_mode: "bridge"
 
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "stable-4.11"
+  ocp_channel: "stable-4.14"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  upgrade_logging_channel: "4.11"
+  upgrade_logging_channel: "4.14"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
 # or ping in ocs infra chat room.
 AUTH:
   test_quay_auth: test_secret
+  pagerduty:
+    escalation_policy: "Default"
 
 # This section is for FLEXY, any variable in this section will be copied into
 # flexy env file
@@ -280,3 +331,4 @@ MULTICLUSTER:
   multicluster_index: 0
   acm_cluster: False
   primary_cluster: False
+  active_acm_cluster: False

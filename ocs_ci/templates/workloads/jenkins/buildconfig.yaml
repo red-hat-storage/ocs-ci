@@ -9,13 +9,16 @@ spec:
     type: JenkinsPipeline
     jenkinsPipelineStrategy:
       jenkinsfile: |-
-        podTemplate(label: 'maven-s',
+        podTemplate(label: 'maven-build-pod',
                     cloud: 'openshift',
-                    inheritFrom: 'maven',
-                    name: 'maven-s',
+                    containers: [
+                    containerTemplate(
+                        name: 'jnlp', image: 'quay.io/ocsci/jenkins-agent-maven:latest'
+                    )
+                    ],
                     volumes: [persistentVolumeClaim(mountPath: '/home/jenkins/.m2', claimName: 'dependencies', readOnly: false) ]
               ) {
-          node("maven-s") {
+          node("maven-build-pod") {
             stage('Source Checkout') {
               git url: "https://github.com/red-hat-storage/ocs-workloads.git"
               script {
@@ -26,7 +29,7 @@ spec:
             // Using Maven build the war file
             stage('Build JAX-RS') {
               echo "Building war file"
-              sh "mvn -f jenkins/maven01/pom.xml clean package -DskipTests=true"
+              sh "mvn -f jenkins/maven01/pom.xml clean package"
             }
           }
         }

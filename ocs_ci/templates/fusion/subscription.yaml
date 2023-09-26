@@ -1,0 +1,11 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: isf-operator
+  namespace: ibm-spectrum-fusion-ns
+spec:
+  channel: v2.0
+  name: isf-operator
+  source: ibm-operator-catalog
+  sourceNamespace: openshift-marketplace

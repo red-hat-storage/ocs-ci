@@ -2,11 +2,14 @@ import logging
 import pytest
 import time
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4b,
     ignore_leftovers,
     skipif_ibm_cloud,
+    skipif_managed_service,
+    skipif_external_mode,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
@@ -17,6 +20,7 @@ from ocs_ci.ocs.resources.pod import wait_for_storage_pods, list_of_nodes_runnin
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4b
 class TestOCSWorkerNodeShutdown(ManageTest):
@@ -37,6 +41,9 @@ class TestOCSWorkerNodeShutdown(ManageTest):
 
     @pytest.mark.polarion_id("OCS-2315")
     @skipif_ibm_cloud
+    @skipif_managed_service
+    @skipif_external_mode
+    @pytest.mark.bugzilla("2232106")
     def test_check_pod_status_after_two_nodes_shutdown_recovery(
         self, nodes, node_restart_teardown
     ):

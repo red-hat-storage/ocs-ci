@@ -8,8 +8,10 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import skipif_managed_service, skipif_ocs_version, tier4c
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -18,6 +20,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
+@blue_squad
 @skipif_ocs_version("<4.6")
 @tier4c
 @pytest.mark.polarion_id("OCS-2385")
@@ -29,7 +32,9 @@ def test_ceph_rgw_metrics_after_metrics_exporter_respin(rgw_deployments):
 
     """
     logger.info("Respin ocs-metrics-exporter pod")
-    pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    pod_obj = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     metrics_pods = pod_obj.get(selector="app.kubernetes.io/name=ocs-metrics-exporter")[
         "items"
     ]

@@ -5,7 +5,6 @@ import logging
 import re
 import time
 
-from semantic_version.base import Version
 from collections import OrderedDict
 from prettytable import PrettyTable
 
@@ -91,6 +90,13 @@ class Jenkins(object):
                     constants.JENKINS_BUILDCONFIG_YAML
                 )
                 jenkins_build_config["metadata"]["namespace"] = project
+                jenkins_build_config["spec"]["strategy"]["jenkinsPipelineStrategy"][
+                    "jenkinsfile"
+                ] = jenkins_build_config["spec"]["strategy"]["jenkinsPipelineStrategy"][
+                    "jenkinsfile"
+                ].replace(
+                    "latest", self.ocp_version
+                )
                 jenkins_build_config_obj = OCS(**jenkins_build_config)
                 jenkins_build_config_obj.create()
             except (CommandFailed, CalledProcessError) as cf:
@@ -118,7 +124,7 @@ class Jenkins(object):
                     cmd = f"logs {jenkins_deploy_pod.name}"
                     ocp_obj = OCP(namespace=project)
                     output_log = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
-                    cmd = f"describe {jenkins_deploy_pod.name}"
+                    cmd = f"describe pod {jenkins_deploy_pod.name}"
                     output_describe = ocp_obj.exec_oc_cmd(
                         command=cmd, out_yaml_format=False
                     )
@@ -131,7 +137,7 @@ class Jenkins(object):
                     log.error(error_msg)
                     raise UnexpectedBehaviour(error_msg)
 
-    def wait_for_build_to_complete(self, timeout=900):
+    def wait_for_build_to_complete(self, timeout=1200):
         """
         Wait for build status to reach complete state
 
@@ -333,18 +339,6 @@ class Jenkins(object):
                 "slaves.NodeProvisioner.MARGIN0=0.85",
             }
         )
-        if Version.coerce(self.ocp_version) >= Version.coerce("4.8"):
-            # Added "Pipeline Utility Steps" plugin via Jenkins Template
-            # OCP team changed the default plugin list on OCP4.9
-            tmp_dict["objects"][3]["spec"]["template"]["spec"]["containers"][0][
-                "env"
-            ].append(
-                {
-                    "name": "INSTALL_PLUGINS",
-                    "value": "scm-api:2.6.5,pipeline-utility-steps:2.12.0,workflow-step-api:622."
-                    "vb_8e7c15b_c95a_,workflow-cps:2648.va9433432b33c,workflow-api:2.47",
-                }
-            )
         ocs_jenkins_template_obj = OCS(**tmp_dict)
         ocs_jenkins_template_obj.create()
 

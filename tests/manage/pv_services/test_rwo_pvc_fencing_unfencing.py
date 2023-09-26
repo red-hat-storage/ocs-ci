@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from time import sleep
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -17,6 +18,7 @@ from ocs_ci.framework.testlib import (
     skipif_vsphere_ipi,
     skipif_tainted_nodes,
     tier4b,
+    skipif_managed_service,
 )
 from ocs_ci.ocs import constants, machine, node, ocp
 from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal
@@ -30,9 +32,11 @@ from ocs_ci.helpers import disruption_helpers, helpers
 logger = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4b
 @ignore_leftovers
 @skipif_vsphere_ipi
+@skipif_managed_service
 class TestRwoPVCFencingUnfencing(ManageTest):
     """
     KNIP-677 OCS support for Automated fencing/unfencing RWO PV

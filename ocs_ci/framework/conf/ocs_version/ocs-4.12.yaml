@@ -1,0 +1,12 @@
+---
+DEPLOYMENT:
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-stable-4.12"
+  default_latest_tag: 'latest-stable-4.12'
+  ocs_csv_channel: "stable-4.12"
+  default_ocp_version: '4.12'
+ENV_DATA:
+  ocs_version: '4.12'
+REPORTING:
+  default_ocs_must_gather_latest_tag: 'latest-4.12'
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"

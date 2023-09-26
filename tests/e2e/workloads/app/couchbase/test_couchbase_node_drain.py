@@ -4,13 +4,21 @@ import pytest
 
 from ocs_ci.ocs import node
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    workloads,
+    ignore_leftovers,
+    skipif_ocp_version,
+)
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 from ocs_ci.ocs import flowtest
 
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
+@skipif_ocp_version(">=4.13")
 @workloads
 @ignore_leftovers
 class TestCouchBaseNodeDrain(E2ETest):

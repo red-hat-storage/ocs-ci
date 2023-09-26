@@ -9,13 +9,16 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     on_prem_platform_required,
     skipif_ocs_version,
+    skipif_external_mode,
     tier4c,
     tier3,
     skipif_managed_service,
+    skipif_mcg_only,
+    red_squad,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
-from ocs_ci.ocs import cluster, constants, defaults, ocp
+from ocs_ci.ocs import cluster, constants, ocp
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
@@ -29,7 +32,9 @@ def setup(request):
     request.cls.cl_obj = cluster.CephCluster()
 
 
+@red_squad
 @ignore_leftovers()
+@skipif_mcg_only
 @pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):
     """
@@ -65,7 +70,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map[resource_to_delete],
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
 
@@ -82,6 +87,7 @@ class TestMCGResourcesDisruptions(MCGTest):
     @tier4c
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required
+    @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["scale_down_to"],
         argvalues=[
@@ -100,7 +106,7 @@ class TestMCGResourcesDisruptions(MCGTest):
 
         """
         rgw_deployment = pod.get_deployments_having_label(
-            constants.RGW_APP_LABEL, defaults.ROOK_CLUSTER_NAMESPACE
+            constants.RGW_APP_LABEL, config.ENV_DATA["cluster_namespace"]
         )[0]
         rgw_deployment = OCS(**rgw_deployment)
 
@@ -140,7 +146,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map[pod_to_drain],
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
         # Retrieve the node name on which the pod resides
@@ -155,7 +161,7 @@ class TestMCGResourcesDisruptions(MCGTest):
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map[pod_to_drain],
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
         # Verify that the new pod has reached a 'RUNNNING' status again and recovered successfully
@@ -177,35 +183,25 @@ class TestMCGResourcesDisruptions(MCGTest):
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map["noobaa_db"],
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
             pod_data_list = pod_obj.get()
             ocp_scc = ocp.OCP(
-                kind=constants.SCC, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                kind=constants.SCC, namespace=config.ENV_DATA["cluster_namespace"]
             )
             if helpers.validate_scc_policy(
                 sa_name=scc_name,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 scc_name=constants.ANYUID,
             ):
                 ocp_scc.patch(
                     resource_name=constants.ANYUID,
                     params='[{"op": "remove", "path": "/users/0", '
-                    f'"value":{service_account}}}]',
+                    f'"value": "{service_account}"}}]',
                     format_type="json",
                 )
-            if not helpers.validate_scc_policy(
-                sa_name=scc_name,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                scc_name=scc_name,
-            ):
-                ocp_scc.patch(
-                    resource_name=scc_name,
-                    params='[{"op": "add", "path": "/users/0", '
-                    f'"value":{service_account}}}]',
-                    format_type="json",
-                )
+
             if (
                 pod_data_list.get("metadata").get("annotations").get("openshift.io/scc")
                 == constants.ANYUID
@@ -242,10 +238,12 @@ class TestMCGResourcesDisruptions(MCGTest):
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map["noobaa_db"],
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
-        ocp_scc = ocp.OCP(kind=constants.SCC, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        ocp_scc = ocp.OCP(
+            kind=constants.SCC, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         pod_data = pod_obj.get()
 
         log.info(f"Verifying current SCC is {scc_name} in db pod")
@@ -254,33 +252,30 @@ class TestMCGResourcesDisruptions(MCGTest):
             == scc_name
         ), "Invalid default scc"
 
-        log.info("Deleting the user array from the Noobaa scc")
-        ocp_scc.patch(
-            resource_name=scc_name,
-            params='[{"op": "remove", "path": "/users/0", '
-            f'"value":{service_account}}}]',
-            format_type="json",
-        )
+        log.info("Verifying the SA is not present in noobaa scc")
         assert not helpers.validate_scc_policy(
             sa_name=scc_name,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             scc_name=scc_name,
-        ), "SA name is  present in noobaa scc"
-        log.info("Adding the noobaa system sa user to anyuid scc")
+        ), "SA name is present in noobaa scc"
+
+        log.info("Adding the noobaa-db system sa user to anyuid scc")
         ocp_scc.patch(
             resource_name=constants.ANYUID,
             params='[{"op": "add", "path": "/users/0", '
-            f'"value":{service_account}}}]',
+            f'"value": "{service_account}"}}]',
             format_type="json",
         )
+
+        log.info(f"Verifying {service_account} was added to the anyuid scc")
         assert helpers.validate_scc_policy(
             sa_name=scc_name,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             scc_name=constants.ANYUID,
         ), "SA name is not present in anyuid scc"
 
+        log.info("Deleting the db pod and waiting for the new pod to reach 'RUNNNING'")
         pod_obj.delete(force=True)
-        # Verify that the new pod has reached a 'RUNNNING' status
         assert pod_obj.ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=self.labels_map["noobaa_db"],
@@ -288,10 +283,12 @@ class TestMCGResourcesDisruptions(MCGTest):
             timeout=300,
         ), "Noobaa pod did not reach running state"
         pod_data = pod_obj.get()
+
         log.info("Verifying SCC is now anyuid in the db pod")
         assert (
             pod_data.get("metadata").get("annotations").get("openshift.io/scc")
             == constants.ANYUID
         ), "Invalid scc"
-        # Check the NB status to verify the system is healthy
+
+        log.info("Checking the NB status to verify the system is healthy")
         self.cl_obj.wait_for_noobaa_health_ok()

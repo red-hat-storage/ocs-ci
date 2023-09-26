@@ -5,18 +5,20 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     managed_service_required,
     skipif_ms_provider,
+    blue_squad,
 )
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @pytest.mark.polarion_id("OCS-2718")
 @tier2
 @managed_service_required
 @skipif_ms_provider
 def test_capacity_workload_alerts(
-    notification_emails_required, workload_storageutilization_95p_rbd
+    notification_emails_required, workload_storageutilization_97p_rbd
 ):
     """
     Test that there are appropriate alert emails when ceph cluster is utilized

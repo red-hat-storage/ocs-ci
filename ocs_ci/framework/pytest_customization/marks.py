@@ -64,6 +64,9 @@ workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
 system_test = pytest.mark.system_test
 performance = pytest.mark.performance
+performance_a = pytest.mark.performance_a
+performance_b = pytest.mark.performance_b
+performance_c = pytest.mark.performance_c
 performance_extended = pytest.mark.performance_extended
 scale = pytest.mark.scale
 scale_long_run = pytest.mark.scale_long_run
@@ -83,6 +86,9 @@ tier_marks = [
     tier4c,
     tier_after_upgrade,
     performance,
+    performance_a,
+    performance_b,
+    performance_c,
     scale,
     scale_long_run,
     scale_changed_layout,
@@ -100,14 +106,31 @@ order_ocs_upgrade = pytest.mark.run(order=ORDER_OCS_UPGRADE)
 order_post_upgrade = pytest.mark.run(order=ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.run(order=ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.run(order=ORDER_AFTER_OCS_UPGRADE)
-ocp_upgrade = compose(pytest.mark.ocp_upgrade, order_ocp_upgrade)
-ocs_upgrade = compose(pytest.mark.ocs_upgrade, order_ocs_upgrade)
-pre_upgrade = compose(pytest.mark.pre_upgrade, order_pre_upgrade)
-pre_ocp_upgrade = compose(pytest.mark.pre_ocp_upgrade, order_pre_ocp_upgrade)
-pre_ocs_upgrade = compose(pytest.mark.pre_ocs_upgrade, order_pre_ocs_upgrade)
-post_upgrade = compose(pytest.mark.post_upgrade, order_post_upgrade)
-post_ocp_upgrade = compose(pytest.mark.post_ocp_upgrade, order_post_ocp_upgrade)
-post_ocs_upgrade = compose(pytest.mark.post_ocs_upgrade, order_post_ocs_upgrade)
+ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
+ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
+pre_ocp_upgrade = compose(
+    order_pre_ocp_upgrade,
+    pytest.mark.pre_ocp_upgrade,
+)
+pre_ocs_upgrade = compose(
+    order_pre_ocs_upgrade,
+    pytest.mark.pre_ocs_upgrade,
+)
+post_upgrade = compose(order_post_upgrade, pytest.mark.post_upgrade)
+post_ocp_upgrade = compose(order_post_ocp_upgrade, pytest.mark.post_ocp_upgrade)
+post_ocs_upgrade = compose(order_post_ocs_upgrade, pytest.mark.post_ocs_upgrade)
+
+upgrade_marks = [
+    ocp_upgrade,
+    ocs_upgrade,
+    pre_upgrade,
+    pre_ocp_upgrade,
+    pre_ocs_upgrade,
+    post_upgrade,
+    post_ocp_upgrade,
+    post_ocs_upgrade,
+]
 
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers
@@ -116,6 +139,12 @@ ignore_leftovers = pytest.mark.ignore_leftovers
 # the app labels specified
 ignore_leftover_label = pytest.mark.ignore_leftover_label
 
+# ignore resource_not_found error such as when deleting a resource that was already deleted
+# useful for cleanup in teardown when resource might be deleted during the test
+ignore_resource_not_found_error_label = (
+    pytest.mark.ignore_resource_not_found_error_label
+)
+
 # testing marker this is just for testing purpose if you want to run some test
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
@@ -123,6 +152,11 @@ run_this = pytest.mark.run_this
 # Skip marks
 skip_inconsistent = pytest.mark.skip(
     reason="Currently the reduction is too inconsistent leading to inconsistent test results"
+)
+
+skipif_more_than_three_workers = pytest.mark.skipif(
+    config.ENV_DATA["worker_replicas"] > 3,
+    reason="This test cannot run on setup having more than three worker nodes",
 )
 
 # Skipif marks
@@ -215,18 +249,29 @@ managed_service_required = pytest.mark.skipif(
 
 ms_provider_required = pytest.mark.skipif(
     not (
-        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
-        and config.ENV_DATA["cluster_type"].lower() == "provider"
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in MANAGED_SERVICE_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "provider"
     ),
     reason="Test runs ONLY on managed service provider cluster",
 )
 
 ms_consumer_required = pytest.mark.skipif(
     not (
-        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
-        and config.ENV_DATA["cluster_type"].lower() == "consumer"
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in MANAGED_SERVICE_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "consumer"
     ),
     reason="Test runs ONLY on managed service consumer cluster",
+)
+
+ms_provider_and_consumer_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+        and config.is_provider_exist()
+        and config.is_consumer_exist()
+    ),
+    reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
 
 kms_config_required = pytest.mark.skipif(
@@ -243,6 +288,11 @@ kms_config_required = pytest.mark.skipif(
         )
     ),
     reason="KMS config not found in auth.yaml",
+)
+
+external_mode_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("external_mode") is not True,
+    reason="Test will run on External Mode cluster only",
 )
 
 skipif_aws_i3 = pytest.mark.skipif(
@@ -274,15 +324,22 @@ skipif_openshift_dedicated = pytest.mark.skipif(
 )
 
 skipif_ms_provider = pytest.mark.skipif(
-    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
-    and config.ENV_DATA["cluster_type"].lower() == "provider",
+    config.default_cluster_ctx.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "provider",
     reason="Test will not run on Managed service provider cluster",
 )
 
 skipif_ms_consumer = pytest.mark.skipif(
-    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
-    and config.ENV_DATA["cluster_type"].lower() == "consumer",
+    config.default_cluster_ctx.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "consumer",
     reason="Test will not run on Managed service consumer cluster",
+)
+
+skipif_ms_provider_and_consumer = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS
+    and config.is_provider_exist()
+    and config.is_consumer_exist(),
+    reason="Test will not run on Managed service with provider and consumer clusters",
 )
 
 skipif_rosa = pytest.mark.skipif(
@@ -292,6 +349,12 @@ skipif_rosa = pytest.mark.skipif(
 skipif_ibm_cloud = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == IBMCLOUD_PLATFORM,
     reason="Test will not run on IBM cloud",
+)
+
+skipif_ibm_cloud_managed = pytest.mark.skipif(
+    config.ENV_DATA["deployment_type"].lower() == "managed"
+    and config.ENV_DATA["platform"].lower() == IBMCLOUD_PLATFORM,
+    reason="Test will not run on IBM Cloud aka ROKS (managed deployment type)",
 )
 
 skipif_ibm_power = pytest.mark.skipif(
@@ -355,6 +418,14 @@ metrics_for_external_mode_required = pytest.mark.skipif(
     reason="Metrics is not enabled for external mode OCS <4.6",
 )
 
+rdr_ui_failover_config_required = pytest.mark.skipif(
+    not config.RUN.get("rdr_failover_via_ui"), reason="RDR UI failover config needed"
+)
+
+rdr_ui_relocate_config_required = pytest.mark.skipif(
+    not config.RUN.get("rdr_relocate_via_ui"), reason="RDR UI relocate config needed"
+)
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     "ignore::urllib3.exceptions.InsecureRequestWarning"
@@ -379,7 +450,7 @@ skipif_ui_not_support = pytest.mark.skipif_ui_not_support
 # Marker for skipping tests if the cluster is upgraded from a particular
 # OCS version
 skipif_upgraded_from = pytest.mark.skipif_upgraded_from
-
+skipif_lvm_not_installed = pytest.mark.skipif_lvm_not_installed
 # Marker for skipping tests if the cluster doesn't have configured cluster-wide
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
@@ -389,7 +460,20 @@ skipif_ibm_flash = pytest.mark.skipif(
     reason="This test doesn't work correctly on IBM Flash system",
 )
 
+# Skipif intransit encryption is not set.
+skipif_intransit_encryption_notset = pytest.mark.skipif(
+    not config.ENV_DATA.get("in_transit_encryption"),
+    reason="Skipping test due to intransit encryption is not set in config.",
+)
+
+# Skip if multus is enabled
+skipif_multus_enabled = pytest.mark.skipif(
+    config.ENV_DATA.get("is_multus_enabled"),
+    reason="This test doesn't work correctly with multus deployments",
+)
+
 # Squad marks
+aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
 blue_squad = pytest.mark.blue_squad
 brown_squad = pytest.mark.brown_squad
@@ -399,6 +483,16 @@ magenta_squad = pytest.mark.magenta_squad
 orange_squad = pytest.mark.orange_squad
 purple_squad = pytest.mark.purple_squad
 red_squad = pytest.mark.red_squad
+turquoise_squad = pytest.mark.turquoise_squad
+yellow_squad = pytest.mark.yellow_squad
+
+# Ignore test during squad decorator check in pytest collection
+ignore_owner = pytest.mark.ignore_owner
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
+
+# Mark the test with marker below to allow re-tries in ceph health fixture
+# for known issues when waiting in re-balance and flip flop from health OK
+# to 1-2 PGs waiting to be Clean
+ceph_health_retry = pytest.mark.ceph_health_retry

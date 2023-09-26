@@ -5,6 +5,7 @@ import json
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from ocs_ci.helpers import helpers
@@ -39,28 +40,44 @@ def create_configmap_cluster_monitoring_pod(sc_name=None, telemeter_server_url=N
     """
     logger.info("Creating configmap cluster-monitoring-config")
     config_map = templating.load_yaml(constants.CONFIGURE_PVC_ON_MONITORING_POD)
-    config = yaml.safe_load(config_map["data"]["config.yaml"])
+    config_data = yaml.safe_load(config_map["data"]["config.yaml"])
     if sc_name is not None:
         logger.info(
             f"Setting {sc_name} as storage backed for Prometheus and Alertmanager"
         )
-        config["prometheusK8s"]["volumeClaimTemplate"]["spec"][
+        config_data["prometheusK8s"]["volumeClaimTemplate"]["spec"][
             "storageClassName"
         ] = sc_name
-        config["alertmanagerMain"]["volumeClaimTemplate"]["spec"][
+        config_data["alertmanagerMain"]["volumeClaimTemplate"]["spec"][
             "storageClassName"
         ] = sc_name
     else:
-        del config["prometheusK8s"]
-        del config["alertmanagerMain"]
+        del config_data["prometheusK8s"]
+        del config_data["alertmanagerMain"]
     if telemeter_server_url is not None:
         logger.info(f"Setting {telemeter_server_url} as telemeter server url")
-        config["telemeterClient"] = {}
-        config["telemeterClient"]["telemeterServerURL"] = telemeter_server_url
-    config = yaml.dump(config)
-    config_map["data"]["config.yaml"] = config
-    assert helpers.create_resource(**config_map)
+        config_data["telemeterClient"] = {}
+        config_data["telemeterClient"]["telemeterServerURL"] = telemeter_server_url
+    config_data = yaml.dump(config_data)
+    config_map["data"]["config.yaml"] = config_data
     ocp = OCP("v1", "ConfigMap", defaults.OCS_MONITORING_NAMESPACE)
+    config_map_exists = False
+    if (
+        config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    ):
+        try:
+            assert ocp.get(resource_name="cluster-monitoring-config")
+            logger.info(
+                "For Azure ARO cluster the cluster-monitoring-config exists and we need only apply the data!"
+            )
+            config_map_exists = True
+            config_map_obj = OCS(**config_map)
+            config_map_obj.apply(**config_map)
+        except CommandFailed:
+            pass
+    if not config_map_exists:
+        assert helpers.create_resource(**config_map)
     assert ocp.get(resource_name="cluster-monitoring-config")
     logger.info("Successfully created configmap cluster-monitoring-config")
 
@@ -282,3 +299,113 @@ def check_if_monitoring_stack_exists():
     else:
         logger.info("Monitoring stack is not configured on the cluster")
         return False
+
+
+def get_prometheus_response(api, query) -> dict:
+    """
+    Get the response from Prometheus based on the provided query
+
+    Args:
+        api (PrometheusAPI): A PrometheusAPI object
+        query (str): The Prometheus query string
+
+    Returns:
+        dict: A dictionary representing the parsed JSON response from Prometheus
+    """
+    resp = api.get("query", payload={"query": query})
+    if resp.ok:
+        logger.debug(query)
+        logger.debug(resp.text)
+        return json.loads(resp.text)
+
+
+def get_pvc_namespace_metrics():
+    """
+    Get PVC and Namespace metrics from Prometheus.
+
+    Returns:
+        dict: A dictionary containing the PVC and Namespace metrics data
+    """
+
+    api = ocs_ci.utility.prometheus.PrometheusAPI()
+
+    pvc_namespace = {}
+
+    logger.info("Get PVC namespace data from Prometheus")
+
+    # use get_prometheus_response to store the response text to a dict
+    pvc_namespace["PVC_NAMESPACES_BY_USED"] = get_prometheus_response(
+        api,
+        constants.PVC_NAMESPACES_BY_USED,
+    )
+    pvc_namespace["PVC_NAMESPACES_TOTAL_USED"] = get_prometheus_response(
+        api,
+        f"sum({constants.PVC_NAMESPACES_BY_USED})",
+    )
+
+    # convert the values from string to dict
+    pvc_namespace = {
+        key: json.loads(value) if isinstance(value, str) else value
+        for key, value in pvc_namespace.items()
+    }
+
+    # convert dict to json and print it with pretty format
+    logger.info(json.dumps(pvc_namespace, indent=4))
+    return pvc_namespace
+
+
+def get_ceph_capacity_metrics():
+    """
+    Get CEPH capacity breakdown data from Prometheus, return all response texts collected to a dict
+    Use the queries from ceph-storage repo:
+    https://github.com/red-hat-storage/odf-console/blob/master/packages/ocs/queries/ceph-storage.ts
+
+    To get the data use format similar to:
+        data.get('PROJECTS_TOTAL_USED').get('data').get('result')[0].get('value')
+
+    Returns:
+        dict: A dictionary containing the CEPH capacity breakdown data
+    """
+    api = ocs_ci.utility.prometheus.PrometheusAPI()
+
+    ceph_capacity = {}
+    logger.info("Get CEPH capacity breakdown data from Prometheus")
+
+    # use get_prometheus_response to store the response text to a dict
+    ceph_capacity["PROJECTS_TOTAL_USED"] = get_prometheus_response(
+        api,
+        "sum(sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
+        "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
+        "on (storageclass)  group_left(provisioner) "
+        "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
+        "by (namespace))",
+    )
+    ceph_capacity["STORAGE_CLASSES_BY_USED"] = get_prometheus_response(
+        api, constants.STORAGE_CLASSES_BY_USED
+    )
+    ceph_capacity["STORAGE_CLASSES_TOTAL_USED"] = get_prometheus_response(
+        api,
+        f"sum({constants.STORAGE_CLASSES_BY_USED})",
+    )
+    ceph_capacity["PODS_BY_USED"] = get_prometheus_response(api, constants.PODS_BY_USED)
+    ceph_capacity["PODS_TOTAL_USED"] = get_prometheus_response(
+        api,
+        f"sum({constants.PODS_BY_USED})",
+    )
+    ceph_capacity["CEPH_CAPACITY_TOTAL"] = get_prometheus_response(
+        api, "ceph_cluster_total_bytes"
+    )
+    ceph_capacity["CEPH_CAPACITY_USED"] = get_prometheus_response(
+        api,
+        "max(ceph_pool_max_avail * on (pool_id) group_left(name)ceph_pool_metadata{name=~'(.*file.*)|(.*block.*)'})",
+    )
+
+    # convert the values from string to dict
+    ceph_capacity = {
+        key: json.loads(value) if isinstance(value, str) else value
+        for key, value in ceph_capacity.items()
+    }
+
+    # convert dict to json and print it with pretty format
+    logger.info(json.dumps(ceph_capacity, indent=4))
+    return ceph_capacity

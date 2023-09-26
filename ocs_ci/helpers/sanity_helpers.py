@@ -10,8 +10,9 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_object
 from ocs_ci.helpers.pvc_ops import create_pvcs
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal
-
+from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal, is_ms_consumer_cluster
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +41,18 @@ class Sanity:
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status(timeout=300)
 
-        if not config.ENV_DATA["mcg_only_deployment"]:
+        if not (
+            config.ENV_DATA["mcg_only_deployment"]
+            or (
+                config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+                and config.ENV_DATA["cluster_type"].lower() == "consumer"
+            )
+        ):
             ceph_health_check(
                 namespace=config.ENV_DATA["cluster_namespace"], tries=tries
             )
             if cluster_check:
-                self.ceph_cluster.cluster_health_check(timeout=60)
+                self.ceph_cluster.cluster_health_check(timeout=120)
 
     def create_resources(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory, run_io=True
@@ -183,3 +190,187 @@ class SanityExternalCluster(Sanity):
         self.pod_objs = list()
         self.obc_objs = list()
         self.ceph_cluster = CephClusterExternal()
+
+
+class SanityManagedService(Sanity):
+    """
+    Class for cluster health and functional validations for the Managed Service
+    """
+
+    def __init__(
+        self,
+        create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers,
+        scale_count=None,
+        pvc_per_pod_count=5,
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+        max_pvc_size=30,
+        consumer_indexes=None,
+    ):
+        """
+        Init the sanity managed service class.
+        Init the 'create resources on MS consumers' factory.
+        This method uses the 'create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers' factory.
+
+        Args:
+           create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers (function): Factory for creating scale
+               pods and PVCs using k8s on MS consumers fixture.
+           scale_count (int): No of PVCs to be Scaled. Should be one of the values in the dict
+               "constants.SCALE_PVC_ROUND_UP_VALUE".
+           pvc_per_pod_count (int): Number of PVCs to be attached to single POD
+               Example, If 20 then 20 PVCs will be attached to single POD
+           start_io (bool): Binary value to start IO default it's True
+           io_runtime (seconds): Runtime in Seconds to continue IO
+           pvc_size (int): Size of PVC to be created
+           max_pvc_size (int): The max size of the pvc
+           consumer_indexes (list): The list of the consumer indexes to create scale pods and PVCs.
+               If not specified - if it's a consumer cluster, it creates scale pods and PVCs only
+               on the current consumer. And if it's a provider it creates scale pods and PVCs on
+               all the consumers.
+        """
+        super(SanityManagedService, self).__init__()
+        # A dictionary of a consumer index per the fio_scale object
+        self.consumer_i_per_fio_scale = {}
+
+        self.create_resources_on_ms_consumers_factory = (
+            create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
+        )
+        self.scale_count = scale_count
+        self.pvc_per_pod_count = pvc_per_pod_count
+        self.start_io = start_io
+        self.io_runtime = io_runtime
+        self.pvc_size = pvc_size
+        self.max_pvc_size = max_pvc_size
+
+        if consumer_indexes:
+            logger.info(
+                f"The consumer indexes for creating resources passed to the method are: {consumer_indexes}"
+            )
+            self.consumer_indexes = consumer_indexes
+        else:
+            logger.info(
+                "The consumer indexes were not passed to the method. Checking the cluster type..."
+            )
+            if is_ms_consumer_cluster():
+                logger.info(
+                    "The cluster is a consumer cluster. We will create the resources only for this cluster"
+                )
+                self.consumer_indexes = [config.cur_index]
+            else:
+                logger.info(
+                    "The cluster is a provider cluster. We will create the resources for "
+                    "all the consumer clusters"
+                )
+                self.consumer_indexes = config.get_consumer_indexes_list()
+
+        logger.info(
+            f"The consumer indexes for creating resources are: {self.consumer_indexes}"
+        )
+
+    def create_resources_on_ms_consumers(self, tries=1, delay=30):
+        """
+        Try creates resources for MS consumers 'tries' times with delay 'delay' between the iterations
+        using the method 'base_create_resources_on_ms_consumers'. If not specified, the default value of
+        'tries' is 1 - which means that by default, it only tries to create the resources once.
+        In every iteration, if it fails to generate the resources, it cleans up the current resources
+        before continuing to the next iteration.
+
+        Args:
+            tries (int): The number of tries to create the resources on MS consumers
+            delay (int): The delay in seconds between retries
+
+        Raises:
+            ocs_ci.ocs.exceptions.CommandFailed: In case of a command failed
+
+        """
+        retry(
+            (FileNotFoundError, CommandFailed),
+            tries=tries,
+            delay=delay,
+            backoff=1,
+        )(self.base_create_resources_on_ms_consumers)()
+
+    def base_create_resources_on_ms_consumers(self):
+        """
+        Create resources on MS consumers.
+        This function uses the factory "create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers"
+        for creating the resources - Create scale pods, PVCs, and run IO using a Kube job on MS consumers.
+        If it fails to create the resources, it cleans up the current resources.
+
+        Raises:
+            ocs_ci.ocs.exceptions.CommandFailed: In case of a command failed
+
+        """
+        orig_index = config.cur_index
+        is_success = False
+
+        try:
+            # Create the scale pods and PVCs using k8s on MS consumers factory
+            self.consumer_i_per_fio_scale = (
+                self.create_resources_on_ms_consumers_factory(
+                    scale_count=self.scale_count,
+                    pvc_per_pod_count=self.pvc_per_pod_count,
+                    start_io=self.start_io,
+                    io_runtime=self.io_runtime,
+                    pvc_size=self.pvc_size,
+                    max_pvc_size=self.max_pvc_size,
+                    consumer_indexes=self.consumer_indexes,
+                )
+            )
+            is_success = True
+            logger.info("Successfully create the resources on MS consumers")
+        finally:
+            # Switch back to the original index
+            config.switch_ctx(orig_index)
+            if not is_success:
+                logger.info(
+                    "Failed to create the resources on MS consumers. Deleting the leftovers..."
+                )
+                self.delete_resources_on_ms_consumers()
+
+    def delete_resources_on_ms_consumers(self):
+        """
+        Delete the resources from the MS consumers
+
+        """
+        orig_index = config.cur_index
+        try:
+            logger.info("Clean up the pods and PVCs from all consumers")
+            for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
+                config.switch_ctx(consumer_i)
+                fio_scale.cleanup()
+        finally:
+            # Switch back to the original index
+            config.switch_ctx(orig_index)
+
+    def health_check_ms(
+        self,
+        cluster_check=True,
+        tries=20,
+        consumers_ceph_health_check=True,
+        consumers_tries=10,
+    ):
+        """
+        Perform Ceph and cluster health checks on Managed Service cluster
+
+        Args:
+            cluster_check (bool): If true, perform the cluster check. False, otherwise.
+            tries (int): The number of tries to perform ceph health check
+            consumers_ceph_health_check (bool): If true and the cluster is an MS provider cluster,
+                perform ceph health check on the ms consumer clusters.
+            consumers_tries: The number of tries to perform ceph health check on the MS consumer clusters
+
+        """
+        orig_index = config.cur_index
+        try:
+            self.health_check(cluster_check=cluster_check, tries=tries)
+            if consumers_ceph_health_check and not is_ms_consumer_cluster():
+                # Check the ceph health on the consumers
+                consumer_indexes = config.get_consumer_indexes_list()
+                for consumer_i in consumer_indexes:
+                    config.switch_ctx(consumer_i)
+                    ceph_health_check(tries=consumers_tries)
+
+        finally:
+            config.switch_ctx(orig_index)

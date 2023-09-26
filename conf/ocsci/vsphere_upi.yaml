@@ -10,6 +10,6 @@ ENV_DATA:
   worker_replicas: 3
   master_replicas: 3
   fio_storageutilization_min_mbps: 10.0
-  master_memory: '12288'
+  master_memory: '16384'
   compute_memory: '36864'
   worker_num_cpus: '12'

@@ -14,7 +14,7 @@ networking:
     hostPrefix: 23
   machineNetwork:
   - cidr: 10.0.0.0/16
-  networkType: OpenShiftSDN
+  networkType: {{ network_type | default('OpenShiftSDN') }}
   serviceNetwork:
     - {{ service_network_cidr | default('172.30.0.0/16') }}
 {% if fips %}

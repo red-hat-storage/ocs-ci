@@ -1,2 +1,33 @@
 ENV_DATA:
-  dr_workload_repo_url: "https://github.com/shylesh/ocm-ramen-samples.git"
+  dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
+  dr_workload_repo_branch: "master"
+  dr_workload_subscription: [
+    {name: "busybox-1", workload_dir: "rdr/busybox/app-busybox-1", pod_count: 20, pvc_count: 20},
+    {name: "busybox-2", workload_dir: "rdr/busybox/app-busybox-2", pod_count: 5, pvc_count: 5},
+    {name: "busybox-3", workload_dir: "rdr/busybox/app-busybox-3", pod_count: 20, pvc_count: 20},
+    {name: "busybox-4", workload_dir: "rdr/busybox/app-busybox-4", pod_count: 20, pvc_count: 20},
+    {name: "busybox-5", workload_dir: "rdr/busybox/app-busybox-5", pod_count: 20, pvc_count: 20},
+  ]
+  dr_workload_appset: [
+    { name: "appset-busybox-1", workload_dir: "rdr/busybox/AppSet/appset-busybox-1",
+      dr_workload_app_placement_name: "busybox-1-placement",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app1'}, pod_count: 20, pvc_count: 20
+    },
+    { name: "appset-busybox-2", workload_dir: "rdr/busybox/AppSet/appset-busybox-2",
+      dr_workload_app_placement_name: "busybox-2-placement",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app2'}, pod_count: 5, pvc_count: 5
+    },
+    { name: "appset-busybox-3", workload_dir: "rdr/busybox/AppSet/appset-busybox-3",
+      dr_workload_app_placement_name: "busybox-3-placement",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app3'}, pod_count: 20, pvc_count: 20
+    },
+    { name: "appset-busybox-4", workload_dir: "rdr/busybox/AppSet/appset-busybox-4",
+      dr_workload_app_placement_name: "busybox-4-placement",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app4'}, pod_count: 20, pvc_count: 20
+    },
+    { name: "appset-busybox-5", workload_dir: "rdr/busybox/AppSet/appset-busybox-5",
+      dr_workload_app_placement_name: "busybox-5-placement",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app5'}, pod_count: 20, pvc_count: 20
+    },
+  ]
+  # dr_policy_name: PLACEHOLDER

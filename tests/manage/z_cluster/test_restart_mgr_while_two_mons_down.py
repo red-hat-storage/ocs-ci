@@ -3,13 +3,17 @@ import pytest
 import time
 
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
     get_mgr_pods,
     wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.pod import get_deployments_having_label
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_external_mode,
+    brown_squad,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -20,9 +24,11 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
 @bugzilla("1990031")
 @polarion_id("OCS-2696")
+@skipif_external_mode
 class TestRestartMgrWhileTwoMonsDown(ManageTest):
     """
     Restart mgr pod while two mon pods are down
@@ -81,7 +87,7 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
         mons = [
             mon["metadata"]["name"]
             for mon in get_deployments_having_label(
-                constants.MON_APP_LABEL, defaults.ROOK_CLUSTER_NAMESPACE
+                constants.MON_APP_LABEL, config.ENV_DATA["cluster_namespace"]
             )
         ]
         self.mons_scale = mons[0:2]
@@ -105,7 +111,7 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
 
             log.info(f"Waiting for mgr pod move to Running state, index={index}")
             mgr_pod_obj = ocp.OCP(
-                kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
             )
             assert mgr_pod_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,

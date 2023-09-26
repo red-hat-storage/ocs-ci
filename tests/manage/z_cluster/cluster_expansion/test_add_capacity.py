@@ -3,6 +3,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    ceph_health_retry,
     polarion_id,
     pre_upgrade,
     skipif_aws_i3,
@@ -10,6 +11,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_bmpsi,
     skipif_ibm_power,
+    skipif_no_lso,
+    skipif_lso,
+    brown_squad,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -35,18 +39,19 @@ from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 logger = logging.getLogger(__name__)
 
 
-def add_capacity_test():
+def add_capacity_test(ui_flag=False):
+    """
+    Add capacity on non-lso cluster
+
+    Args:
+        ui_flag(bool): add capacity via ui [true] or via cli [false]
+
+    """
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
-    if ui_add_capacity_conditions():
-        try:
-            result = ui_add_capacity(osd_size)
-        except Exception as e:
-            logger.error(
-                f"Add capacity via UI is not applicable and CLI method will be done. The error is {e}"
-            )
-            result = storage_cluster.add_capacity(osd_size)
+    if ui_add_capacity_conditions() and ui_flag:
+        result = ui_add_capacity(osd_size)
     else:
         result = storage_cluster.add_capacity(osd_size)
     osd_pods_post_expansion = get_osd_pods()
@@ -91,10 +96,42 @@ def add_capacity_test():
     check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
 
 
+@brown_squad
 @ignore_leftovers
-@tier1
-@acceptance
 @polarion_id("OCS-1191")
+@pytest.mark.second_to_last
+@skipif_managed_service
+@skipif_aws_i3
+@skipif_bm
+@skipif_bmpsi
+@skipif_lso
+@skipif_external_mode
+@skipif_ibm_power
+@skipif_managed_service
+@ceph_health_retry
+class TestAddCapacity(ManageTest):
+    """
+    Automates adding variable capacity to the cluster
+    """
+
+    @acceptance
+    def test_add_capacity_cli(self, reduce_and_resume_cluster_load):
+        """
+        Add capacity on non-lso cluster via cli on Acceptance suite
+        """
+        add_capacity_test(ui_flag=False)
+
+    @tier1
+    def test_add_capacity_ui(self, reduce_and_resume_cluster_load):
+        """
+        Add capacity on non-lso cluster via UI on tier1 suite
+        """
+        add_capacity_test(ui_flag=True)
+
+
+@brown_squad
+@ignore_leftovers
+@polarion_id("OCS-4647")
 @pytest.mark.second_to_last
 @skipif_managed_service
 @skipif_aws_i3
@@ -103,18 +140,29 @@ def add_capacity_test():
 @skipif_external_mode
 @skipif_ibm_power
 @skipif_managed_service
-class TestAddCapacity(ManageTest):
+@skipif_no_lso
+@ceph_health_retry
+class TestAddCapacityLSO(ManageTest):
     """
-    Automates adding variable capacity to the cluster
+    Add capacity on lso cluster
     """
 
-    def test_add_capacity(self, reduce_and_resume_cluster_load):
+    @acceptance
+    def test_add_capacity_lso_cli(self, reduce_and_resume_cluster_load):
         """
-        Test to add variable capacity to the OSD cluster while IOs running
+        Add capacity on lso cluster via CLI on Acceptance suite
         """
-        add_capacity_test()
+        storage_cluster.add_capacity_lso(ui_flag=False)
+
+    @tier1
+    def test_add_capacity_lso_ui(self, reduce_and_resume_cluster_load):
+        """
+        Add capacity on lso cluster via UI on tier1 suite
+        """
+        storage_cluster.add_capacity_lso(ui_flag=True)
 
 
+@brown_squad
 @skipif_ocs_version("<4.4")
 @pre_upgrade
 @ignore_leftovers
@@ -124,6 +172,7 @@ class TestAddCapacity(ManageTest):
 @skipif_external_mode
 @cloud_platform_required
 @skipif_managed_service
+@ceph_health_retry
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade

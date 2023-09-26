@@ -6,7 +6,7 @@ import random
 import traceback
 import re
 
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_infra_id
@@ -377,12 +377,13 @@ class AWS(object):
         )
         self.attach_volume(volume, instance_id, device)
 
-    def get_volumes_by_name_pattern(self, pattern):
+    def get_volumes_by_tag_pattern(self, tag, pattern):
         """
-        Get volumes by pattern
+        Get volumes by tag pattern
 
         Args:
-            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+            tag (str): Tag name
+            pattern (str): Pattern of tag value (e.g. '*cl-vol-*')
 
         Returns:
             list: Volume information like id and attachments
@@ -390,7 +391,7 @@ class AWS(object):
         volumes_response = self.ec2_client.describe_volumes(
             Filters=[
                 {
-                    "Name": "tag:Name",
+                    "Name": f"tag:{tag}",
                     "Values": [pattern],
                 },
             ],
@@ -404,6 +405,121 @@ class AWS(object):
                 )
             )
         return volumes
+
+    def get_volume_data(self, volume_id):
+        """
+        Get volume information
+
+        Args:
+            volume_id(str): ID of the volume
+
+        Returns:
+            dict: complete volume information
+        """
+        volumes_response = self.ec2_client.describe_volumes(
+            VolumeIds=[
+                volume_id,
+            ],
+        )
+        return volumes_response["Volumes"][0]
+
+    def get_volume_tag_value(self, volume_data, tag_name):
+        """
+        Get the value of the volume's tag
+
+        Args:
+            volume_data(dict): complete volume information
+            tag_name(str): name of the tag
+        Returns:
+            str: value of the tag or None if there's no such tag
+        """
+        tags = volume_data["Tags"]
+        for tag in tags:
+            if tag["Key"] == tag_name:
+                return tag["Value"]
+        return None
+
+    def get_volumes_by_name_pattern(self, pattern):
+        """
+        Get volumes by pattern
+
+        Args:
+            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+
+        Returns:
+            list: Volume information like id and attachments
+        """
+        return self.get_volumes_by_tag_pattern("Name", pattern)
+
+    def check_volume_attributes(
+        self,
+        volume_id,
+        name_end=None,
+        size=None,
+        iops=None,
+        throughput=None,
+        namespace=None,
+    ):
+        """
+        Verify aws volume attributes
+        Primarily used for faas
+
+        Args:
+            volume_id(str): id of the volume to be checked
+            name_end(str): expected ending of Name tag
+            size(int): expected value of volume's size
+            iops(int): expected value of IOPS
+            throughput(int): expected value of Throughput
+            namespace(str): expected value of kubernetes.io/created-for/pvc/namespace tag
+
+        Raises:
+            ValueError if the actual value differs from the expected one
+        """
+        volume_data = self.get_volume_data(volume_id)
+        volume_name = self.get_volume_tag_value(
+            volume_data,
+            "Name",
+        )
+        logger.info(
+            f"Verifying that volume name {volume_name} starts with cluster name"
+        )
+        if not volume_name.startswith(config.ENV_DATA["cluster_name"]):
+            raise ValueError(
+                f"Volume name should start with cluster name {config.ENV_DATA['cluster_name']}"
+            )
+        if name_end:
+            logger.info(f"Verifying that volume name ends with {name_end}")
+            if not volume_name.endswith(name_end):
+                raise ValueError(f"Volume name should end with {name_end}")
+        if size:
+            logger.info(f"Verifying that volume size is {size}")
+            if volume_data["Size"] != size:
+                raise ValueError(
+                    f"Volume size should be {size} but it's {volume_data['Size']}"
+                )
+        if iops:
+            logger.info(f"Verifying that volume IOPS is {iops}")
+            if volume_data["Iops"] != iops:
+                raise ValueError(
+                    f"Volume IOPS should be {iops} but it's {volume_data['Iops']}"
+                )
+        if throughput:
+            logger.info(f"Verifying that volume throughput is {throughput}")
+            if volume_data["Throughput"] != throughput:
+                raise ValueError(
+                    f"Volume size should be {throughput} but it's {volume_data['Throughput']}"
+                )
+        if namespace:
+            logger.info(f"Verifying that namespace is {namespace}")
+            volume_namespace = self.get_volume_tag_value(
+                volume_data,
+                constants.AWS_VOL_PVC_NAMESPACE,
+            )
+            if volume_namespace != namespace:
+                raise ValueError(
+                    "Namespace in kubernetes.io/created-for/pvc/namespace tag "
+                    f"should be {namespace} but it's {volume_namespace}"
+                )
 
     def detach_volume(self, volume, timeout=120):
         """
@@ -1357,13 +1473,17 @@ class AWS(object):
         logger.info(f"Deleting CloudFormation Stack: {cfs_name}")
         self.delete_cloudformation_stacks([cfs_name])
 
-    def delete_hosted_zone(self, cluster_name, delete_zone=True):
+    def delete_hosted_zone(
+        self, cluster_name, delete_zone=True, delete_from_base_domain=False
+    ):
         """
         Deletes the hosted zone
 
         Args:
             cluster_name (str): Name of the cluster
             delete_zone (bool): Whether to delete complete zone
+            delete_from_base_domain (bool): Whether to delete record from base domain
+
         """
         cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
         base_domain = config.ENV_DATA["base_domain"]
@@ -1385,6 +1505,11 @@ class AWS(object):
                 self.delete_all_record_sets(hosted_zone_id)
                 if delete_zone:
                     self.route53_client.delete_hosted_zone(Id=hosted_zone_id)
+                if delete_from_base_domain:
+                    self.delete_record_from_base_domain(
+                        cluster_name=cluster_name, base_domain=base_domain
+                    )
+
         else:
             logger.info(f"hosted zone {hosted_zone_name} not found")
             return
@@ -1540,7 +1665,7 @@ class AWS(object):
         return full_hosted_zone_id.strip("/hostedzone/")
 
     def update_hosted_zone_record(
-        self, zone_id, record_name, data, type, operation_type, ttl=60
+        self, zone_id, record_name, data, type, operation_type, ttl=60, raw_data=None
     ):
         """
         Update Route53 DNS record
@@ -1553,6 +1678,7 @@ class AWS(object):
             type (str): DNS record type
             operation_type (str): Operation Type (Allowed Values:- Add, Delete)
             ttl (int): Default set to 60 sec
+            raw_data (list): Data to be added as a record
 
         Returns:
             dict: The response from change_resource_record_sets
@@ -1573,6 +1699,8 @@ class AWS(object):
             old_resource_record_list.append({"Value": data})
         elif operation_type == "Delete":
             old_resource_record_list.remove({"Value": data})
+        if raw_data:
+            old_resource_record_list = data
         response = self.route53_client.change_resource_record_sets(
             HostedZoneId=zone_id,
             ChangeBatch={
@@ -1629,6 +1757,118 @@ class AWS(object):
             zone["Id"] for zone in hosted_zones if zone["Name"] == f"{domain}."
         ]
         return hosted_zone_ids[0]
+
+    def create_hosted_zone(self, cluster_name):
+        """
+        Create Hosted Zone
+
+        Args:
+            cluster_name (str): Name of cluster
+
+        Returns:
+            str: Hosted Zone id
+
+        """
+        ts = time.time()
+        domain = config.ENV_DATA["base_domain"]
+        full_cluster_name = f"{cluster_name}.{domain}."
+        response = self.route53_client.create_hosted_zone(
+            Name=full_cluster_name, CallerReference=str(ts)
+        )
+
+        full_hosted_zone_id = response["HostedZone"]["Id"]
+        hosted_zone_id = full_hosted_zone_id.strip("/hostedzone/")
+        logger.info(
+            f"Hosted zone Created with id {hosted_zone_id} and name is {response['HostedZone']['Name']}"
+        )
+        return hosted_zone_id
+
+    def get_hosted_zone_details(self, zone_id):
+        """
+        Get Hosted zone Details
+
+        Args:
+            zone_id (str): Zone Id of cluster_name
+
+        Returns:
+            dict: Response
+
+        """
+        return self.route53_client.get_hosted_zone(Id=zone_id)
+
+    def get_ns_for_hosted_zone(self, zone_id):
+        """
+        Get NameServers Details from Hosted Zone
+
+        Args:
+            zone_id (str): Zone Id of cluster_name
+
+        Returns:
+            list: NameServers
+
+        """
+        return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
+
+    def wait_for_instances_to_stop(self, instances):
+        """
+        Wait for the instances to reach status stopped
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status stopped
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(f"Waiting for instance {instance_name} to reach status stopped")
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_stopped()
+
+    def wait_for_instances_to_terminate(self, instances):
+        """
+        Wait for the instances to reach status terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_terminated()
+
+    def wait_for_instances_to_stop_or_terminate(self, instances):
+        """
+        Wait for the instances to reach statuses stopped or terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected statuses stopped or terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status stopped or terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            try:
+                instance.wait_until_stopped()
+            except WaiterError as e:
+                logger.warning(
+                    f"Failed to reach the status stopped due to the error {str(e)}"
+                )
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status terminated"
+                )
+                instance.wait_until_terminated()
 
 
 def get_instances_ids_and_names(instances):
@@ -1890,8 +2130,7 @@ def get_stack_name_from_instance_dict(instance_dict):
 
 
 def create_and_attach_ebs_volumes(
-    worker_pattern,
-    size=100,
+    worker_pattern, size=100, count=1, device_names=("sdx",)
 ):
     """
     Create volumes on workers
@@ -1900,24 +2139,44 @@ def create_and_attach_ebs_volumes(
         worker_pattern (string): Worker name pattern e.g.:
             cluster-55jx2-worker*
         size (int): Size in GB (default: 100)
+        count (int): number of EBS volumes to attach to worker node, if it's
+        device_names (list): list of the devices like ["sda", "sdb"]. Length of list needs
+            to match count!
+
+    Raises:
+        UnexpectedInput: In case the device_names length doesn't match count.
 
     """
     region = config.ENV_DATA["region"]
+    if len(device_names) != count:
+        raise exceptions.UnexpectedInput(
+            "The device_names doesn't contain the same number of devices as the "
+            f"count, which is: {count}! If count is 2, the device_names should be for example ['sdc', 'sdx']!"
+        )
     aws = AWS(region)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
     with parallel() as p:
         for worker in worker_instances:
-            logger.info(f"Creating and attaching {size} GB volume to {worker['name']}")
-            p.spawn(
-                aws.create_volume_and_attach,
-                availability_zone=worker["avz"],
-                instance_id=worker["id"],
-                name=f"{worker['name']}_extra_volume",
-                size=size,
-            )
+            for number in range(1, count + 1):
+                logger.info(
+                    f"Creating and attaching {number}. {size} GB volume to {worker['name']}"
+                )
+                p.spawn(
+                    aws.create_volume_and_attach,
+                    availability_zone=worker["avz"],
+                    instance_id=worker["id"],
+                    name=f"{worker['name']}_extra_volume_{number}",
+                    size=size,
+                    device=f"/dev/{device_names[number-1]}",
+                )
 
 
-def create_and_attach_volume_for_all_workers(device_size=None, worker_suffix="worker"):
+def create_and_attach_volume_for_all_workers(
+    device_size=None,
+    worker_suffix="worker",
+    count=1,
+    device_letters="ghijklmnopxyz",
+):
     """
     Create volumes on workers
 
@@ -1925,13 +2184,20 @@ def create_and_attach_volume_for_all_workers(device_size=None, worker_suffix="wo
         device_size (int): Size in GB, if not specified value from:
             config.ENV_DATA["device_size"] will be used
         worker_suffix (str): Worker name suffix (default: worker)
+        count (int): number of EBS volumes to attach to worker node
+        device_letters (str): device letters from which generate device names.
+            e.g. for "abc" and if count=2 it will generate ["sda", "sdb"]
 
     """
     device_size = device_size or int(
         config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
     )
+    device_letters = "ghijklmnopxyz"
+    device_names = [f"sd{letter}" for letter in device_letters[:count]]
     infra_id = get_infra_id(config.ENV_DATA["cluster_path"])
     create_and_attach_ebs_volumes(
         f"{infra_id}-{worker_suffix}*",
         device_size,
+        count,
+        device_names,
     )

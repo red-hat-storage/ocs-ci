@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from concurrent.futures import ThreadPoolExecutor
-
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -19,6 +19,7 @@ from ocs_ci.ocs import flowtest
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @flowtests
 @ignore_leftovers
 class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):

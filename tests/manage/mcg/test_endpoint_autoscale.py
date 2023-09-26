@@ -1,10 +1,15 @@
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import MCGTest, tier1, skipif_ocs_version
-from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    red_squad,
+)
 
 
 # @pytest.mark.polarion_id("OCS-XXXX")
 # Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
+@red_squad
 @skipif_ocs_version(["<4.5", ">4.6"])
 @skipif_managed_service
 @tier1
@@ -61,7 +66,9 @@ class TestEndpointAutoScale(MCGTest):
         self._assert_endpoint_count(1)
 
     def _assert_endpoint_count(self, desired_count):
-        pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
 
         assert pod.wait_for_resource(
             resource_count=desired_count,

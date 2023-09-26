@@ -3,7 +3,13 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, tier2, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    tier2,
+    ignore_leftovers,
+    skipif_external_mode,
+)
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
 )
@@ -13,6 +19,8 @@ from ocs_ci.ocs import flowtest
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
+@skipif_external_mode
 @ignore_leftovers
 @tier2
 class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):

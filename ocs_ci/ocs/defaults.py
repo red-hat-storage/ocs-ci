@@ -17,6 +17,8 @@ OPENSHIFT_REST_CLIENT_API_VERSION = "v1"
 
 INSTALLER_VERSION = "4.1.4"
 CLIENT_VERSION = INSTALLER_VERSION
+CERT_MANAGER_NAMESPACE = "cert-manager-operator"
+FUSION_NAMESPACE = "ibm-spectrum-fusion-ns"
 SRE_BUILD_TEST_NAMESPACE = "openshift-build-test"
 ROOK_CLUSTER_NAMESPACE = "openshift-storage"
 OCS_MONITORING_NAMESPACE = "openshift-monitoring"
@@ -25,6 +27,7 @@ API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = "ocs-storagecluster-cephfilesystem"
 RBD_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com"
 RBD_NAME = "rbd"
+RHCS_CLUSTER_NAME = "ceph"
 CEPHFS_PROVISIONER = f"{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com"
 CSI_PROVISIONERS = {CEPHFS_PROVISIONER, RBD_PROVISIONER}
 
@@ -41,7 +44,11 @@ NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
 ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
+CERT_MANAGER_OPERATOR_NAME = "cert-manager-operator"
+FUSION_OPERATOR_NAME = "isf-operator"
+FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
 LIVE_CONTENT_SOURCE = "redhat-operators"
+OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
 
 # Noobaa S3 bucket website configurations
 website_config = {
@@ -134,6 +141,20 @@ HPCS_CSI_CONNECTION_CONF = {
     }
 }
 
+# KMIP csi-kms-connection-details
+KMIP_CSI_CONNECTION_CONF = {
+    "1-kmip": {
+        "KMS_PROVIDER": "kmip",
+        "KMS_SERVICE_NAME": "1-kmip",
+        "KMIP_ENDPOINT": "",
+        "KMIP_SECRET_NAME": "thales-kmip-csi-secret",
+        "TLS_SERVER_NAME": "kmip_all.ciphertrustmanager.local",
+    }
+}
+
 # Must-gather:
 MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
+
+# CrushDeviceClass
+CRUSH_DEVICE_CLASS = "ssd"

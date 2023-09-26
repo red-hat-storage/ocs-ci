@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     flowtests,
     skipif_managed_service,
+    red_squad,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
@@ -23,7 +24,7 @@ from ocs_ci.ocs.bucket_utils import (
     compare_directory,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import drain_nodes, wait_for_nodes_status, schedule_nodes
 from ocs_ci.ocs.resources.bucket_policy import (
@@ -37,10 +38,8 @@ from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 
 logger = logging.getLogger(__name__)
 
-MCG_NS_RESULT_DIR = "/result"
-MCG_NS_ORIGINAL_DIR = "/original"
 
-
+@red_squad
 @skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")
@@ -65,6 +64,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
         awscli_pod,
         ns_resource_factory,
         bucket_factory,
+        test_directory_setup,
         node_drain_teardown,
     ):
         """
@@ -96,7 +96,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
         email = user_name + "@mail.com"
 
         logger.info("Setting up test files for upload, to the bucket/resources")
-        setup_base_objects(awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3)
+        setup_base_objects(awscli_pod, test_directory_setup.origin_dir, amount=3)
 
         # Create the namespace resource and verify health
         aws_res = ns_resource_factory()
@@ -113,7 +113,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
         logger.info(f"Uploading objects to ns bucket: {ns_bucket}")
         sync_object_directory(
             awscli_pod,
-            src=MCG_NS_ORIGINAL_DIR,
+            src=test_directory_setup.origin_dir,
             target=f"s3://{ns_bucket}",
             s3_obj=mcg_obj,
         )
@@ -123,7 +123,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map[pod_to_respin],
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
 
@@ -143,7 +143,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
             sync_object_directory(
                 awscli_pod,
                 src=f"s3://{ns_bucket}",
-                target=MCG_NS_RESULT_DIR,
+                target=test_directory_setup.result_dir,
                 s3_obj=mcg_obj,
             )
 
@@ -152,7 +152,10 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
                 f"after re-spinning: {self.labels_map[pod_to_respin]}"
             )
             compare_directory(
-                awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3
+                awscli_pod,
+                test_directory_setup.origin_dir,
+                test_directory_setup.result_dir,
+                amount=3,
             )
 
         # S3 account
@@ -192,7 +195,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
         logger.info(f"Uploading objects directly to ns resource target: {aws_res[0]}")
         sync_object_directory(
             awscli_pod,
-            src=MCG_NS_ORIGINAL_DIR,
+            src=test_directory_setup.origin_dir,
             target=f"s3://{aws_res[0]}",
             signed_request_creds=aws_s3_creds,
         )
@@ -201,7 +204,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map[pod_to_drain],
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
 
@@ -228,7 +231,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map[pod_to_drain],
-                    namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
@@ -243,7 +246,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
             sync_object_directory(
                 awscli_pod,
                 src=f"s3://{ns_bucket}",
-                target=MCG_NS_RESULT_DIR,
+                target=test_directory_setup.result_dir,
                 s3_obj=mcg_obj,
             )
 
@@ -252,7 +255,10 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
                 f"after draining node with pod: {pod_to_drain}"
             )
             compare_directory(
-                awscli_pod, MCG_NS_ORIGINAL_DIR, MCG_NS_RESULT_DIR, amount=3
+                awscli_pod,
+                test_directory_setup.origin_dir,
+                test_directory_setup.result_dir,
+                amount=3,
             )
 
         logger.info(f"Editing the namespace resource bucket: {ns_bucket}")
@@ -267,7 +273,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
         sync_object_directory(
             awscli_pod,
             src=f"s3://{ns_bucket}",
-            target=MCG_NS_RESULT_DIR,
+            target=test_directory_setup.result_dir,
             s3_obj=mcg_obj,
         )
 

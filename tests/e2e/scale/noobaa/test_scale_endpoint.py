@@ -1,8 +1,11 @@
 import pytest
 import logging
 import time
+
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import MCGTest, scale, skipif_ocs_version
-from ocs_ci.ocs import constants, defaults, ocp, scale_pgsql
+from ocs_ci.ocs import constants, ocp, scale_pgsql
 from ocs_ci.utility import utils
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilization
@@ -49,6 +52,7 @@ def worker_node(request):
     return worker_node
 
 
+@orange_squad
 @scale
 @skipif_ocs_version("<4.5")
 @pytest.mark.parametrize(
@@ -71,7 +75,9 @@ class TestScaleEndpointAutoScale(MCGTest):
     MAX_ENDPOINT_COUNT = 2
 
     def _assert_endpoint_count(self, desired_count):
-        pod = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
 
         assert pod.wait_for_resource(
             resource_count=desired_count,
@@ -97,8 +103,8 @@ class TestScaleEndpointAutoScale(MCGTest):
         # Check autoscale endpoint count before start s3 load
         self._assert_endpoint_count(desired_count=self.MIN_ENDPOINT_COUNT)
 
-        endpoint_cnt = get_endpoint_pod_count(constants.OPENSHIFT_STORAGE_NAMESPACE)
-        get_hpa_utilization(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
+        get_hpa_utilization(config.ENV_DATA["cluster_namespace"])
         job_cnt = 0
         wait_time = 30
         job_list = list()
@@ -107,9 +113,9 @@ class TestScaleEndpointAutoScale(MCGTest):
             exec(f"job{job_cnt} = mcg_job_factory(custom_options=options)")
             job_list.append(f"job{job_cnt}")
             time.sleep(wait_time)
-            endpoint_cnt = get_endpoint_pod_count(constants.OPENSHIFT_STORAGE_NAMESPACE)
+            endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
             hpa_cpu_utilization = get_hpa_utilization(
-                constants.OPENSHIFT_STORAGE_NAMESPACE
+                config.ENV_DATA["cluster_namespace"]
             )
             log.info(
                 f"HPA CPU utilization by noobaa-endpoint is {hpa_cpu_utilization}%"

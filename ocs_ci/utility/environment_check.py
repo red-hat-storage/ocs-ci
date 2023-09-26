@@ -6,32 +6,10 @@ import copy
 import logging
 import yaml
 from gevent.threadpool import ThreadPoolExecutor
-
+from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, defaults, constants, exceptions
 
 log = logging.getLogger(__name__)
-
-
-POD = ocp.OCP(kind=constants.POD)
-SC = ocp.OCP(kind=constants.STORAGECLASS)
-CEPHFILESYSTEM = ocp.OCP(kind=constants.CEPHFILESYSTEM)
-CEPHBLOCKPOOL = ocp.OCP(kind=constants.CEPHBLOCKPOOL)
-PV = ocp.OCP(kind=constants.PV)
-PVC = ocp.OCP(kind=constants.PVC)
-NS = ocp.OCP(kind=constants.NAMESPACE)
-
-KINDS = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, NS]
-ENV_STATUS_DICT = {
-    "pod": None,
-    "sc": None,
-    "cephfs": None,
-    "cephbp": None,
-    "pv": None,
-    "pvc": None,
-    "namespace": None,
-}
-ENV_STATUS_PRE = copy.deepcopy(ENV_STATUS_DICT)
-ENV_STATUS_POST = copy.deepcopy(ENV_STATUS_DICT)
 
 
 def compare_dicts(before, after):
@@ -96,16 +74,25 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
         ns = item.get("metadata", {}).get("namespace")
         if item.get("kind") == constants.PV:
             ns = item.get("spec").get("claimRef").get("namespace")
-        app_label = item.get("metadata", {}).get("labels", {}).get("app")
+
+        item_labels = item.get("metadata", {}).get("labels", {})
+        excluded_item_labels = [
+            f"{key}={value}"
+            for key, value in item_labels.items()
+            if f"{key}={value}" in exclude_labels
+        ]
+
         if (
             ns is not None
             and ns.startswith(("openshift-", defaults.BG_LOAD_NAMESPACE))
-            and ns != defaults.ROOK_CLUSTER_NAMESPACE
+            and ns != config.ENV_DATA["cluster_namespace"]
         ):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
-        if app_label in exclude_labels:
-            log.debug("ignoring item with app label %s: %s", app_label, item)
+        if excluded_item_labels:
+            log.debug(
+                "ignoring item with app label %s: %s", excluded_item_labels[0], item
+            )
             continue
         if item.get("kind") == constants.POD:
             name = item.get("metadata", {}).get("name", "")
@@ -113,6 +100,9 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
                 log.debug(f"ignoring item: {name}")
                 continue
             if name.startswith("session-awscli"):
+                log.debug(f"ignoring item: {name}")
+                continue
+            if name.startswith(constants.REPORT_STATUS_TO_PROVIDER_POD):
                 log.debug(f"ignoring item: {name}")
                 continue
         if item.get("kind") == constants.NAMESPACE:
@@ -141,8 +131,8 @@ def get_environment_status(env_dict, exclude_labels=None):
         env_dict (dict): Dictionary that is a copy.deepcopy(ENV_STATUS_DICT)
         exclude_labels (list): App labels to ignore leftovers
     """
-    with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
-        for key, kind in zip(env_dict.keys(), KINDS):
+    with ThreadPoolExecutor(max_workers=len(config.RUN["KINDS"])) as executor:
+        for key, kind in zip(env_dict.keys(), config.RUN["KINDS"]):
             executor.submit(
                 assign_get_values, env_dict, key, kind, exclude_labels=exclude_labels
             )
@@ -155,7 +145,43 @@ def get_status_before_execution(exclude_labels=None):
     Args:
         exclude_labels (list): App labels to ignore leftovers
     """
-    get_environment_status(ENV_STATUS_PRE, exclude_labels=exclude_labels)
+
+    POD = ocp.OCP(kind=constants.POD)
+    SC = ocp.OCP(kind=constants.STORAGECLASS)
+    PV = ocp.OCP(kind=constants.PV)
+    PVC = ocp.OCP(kind=constants.PVC)
+    NS = ocp.OCP(kind=constants.NAMESPACE)
+    VS = ocp.OCP(kind=constants.VOLUMESNAPSHOT)
+    if config.RUN["cephcluster"]:
+        CEPHFILESYSTEM = ocp.OCP(kind=constants.CEPHFILESYSTEM)
+        CEPHBLOCKPOOL = ocp.OCP(kind=constants.CEPHBLOCKPOOL)
+        config.RUN["KINDS"] = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, NS, VS]
+        config.RUN["ENV_STATUS_DICT"] = {
+            "pod": None,
+            "sc": None,
+            "cephfs": None,
+            "cephbp": None,
+            "pv": None,
+            "pvc": None,
+            "namespace": None,
+            "vs": None,
+        }
+    elif config.RUN["lvm"]:
+        LV = ocp.OCP(kind=constants.LOGICALVOLUME)
+        config.RUN["KINDS"] = [POD, SC, PV, PVC, NS, VS, LV]
+        config.RUN["ENV_STATUS_DICT"] = {
+            "pod": None,
+            "sc": None,
+            "pv": None,
+            "pvc": None,
+            "namespace": None,
+            "vs": None,
+            "lv": None,
+        }
+    config.RUN["ENV_STATUS_PRE"] = copy.deepcopy(config.RUN["ENV_STATUS_DICT"])
+    config.RUN["ENV_STATUS_POST"] = copy.deepcopy(config.RUN["ENV_STATUS_DICT"])
+
+    get_environment_status(config.RUN["ENV_STATUS_PRE"], exclude_labels=exclude_labels)
 
 
 def get_status_after_execution(exclude_labels=None):
@@ -170,26 +196,61 @@ def get_status_after_execution(exclude_labels=None):
          ResourceLeftoversException: In case there are leftovers in the
             environment after the execution
     """
-    get_environment_status(ENV_STATUS_POST, exclude_labels=exclude_labels)
+    get_environment_status(config.RUN["ENV_STATUS_POST"], exclude_labels=exclude_labels)
 
-    pod_diff = compare_dicts(ENV_STATUS_PRE["pod"], ENV_STATUS_POST["pod"])
-    sc_diff = compare_dicts(ENV_STATUS_PRE["sc"], ENV_STATUS_POST["sc"])
-    cephfs_diff = compare_dicts(ENV_STATUS_PRE["cephfs"], ENV_STATUS_POST["cephfs"])
-    cephbp_diff = compare_dicts(ENV_STATUS_PRE["cephbp"], ENV_STATUS_POST["cephbp"])
-    pv_diff = compare_dicts(ENV_STATUS_PRE["pv"], ENV_STATUS_POST["pv"])
-    pvc_diff = compare_dicts(ENV_STATUS_PRE["pvc"], ENV_STATUS_POST["pvc"])
-    namespace_diff = compare_dicts(
-        ENV_STATUS_PRE["namespace"], ENV_STATUS_POST["namespace"]
+    pod_diff = compare_dicts(
+        config.RUN["ENV_STATUS_PRE"]["pod"], config.RUN["ENV_STATUS_POST"]["pod"]
     )
-    diffs_dict = {
-        "pods": pod_diff,
-        "storageClasses": sc_diff,
-        "cephfs": cephfs_diff,
-        "cephbp": cephbp_diff,
-        "pvs": pv_diff,
-        "pvcs": pvc_diff,
-        "namespaces": namespace_diff,
-    }
+    sc_diff = compare_dicts(
+        config.RUN["ENV_STATUS_PRE"]["sc"], config.RUN["ENV_STATUS_POST"]["sc"]
+    )
+    pv_diff = compare_dicts(
+        config.RUN["ENV_STATUS_PRE"]["pv"], config.RUN["ENV_STATUS_POST"]["pv"]
+    )
+    pvc_diff = compare_dicts(
+        config.RUN["ENV_STATUS_PRE"]["pvc"], config.RUN["ENV_STATUS_POST"]["pvc"]
+    )
+    namespace_diff = compare_dicts(
+        config.RUN["ENV_STATUS_PRE"]["namespace"],
+        config.RUN["ENV_STATUS_POST"]["namespace"],
+    )
+    volumesnapshot_diff = compare_dicts(
+        config.RUN["ENV_STATUS_PRE"]["vs"], config.RUN["ENV_STATUS_POST"]["vs"]
+    )
+    if config.RUN["cephcluster"]:
+        cephfs_diff = compare_dicts(
+            config.RUN["ENV_STATUS_PRE"]["cephfs"],
+            config.RUN["ENV_STATUS_POST"]["cephfs"],
+        )
+        cephbp_diff = compare_dicts(
+            config.RUN["ENV_STATUS_PRE"]["cephbp"],
+            config.RUN["ENV_STATUS_POST"]["cephbp"],
+        )
+        diffs_dict = {
+            "pods": pod_diff,
+            "storageClasses": sc_diff,
+            "cephfs": cephfs_diff,
+            "cephbp": cephbp_diff,
+            "pvs": pv_diff,
+            "pvcs": pvc_diff,
+            "namespaces": namespace_diff,
+            "vs": volumesnapshot_diff,
+        }
+    elif config.RUN["lvm"]:
+        lv_diff = compare_dicts(
+            config.RUN["ENV_STATUS_PRE"]["lv"],
+            config.RUN["ENV_STATUS_POST"]["lv"],
+        )
+        diffs_dict = {
+            "pods": pod_diff,
+            "storageClasses": sc_diff,
+            "pvs": pv_diff,
+            "pvcs": pvc_diff,
+            "namespaces": namespace_diff,
+            "vs": volumesnapshot_diff,
+            "lv": lv_diff,
+        }
+
     leftover_detected = False
 
     leftovers = {"Leftovers added": [], "Leftovers removed": []}

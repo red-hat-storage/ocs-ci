@@ -2,11 +2,10 @@ import base64
 import json
 import logging
 from abc import ABC, abstractmethod
-from time import sleep
 
 import boto3
 import google.api_core.exceptions as GoogleExceptions
-from azure.core.exceptions import ResourceNotFoundError
+from azure.core.exceptions import ResourceNotFoundError, AzureError
 from azure.storage.blob import BlobServiceClient
 from botocore.exceptions import ClientError, EndpointConnectionError
 from google.auth.exceptions import DefaultCredentialsError
@@ -125,8 +124,25 @@ class CloudClient(ABC):
         the appropriate implementation
 
         """
+        if self.verify_uls_exists(name) is False:
+            logger.warning(
+                f"Underlying Storage {name} does not exist, hence it can't be deleted."
+            )
+            return
+
         logger.info(f"Deleting ULS: {name}")
-        self.internal_delete_uls(name)
+
+        try:
+            for deletion_result in TimeoutSampler(
+                60, 5, self.internal_delete_uls, name
+            ):
+                if deletion_result:
+                    logger.info("ULS deleted.")
+                    break
+
+        except TimeoutExpiredError:
+            assert False, f"Failed to delete ULS {name}."
+
         self.verify_uls_state(name, False)
 
     def get_all_uls_names(self):
@@ -181,10 +197,10 @@ class S3Client(CloudClient):
     ):
         super().__init__(*args, **kwargs)
 
-        secret_prefix = auth_dict.get("SECRET_PREFIX", "AWS")
-        data_prefix = auth_dict.get("DATA_PREFIX", "AWS")
-        key_id = auth_dict.get(f"{secret_prefix}_ACCESS_KEY_ID")
-        access_key = auth_dict.get(f"{secret_prefix}_SECRET_ACCESS_KEY")
+        self.secret_prefix = auth_dict.get("SECRET_PREFIX", "AWS")
+        self.data_prefix = auth_dict.get("DATA_PREFIX", "AWS")
+        key_id = auth_dict.get(f"{self.secret_prefix}_ACCESS_KEY_ID")
+        access_key = auth_dict.get(f"{self.secret_prefix}_SECRET_ACCESS_KEY")
         self.endpoint = auth_dict.get("ENDPOINT") or endpoint
         self.region = auth_dict.get("REGION")
         self.access_key = key_id
@@ -197,7 +213,7 @@ class S3Client(CloudClient):
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
-        self.secret = self.create_s3_secret(secret_prefix, data_prefix)
+        self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
 
         self.nss_creds = {
             "access_key_id": self.access_key,
@@ -233,48 +249,26 @@ class S3Client(CloudClient):
         Args:
            name (str): The Underlying Storage name to be deleted
 
+        Returns:
+            bool: True if deleted successfully
+
         """
 
-        def _exec_uls_deletion(self, name):
-            """
-            Try to delete Underlying Storage by name if exists
-
-            Args:
-                name (str): the Underlying Storage name
-
-            Returns:
-                bool: True if deleted successfully
-
-            """
-            if self.verify_uls_exists(name):
-                try:
-                    # TODO: Check why bucket policy deletion fails on IBM COS
-                    # when bucket have no policy set
-                    if "aws" in name:
-                        self.client.meta.client.delete_bucket_policy(Bucket=name)
-                    self.client.Bucket(name).objects.all().delete()
-                    self.client.Bucket(name).delete()
-                    return True
-                except ClientError:
-                    logger.info(f"Deletion of Underlying Storage {name} failed.")
-                    return False
-            else:
-                logger.warning(
-                    f"Underlying Storage {name} does not exist, and was not deleted."
-                )
-                return True
+        deletion_result = False
 
         try:
-            for deletion_result in TimeoutSampler(
-                60, 5, _exec_uls_deletion, self, name
-            ):
-                if deletion_result:
-                    logger.info("ULS deleted.")
-                    break
+            # TODO: Check why bucket policy deletion fails on IBM COS
+            # when bucket have no policy set
+            if "aws" in name:
+                self.client.meta.client.delete_bucket_policy(Bucket=name)
+            self.client.Bucket(name).objects.all().delete()
+            self.client.Bucket(name).delete()
+            deletion_result = True
 
-        except TimeoutExpiredError:
-            logger.error("Failed to delete ULS.")
-            assert False
+        except ClientError:
+            logger.warning(f"Deletion of Underlying Storage {name} failed.")
+
+        return deletion_result
 
         # Todo: rename client to resource (or find an alternative)
 
@@ -406,17 +400,25 @@ class GoogleClient(CloudClient):
         Args:
            name (str): The Underlying Storage name to be deleted
 
+        Returns:
+            bool: True if deleted successfully
+
         """
-        # Todo: Replace with a TimeoutSampler
-        for _ in range(10):
-            try:
-                bucket = GCPBucket(client=self.client, name=name)
-                bucket.delete_blobs(bucket.list_blobs())
-                bucket.delete()
-                break
-            except GoogleExceptions.NotFound:
-                logger.warning("Failed to delete some of the bucket blobs. Retrying...")
-                sleep(10)
+
+        deletion_result = False
+
+        try:
+            bucket = GCPBucket(client=self.client, name=name)
+            blobs = self.client.list_blobs(bucket)
+            bucket.delete_blobs(list(blobs))
+            bucket.delete()
+            deletion_result = True
+
+        except GoogleExceptions.NotFound:
+            logger.warning("Failed to delete some of the bucket blobs.")
+            deletion_result = False
+
+        return deletion_result
 
     def get_all_uls_names(self):
         """
@@ -501,8 +503,20 @@ class AzureClient(CloudClient):
         Args:
            name (str): The Underlying Storage name to be deleted
 
+        Returns:
+            bool: True if deleted successfully
+
         """
-        self.blob_service_client.get_container_client(name).delete_container()
+
+        deletion_result = False
+
+        try:
+            self.blob_service_client.get_container_client(name).delete_container()
+            deletion_result = True
+        except AzureError:
+            logger.warning(f"Failed to delete Azure uls {name}.")
+
+        return deletion_result
 
     def get_all_uls_names(self):
         """

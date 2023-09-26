@@ -5,6 +5,7 @@ import time
 from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
+import random
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -17,12 +18,13 @@ from ocs_ci.ocs.exceptions import (
     NotAllNodesCreated,
     CommandFailed,
     ResourceNotFoundError,
+    NotFoundError,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
@@ -34,8 +36,12 @@ from ocs_ci.ocs.resources.pv import (
     get_node_pv_objs,
 )
 from ocs_ci.utility.version import get_semantic_version
-from ocs_ci.utility.rosa import is_odf_addon_installed
-
+from ocs_ci.utility.rosa import (
+    is_odf_addon_installed,
+    edit_addon_installation,
+    wait_for_addon_to_be_ready,
+)
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -143,9 +149,13 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
         log.info(f"Waiting for nodes {node_names} to reach status {status}")
         for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
             for node in sample:
-                if node.ocp.get_resource_status(node.name) == status:
-                    log.info(f"Node {node.name} reached status {status}")
-                    nodes_not_in_state.remove(node.name)
+                try:
+                    if node.ocp.get_resource_status(node.name) == status:
+                        log.info(f"Node {node.name} reached status {status}")
+                        nodes_not_in_state.remove(node.name)
+                except CommandFailed as ex:
+                    log.info(f"failed to get the node status by error {ex}")
+                    continue
             if not nodes_not_in_state:
                 break
         log.info(f"The following nodes reached status {status}: {node_names}")
@@ -191,12 +201,13 @@ def schedule_nodes(node_names):
     wait_for_nodes_status(node_names)
 
 
-def drain_nodes(node_names):
+def drain_nodes(node_names, timeout=1800):
     """
     Drain nodes
 
     Args:
         node_names (list): The names of the nodes
+        timeout (int): Time to wait for the drain nodes 'oc' command
 
     Raises:
         TimeoutExpired: in case drain command fails to complete in time
@@ -215,7 +226,7 @@ def drain_nodes(node_names):
         ocp.exec_oc_cmd(
             f"adm drain {node_names_str} --force=true --ignore-daemonsets "
             f"{drain_deletion_flag}",
-            timeout=1800,
+            timeout=timeout,
         )
     except TimeoutExpired:
         ct_pod = pod.get_ceph_tools_pod()
@@ -354,7 +365,7 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
 
     # wait for the new node to come to ready state
     log.info("Waiting for the new node to be in ready state")
-    machine.wait_for_new_node_to_be_ready(machineset_name)
+    machine.wait_for_new_node_to_be_ready(machineset_name, timeout=900)
 
     # Get the node name of new spun node
     nodes_after_new_spun_node = get_worker_nodes()
@@ -835,7 +846,7 @@ def check_nodes_specs(min_memory, min_cpu):
     for node in nodes:
         real_cpu = int(node.get()["status"]["capacity"]["cpu"])
         real_memory = convert_device_size(
-            node.get()["status"]["capacity"]["memory"], "B"
+            node.get()["status"]["capacity"]["memory"], "BY"
         )
         if real_cpu < min_cpu or real_memory < min_memory:
             log.warning(
@@ -918,6 +929,11 @@ def delete_and_create_osd_node_aws_upi(osd_node_name):
 
     remove_nodes([osd_node])
 
+    log.info(f"Waiting for node {osd_node_name} to be deleted")
+    osd_node.ocp.wait_for_delete(
+        osd_node_name, timeout=600
+    ), f"Node {osd_node_name} is not deleted"
+
     log.info(f"name of deleted node = {osd_node_name}")
     log.info(f"availability zone of deleted node = {az}")
     log.info(f"stack name of deleted node = {stack_name_of_deleted_node}")
@@ -966,11 +982,21 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
         str: The new node name
 
     """
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     remove_nodes([osd_node])
 
+    log.info(f"Waiting for node {osd_node_name} to be deleted")
+    osd_node.ocp.wait_for_delete(
+        osd_node_name, timeout=600
+    ), f"Node {osd_node_name} is not deleted"
+
     log.info(f"name of deleted node = {osd_node_name}")
+    node_util.terminate_nodes([osd_node])
 
     if config.ENV_DATA.get("rhel_workers"):
         node_type = constants.RHEL_OS
@@ -1183,7 +1209,10 @@ def node_replacement_verification_steps_user_side(
     if new_node_name not in ocs_node_names:
         log.warning("The new node not found in ocs nodes")
         return False
-    if old_node_name in ocs_node_names:
+    if (
+        old_node_name in ocs_node_names
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("The old node name found in ocs nodes")
         return False
 
@@ -1251,7 +1280,10 @@ def node_replacement_verification_steps_ceph_side(
         bool: True if all the verification steps passed. False otherwise
 
     """
-    if old_node_name == new_node_name:
+    if (
+        old_node_name == new_node_name
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("Hostname didn't change")
         return False
 
@@ -1281,11 +1313,17 @@ def node_replacement_verification_steps_ceph_side(
             "New osd node name is not provided. Continue with the other verification steps..."
         )
 
-    if old_node_name in ceph_osd_status:
+    if (
+        old_node_name in ceph_osd_status
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
-    if old_node_name in osd_node_names:
+    if (
+        old_node_name in osd_node_names
+        and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
+    ):
         log.warning("the old hostname found in osd node names")
         return False
 
@@ -1408,7 +1446,7 @@ def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=Fals
             if pod.get_pod_node(p).name == node_name:
                 node_pods.append(p)
         # Check if the command failed because the pod not found
-        except CommandFailed as ex:
+        except (CommandFailed, NotFoundError) as ex:
             if "not found" not in str(ex):
                 raise ex
             # Check the 2 cases of pod not found error
@@ -1451,7 +1489,7 @@ def scale_down_deployments(node_name):
         node_name (str): The node name
 
     """
-    ocp = OCP(kind="node", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ocp = OCP(kind="node", namespace=config.ENV_DATA["cluster_namespace"])
     pods_to_scale_down = get_node_pods_to_scale_down(node_name)
     for p in pods_to_scale_down:
         deployment_name = pod.get_deployment_name(p.name)
@@ -1603,14 +1641,68 @@ def verify_all_nodes_created():
 
     """
     expected_num_nodes = (
-        config.ENV_DATA["worker_replicas"]
-        + config.ENV_DATA["master_replicas"]
-        + config.ENV_DATA.get("infra_replicas", 0)
+        config.ENV_DATA["worker_replicas"] + config.ENV_DATA["master_replicas"]
     )
+    raise_exception = False
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        expected_num_nodes += 3
+    else:
+        expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
+
     existing_num_nodes = len(get_all_nodes())
+
+    # Some nodes will take time to create due to the issue https://issues.redhat.com/browse/SDA-6346
+    # Increasing the wait time for FaaS where the presence of all nodes are important
+    # when DEPLOYMENT["pullsecret_workaround"] is True
+    if config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM:
+        wait_time = 2400
+    else:
+        wait_time = 1200
+
     if expected_num_nodes != existing_num_nodes:
+        platforms_to_wait = [
+            constants.VSPHERE_PLATFORM,
+            constants.IBMCLOUD_PLATFORM,
+            constants.AZURE_PLATFORM,
+        ]
+        platforms_to_wait.extend(constants.MANAGED_SERVICE_PLATFORMS)
+        if config.ENV_DATA[
+            "platform"
+        ].lower() in constants.MANAGED_SERVICE_PLATFORMS and not config.DEPLOYMENT.get(
+            "pullsecret_workaround"
+        ):
+            log.warning(
+                f"Expected number of nodes is {expected_num_nodes} but "
+                f"created during deployment is {existing_num_nodes}"
+            )
+        elif config.ENV_DATA["platform"].lower() in platforms_to_wait and (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            or config.ENV_DATA["deployment_type"] == "managed"
+        ):
+            try:
+
+                for node_list in TimeoutSampler(
+                    timeout=wait_time, sleep=60, func=get_all_nodes
+                ):
+                    if len(node_list) == expected_num_nodes:
+                        log.info(
+                            f"All {expected_num_nodes} nodes are created successfully."
+                        )
+                        break
+                    else:
+                        log.warning(
+                            f"waiting for {expected_num_nodes} nodes to create but found {len(node_list)} nodes"
+                        )
+            except TimeoutExpiredError:
+                log.error(f"Expected {expected_num_nodes} nodes are not created")
+                raise_exception = True
+        else:
+            raise_exception = True
+
+    if raise_exception:
         raise NotAllNodesCreated(
-            f"Expected number of nodes is {expected_num_nodes} but created during deployment is {existing_num_nodes}"
+            f"Expected number of nodes is {expected_num_nodes} but "
+            f"created during deployment is {existing_num_nodes}"
         )
 
 
@@ -1685,19 +1777,34 @@ def add_new_nodes_and_label_upi_lso(
     return new_node_names
 
 
-def get_nodes_in_statuses(statuses):
+def get_nodes_in_statuses(statuses, node_objs=None):
     """
     Get all nodes in specific statuses
 
     Args:
         statuses (list): List of the statuses to search for the nodes
+        node_objs (list): The node objects to check their statues. If not specified,
+            it gets all the nodes.
 
     Returns:
         list: OCP objects representing the nodes in the specific statuses
 
     """
-    nodes = get_node_objs()
-    return [n for n in nodes if n.ocp.get_resource_status(n.name) in statuses]
+    if not node_objs:
+        node_objs = get_node_objs()
+
+    nodes_in_statuses = []
+    for n in node_objs:
+        try:
+            node_status = get_node_status(n)
+        except CommandFailed as e:
+            log.warning(f"Failed to get the node status due to the error: {str(e)}")
+            continue
+
+        if node_status in statuses:
+            nodes_in_statuses.append(n)
+
+    return nodes_in_statuses
 
 
 def get_node_osd_ids(node_name):
@@ -1752,7 +1859,7 @@ def get_nodes_where_ocs_pods_running():
 
     """
     pods_openshift_storage = pod.get_all_pods(
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     ocs_nodes = list()
     for pod_obj in pods_openshift_storage:
@@ -2319,3 +2426,410 @@ def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
         if all(nodes_racks_or_zones):
             log.info("All the nodes racks or zones exist!")
             break
+
+
+def wait_for_new_worker_node_ipi(machineset, old_wnodes, timeout=900):
+    """
+    Wait for the new worker node to be ready
+
+    Args:
+        machineset (str): The machineset name
+        old_wnodes (list): The old worker nodes
+        timeout (int): Time to wait for the new worker node to be ready.
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The new worker node object
+
+    Raise:
+        ResourceWrongStatusException: In case the new spun machine fails to reach Ready state
+            or replica count didn't match. Or in case one or more nodes haven't reached
+            the desired state.
+
+    """
+    machine.wait_for_new_node_to_be_ready(machineset, timeout=timeout)
+    new_wnode_names = list(set(get_worker_nodes()) - set(old_wnodes))
+    new_wnode = get_node_objs(new_wnode_names)[0]
+    log.info(f"Successfully created a new node {new_wnode.name}")
+
+    wait_for_nodes_status([new_wnode.name])
+    log.info(f"The new worker node {new_wnode.name} is in a Ready state!")
+    return new_wnode
+
+
+def wait_for_node_count_to_reach_status(
+    node_count,
+    node_type=constants.WORKER_MACHINE,
+    expected_status=constants.STATUS_READY,
+    timeout=300,
+    sleep=20,
+):
+    """
+    Wait for a node count to reach the expected status
+
+    Args:
+        node_count (int): The node count
+        node_type (str): The node type. Default value is worker.
+        expected_status (str): The expected status. Default value is "Ready".
+        timeout (int): Time to wait for the node count to reach the expected status.
+        sleep (int): Time in seconds to wait between attempts.
+
+    Raise:
+        TimeoutExpiredError: In case the node count didn't reach the expected status in the given timeout.
+
+    """
+    log.info(
+        f"Wait for {node_count} of the nodes to reach the expected status {expected_status}"
+    )
+
+    for node_objs in TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=get_nodes, node_type=node_type
+    ):
+        nodes_in_expected_statuses = get_nodes_in_statuses([expected_status], node_objs)
+        node_names_in_expected_status = [n.name for n in nodes_in_expected_statuses]
+        if len(node_names_in_expected_status) == node_count:
+            log.info(
+                f"{node_count} of the nodes reached the expected status: {expected_status}"
+            )
+            break
+        else:
+            log.info(
+                f"The nodes {node_names_in_expected_status} reached the expected status {expected_status}, "
+                f"but we were waiting for {node_count} of them to reach status {expected_status}"
+            )
+
+
+def check_for_zombie_process_on_node(node_name=None):
+    """
+    Check if there are any zombie process on the nodes
+
+    Args:
+        node_name (list): Node names list to check for zombie process
+
+    Raise:
+        ZombieProcessFoundException: In case zombie process are found on the node
+
+    """
+    node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
+    for node_obj in node_obj_list:
+        debug_cmd = (
+            f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
+        )
+        out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
+        if not out:
+            log.info(f"No Zombie process found on the node: {node_obj.name}")
+        else:
+            log.error(f"Zombie process found on node: {node_obj.name}")
+            log.error(f"pid and ppid details: {out}")
+            raise exceptions.ZombieProcessFoundException
+
+
+@switch_to_orig_index_at_last
+def get_provider_internal_node_ips(
+    node_type=constants.WORKER_MACHINE, num_of_nodes=None
+):
+    """
+    Get the provider node ips according to the node type (e.g. worker, master) and the
+    number of requested node ips from that type
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+        num_of_nodes (int): The number of node ips to be returned
+
+    Returns:
+        list: The node ips
+
+    """
+    log.info("Switching to the provider cluster to get the provider node ips")
+    config.switch_to_provider()
+    provider_nodes = get_nodes(node_type, num_of_nodes)
+    provider_node_ips = [get_node_internal_ip(n) for n in provider_nodes]
+    log.info(f"Provider node ips: {provider_node_ips}")
+    return provider_node_ips
+
+
+def consumer_verification_steps_after_provider_node_replacement():
+    """
+    Check the consumer verification steps after a provider node replacement
+    The steps are as follows:
+
+    1. Check if the consumer "storageProviderEndpoint" IP is found in the provider worker node ips
+        1.1 If not found, edit the rosa addon installation - modify the param 'storage-provider-endpoint'
+            with the first provider worker node IP.
+        1.2 Wait and check again if the consumer "storageProviderEndpoint" IP is found in the
+            provider worker node IPs.
+    2. If found, Check if the mon endpoint ips are found in the provider worker node ips, and we can execute
+        a ceph command from the consumer
+        2.1 If not found, restart the ocs-operator pod
+        2.2 Wait and check again if the mon endpoint ips are found in the provider worker node ips, and we
+        can execute a ceph command from the consumer
+
+    Returns:
+        bool: True, if the consumer verification steps finished successfully. False, otherwise.
+
+    """
+    # Import inside the function to avoid circular loop
+    from ocs_ci.ocs.resources.storage_cluster import (
+        get_consumer_storage_provider_endpoint,
+        check_consumer_storage_provider_endpoint_in_provider_wnodes,
+        wait_for_consumer_storage_provider_endpoint_in_provider_wnodes,
+        wait_for_consumer_rook_ceph_mon_endpoints_in_provider_wnodes,
+    )
+
+    if not check_consumer_storage_provider_endpoint_in_provider_wnodes():
+        sp_endpoint_suffix = get_consumer_storage_provider_endpoint().split(":")[-1]
+        wnode_ip = get_provider_internal_node_ips()[0]
+
+        edit_addon_installation(
+            addon_param_key="storage-provider-endpoint",
+            addon_param_value=f"{wnode_ip}:{sp_endpoint_suffix}",
+            wait=False,
+        )
+        try:
+            wait_for_addon_to_be_ready()
+        except TimeoutExpiredError:
+            log.warning("The consumer addon is not in a ready state")
+            log.info("Try to restart the ocs-operator pod")
+            pod.delete_pods([pod.get_ocs_operator_pod()])
+            log.info("Wait again for the consumer addon to be in ready state")
+            try:
+                wait_for_addon_to_be_ready()
+            except TimeoutExpiredError:
+                log.warning("The consumer addon is not in a ready state")
+                return False
+
+        if not wait_for_consumer_storage_provider_endpoint_in_provider_wnodes():
+            log.warning(
+                "The consumer storage endpoint is not found in the provider worker node ips"
+            )
+            return False
+
+    log.info(
+        "Check if the mon endpoint ips are found in the provider worker node ips "
+        "and we can execute a ceph command from the consumer"
+    )
+    if not (
+        wait_for_consumer_rook_ceph_mon_endpoints_in_provider_wnodes()
+        and pod.wait_for_ceph_cmd_execute_successfully()
+    ):
+        # This is a workaround due to the BZ https://bugzilla.redhat.com/show_bug.cgi?id=2131581
+        log.info("Try to restart the ocs-operator pod")
+        pod.delete_pods([pod.get_ocs_operator_pod()])
+
+        log.info(
+            "Check that the mon endpoint ips are found in the provider worker node ips"
+        )
+        if not wait_for_consumer_rook_ceph_mon_endpoints_in_provider_wnodes():
+            log.warning(
+                "Did not find all the mon endpoint ips in the provider worker node ips"
+            )
+            return False
+        log.info("Check again if we can execute a ceph command from the consumer")
+        if not pod.wait_for_ceph_cmd_execute_successfully():
+            log.warning("Failed to execute the ceph command")
+            return False
+
+    log.info("The consumer verification steps finished successfully")
+    return True
+
+
+@switch_to_orig_index_at_last
+def consumers_verification_steps_after_provider_node_replacement():
+    """
+    Check all the consumers verification steps after a provider node replacement.
+    On every consumer we will check the steps described in the function
+    'consumer_verification_steps_after_provider_node_replacement'.
+
+    Returns:
+        bool: True, if all the consumers verification steps finished successfully. False, otherwise.
+
+    """
+    from ocs_ci.ocs.managedservice import get_provider_service_type
+
+    if (
+        version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11
+        and get_provider_service_type() != "NodePort"
+    ):
+        log.info(
+            "We need to change the consumers verification steps when the ODF version is 4.11 and not using "
+            "the ocs-provider-server Service type 'NodePort'. Currently, we can skip these steps"
+        )
+        return True
+
+    consumer_indexes = config.get_consumer_indexes_list()
+    for consumer_i in consumer_indexes:
+        config.switch_ctx(consumer_i)
+        if not consumer_verification_steps_after_provider_node_replacement():
+            log.warning(
+                f"The consumer '{config.ENV_DATA['cluster_name']}' verification steps"
+                f" did not finish successfully"
+            )
+            return False
+
+    log.info("All the consumers verification steps finished successfully")
+    return True
+
+
+def generate_nodes_for_provider_worker_node_tests():
+    """
+    Generate worker node objects for the provider worker node tests.
+
+    The function generates the node objects as follows:
+    - If we have 3 worker nodes in the cluster, it generates all the 3 worker nodes
+    - If we have more than 3 worker nodes, it generates one mgr node, 2 mon nodes, and 2 osd nodes.
+    The nodes can overlap, but at least 3 nodes should be selected(and no more than 5 nodes).
+
+    Returns:
+        list: The list of the node objects for the provider node tests
+
+    """
+    wnode_names = get_worker_nodes()
+    if len(wnode_names) <= 3:
+        generated_nodes = get_node_objs(wnode_names)
+        log.info(f"Generated nodes for provider node tests: {wnode_names}")
+        return generated_nodes
+
+    mgr_pod = random.choice(pod.get_mgr_pods())
+    mgr_node_name = pod.get_pod_node(mgr_pod).name
+    mon_node_names = get_mon_running_nodes()
+    if mgr_node_name in mon_node_names:
+        mon_node_names.remove(mgr_node_name)
+        # Set of one mgr node, and one mon node
+        ceph_node_set = {mgr_node_name, random.choice(mon_node_names)}
+    else:
+        # Set of one mgr node, and two mon nodes
+        ceph_node_set = set([mgr_node_name] + random.sample(mon_node_names, k=2))
+
+    osd_node_set = set(get_osd_running_nodes())
+    ceph_include_osd_node_set = ceph_node_set.intersection(osd_node_set)
+
+    if len(ceph_include_osd_node_set) < 2:
+        num_of_osds_to_add = 2 - len(ceph_include_osd_node_set)
+    elif len(ceph_node_set) == 2:
+        num_of_osds_to_add = 1
+    else:
+        num_of_osds_to_add = 0
+
+    osd_exclude_ceph_node_set = osd_node_set - ceph_node_set
+    osd_choices = random.sample(osd_exclude_ceph_node_set, k=num_of_osds_to_add)
+    node_choice_names = list(ceph_node_set) + osd_choices
+
+    generated_nodes = get_node_objs(node_choice_names)
+    log.info(f"Generated nodes for provider node tests: {node_choice_names}")
+    return generated_nodes
+
+
+def gracefully_reboot_nodes():
+    """
+
+    Gracefully reboot OpenShift Container Platform nodes
+
+    """
+    from ocs_ci.ocs import platform_nodes
+
+    node_objs = get_node_objs()
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    waiting_time = 30
+    for node in node_objs:
+        node_name = node.name
+        unschedule_nodes([node_name])
+        drain_nodes([node_name])
+        nodes.restart_nodes([node], wait=False)
+        log.info(f"Waiting for {waiting_time} seconds")
+        time.sleep(waiting_time)
+        schedule_nodes([node_name])
+    wait_for_nodes_status(status=constants.NODE_READY, timeout=180)
+
+
+def get_num_of_racks():
+    """
+    Get the number of racks in the cluster
+
+    Returns:
+        int: The number of racks in the cluster
+
+    """
+    node_racks = get_node_rack_dict().values()
+    node_racks = [rack for rack in node_racks if rack]
+    return len(set(node_racks))
+
+
+def generate_new_nodes_and_osd_running_nodes_ipi(
+    osd_running_worker_nodes=None, num_of_nodes=2
+):
+    """
+    Create new nodes and generate osd running worker nodes in the same machinesets as the new nodes,
+    or if it's a 1AZ cluster, it generates osd running worker nodes in the same rack or zone as the new nodes.
+    This function is only for an IPI deployment
+
+    Args:
+        osd_running_worker_nodes: The list to use in the function for generate osd running worker nodes.
+            If not provided, it generates all the osd running worker nodes.
+        num_of_nodes (int): The number of the new nodes to create and generate. The default value is 2.
+
+    Returns:
+        list: The list of the generated osd running worker nodes
+
+    """
+    osd_running_worker_nodes = osd_running_worker_nodes or get_osd_running_nodes()
+
+    # Get the machine name using the node name
+    machine_names = [
+        machine.get_machine_from_node_name(osd_running_worker_node)
+        for osd_running_worker_node in osd_running_worker_nodes[:num_of_nodes]
+    ]
+    log.info(f"{osd_running_worker_nodes} associated " f"machine are {machine_names}")
+
+    # Get the machineset name using machine name
+    machineset_names = [
+        machine.get_machineset_from_machine_name(machine_name)
+        for machine_name in machine_names
+    ]
+    log.info(
+        f"{osd_running_worker_nodes[:num_of_nodes]} associated machineset is {machineset_names}"
+    )
+
+    # Add a new nodes and label it
+    new_node_names = []
+    machineset_names = machineset_names[:num_of_nodes]
+    for mset in machineset_names:
+        new_node_names.extend(add_new_node_and_label_it(mset))
+    log.info(f"New added nodes: {new_node_names}")
+
+    num_of_racks = get_num_of_racks()
+    num_of_zones = get_az_count()
+
+    if num_of_zones == 1 and num_of_racks >= 3:
+        log.info(
+            f"We have 1 AZ and {num_of_racks} racks in the cluster. "
+            f"Get the osd worker nodes in the same racks as the newly added nodes"
+        )
+        new_nodes = get_node_objs(new_node_names)
+        failure_domain = "rack"
+        osd_running_worker_nodes = []
+        for n in new_nodes:
+            osd_node = get_another_osd_node_in_same_rack_or_zone(
+                failure_domain, node_obj=n
+            )
+            osd_running_worker_nodes.append(osd_node.name)
+
+        log.info(f"osd running worker nodes: {osd_running_worker_nodes}")
+
+    return osd_running_worker_nodes[:num_of_nodes]
+
+
+def is_node_rack_or_zone_exist(failure_domain, node_name):
+    """
+    Check if the node rack/zone exist
+
+    Args:
+        failure_domain (str): The failure domain
+        node_name (str): The node name
+
+    Returns:
+        bool: True if the node rack/zone exist. False otherwise
+
+    """
+    node_obj = get_node_objs([node_name])[0]
+    return get_node_rack_or_zone(failure_domain, node_obj) is not None

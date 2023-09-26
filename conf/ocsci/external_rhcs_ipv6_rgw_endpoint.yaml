@@ -1,0 +1,3 @@
+---
+EXTERNAL_MODE:
+  use_ipv6_rgw_endpoint: True

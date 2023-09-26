@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     tier2,
     skipif_managed_service,
+    red_squad,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs import bucket_utils
@@ -25,6 +26,7 @@ ROOT_OBJ = "RootKey-" + str(uuid.uuid4().hex)
 COPY_OBJ = "CopyKey-" + str(uuid.uuid4().hex)
 
 
+@red_squad
 @pytest.mark.polarion_id("OCS-2296")
 @skipif_managed_service
 @skipif_aws_creds_are_missing
@@ -429,7 +431,13 @@ class TestMcgNamespaceS3OperationsRpc(E2ETest):
         ],
     )
     def test_mcg_namespace_mpu_rpc(
-        self, mcg_obj, awscli_pod, ns_resource_factory, bucket_factory, platform
+        self,
+        mcg_obj,
+        awscli_pod,
+        ns_resource_factory,
+        bucket_factory,
+        test_directory_setup,
+        platform,
     ):
         """
         Test multipart upload S3 operations on namespace buckets(RPC)
@@ -449,7 +457,9 @@ class TestMcgNamespaceS3OperationsRpc(E2ETest):
         logger.info(
             f"Setting up test files for mpu and aborting any mpu on bucket: {ns_bucket}"
         )
-        mpu_key, origin_dir, res_dir, parts = multipart_setup(awscli_pod)
+        mpu_key, origin_dir, res_dir, parts = multipart_setup(
+            awscli_pod, test_directory_setup.origin_dir, test_directory_setup.result_dir
+        )
         bucket_utils.abort_all_multipart_upload(mcg_obj, ns_bucket, COPY_OBJ)
 
         # Initiate mpu, Upload part copy, List and Abort operations

@@ -3,6 +3,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -18,6 +19,7 @@ from ocs_ci.framework import config
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4c
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
@@ -71,9 +73,9 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
             "cephfsplugin_provisioner",
             "cephfsplugin",
             "rbdplugin",
-            "osd",
-            "mgr",
         ]
+        if not config.DEPLOYMENT["external_mode"]:
+            pods_to_delete.extend(["osd", "mgr"])
         executor = ThreadPoolExecutor(max_workers=len(self.pvcs) + len(pods_to_delete))
         disruption_ops = [disruption_helpers.Disruptions() for _ in pods_to_delete]
         file_name = "file_clone"

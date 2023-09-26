@@ -6,12 +6,14 @@ from time import sleep
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4,
     tier4c,
     polarion_id,
     skipif_managed_service,
+    skipif_external_mode,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -36,9 +38,11 @@ from ocs_ci.helpers import disruption_helpers, helpers
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4
 @tier4c
 @skipif_managed_service
+@skipif_external_mode
 class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
     """
     Kill ceph daemon while creation/deletion of PVCs, and pods are progressing
@@ -493,7 +497,10 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         log.info(f"Killing daemons of {daemons_to_kill}")
         for node_name, pids in nodes_and_pids.items():
             # Command to kill the daemon
-            kill_cmd = f"oc debug node/{node_name} -- chroot /host kill -9 {pids}"
+            kill_cmd = (
+                f"oc debug node/{node_name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+                f"-- chroot /host kill -9 {pids}"
+            )
             # Create node-kill process map for verifying the result
             node_and_kill_proc[node_name] = executor.submit(run_cmd, kill_cmd)
 
@@ -594,10 +601,11 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
                     interface=constants.CEPHBLOCKPOOL,
                     image_uuid=uuid,
                     pool_name=pool_name,
+                    timeout=300,
                 )
             if pvc_obj.interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
-                    interface=constants.CEPHFILESYSTEM, image_uuid=uuid
+                    interface=constants.CEPHFILESYSTEM, image_uuid=uuid, timeout=300
                 )
             assert (
                 ret

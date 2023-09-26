@@ -5,10 +5,16 @@ import time
 
 from subprocess import TimeoutExpired
 
-from ocs_ci.ocs.exceptions import CephHealthException, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CephHealthException,
+    ResourceWrongStatusException,
+    ResourceNotFoundError,
+)
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
 
-from ocs_ci.ocs import constants, machine, ocp, defaults
+from ocs_ci.ocs import constants, machine, ocp
+from ocs_ci.ocs.resources.pod import get_pods_having_label, wait_for_pods_to_be_running
 from ocs_ci.ocs.node import (
     drain_nodes,
     schedule_nodes,
@@ -17,9 +23,11 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     get_osd_running_nodes,
     get_node_objs,
-    add_new_node_and_label_it,
+    generate_new_nodes_and_osd_running_nodes_ipi,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -32,6 +40,7 @@ from ocs_ci.framework.testlib import (
     skipif_bm,
     bugzilla,
     skipif_managed_service,
+    skipif_more_than_three_workers,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs.resources import pod
@@ -77,6 +86,7 @@ def teardown(request):
     request.addfinalizer(finalizer)
 
 
+@brown_squad
 @ignore_leftovers
 class TestNodesMaintenance(ManageTest):
     """
@@ -142,8 +152,25 @@ class TestNodesMaintenance(ManageTest):
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
 
+        # check csi-cephfsplugin-provisioner's and csi-rbdplugin-provisioner's
+        # are ready, see BZ #2162504
+        provis_pods = get_pods_having_label(
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            config.ENV_DATA["cluster_namespace"],
+        )
+        provis_pods += get_pods_having_label(
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+            config.ENV_DATA["cluster_namespace"],
+        )
+        provis_pod_names = [p["metadata"]["name"] for p in provis_pods]
+
         # Maintenance the node (unschedule and drain)
         drain_nodes([typed_node_name])
+
+        # avoid scenario when provisioners yet not been created (6 sec for creation)
+        retry(ResourceNotFoundError, tries=2, delay=2, backoff=2)(
+            wait_for_pods_to_be_running
+        )(pod_names=provis_pod_names, raise_pod_not_found_error=True)
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
@@ -161,6 +188,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier4a
     @skipif_bm
+    @skipif_managed_service
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -365,31 +393,11 @@ class TestNodesMaintenance(ManageTest):
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
-        # Get the machine name using the node name
-        machine_names = [
-            machine.get_machine_from_node_name(osd_running_worker_node)
-            for osd_running_worker_node in osd_running_worker_nodes[:2]
-        ]
-        log.info(
-            f"{osd_running_worker_nodes} associated " f"machine are {machine_names}"
+        osd_running_worker_nodes = generate_new_nodes_and_osd_running_nodes_ipi(
+            num_of_nodes=2
         )
-
-        # Get the machineset name using machine name
-        machineset_names = [
-            machine.get_machineset_from_machine_name(machine_name)
-            for machine_name in machine_names
-        ]
-        log.info(
-            f"{osd_running_worker_nodes} associated machineset "
-            f"is {machineset_names}"
-        )
-
-        # Add a new node and label it
-        add_new_node_and_label_it(machineset_names[0])
-        add_new_node_and_label_it(machineset_names[1])
-
         # Drain 2 nodes
-        drain_nodes(osd_running_worker_nodes[:2])
+        drain_nodes(osd_running_worker_nodes, timeout=2100)
 
         # Check the pods should be in running state
         all_pod_obj = pod.get_all_pods(wait=True)
@@ -406,7 +414,9 @@ class TestNodesMaintenance(ManageTest):
                     # WA and deleting its deployment so that the pod
                     # disappears. Will revert this WA once the BZ is fixed
                     if "rook-ceph-crashcollector" in pod_obj.name:
-                        ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+                        ocp_obj = ocp.OCP(
+                            namespace=config.ENV_DATA["cluster_namespace"]
+                        )
                         pod_name = pod_obj.name
                         deployment_name = "-".join(pod_name.split("-")[:-2])
                         command = f"delete deployment {deployment_name}"
@@ -418,13 +428,24 @@ class TestNodesMaintenance(ManageTest):
         pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=1200)
         log.info("All the dc pods reached running state")
 
+        # Save the machine count of the worker nodes and the machine names of the osd nodes
+        machine_count = len(machine.get_machines())
+        machine_names_of_osd_nodes = [
+            machine.get_machine_from_node_name(n) for n in osd_running_worker_nodes
+        ]
         # Remove unscheduled nodes
         # In scenarios where the drain is attempted on >3 worker setup,
         # post completion of drain we are removing the unscheduled nodes so
         # that we maintain 3 worker nodes.
-        log.info(f"Removing scheduled nodes {osd_running_worker_nodes[:2]}")
-        remove_node_objs = get_node_objs(osd_running_worker_nodes[:2])
+        log.info(f"Removing scheduled nodes {osd_running_worker_nodes}")
+        remove_node_objs = get_node_objs(osd_running_worker_nodes)
         remove_nodes(remove_node_objs)
+
+        log.info(
+            f"Deleting the machines associated with the osd nodes: {machine_names_of_osd_nodes}"
+        )
+        machine.delete_machines(machine_names_of_osd_nodes)
+        machine.wait_for_machines_count_to_reach_status(machine_count)
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
@@ -439,6 +460,8 @@ class TestNodesMaintenance(ManageTest):
 
     @bugzilla("1861104")
     @bugzilla("1946573")
+    @skipif_managed_service
+    @skipif_more_than_three_workers
     @pytest.mark.polarion_id("OCS-2524")
     @tier4a
     def test_pdb_check_simultaneous_node_drains(
@@ -468,7 +491,6 @@ class TestNodesMaintenance(ManageTest):
         assert (
             not validate_existence_of_blocking_pdb()
         ), "Blocking PDBs exist, Can't perform drain"
-
         # Get 2 worker nodes to drain
         typed_nodes = get_nodes(num_of_nodes=2)
         assert len(typed_nodes) == 2, "Failed to find worker nodes for the test"
@@ -477,10 +499,15 @@ class TestNodesMaintenance(ManageTest):
 
         # Drain Node A and validate blocking PDBs
         drain_nodes([node_A])
-        assert (
-            validate_existence_of_blocking_pdb()
-        ), "Blocking PDBs not created post drain"
-
+        pdb_sample = TimeoutSampler(
+            timeout=100,
+            sleep=10,
+            func=validate_existence_of_blocking_pdb,
+        )
+        if not pdb_sample:
+            log.error("Failed to create PDBs post node A drain")
+        else:
+            log.info("PDBs are created post node A drain")
         # Inducing delay between 2 drains
         # Node-B drain expected to be in pending due to blocking PDBs
         time.sleep(30)

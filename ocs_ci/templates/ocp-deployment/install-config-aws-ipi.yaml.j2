@@ -16,7 +16,7 @@ controlPlane:
   name: master
   platform:
     aws:
-      type: {{ master_instance_type | default('m4.xlarge') }}
+      type: {{ master_instance_type | default('m6i.xlarge') }}
 {% if master_availability_zones %}
       zones:
 {% for zone in master_availability_zones %}
@@ -32,7 +32,7 @@ networking:
     - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
       hostPrefix: {{ cluster_host_prefix | default(23) }}
   machineCIDR: 10.0.0.0/16
-  networkType: OpenShiftSDN
+  networkType: {{ network_type | default('OpenShiftSDN') }}
   serviceNetwork:
     - {{ service_network_cidr | default('172.30.0.0/16') }}
 {% if fips %}

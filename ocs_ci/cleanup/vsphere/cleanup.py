@@ -14,8 +14,10 @@ import requests
 import yaml
 
 from ocs_ci import framework
+from ocs_ci.deployment.vmware import delete_dns_records
 from ocs_ci.framework import config
 from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.utils import get_infra_id
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 
 FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
@@ -23,13 +25,14 @@ logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def delete_cluster(vsphere, cluster_name):
+def delete_cluster(vsphere, cluster_name, cluster_path=None):
     """
     Deletes the cluster
 
     Args:
         vsphere (instance): vSphere instance
         cluster_name (str): Cluster name to delete from Data center
+        cluster_path (str): Path to cluster directory
 
     """
     datacenter = config.ENV_DATA["vsphere_datacenter"]
@@ -38,6 +41,9 @@ def delete_cluster(vsphere, cluster_name):
     # check for Resource pool
     if not vsphere.is_resource_pool_exist(cluster_name, datacenter, cluster):
         logger.info(f"Resource pool {cluster_name} does not exists")
+        # If the resource pool doesn't exist, assume its IPI deployment
+        config.ENV_DATA["vsphere_cluster_type"] = "ipi"
+        delete_ipi_nodes(vsphere, cluster_name)
         return
 
     # Get all VM's in resource pool
@@ -58,6 +64,33 @@ def delete_cluster(vsphere, cluster_name):
 
     # delete the resource pool
     vsphere.destroy_pool(cluster_name, datacenter, cluster)
+
+    # destroy the folder in templates
+    if cluster_path:
+        template_folder = get_infra_id(cluster_path)
+        vsphere.destroy_folder(template_folder, cluster, datacenter)
+
+
+def delete_ipi_nodes(vsphere, cluster_name):
+    """
+    Deletes the vSphere IPI cluster
+
+    Args:
+        vsphere (instance): vSphere instance
+        cluster_name (str): Cluster name to delete from Data center
+
+    """
+    logger.info("Deleting vSphere IPI nodes")
+    # get all VM's in DC
+    vms_dc = vsphere.get_all_vms_in_dc(config.ENV_DATA["vsphere_datacenter"])
+
+    vms_ipi = []
+    for vm in vms_dc:
+        if cluster_name in vm.name:
+            vms_ipi.append(vm)
+            logger.info(vm.name)
+    if vms_ipi:
+        vsphere.destroy_vms(vms_ipi)
 
 
 def get_vsphere_connection(server, user, password):
@@ -95,9 +128,9 @@ class IPAM(object):
         self.cluster_name = config.ENV_DATA["vsphere_cluster"]
         self.apiapp = "address"
 
-    def delete_ips(self, cluster_name):
+    def delete_ips_upi(self, cluster_name):
         """
-        Delete IP's from IPAM server
+        Delete IP's from IPAM server for UPI cluster
 
         Args:
             cluster_name (str): Name of the cluster to release IP's
@@ -123,14 +156,37 @@ class IPAM(object):
             node_fqdn = f"{node}.{cluster_name}.{config.ENV_DATA['base_domain']}"
             all_nodes.append(node_fqdn)
 
-        logger.info(f"Removing IP's for nodes {all_nodes} from IPAM server")
-        # release the IPs
-        endpoint = os.path.join("http://", self.ipam, "api/removeHost.php?")
         for node in all_nodes:
-            payload = {"apiapp": self.apiapp, "apitoken": self.token, "host": node}
-            res = requests.post(endpoint, data=payload)
-            if res.status_code == "200":
-                logger.info(f"Successfully deleted {node} IP from IPAM server")
+            self.delete(node)
+
+    def delete_ips_ipi(self, cluster_name):
+        """
+        Delete IP's from IPAM server for IPI cluster
+
+        Args:
+            cluster_name (str): Name of the cluster to release IP's
+                from IPAM server
+
+        """
+        for i in range(0, 2):
+            node = f"{cluster_name}-{i}"
+            self.delete(node)
+
+    def delete(self, node):
+        """
+        Delete node IP from IPAM server
+
+        Args:
+            node (str): Node name to delete from IPAM server
+
+        """
+        # release the IPs
+        logger.info(f"Removing IP for node {node} from IPAM server")
+        endpoint = os.path.join("http://", self.ipam, "api/removeHost.php?")
+        payload = {"apiapp": self.apiapp, "apitoken": self.token, "host": node}
+        res = requests.post(endpoint, data=payload)
+        if res.status_code == "200":
+            logger.info(f"Successfully deleted {node} IP from IPAM server")
 
 
 def vsphere_cleanup():
@@ -180,10 +236,17 @@ def vsphere_cleanup():
                   ipam_token: '<IPAM token>'
             """,
     )
+    parser.add_argument(
+        "--cluster-path",
+        action="store",
+        required=False,
+        help="Path to cluster directory",
+    )
 
     args = parser.parse_args()
     cluster_name = args.cluster_name
     vsphere_conf = args.ocsci_conf
+    cluster_path = args.cluster_path
 
     # load vsphere_conf data to config
     vsphere_config_data = yaml.safe_load(vsphere_conf)
@@ -197,18 +260,26 @@ def vsphere_cleanup():
     vsphere = get_vsphere_connection(server, user, password)
 
     # delete the cluster
-    delete_cluster(vsphere, cluster_name)
+    delete_cluster(vsphere, cluster_name, cluster_path)
 
-    # release IP's from IPAM server
     ipam = IPAM()
-    ipam.delete_ips(cluster_name=cluster_name)
+    if config.ENV_DATA.get("vsphere_cluster_type") == "ipi":
+        # release IP's from IPAM server
+        ipam.delete_ips_ipi(cluster_name=cluster_name)
 
-    # Delete AWS route
-    aws = AWS()
-    aws.delete_hosted_zone(cluster_name=cluster_name)
+        # delete DNS records
+        config.ENV_DATA["cluster_name"] = cluster_name
+        delete_dns_records()
+    else:
+        # release IP's from IPAM server
+        ipam.delete_ips_upi(cluster_name=cluster_name)
 
-    # Delete records in base domain
-    base_domain = config.ENV_DATA["base_domain"]
-    aws.delete_record_from_base_domain(
-        cluster_name=cluster_name, base_domain=base_domain
-    )
+        # Delete AWS route
+        aws = AWS()
+        aws.delete_hosted_zone(cluster_name=cluster_name)
+
+        # Delete records in base domain
+        base_domain = config.ENV_DATA["base_domain"]
+        aws.delete_record_from_base_domain(
+            cluster_name=cluster_name, base_domain=base_domain
+        )

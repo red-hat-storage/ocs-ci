@@ -38,8 +38,8 @@ networking:
   - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
     hostPrefix: 23
   machineNetwork:
-  - cidr: 10.0.0.0/16
-  networkType: OpenShiftSDN
+  - cidr: {{ machine_network_cidr | default('10.0.0.0/15') }}
+  networkType: {{ network_type | default('OpenShiftSDN') }}
   serviceNetwork:
   - {{ service_network_cidr | default('172.30.0.0/16') }}
 {% if fips %}

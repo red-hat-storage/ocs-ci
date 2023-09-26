@@ -10,7 +10,10 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import collect_ocs_logs
-from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
+from ocs_ci.ocs.must_gather.const_must_gather import (
+    GATHER_COMMANDS_VERSION,
+    GATHER_COMMANDS_LOG,
+)
 from ocs_ci.utility import version
 from ocs_ci.ocs.constants import (
     OPENSHIFT_STORAGE_NAMESPACE,
@@ -133,6 +136,14 @@ class MustGather(object):
                 except Exception as e:
                     logger.error(f"There is no option to read {file}, error: {e}")
 
+    def print_must_gather_debug(self) -> None:
+        try:
+            with open(os.path.join(self.root, GATHER_COMMANDS_LOG), "r") as f:
+                logger.info("Printing must-gather internal log file")
+                logger.info(f.readlines())
+        except FileNotFoundError:
+            logger.error("must-gather internal log file not found")
+
     def compare_running_pods(self):
         """
         Compare running pods list to "/pods" subdirectories
@@ -244,6 +255,7 @@ class MustGather(object):
         self.validate_expected_files()
         self.print_invalid_files()
         self.compare_running_pods()
+        self.print_must_gather_debug()
 
     def cleanup(self):
         """

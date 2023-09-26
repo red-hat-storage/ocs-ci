@@ -1,42 +1,39 @@
 # Builtin modules
 import logging
 import time
-import datetime
-import os
-from uuid import uuid4
 
 # 3ed party modules
 import pytest
 import statistics
 
 # Local modules
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.elasticsearch import ElasticSearch
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_environment_info
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod, pvc
-from ocs_ci.framework import config
-from ocs_ci.ocs.resources.ocs import OCS
+import ocs_ci.ocs.exceptions as ex
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs.perfresult import ResultsAnalyse
-from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
     performance,
+    performance_b,
 )
 from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
 
+@grey_squad
 @performance
+@performance_b
 @skipif_ocp_version("<4.6")
 @skipif_ocs_version("<4.6")
 class TestPvcSnapshotPerformance(PASTest):
@@ -44,15 +41,11 @@ class TestPvcSnapshotPerformance(PASTest):
     Tests to verify PVC snapshot creation and deletion performance
     """
 
-    tests_numbers = 3  # number of tests to run
-
     @pytest.fixture()
     def base_setup(
         self,
         interface_iterate,
         storageclass_factory,
-        pvc_factory,
-        pod_factory,
         pvc_size,
     ):
         """
@@ -62,8 +55,6 @@ class TestPvcSnapshotPerformance(PASTest):
             interface_iterate: A fixture to iterate over ceph interfaces
             storageclass_factory: A fixture to create everything needed for a
                 storageclass
-            pvc_factory: A fixture to create new pvc
-            pod_factory: A fixture to create new pod
             pvc_size: The size of the PVC in Gi
 
         """
@@ -77,13 +68,30 @@ class TestPvcSnapshotPerformance(PASTest):
         elif self.interface == constants.CEPHBLOCKPOOL_THICK:
             self.sc = "RBD-Thick"
 
-        self.pvc_obj = pvc_factory(
-            interface=self.interface, size=pvc_size, status=constants.STATUS_BOUND
-        )
+        self.create_test_project()
 
-        self.pod_object = pod_factory(
-            interface=self.interface, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
+        self.pvc_obj = helpers.create_pvc(
+            sc_name=self.sc_obj.name, size=pvc_size + "Gi", namespace=self.namespace
         )
+        helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        self.pvc_obj.reload()
+
+        # Create a POD and attach it the the PVC
+        try:
+            self.pod_object = helpers.create_pod(
+                interface_type=self.interface,
+                pvc_name=self.pvc_obj.name,
+                namespace=self.namespace,
+                pod_dict_path=constants.PERF_POD_YAML,
+            )
+            helpers.wait_for_resource_state(self.pod_object, constants.STATUS_RUNNING)
+            self.pod_object.reload()
+            self.pod_object.workload_setup("fs", jobs=1, fio_installed=True)
+        except Exception as e:
+            log.error(
+                f"Pod on PVC {self.pvc_obj.name} was not created, exception {str(e)}"
+            )
+            raise ex.PodNotCreated("Pod on PVC was not created.")
 
     def setup(self):
         """
@@ -92,25 +100,7 @@ class TestPvcSnapshotPerformance(PASTest):
         log.info("Starting the test setup")
         super(TestPvcSnapshotPerformance, self).setup()
         self.benchmark_name = "pvc_snaspshot_performance"
-        self.uuid = uuid4().hex
-        self.crd_data = {
-            "spec": {
-                "test_user": "Homer simpson",
-                "clustername": "test_cluster",
-                "elasticsearch": {
-                    "server": config.PERF.get("production_es_server"),
-                    "port": config.PERF.get("production_es_port"),
-                    "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
-                },
-            }
-        }
-        # during development use the dev ES so the data in the Production ES will be clean.
-        if self.dev_mode:
-            self.crd_data["spec"]["elasticsearch"] = {
-                "server": config.PERF.get("dev_es_server"),
-                "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
-            }
+        self.tests_numbers = 3  # number of tests to run
 
     def init_full_results(self, full_results):
         """
@@ -125,7 +115,6 @@ class TestPvcSnapshotPerformance(PASTest):
         """
         for key in self.environment:
             full_results.add_key(key, self.environment[key])
-        full_results.add_key("index", full_results.new_index)
         return full_results
 
     def measure_create_snapshot_time(
@@ -205,8 +194,7 @@ class TestPvcSnapshotPerformance(PASTest):
         """
 
         # Getting the total Storage capacity
-        ceph_cluster = CephCluster()
-        ceph_capacity = ceph_cluster.get_ceph_capacity()
+        ceph_capacity = self.ceph_cluster.get_ceph_capacity()
 
         log.info(f"Total capacity size is : {ceph_capacity}")
         log.info(f"PVC Size is : {pvc_size}")
@@ -224,9 +212,6 @@ class TestPvcSnapshotPerformance(PASTest):
         file_size = f"{int(filesize * 1024)}M"
 
         all_results = []
-
-        self.results_path = get_full_test_logs_path(cname=self)
-        log.info(f"Logs file path name is : {self.full_log_path}")
 
         # Produce ES report
         # Collecting environment information
@@ -248,6 +233,8 @@ class TestPvcSnapshotPerformance(PASTest):
         self.full_results.all_results["creation_speed"] = []
         self.full_results.all_results["restore_time"] = []
         self.full_results.all_results["restore_speed"] = []
+        self.full_results.all_results["restore_csi_time"] = []
+        self.full_results.all_results["dataset_inMiB"] = []
         for test_num in range(self.tests_numbers):
             test_results = {
                 "test_num": test_num + 1,
@@ -287,7 +274,7 @@ class TestPvcSnapshotPerformance(PASTest):
             )
             log.info(f"Taking snapshot of the PVC {snap_name}")
 
-            start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            start_time = self.get_time("CSI")
 
             test_results["create"]["time"] = self.measure_create_snapshot_time(
                 pvc_name=self.pvc_obj.name,
@@ -337,7 +324,8 @@ class TestPvcSnapshotPerformance(PASTest):
             if self.interface == constants.CEPHFILESYSTEM:
                 restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
 
-            log.info("Resorting the PVC from Snapshot")
+            csi_start_time = self.get_time("csi")
+            log.info("Restoring the PVC from Snapshot")
             restore_pvc_obj = pvc.create_restore_pvc(
                 sc_name=sc_name,
                 snap_name=self.snap_obj.name,
@@ -354,8 +342,8 @@ class TestPvcSnapshotPerformance(PASTest):
             )
             restore_pvc_obj.reload()
             log.info("PVC was restored from the snapshot")
-            test_results["restore"]["time"] = helpers.measure_pvc_creation_time(
-                self.interface, restore_pvc_obj.name
+            test_results["restore"]["time"] = performance_lib.measure_pvc_creation_time(
+                self.interface, restore_pvc_obj.name, csi_start_time
             )
 
             test_results["restore"]["speed"] = int(
@@ -364,12 +352,19 @@ class TestPvcSnapshotPerformance(PASTest):
             log.info(f'Snapshot restore time is : {test_results["restore"]["time"]}')
             log.info(f'restore speed is : {test_results["restore"]["speed"]} MB/sec')
 
+            test_results["restore"]["csi_time"] = performance_lib.csi_pvc_time_measure(
+                self.interface, restore_pvc_obj, "create", csi_start_time
+            )
+            log.info(
+                f'Snapshot csi restore time is : {test_results["restore"]["csi_time"]}'
+            )
+
             # Step 5. Attach a new pod to the restored PVC
             restore_pod_object = helpers.create_pod(
                 interface_type=self.interface,
                 pvc_name=restore_pvc_obj.name,
                 namespace=self.snap_obj.namespace,
-                pod_dict_path=constants.NGINX_POD_YAML,
+                pod_dict_path=constants.PERF_POD_YAML,
             )
 
             # Confirm that the pod is running
@@ -404,8 +399,15 @@ class TestPvcSnapshotPerformance(PASTest):
 
             all_results.append(test_results)
 
+        # clean the enviroment
+        self.pod_object.delete()
+        self.pvc_obj.delete()
+        self.delete_test_project()
+
         # logging the test summary, all info in one place for easy log reading
-        c_speed, c_runtime, c_csi_runtime, r_speed, r_runtime = (0 for i in range(5))
+        c_speed, c_runtime, c_csi_runtime, r_speed, r_runtime, r_csi_runtime = (
+            0 for i in range(6)
+        )
 
         log.info("Test summary :")
         for tst in all_results:
@@ -414,6 +416,8 @@ class TestPvcSnapshotPerformance(PASTest):
             c_csi_runtime += tst["create"]["csi_time"]
             r_speed += tst["restore"]["speed"]
             r_runtime += tst["restore"]["time"]
+            r_csi_runtime += tst["restore"]["csi_time"]
+
             self.full_results.all_results["creation_time"].append(tst["create"]["time"])
             self.full_results.all_results["csi_creation_time"].append(
                 tst["create"]["csi_time"]
@@ -425,7 +429,10 @@ class TestPvcSnapshotPerformance(PASTest):
             self.full_results.all_results["restore_speed"].append(
                 tst["restore"]["speed"]
             )
-            self.full_results.all_results["dataset_inMiB"] = tst["dataset"]
+            self.full_results.all_results["restore_csi_time"].append(
+                tst["restore"]["csi_time"]
+            )
+            self.full_results.all_results["dataset_inMiB"].append(tst["dataset"])
             log.info(
                 f"Test {tst['test_num']} results : dataset is {tst['dataset']} MiB. "
                 f"Take snapshot time is {tst['create']['time']} "
@@ -439,11 +446,13 @@ class TestPvcSnapshotPerformance(PASTest):
         avg_snap_c_speed = c_speed / self.tests_numbers
         avg_snap_r_time = r_runtime / self.tests_numbers
         avg_snap_r_speed = r_speed / self.tests_numbers
+        avg_snap_r_csi_time = r_csi_runtime / self.tests_numbers
         log.info(f" Average snapshot creation time is {avg_snap_c_time} sec.")
         log.info(f" Average csi snapshot creation time is {avg_snap_csi_c_time} sec.")
         log.info(f" Average snapshot creation speed is {avg_snap_c_speed} MiB/sec")
         log.info(f" Average snapshot restore time is {avg_snap_r_time} sec.")
         log.info(f" Average snapshot restore speed is {avg_snap_r_speed} MiB/sec")
+        log.info(f" Average snapshot restore csi time is {avg_snap_r_csi_time} sec.")
 
         self.full_results.add_key("avg_snap_creation_time_insecs", avg_snap_c_time)
         self.full_results.add_key(
@@ -452,8 +461,13 @@ class TestPvcSnapshotPerformance(PASTest):
         self.full_results.add_key("avg_snap_creation_speed", avg_snap_c_speed)
         self.full_results.add_key("avg_snap_restore_time_insecs", avg_snap_r_time)
         self.full_results.add_key("avg_snap_restore_speed", avg_snap_r_speed)
+        self.full_results.add_key(
+            "avg_snap_restore_csi_time_insecs", avg_snap_r_csi_time
+        )
 
         # Write the test results into the ES server
+        self.results_path = helpers.get_full_test_logs_path(cname=self)
+        log.info(f"Logs file path name is : {self.full_log_path}")
         log.info("writing results to elastic search server")
         if self.full_results.es_write():
             res_link = self.full_results.results_link()
@@ -499,15 +513,35 @@ class TestPvcSnapshotPerformance(PASTest):
 
         """
 
+        # Loading the main template yaml file for the benchmark and update some
+        # fields with new values
+        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
         # Deploying elastic-search server in the cluster for use by the
         # SmallFiles workload, since it is mandatory for the workload.
         # This is deployed once for all test iterations and will be deleted
         # in the end of the test.
-        self.es = ElasticSearch()
-
-        # Loading the main template yaml file for the benchmark and update some
-        # fields with new values
-        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+        if config.PERF.get("deploy_internal_es"):
+            self.es = ElasticSearch()
+            sf_data["spec"]["elasticsearch"] = {
+                "url": f"http://{self.es.get_ip()}:{self.es.get_port()}"
+            }
+        else:
+            if config.PERF.get("internal_es_server") == "":
+                self.es = None
+                return
+            else:
+                self.es = {
+                    "server": config.PERF.get("internal_es_server"),
+                    "port": config.PERF.get("internal_es_port"),
+                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                }
+                # verify that the connection to the elasticsearch server is OK
+                if not super(TestPvcSnapshotPerformance, self).es_connect():
+                    self.es = None
+                    log.error("ElasticSearch doesn't exist ! The test cannot run")
+                    return
+                sf_data["spec"]["elasticsearch"] = {"url": self.es["url"]}
 
         if interface == constants.CEPHBLOCKPOOL:
             storageclass = constants.DEFAULT_STORAGECLASS_RBD
@@ -522,9 +556,6 @@ class TestPvcSnapshotPerformance(PASTest):
         sf_data["spec"]["workload"]["args"]["files"] = files
         sf_data["spec"]["workload"]["args"]["threads"] = threads
         sf_data["spec"]["workload"]["args"]["storageclass"] = storageclass
-        sf_data["spec"]["elasticsearch"] = {
-            "url": f"http://{self.es.get_ip()}:{self.es.get_port()}"
-        }
 
         """
         Calculating the size of the volume that need to be test, it should
@@ -558,9 +589,6 @@ class TestPvcSnapshotPerformance(PASTest):
 
         all_results = []
 
-        self.results_path = get_full_test_logs_path(cname=self)
-        log.info(f"Logs file path name is : {self.full_log_path}")
-
         # Produce ES report
         # Collecting environment information
         self.get_env_info()
@@ -582,60 +610,26 @@ class TestPvcSnapshotPerformance(PASTest):
             test_results = {"creation_time": None, "csi_creation_time": None}
 
             # deploy the smallfile workload
-            log.info("Running SmallFile bench")
-            sf_obj = OCS(**sf_data)
-            sf_obj.create()
-
-            # wait for benchmark pods to get created - takes a while
-            for bench_pod in TimeoutSampler(
-                240,
-                10,
-                get_pod_name_by_pattern,
-                "smallfile-client",
-                BMO_NAME,
-            ):
-                try:
-                    if bench_pod[0] is not None:
-                        small_file_client_pod = bench_pod[0]
-                        break
-                except IndexError:
-                    log.info("Bench pod not ready yet")
-
-            bench_pod = OCP(kind="pod", namespace=BMO_NAME)
-            log.info("Waiting for SmallFile benchmark to Run")
-            assert bench_pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                resource_name=small_file_client_pod,
-                sleep=30,
-                timeout=600,
-            )
+            self.crd_data = sf_data
+            self.client_pod_name = "smallfile-client"
+            self.deploy_and_wait_for_wl_to_start(timeout=240)
             # Initialize the pvc_name variable so it will not be in loop scope only.
-            pvc_name = ""
-            for item in bench_pod.get()["items"]:
-                if item.get("metadata").get("name") == small_file_client_pod:
-                    for volume in item.get("spec").get("volumes"):
-                        if "persistentVolumeClaim" in volume:
-                            pvc_name = volume["persistentVolumeClaim"]["claimName"]
-                            break
+            pvc_name = (
+                OCP(kind="pvc", namespace=BMO_NAME)
+                .get()
+                .get("items")[0]
+                .get("metadata")
+                .get("name")
+            )
             log.info(f"Benchmark PVC name is : {pvc_name}")
-            # Creation of 1M files on CephFS can take a lot of time
-            timeout = 7200
-            while timeout >= 0:
-                logs = bench_pod.get_logs(name=small_file_client_pod)
-                if "RUN STATUS DONE" in logs:
-                    break
-                timeout -= 30
-                if timeout == 0:
-                    raise TimeoutError("Timed out waiting for benchmark to complete")
-                time.sleep(30)
-            log.info(f"Smallfile test ({test_num + 1}) finished.")
+            self.wait_for_wl_to_finish(sleep=30)
 
             # Taking snapshot of the PVC (which contain files)
             snap_name = pvc_name.replace("claim", "snapshot-")
             log.info(f"Taking snapshot of the PVC {pvc_name}")
             log.info(f"Snapshot name : {snap_name}")
 
-            start_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            start_time = self.get_time("csi")
 
             test_results["creation_time"] = self.measure_create_snapshot_time(
                 pvc_name=pvc_name,
@@ -663,7 +657,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
             # Delete the smallfile workload - which will delete also the PVC
             log.info("Deleting the smallfile workload")
-            if sf_obj.delete(wait=True):
+            if self.benchmark_obj.delete(wait=True):
                 log.info("The smallfile workload was deleted successfully")
 
             # Delete VolumeSnapshots
@@ -676,9 +670,10 @@ class TestPvcSnapshotPerformance(PASTest):
             # Sleep for 1 Min. between test samples
             time.sleep(60)
 
-        # Cleanup the elasticsearch instance.
-        log.info("Deleting the elastic-search instance")
-        self.es.cleanup()
+        # Cleanup the elasticsearch instance, if needed.
+        if isinstance(self.es, ElasticSearch):
+            log.info("Deleting the elastic-search instance")
+            self.es.cleanup()
 
         creation_times = [t["creation_time"] for t in all_results]
         avg_c_time = statistics.mean(creation_times)
@@ -690,9 +685,9 @@ class TestPvcSnapshotPerformance(PASTest):
         log.info(f"Full test report for {interface}:")
         log.info(
             f"Test ran {self.tests_numbers} times, "
-            f"All snapshot creation results are {creation_times}"
+            f"All snapshot creation results are {creation_times} seconds"
         )
-        log.info(f"The average snapshot creation time is : {avg_c_time}")
+        log.info(f"The average snapshot creation time is : {avg_c_time} seconds")
         log.info(
             f"Test ran {self.tests_numbers} times, "
             f"All snapshot csi creation results are {csi_creation_times}"
@@ -712,6 +707,7 @@ class TestPvcSnapshotPerformance(PASTest):
 
         # Write the test results into the ES server
         log.info("writing results to elastic search server")
+        self.results_path = helpers.get_full_test_logs_path(cname=self)
         if self.full_results.es_write():
             res_link = self.full_results.results_link()
             # write the ES link to the test results in the test log.
@@ -725,23 +721,14 @@ class TestPvcSnapshotPerformance(PASTest):
         This is not a test - it is only check that previous tests ran and finished as expected
         and reporting the full results (links in the ES) of previous tests (6 + 2)
         """
-
-        workloads = [
-            {
-                "name": "test_pvc_snapshot_performance",
-                "tests": 6,
-                "test_name": "PVC Snapshot",
-            },
-            {
-                "name": "test_pvc_snapshot_performance_multiple_files",
-                "tests": 2,
-                "test_name": "PVC Snapshot - Multiple Files",
-            },
-        ]
-        for wl in workloads:
-            self.number_of_tests = wl["tests"]
-            self.results_path = get_full_test_logs_path(cname=self, fname=wl["name"])
-            self.results_file = os.path.join(self.results_path, "all_results.txt")
-            log.info(f"Check results for [{wl['name']}] in : {self.results_file}")
-            self.check_tests_results()
-            self.push_to_dashboard(test_name=wl["test_name"])
+        self.add_test_to_results_check(
+            test="test_pvc_snapshot_performance",
+            test_count=6,
+            test_name="PVC Snapshot",
+        )
+        self.add_test_to_results_check(
+            test="test_pvc_snapshot_performance_multiple_files",
+            test_count=2,
+            test_name="PVC Snapshot - Multiple Files",
+        )
+        self.check_results_and_push_to_dashboard()

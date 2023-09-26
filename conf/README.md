@@ -42,6 +42,7 @@ run it belongs here.
 * `password_location` - Filepath (under the cluster path) where the kubeadmin password is located
 * `log_dir` - Directory where logs are placed
 * `logs_url` - URL where the logs will be available for remote access, used for Jenkins runs and configured by Jenkins
+* `cluster_dir_full_path` - cluster dir full path on NFS share starting with `/mnt/`
 * `run_id` - Timestamp ID that is used for log directory naming
 * `kubeconfig_location` - Filepath (under the cluster path) where the kubeconfig is located
 * `cli_params` - Dict that holds onto all CLI parameters
@@ -63,6 +64,8 @@ Deployment related parameters. Only deployment related params not used
 anywhere else.
 
 * `installer_version` - OCP installer version
+* `custom_ocp_image` - Custom OCP image from which extract the installer and
+  client and isntall OCP
 * `force_download_installer` - Download the OCP installer even if one already exists in the bin_dir
 * `force_download_client` - Download the OCP client even if one already exists in the bin_dir
 * `skip_download_client` - Skip the openshift client download step or not (Default: false)
@@ -77,6 +80,7 @@ anywhere else.
 * `force_deploy_multiple_clusters` - Allow multiple clusters to be deployed with the same prefix (vmware)
 * `allow_lower_instance_requirements` Allow instance requirements lower than the documented recommended values (Default: false)
 * `ui_deployment` - Utilize openshift-console to deploy OCS via the UI (Default: false)
+* `ui_acm_import` - Import clusters to ACM via the UI (Default: false)
 * `live_deployment` - Deploy OCS from live content (Default: false)
 * `live_content_source` - Content source to use for live deployment
 * `preserve_bootstrap_node` - Preserve the bootstrap node rather than deleting it after deployment (Default: false)
@@ -122,8 +126,11 @@ anywhere else.
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
+* `disconnected_dns_server` - DNS server accessible from disconnected cluster (should be on the same network)
+* `disconnected_false_gateway` - false gateway used to make cluster effectively disconnected
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
+* `in_transit_encryption` - Enable in-transit encryption.
 
 #### REPORTING
 
@@ -143,6 +150,11 @@ Reporting related config. (Do not store secret data in the repository!).
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
+* `post_upgrade` - If True, post-upgrade will be reported in the test suite
+  name in the mail subject.
+* `save_mem_report` - If True, test run memory report CSV file will be saved in `RUN["log_dir"]/stats_log_dir_<run_id>`
+  directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
+  exporting env variable: export SAVE_MEM_REPORT=true
 
 #### ENV_DATA
 
@@ -228,6 +240,12 @@ higher priority).
 * `client_http_proxy` - proxy configuration used by client to access OCP cluster
 * `ibm_flash` - Set to `true` if you are running on the system with IBM Flash storageSystem.
 * `ms_env_type` - to choose managed service environment type staging or production, default set to staging
+* `lvmo` - set to True if it's LVMO deployment - mainly used for reporting purpose.
+* `nb_nfs_server` - NFS server used for testing noobaa db NFS mount test
+* `nb_nfs_mount` - NFS mount point used specifically for testing noobaa db NFS mount test
+* `custom_default_storageclass_names` - Set to true if custom storageclass names use instead of default one.
+* `storageclassnames` - Under this key, custom storage class names for `cephFilesystems`, `cephObjectStores`, `cephBlockPools`, `cephNonResilientPools`, `nfs` and for `encryption` are defined.
+
 #### UPGRADE
 
 Upgrade related configuration data.
@@ -246,6 +264,16 @@ This section of the config is used for storing secret data that is read from a l
 auth file or pulled from s3.
 
 * `test_quay_auth` - Config variable used during unit_testing
+
+#### MULTICLUSTER
+
+This section of the config is used for multicluster specific configuration data.
+Scenarios that use this data include MDR and RDR deployments.
+
+* `multicluster_index` - Index of the cluster, used to differentiate between other cluster configurations.
+* `acm_cluster` - True if the cluster is an ACM hub cluster, otherwise False.
+* `primary_cluster` - True if the cluster is the primary cluster, otherwise False.
+* `active_acm_cluster` - True if the cluster is the active ACM hub cluster, False if passive.
 
 ##### ibmcloud
 
@@ -277,6 +305,17 @@ Configuration specific to external Ceph cluster
 * `admin_keyring`
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
+* `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
+* `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+
+##### login
+
+Login section under EXTERNAL_MODE with auth details for SSH to the host of RHCS
+Cluster.
+
+* `username` - user to be used for SSH access to the node
+* `password` - password for the ssh user (optional if ssh_key provided)
+* `ssh_key` - path to SSH private key (optional if password is provided)
 
 #### UI_SELENIUM
 

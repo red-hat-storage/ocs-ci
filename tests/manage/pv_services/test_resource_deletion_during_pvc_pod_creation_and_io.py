@@ -3,11 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4,
     tier4c,
     ignore_leftover_label,
+    skipif_external_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -27,6 +29,7 @@ from ocs_ci.framework import config
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @tier4
 @tier4c
 @ignore_leftover_label(constants.drain_canary_pod_label)
@@ -34,25 +37,53 @@ log = logging.getLogger(__name__)
     argnames=["interface", "resource_to_delete"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mgr"], marks=pytest.mark.polarion_id("OCS-735")
+            *[constants.CEPHBLOCKPOOL, "mgr"],
+            marks=[
+                pytest.mark.polarion_id("OCS-735"),
+                skipif_external_mode,
+            ],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "mon"], marks=pytest.mark.polarion_id("OCS-736")
+            *[constants.CEPHBLOCKPOOL, "mon"],
+            marks=[
+                pytest.mark.polarion_id("OCS-736"),
+                skipif_external_mode,
+            ],
         ),
         pytest.param(
-            *[constants.CEPHBLOCKPOOL, "osd"], marks=pytest.mark.polarion_id("OCS-737")
+            *[constants.CEPHBLOCKPOOL, "osd"],
+            marks=[
+                pytest.mark.polarion_id("OCS-737"),
+                skipif_external_mode,
+            ],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mgr"], marks=pytest.mark.polarion_id("OCS-738")
+            *[constants.CEPHFILESYSTEM, "mgr"],
+            marks=[
+                pytest.mark.polarion_id("OCS-738"),
+                skipif_external_mode,
+            ],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mon"], marks=pytest.mark.polarion_id("OCS-739")
+            *[constants.CEPHFILESYSTEM, "mon"],
+            marks=[
+                pytest.mark.polarion_id("OCS-739"),
+                skipif_external_mode,
+            ],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "osd"], marks=pytest.mark.polarion_id("OCS-740")
+            *[constants.CEPHFILESYSTEM, "osd"],
+            marks=[
+                pytest.mark.polarion_id("OCS-740"),
+                skipif_external_mode,
+            ],
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, "mds"], marks=pytest.mark.polarion_id("OCS-741")
+            *[constants.CEPHFILESYSTEM, "mds"],
+            marks=[
+                pytest.mark.polarion_id("OCS-741"),
+                skipif_external_mode,
+            ],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, "cephfsplugin"],
@@ -314,7 +345,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Verify new pods are Running
         for pod_obj in pod_objs_new:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
             )
             pod_obj.reload()
         log.info("Verified: All new pods are Running.")
@@ -398,7 +429,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Verify pods are Running
         for pod_obj in pod_objs_re:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
             )
             pod_obj.reload()
         log.info("Successfully created new pods using all PVCs.")

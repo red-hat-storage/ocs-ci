@@ -1,8 +1,10 @@
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     polarion_id,
-    bugzilla,
+    skipif_aws_creds_are_missing,
+    skipif_disconnected_cluster,
     skipif_managed_service,
     tier2,
     tier4a,
@@ -14,10 +16,12 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @tier2
 @polarion_id("OCS-1254")
-@bugzilla("1835290")
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_aws_creds_are_missing
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
     Test that there are appropriate alerts when NooBaa Bucket Quota is reached.
@@ -48,7 +52,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
                 "warning",
             ),
         ]
-    else:
+    elif version.get_semantic_ocs_version_from_config() < version.VERSION_4_13:
         expected_alerts = [
             (
                 constants.ALERT_BUCKETREACHINGQUOTASTATE,
@@ -65,6 +69,27 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
             (
                 constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
                 "A NooBaa Bucket Is In Exceeding Quota State",
+                ["pending", "firing"],
+                "warning",
+            ),
+        ]
+    else:
+        expected_alerts = [
+            (
+                constants.ALERT_BUCKETREACHINGSIZEQUOTASTATE,
+                "A NooBaa Bucket Is In Reaching Size Quota State",
+                ["pending", "firing"],
+                "warning",
+            ),
+            (
+                constants.ALERT_BUCKETERRORSTATE,
+                "A NooBaa Bucket Is In Error State",
+                ["pending", "firing"],
+                "warning",
+            ),
+            (
+                constants.ALERT_BUCKETEXCEEDINGSIZEQUOTASTATE,
+                "A NooBaa Bucket Is In Exceeding Size Quota State",
                 ["pending", "firing"],
                 "warning",
             ),
@@ -88,9 +113,12 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
         )
 
 
+@blue_squad
 @tier4a
 @polarion_id("OCS-2498")
 @skipif_managed_service
+@skipif_disconnected_cluster
+@skipif_aws_creds_are_missing
 def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
     """
     Test that there are appropriate alerts when target bucket used of

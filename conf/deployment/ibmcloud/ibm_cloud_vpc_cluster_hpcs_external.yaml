@@ -9,7 +9,7 @@ ENV_DATA:
   region: 'eu-de'
   zone: 'eu-de-3'
   provider: "vpc-gen2"
-  worker_instance_type: "mx2.16x128"
+  worker_instance_type: "bx2.16x64"
   master_replicas: 0
   worker_replicas: 3
   rhel_workers: true

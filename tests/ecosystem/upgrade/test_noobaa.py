@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     red_squad,
     skipif_aws_creds_are_missing,
+    skipif_managed_service,
 )
 from ocs_ci.ocs.constants import BS_OPTIMAL
 from ocs_ci.ocs.bucket_utils import (
@@ -26,6 +27,7 @@ DOWNLOADED_OBJS = []
 
 
 @skipif_aws_creds_are_missing
+@skipif_managed_service
 @aws_platform_required
 @pre_upgrade
 @red_squad
@@ -80,6 +82,7 @@ def test_fill_bucket(
 
 
 @skipif_aws_creds_are_missing
+@skipif_managed_service
 @aws_platform_required
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
@@ -104,7 +107,7 @@ def test_noobaa_postupgrade(
             awscli_pod=awscli_pod_session,
         ), "Checksum comparision between original and result object failed"
 
-    bucket.verify_health()
+    bucket.verify_health(timeout=100)
 
     # Clean up the temp dir
     awscli_pod_session.exec_cmd_on_pod(command=f'sh -c "rm -rf {LOCAL_TEMP_PATH}/*"')
@@ -127,6 +130,7 @@ def test_noobaa_postupgrade(
 
 
 @aws_platform_required
+@skipif_managed_service
 @bugzilla("1820974")
 @pre_upgrade
 @red_squad
@@ -139,6 +143,7 @@ def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
 
 
 @aws_platform_required
+@skipif_managed_service
 @bugzilla("1820974")
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2181")
@@ -152,6 +157,7 @@ def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
 
 
 @pre_upgrade
+@skipif_managed_service
 @red_squad
 def test_start_upgrade_mcg_io(mcg_workload_job):
     """
@@ -164,6 +170,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
 
 
 @post_upgrade
+@skipif_managed_service
 @pytest.mark.polarion_id("OCS-2207")
 @bugzilla("1874243")
 @red_squad

@@ -3,7 +3,6 @@ import argparse
 import base64
 import binascii
 import os
-import re
 import yaml
 
 from os import environ as env
@@ -110,6 +109,8 @@ def get_ocsci_conf(upgrade_run=False, pre_upgrade=False):
         conf_obj["REPORTING"]["us_ds"] = "DS"
     if env.get("SMTP_SERVER"):
         conf_obj["REPORTING"]["email"] = dict(smtp_server=env["SMTP_SERVER"])
+    if env.get("SAVE_MEM_REPORT").lower() == "true":
+        conf_obj["REPORTING"]["save_mem_report"] = True
     if upgrade_run:
         version = Version.coerce(env["OCS_REGISTRY_IMAGE"].split(":")[1]).truncate(
             "minor"

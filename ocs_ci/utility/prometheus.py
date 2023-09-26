@@ -5,6 +5,7 @@ import requests
 import tempfile
 import time
 import yaml
+from threading import Timer
 from datetime import datetime
 
 from ocs_ci.framework import config
@@ -12,6 +13,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import AlertingError, AuthError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
+from ocs_ci.utility.utils import TimeoutIterator
 
 logger = logging.getLogger(name=__file__)
 
@@ -307,7 +309,6 @@ def validate_status(content):
     if status != "success":
         logger.error("content status is not success, but %s", status)
         raise ValueError("content status is not success")
-    logger.info("content status is success as expected")
 
 
 class PrometheusAPI(object):
@@ -320,15 +321,19 @@ class PrometheusAPI(object):
     _password = None
     _endpoint = None
     _cacert = False
+    _threading_lock = None
 
-    def __init__(self, user=None, password=None):
+    def __init__(self, user=None, password=None, threading_lock=None):
         """
         Constructor for PrometheusAPI class.
 
         Args:
             user (str): OpenShift username used to connect to API
         """
-        if config.ENV_DATA["platform"].lower() == "ibm_cloud":
+        if (
+            config.ENV_DATA["platform"].lower() == "ibm_cloud"
+            and config.ENV_DATA["deployment_type"] == "managed"
+        ):
             self._user = user or "apikey"
             self._password = password or config.AUTH["ibmcloud"]["api_key"]
         else:
@@ -340,16 +345,25 @@ class PrometheusAPI(object):
                 with open(filename) as f:
                     password = f.read().rstrip("\n")
             self._password = password
+        self._threading_lock = threading_lock
         self.refresh_connection()
         # TODO: generate certificate for IBM cloud platform
-        if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
+        if (
+            not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+            and config.ENV_DATA["deployment_type"] == "managed"
+        ):
             self.generate_cert()
 
     def refresh_connection(self):
         """
         Login into OCP, refresh endpoint and token.
         """
-        ocp = OCP(kind=constants.ROUTE, namespace=defaults.OCS_MONITORING_NAMESPACE)
+        ocp = OCP(
+            kind=constants.ROUTE,
+            namespace=defaults.OCS_MONITORING_NAMESPACE,
+            threading_lock=self._threading_lock,
+            cluster_kubeconfig=os.getenv("KUBECONFIG"),
+        )
         kubeconfig = os.getenv("KUBECONFIG")
         kube_data = ""
         with open(kubeconfig, "r") as kube_file:
@@ -387,7 +401,7 @@ class PrometheusAPI(object):
         self._cacert = cert_file.name
         logger.info(f"Generated CA certification file: {self._cacert}")
 
-    def get(self, resource, payload=None):
+    def get(self, resource, payload=None, timeout=300):
         """
         Get alerts from Prometheus API.
 
@@ -397,9 +411,11 @@ class PrometheusAPI(object):
             payload (dict): Provide parameters to GET API call.
                 e.g. for `alerts` resource this can be
                 {'silenced': False, 'inhibited': False}
+            timeout (int): Number of seconds to wait for Prometheus endpoint to
+                get available if it is not available
 
         Returns:
-            dict: Response from Prometheus alerts api
+            requests.models.Response: Response from Prometheus alerts api
         """
         pattern = f"/api/v1/{resource}"
         headers = {"Authorization": f"Bearer {self._token}"}
@@ -409,27 +425,40 @@ class PrometheusAPI(object):
         logger.debug(f"verify={self._cacert}")
         logger.debug(f"params={payload}")
 
-        response = requests.get(
-            self._endpoint + pattern,
-            headers=headers,
-            verify=self._cacert,
-            params=payload,
-        )
-        if "Application is not available" in response.text:
-            logger.warning(f"There was an error in response: {response.text}")
-            logger.warning("Refreshing connection")
-            self.refresh_connection()
-            if not config.ENV_DATA["platform"].lower() == "ibm_cloud":
-                logger.warning("Generating new certificate")
-                self.generate_cert()
-            logger.warning("Connection refreshed - trying the query again")
-            response = requests.get(
+        if timeout:
+            for sample_response in TimeoutIterator(
+                timeout=timeout,
+                sleep=15,
+                func=requests.get,
+                func_kwargs={
+                    "url": self._endpoint + pattern,
+                    "headers": headers,
+                    "verify": self._cacert,
+                    "params": payload,
+                },
+            ):
+                response = sample_response
+                if response.status_code == 503:
+                    logger.warning(f"There was an error in response: {response.text}")
+                    logger.warning("Refreshing connection")
+                    self.refresh_connection()
+                    if (
+                        not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+                        and config.ENV_DATA["deployment_type"] == "managed"
+                    ):
+                        logger.warning("Generating new certificate")
+                        self.generate_cert()
+                    logger.warning("Connection refreshed")
+                else:
+                    break
+            return response
+        else:
+            return requests.get(
                 self._endpoint + pattern,
                 headers=headers,
                 verify=self._cacert,
                 params=payload,
             )
-        return response
 
     def query(
         self,
@@ -659,3 +688,75 @@ class PrometheusAPI(object):
             error_msg = f"{label} alerts were not cleared"
             logger.error(error_msg)
             raise AlertingError(error_msg)
+
+    def prometheus_log(self, prometheus_alert_list):
+        """
+        Log all alerts from Prometheus API to list
+
+        Args:
+            prometheus_alert_list (list): List to be populated with alerts
+        """
+
+        alerts_response = self.get(
+            "alerts", payload={"silenced": False, "inhibited": False}
+        )
+        msg = f"Request {alerts_response.request.url} failed"
+        if alerts_response.ok:
+            for alert in alerts_response.json().get("data").get("alerts"):
+                if alert not in prometheus_alert_list:
+                    logger.info(f"Adding {alert} to alert list")
+                    prometheus_alert_list.append(alert)
+        else:
+            # no need raise Assertion error or Exception here:
+            # 1. It will not lead to a test failure, fixture is in parallel Thread, in SetUp
+            # 2. One bad response should not fail the test
+            # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway on checking alert list
+            logger.error(msg)
+
+
+class PrometheusAlertSubscriber(Timer):
+
+    prometheus_alert_list = []
+
+    def __init__(self, threading_lock, interval: float):
+        self.prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+        super().__init__(
+            interval,
+            lambda: self.prometheus_api.prometheus_log(self.prometheus_alert_list),
+        )
+
+    def run(self):
+        """
+        Run logging of all prometheus alerts.
+
+        ! This method is called by Timer class, do not call it directly !
+        """
+        while not self.finished.wait(self.interval):
+            self.function(*self.args, **self.kwargs)
+
+    def get_alerts(self):
+        """
+        Get list of all alerts
+        """
+        return self.prometheus_alert_list
+
+    def clear_alerts(self):
+        """
+        Clear alert list
+        """
+        self.prometheus_alert_list = []
+
+    def subscribe(self):
+        """
+        Start logging of all prometheus alerts
+        """
+        logger.info("Logging of all prometheus alerts started")
+        self.daemon = True
+        self.start()
+
+    def unsubscribe(self):
+        """
+        Stop logging of all prometheus alerts
+        """
+        self.cancel()
+        logger.info("Logging of all prometheus alerts stopped")

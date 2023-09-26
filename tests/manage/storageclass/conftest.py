@@ -17,7 +17,7 @@ def pytest_collection_modifyitems(items):
     if config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS:
         for item in items.copy():
             if "manage/storageclass" in str(item.fspath):
-                log.info(
+                log.debug(
                     f"Test {item} is removed from the collected items"
                     f" New storage-class creation is not supported on"
                     f" {config.ENV_DATA['platform'].lower()}"

@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 from ocs_ci.framework.pytest_customization.marks import (
+    orange_squad,
     skipif_aws_i3,
     skipif_bm,
     skipif_external_mode,
@@ -38,6 +39,7 @@ log_path = ocsci_log_path()
 SCALE_DATA_FILE = f"{log_path}/scale_data_file.yaml"
 
 
+@orange_squad
 @scale_changed_layout
 @skipif_aws_i3
 @skipif_bm
@@ -101,7 +103,6 @@ class TestAddNode(E2ETest):
             )
             logger.error(f"Cluster not in expected state. {ex}")
 
-    @pytest.mark.skipif("TestAddNode.skip_all")
     @pytest.mark.polarion_id("OCS-609")
     def test_scale_pvcs_pods(self):
         """
@@ -139,7 +140,6 @@ class TestAddNode(E2ETest):
             raise
 
     @ignore_leftovers
-    @pytest.mark.skipif("TestAddNode.skip_all")
     @pytest.mark.parametrize(
         argnames="resource_to_delete",
         argvalues=[
@@ -255,7 +255,6 @@ class TestAddNode(E2ETest):
         )
 
     @ignore_leftovers
-    @pytest.mark.skipif("TestAddNode.skip_all")
     def test_add_node_cleanup(self):
         """
         Test to cleanup possible resources created in TestAddNode class

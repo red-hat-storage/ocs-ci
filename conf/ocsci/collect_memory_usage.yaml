@@ -1,0 +1,4 @@
+---
+# Use this config for collect memory usage of vm
+REPORTING:
+  save_mem_report: true

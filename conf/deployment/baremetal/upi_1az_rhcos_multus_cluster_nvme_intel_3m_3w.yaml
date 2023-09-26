@@ -1,0 +1,22 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+  disk_pattern: 'nvme-INTEL'
+  is_multus_enabled: true
+  multus_cluster_net_interface: 'enp1s0f1'
+  multus_create_public_net: false
+  multus_create_cluster_net: true
+  multus_cluster_net_namespace: "default"
+  multus_cluster_net_type: "ipvlan"
+  multus_cluster_net_mode: "l2"
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2510'

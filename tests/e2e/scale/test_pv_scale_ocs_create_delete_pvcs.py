@@ -1,18 +1,15 @@
 """
-PV Create/Delete & Memory Leak Test: Test the PVC limit with 3 worker nodes
-with & without any IO create and delete the PVCs and check for memory leak
-TO DO: This Test needs to be executed in Scaled setup,
-Adding node scale is yet to be supported.
+Scale TC to perform PVC Create and Delete in parallel
 """
 import logging
 import pytest
 import random
-import time
 import threading
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 
 log = logging.getLogger(__name__)
@@ -59,10 +56,20 @@ class BasePvcPodCreateDelete(E2ETest):
         )
         rbd_rwo_pvc, rbd_rwx_pvc = ([] for i in range(2))
         for pvc_obj in rbd_pvcs:
-            if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
-                rbd_rwx_pvc.append(pvc_obj)
-            else:
-                rbd_rwo_pvc.append(pvc_obj)
+            if pvc_obj is not None:
+                if type(pvc_obj) is list:
+                    for pvc_ in pvc_obj:
+                        if pvc_.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
+                            rbd_rwx_pvc.append(pvc_)
+                        else:
+                            rbd_rwo_pvc.append(pvc_)
+                else:
+
+                    if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
+                        rbd_rwx_pvc.append(pvc_obj)
+                    else:
+                        rbd_rwo_pvc.append(pvc_obj)
+
         rbd_rwo_pods = helpers.create_pods_parallel(
             rbd_rwo_pvc, self.namespace, constants.CEPHBLOCKPOOL
         )
@@ -108,11 +115,21 @@ class BasePvcPodCreateDelete(E2ETest):
         temp_pod_list = random.choices(self.all_pod_obj, k=self.delete_pod_count)
         temp_pvc_list = []
         for pod_obj in temp_pod_list:
+            list_counter_for_pvc = 0
             for pvc_obj in self.all_pvc_obj:
-                if pod.get_pvc_name(pod_obj) == pvc_obj.name:
-                    temp_pvc_list.append(pvc_obj)
-                    log.info(f"Deleting pvc {pvc_obj.name}")
-                    self.all_pvc_obj.remove(pvc_obj)
+                if pvc_obj is not None:
+                    if type(pvc_obj) is list:
+                        for pvc_ in pvc_obj:
+                            if pod.get_pvc_name(pod_obj) == pvc_.name:
+                                temp_pvc_list.append(pvc_)
+                                log.info(f"Deleting pvc {pvc_.name}")
+                                self.all_pvc_obj[list_counter_for_pvc].remove(pvc_)
+                    else:
+                        if pod.get_pvc_name(pod_obj) == pvc_obj.name:
+                            temp_pvc_list.append(pvc_obj)
+                            log.info(f"Deleting pvc {pvc_obj.name}")
+                            self.all_pvc_obj.remove(pvc_obj)
+                list_counter_for_pvc += 1
             log.info(f"Deleting pod {pod_obj.name}")
             if pod_obj in self.all_pod_obj:
                 self.all_pod_obj.remove(pod_obj)
@@ -129,6 +146,7 @@ class BasePvcPodCreateDelete(E2ETest):
         self.cephfs_sc_obj.delete()
 
 
+@orange_squad
 @scale
 @ignore_leftovers
 @pytest.mark.parametrize(
@@ -143,8 +161,7 @@ class BasePvcPodCreateDelete(E2ETest):
 )
 class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
     """
-    Class for TC OCS-682 & OCS-679 Create & Delete Cluster with 1000 PVC with
-    and without IO, then Increase the PVC count to 1500. Check for Memory leak
+    Class for TC OCS-682 & OCS-679 Create & Delete Cluster PVC with and without IO
     """
 
     @pytest.fixture()
@@ -170,25 +187,18 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         self.rbd_sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
         self.cephfs_sc_obj = storageclass_factory(interface=constants.CEPHFILESYSTEM)
 
-    # TODO: Skipping memory leak fixture call in test function because of bz 1750328
     def test_pv_scale_out_create_delete_pvcs_with_and_without_io(
         self,
         namespace,
         storageclass,
         setup_fixture,
         start_io,
-        memory_leak_function,
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
         size = "10Gi"
-        test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
         self.delete_pod_count = 0
-
-        # Identify median memory value for each worker node
-        median_dict = helpers.get_memory_leak_median_value()
-        log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
         self.create_pvc_pod(
@@ -221,7 +231,3 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
                 thread2.start()
             thread1.join()
             thread2.join()
-
-        # Added sleep for test case run time and for capturing memory leak after scale
-        time.sleep(test_run_time)
-        helpers.memory_leak_analysis(median_dict)

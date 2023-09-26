@@ -2,10 +2,12 @@ import base64
 import copy
 import logging
 import os
+import pandas as pd
 import random
 import time
 import tempfile
 import threading
+import json
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
@@ -18,16 +20,20 @@ import pytest
 from collections import namedtuple
 
 from ocs_ci.deployment import factory as dep_factory
-from ocs_ci.framework import config
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
     ignore_leftovers,
     tier_marks,
     ignore_leftover_label,
+    upgrade_marks,
+    ignore_resource_not_found_error_label,
 )
+from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -38,15 +44,25 @@ from ocs_ci.ocs.exceptions import (
     StorageclassNotCreated,
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
+    ResourceNotDeleted,
+    MissingSquadDecoratorError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
-from ocs_ci.ocs.utils import setup_ceph_toolbox, collect_ocs_logs
+from ocs_ci.ocs.scale_lib import FioPodScale
+from ocs_ci.ocs.utils import (
+    setup_ceph_toolbox,
+    collect_ocs_logs,
+    collect_pod_container_rpm_package,
+)
+from ocs_ci.ocs.resources.deployment import Deployment
+from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
 )
+from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.namespacestore import (
     namespace_store_factory as namespacestore_factory_implementation,
 )
@@ -70,6 +86,8 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
     get_ceph_tools_pod,
     get_all_pods,
+    verify_data_integrity_for_multi_pvc_objs,
+    get_noobaa_pods,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -90,7 +108,7 @@ from ocs_ci.utility.environment_check import (
     get_status_after_execution,
 )
 from ocs_ci.utility.flexy import load_cluster_info
-from ocs_ci.utility.kms import is_kms_enabled
+from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
@@ -98,9 +116,9 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     ceph_health_check_base,
+    get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
-    get_system_architecture,
     get_testrun_name,
     load_auth_config,
     ocsci_log_path,
@@ -110,14 +128,16 @@ from ocs_ci.utility.utils import (
     skipif_upgraded_from,
     update_container_with_mirrored_image,
     skipif_ui_not_support,
+    run_cmd,
 )
-from ocs_ci.helpers import helpers
+from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
     setup_pod_directories,
     get_current_test_name,
 )
+from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -128,8 +148,12 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase import CouchBase
+from ocs_ci.helpers.longevity_helpers import (
+    _multi_pvc_pod_lifecycle_factory,
+    _multi_obc_lifecycle_factory,
+)
 from ocs_ci.ocs.longevity import start_app_workload
-
+from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -137,8 +161,8 @@ log = logging.getLogger(__name__)
 class OCSLogFormatter(logging.Formatter):
     def __init__(self):
         fmt = (
-            "%(asctime)s - %(threadName)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
-            "- %(message)s"
+            "%(asctime)s - %(threadName)s - %(levelname)s -"
+            " %(name)s.%(funcName)s.%(lineno)d - %(message)s"
         )
         super(OCSLogFormatter, self).__init__(fmt)
 
@@ -159,7 +183,98 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-def pytest_collection_modifyitems(session, items):
+def verify_squad_owners(items):
+    """
+    Verify that all tests collected are decorated with a squad marker
+
+    Args:
+        items: list of collected tests
+
+    """
+    items_without_squad_marker = {}
+    for item in items:
+        base_dir = os.path.join(constants.TOP_DIR, "tests")
+        ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
+        if item.fspath.strpath.startswith(base_dir):
+            item_markers = [marker.name for marker in item.iter_markers()]
+            if any(marker in item_markers for marker in ignored_markers):
+                log.debug(
+                    "Ignoring test case %s as it has a marker in the ignore list",
+                    item.name,
+                )
+            elif not any(["_squad" in marker for marker in item_markers]):
+                log.debug("%s is missing a squad owner marker", item.name)
+                items_without_squad_marker.update({item.name: item.fspath.strpath})
+
+    if items_without_squad_marker:
+        msg = f"""
+Missing squad decorator for the following test items: {json.dumps(items_without_squad_marker, indent=4)}
+
+Tests are required to be decorated with their squad owner. Please add the tests respective owner.
+
+For example:
+
+    @magenta_squad
+    def test_name():
+
+Test owner marks can be imported from `ocs_ci.framework.pytest_customization.marks`
+            """
+        raise MissingSquadDecoratorError(msg)
+
+
+def export_squad_marker_to_csv(items, filename=None):
+    """
+    Export data regarding tests that are missing squad markers to a CSV
+
+    Args:
+        items: list of collected tests
+        filename: name of the file to export the data to
+
+    """
+    _filename = filename or "squad_decorator_data.csv"
+    test_data = {"File": [], "Name": [], "Suggestions": []}
+    ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
+    for item in items:
+        item_markers = [marker.name for marker in item.iter_markers()]
+        if any(marker in item_markers for marker in ignored_markers):
+            log.debug(
+                "Ignoring test case %s as it has a marker in the ignore list", item.name
+            )
+        else:
+            item_squad = None
+            for marker in item_markers:
+                if "_squad" in marker:
+                    item_squad = marker.split("_")[0]
+                    item_squad = item_squad.capitalize()
+                    log.info("Test item %s has squad marker: %s", item.name, marker)
+            if not item_squad:
+                suggested_squads = []
+                for squad, paths in constants.SQUADS.items():
+                    for _path in paths:
+                        test_path = os.path.relpath(
+                            item.fspath.strpath, constants.TOP_DIR
+                        )
+                        if _path in test_path:
+                            suggested_squads.append(squad)
+                test_data["File"].append(item.fspath.strpath)
+                test_data["Name"].append(item.name)
+                test_data["Suggestions"].append(",".join(suggested_squads))
+
+    df = pd.DataFrame(data=test_data)
+    df.to_csv(
+        _filename,
+        header=["File ", "Test Name", "Squad Suggestions"],
+        index=False,
+        sep=",",
+        mode="a",
+    )
+    num_tests = len(test_data["Name"])
+    num_files = len(set(test_data["File"]))
+    log.info("Exported squad marker info to %s", _filename)
+    log.info("%s tests require action across %s files", num_tests, num_files)
+
+
+def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
@@ -170,23 +285,21 @@ def pytest_collection_modifyitems(session, items):
         items: list of collected tests
 
     """
-    teardown = config.RUN["cli_params"].get("teardown")
-    deploy = config.RUN["cli_params"].get("deploy")
-    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+    teardown = ocsci_config.RUN["cli_params"].get("teardown")
+    deploy = ocsci_config.RUN["cli_params"].get("deploy")
+    skip_ocs_deployment = ocsci_config.ENV_DATA["skip_ocs_deployment"]
+
+    # Verify tests are decorated with the correct squad owner
+    if config.option.collectonly:
+        verify_squad_owners(items)
 
     # Add squad markers to each test item based on filepath
     for item in items:
         # check, if test already have squad marker manually assigned
-        if any(map(lambda x: "_squad" in x.name, item.iter_markers())):
-            continue
-        for squad, paths in constants.SQUADS.items():
-            for _path in paths:
-                # Limit the test_path to the tests directory
-                test_path = os.path.relpath(item.fspath.strpath, constants.TOP_DIR)
-                if _path in test_path:
-                    item.add_marker(f"{squad.lower()}_squad")
-                    item.user_properties.append(("squad", squad))
-                    break
+        for marker in item.iter_markers():
+            if "_squad" in marker.name:
+                squad = marker.name.split("_")[0]
+                item.user_properties.append(("squad", squad.capitalize()))
 
     if not (teardown or deploy or (deploy and skip_ocs_deployment)):
         for item in items[:]:
@@ -199,12 +312,20 @@ def pytest_collection_modifyitems(session, items):
             skipif_ui_not_support_marker = item.get_closest_marker(
                 "skipif_ui_not_support"
             )
+            skipif_lvm_not_installed_marker = item.get_closest_marker(
+                "skipif_lvm_not_installed"
+            )
+            if skipif_lvm_not_installed_marker and "lvm" in ocsci_config.RUN:
+                if not ocsci_config.RUN["lvm"]:
+                    log.info(f"Test {item} will be removed due to lvm not installed")
+                    items.remove(item)
+                    continue
             if skipif_ocp_version_marker:
                 skip_condition = skipif_ocp_version_marker.args
                 # skip_condition will be a tuple
                 # and condition will be first element in the tuple
                 if skipif_ocp_version(skip_condition[0]):
-                    log.info(
+                    log.debug(
                         f"Test: {item} will be skipped due to OCP {skip_condition}"
                     )
                     items.remove(item)
@@ -214,13 +335,13 @@ def pytest_collection_modifyitems(session, items):
                 # skip_condition will be a tuple
                 # and condition will be first element in the tuple
                 if skipif_ocs_version(skip_condition[0]):
-                    log.info(f"Test: {item} will be skipped due to {skip_condition}")
+                    log.debug(f"Test: {item} will be skipped due to {skip_condition}")
                     items.remove(item)
                     continue
             if skipif_upgraded_from_marker:
                 skip_args = skipif_upgraded_from_marker.args
                 if skipif_upgraded_from(skip_args[0]):
-                    log.info(
+                    log.debug(
                         f"Test: {item} will be skipped because the OCS cluster is"
                         f" upgraded from one of these versions: {skip_args[0]}"
                     )
@@ -228,9 +349,9 @@ def pytest_collection_modifyitems(session, items):
             if skipif_no_kms_marker:
                 try:
                     if not is_kms_enabled(dont_raise=True):
-                        log.info(
+                        log.debug(
                             f"Test: {item} it will be skipped because the OCS cluster"
-                            f" has not configured cluster-wide encryption with KMS"
+                            " has not configured cluster-wide encryption with KMS"
                         )
                         items.remove(item)
                 except KeyError:
@@ -240,23 +361,33 @@ def pytest_collection_modifyitems(session, items):
             if skipif_ui_not_support_marker:
                 skip_condition = skipif_ui_not_support_marker
                 if skipif_ui_not_support(skip_condition.args[0]):
-                    log.info(
-                        f"Test: {item} will be skipped due to UI test {skip_condition.args} is not available"
+                    log.debug(
+                        f"Test: {item} will be skipped due to UI test"
+                        f" {skip_condition.args} is not available"
                     )
                     items.remove(item)
                     continue
-    # skip UI test on openshift dedicated ODF-MS platform
-    if (
-        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
-        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
-    ):
+    # Skip UI test on openshift dedicated, ODF-MS, FaaS platform
+    if ocsci_config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         for item in items.copy():
             if "/ui/" in str(item.fspath):
-                log.info(
+                log.debug(
                     f"Test {item} is removed from the collected items"
-                    f" UI is not supported on {config.ENV_DATA['platform'].lower()}"
+                    f" UI is not supported on {ocsci_config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
+
+
+def pytest_collection_finish(session):
+    """
+    A pytest hook to get all collected tests post their collection modifications done in the varius
+    pytest_collection_modifyitems hook functions
+
+    Args:
+        session: pytest session
+
+    """
+    ocsci_config.RUN["number_of_tests"] = len(session.items)
 
 
 @pytest.fixture()
@@ -272,7 +403,7 @@ def supported_configuration():
         64 GB memory
     Last documentation check: 2020-02-21
     """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+    if ocsci_config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         log.info("Check for supported configuration is not applied on Managed Service")
         return
     min_cpu = constants.MIN_NODE_CPU
@@ -281,17 +412,28 @@ def supported_configuration():
     log.info("Checking if system meets minimal requirements")
     if not check_nodes_specs(min_memory=min_memory, min_cpu=min_cpu):
         err_msg = (
-            f"At least one of the worker nodes doesn't meet the "
+            "At least one of the worker nodes doesn't meet the "
             f"required minimum specs of {min_cpu} vCPUs and {min_memory} RAM"
         )
         pytest.xfail(err_msg)
+
+
+@pytest.fixture(scope="session")
+def threading_lock():
+    """
+    threading.Lock object that can be used in threads across multiple tests.
+
+    Returns:
+        threading.Lock: lock object
+    """
+    return threading.Lock()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def auto_load_auth_config():
     try:
         auth_config = {"AUTH": load_auth_config()}
-        config.update(auth_config)
+        ocsci_config.update(auth_config)
     except FileNotFoundError:
         pass  # If auth file doesn't exist we just ignore.
 
@@ -363,10 +505,10 @@ def log_ocs_version(cluster):
      * ocs_version file in cluster path directory (for copy pasting into bug
        reports)
     """
-    teardown = config.RUN["cli_params"].get("teardown")
-    deploy = config.RUN["cli_params"].get("deploy")
-    dev_mode = config.RUN["cli_params"].get("dev_mode")
-    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+    teardown = ocsci_config.RUN["cli_params"].get("teardown")
+    deploy = ocsci_config.RUN["cli_params"].get("deploy")
+    dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
+    skip_ocs_deployment = ocsci_config.ENV_DATA["skip_ocs_deployment"]
     if teardown and not deploy:
         log.info("Skipping version reporting for teardown.")
         return
@@ -379,7 +521,8 @@ def log_ocs_version(cluster):
     cluster_version = retry(CommandFailed, tries=3, delay=15)(get_ocp_version_dict)()
     image_dict = retry(CommandFailed, tries=3, delay=15)(get_ocs_version)()
     file_name = os.path.join(
-        config.ENV_DATA["cluster_path"], "ocs_version." + datetime.now().isoformat()
+        ocsci_config.ENV_DATA["cluster_path"],
+        "ocs_version." + datetime.now().isoformat(),
     )
     with open(file_name, "w") as file_obj:
         report_ocs_version(cluster_version, image_dict, file_obj)
@@ -396,14 +539,24 @@ def pagerduty_service(request):
         str: PagerDuty service json
 
     """
-    if config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS:
+    if (
+        ocsci_config.ENV_DATA["platform"].lower()
+        not in constants.MANAGED_SERVICE_PLATFORMS
+    ):
         log.info(
             "PagerDuty service is not created because "
             f"platform from {constants.MANAGED_SERVICE_PLATFORMS} "
             "is not used"
         )
         return None
-    if config.ENV_DATA.get("disable_pagerduty"):
+    teardown = ocsci_config.RUN["cli_params"]["teardown"]
+    skip_ocs_deployment = ocsci_config.ENV_DATA["skip_ocs_deployment"]
+    ceph_cluster_installed = ocsci_config.RUN.get("cephcluster")
+    if teardown or skip_ocs_deployment or not ceph_cluster_installed:
+        log.info("CephCluster is not available. Skipping PagerDuty integration.")
+        return None
+
+    if ocsci_config.ENV_DATA.get("disable_pagerduty"):
         log.info(
             "PagerDuty service is not created because it was disabled "
             "with configuration"
@@ -416,6 +569,7 @@ def pagerduty_service(request):
     msg = f"Request {service_response.request.url} failed: {service_response.text}"
     assert service_response.ok, msg
     service = service_response.json().get("service")
+    ocsci_config.RUN["pagerduty_service_id"] = service["id"]
 
     def teardown():
         """
@@ -440,12 +594,9 @@ def pagerduty_integration(request, pagerduty_service):
     Managed Service.
 
     """
-    if config.ENV_DATA[
-        "platform"
-    ].lower() not in constants.MANAGED_SERVICE_PLATFORMS or config.ENV_DATA.get(
-        "disable_pagerduty"
-    ):
+    if not pagerduty_service:
         # this is used only for managed service platforms with configured PagerDuty
+        # and installed CephCluster
         return
 
     service_id = pagerduty_service["id"]
@@ -459,8 +610,7 @@ def pagerduty_integration(request, pagerduty_service):
     for integration in pagerduty_service.get("integrations"):
         if integration["summary"] == "Prometheus":
             log.info(
-                "Prometheus integration already exists. "
-                "Skipping creation of new one."
+                "Prometheus integration already exists. Skipping creation of new one."
             )
             integration_key = integration["integration_key"]
             break
@@ -477,23 +627,29 @@ def pagerduty_integration(request, pagerduty_service):
         assert integration_response.ok, msg
         integration = integration_response.json().get("integration")
         integration_key = integration["integration_key"]
-    pagerduty.set_pagerduty_integration_secret(integration_key)
+        if ocsci_config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+            pagerduty.set_pagerduty_faas_secret(integration_key)
+        else:
+            pagerduty.set_pagerduty_integration_secret(integration_key)
 
     def update_pagerduty_integration_secret():
         """
         Make sure that pagerduty secret is updated with correct integration
-        token. Check value of config.RUN['thread_pagerduty_secret_update']:
+        token. Check value of ocsci_config.RUN['thread_pagerduty_secret_update']:
             * required - secret is periodically updated to correct value
             * not required - secret is not updated
             * finished - thread is terminated
 
         """
-        while config.RUN["thread_pagerduty_secret_update"] != "finished":
-            if config.RUN["thread_pagerduty_secret_update"] == "required":
-                pagerduty.set_pagerduty_integration_secret(integration_key)
+        while ocsci_config.RUN["thread_pagerduty_secret_update"] != "finished":
+            if ocsci_config.RUN["thread_pagerduty_secret_update"] == "required":
+                if ocsci_config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+                    pagerduty.set_pagerduty_faas_secret(integration_key)
+                else:
+                    pagerduty.set_pagerduty_integration_secret(integration_key)
             time.sleep(60)
 
-    config.RUN["thread_pagerduty_secret_update"] = "not required"
+    ocsci_config.RUN["thread_pagerduty_secret_update"] = "not required"
     thread = threading.Thread(
         target=update_pagerduty_integration_secret,
         name="thread_pagerduty_secret_update",
@@ -503,7 +659,7 @@ def pagerduty_integration(request, pagerduty_service):
         """
         Stop the thread that executed update_pagerduty_integration_secret()
         """
-        config.RUN["thread_pagerduty_secret_update"] = "finished"
+        ocsci_config.RUN["thread_pagerduty_secret_update"] = "finished"
         if thread:
             thread.join()
 
@@ -556,8 +712,24 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
         """
         Delete the Ceph block pool
         """
+        skip_resource_not_found_error = None
+        node = request.node
+        for mark in node.iter_markers():
+            if mark.name == ignore_resource_not_found_error_label.name:
+                skip_resource_not_found_error = True
+
         for instance in instances:
-            instance.delete()
+            try:
+                instance.delete()
+            except CommandFailed as ex:
+                if "NotFound" in str(ex) and skip_resource_not_found_error:
+                    log.info(
+                        f"Resource {instance.kind} {instance.name} not found in "
+                        f"namespace {instance.namespace}, ignore_resource_not_found_error_label applied. "
+                        "Skipping deletion"
+                    )
+                else:
+                    raise
             instance.ocp.wait_for_delete(instance.name)
 
     request.addfinalizer(finalizer)
@@ -613,6 +785,8 @@ def storageclass_factory_fixture(
         rbd_thick_provision=False,
         encrypted=False,
         encryption_kms_id=None,
+        volume_binding_mode="Immediate",
+        allow_volume_expansion=True,
     ):
         """
         Args:
@@ -634,6 +808,9 @@ def storageclass_factory_fixture(
             encrypted (bool): True to enable RBD PV encryption
             encryption_kms_id (str): Key value of vault config to be used from
                     csi-kms-connection-details configmap
+            volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending
+                till pod attachment.
+            allow_volume_expansion (bool)= True to Allows volume expansion
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -644,11 +821,12 @@ def storageclass_factory_fixture(
         else:
             secret = secret or secret_factory(interface=interface)
             if interface == constants.CEPHBLOCKPOOL:
-                if config.ENV_DATA.get("new_rbd_pool") or new_rbd_pool:
+                if ocsci_config.ENV_DATA.get("new_rbd_pool") or new_rbd_pool:
                     pool_obj = ceph_pool_factory(
                         interface=interface,
-                        replica=config.ENV_DATA.get("replica") or replica,
-                        compression=config.ENV_DATA.get("compression") or compression,
+                        replica=ocsci_config.ENV_DATA.get("replica") or replica,
+                        compression=ocsci_config.ENV_DATA.get("compression")
+                        or compression,
                     )
                     interface_name = pool_obj.name
                 else:
@@ -668,9 +846,12 @@ def storageclass_factory_fixture(
                 rbd_thick_provision=rbd_thick_provision,
                 encrypted=encrypted,
                 encryption_kms_id=encryption_kms_id,
+                volume_binding_mode=volume_binding_mode,
+                allow_volume_expansion=allow_volume_expansion,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
+            sc_obj.interface_name = interface_name
 
         instances.append(sc_obj)
         return sc_obj
@@ -789,11 +970,9 @@ def delete_projects(instances):
                 if event["type"] == "Warning":
                     warn_event_count += 1
             log.info(
-                (
-                    "There were %d events in %s namespace before it's"
-                    " removal (out of which %d were of type Warning)."
-                    " For a full dump of this event list, see DEBUG logs."
-                ),
+                "There were %d events in %s namespace before it's"
+                " removal (out of which %d were of type Warning)."
+                " For a full dump of this event list, see DEBUG logs.",
                 event_count,
                 instance.namespace,
                 warn_event_count,
@@ -929,8 +1108,9 @@ def pvc_factory_fixture(request, project_factory):
         # If they have ReclaimPolicy set to Retain then delete them manually
         for pv_obj in pv_objs:
             if (
-                pv_obj.data.get("spec").get("persistentVolumeReclaimPolicy")
+                pv_obj.data.get("spec", {}).get("persistentVolumeReclaimPolicy")
                 == constants.RECLAIM_POLICY_RETAIN
+                and pv_obj is not None
             ):
                 helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
                 pv_obj.delete()
@@ -974,10 +1154,13 @@ def pod_factory_fixture(request, pvc_factory):
         raw_block_pv=False,
         deployment_config=False,
         service_account=None,
+        security_context=None,
         replica_count=1,
+        pod_name=None,
         command=None,
         command_args=None,
         subpath=None,
+        deployment=False,
     ):
         """
         Args:
@@ -998,11 +1181,14 @@ def pod_factory_fixture(request, pvc_factory):
                 False otherwise
             service_account (OCS): Service account object, in case DeploymentConfig
                 is to be created
+            security_context (dict): security context in the form of dictionary
             replica_count (int): The replica count for deployment config
+            pod_name (str): Name of the pod
             command (list): The command to be executed on the pod
             command_args (list): The arguments to be sent to the command running
                 on the pod
             subpath (str): Value of subPath parameter in pod yaml
+            deployment (bool): True for Deployment creation, False otherwise
 
         Returns:
             object: helpers.create_pod instance
@@ -1023,18 +1209,25 @@ def pod_factory_fixture(request, pvc_factory):
                 dc_deployment=deployment_config,
                 sa_name=sa_name,
                 replica_count=replica_count,
+                pod_name=pod_name,
+                security_context=security_context,
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
+                deployment=deployment,
             )
             assert pod_obj, "Failed to create pod"
-        if deployment_config:
-            dc_name = pod_obj.get_labels().get("name")
-            dc_ocp_dict = ocp.OCP(
-                kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace
-            ).get(resource_name=dc_name)
-            dc_obj = OCS(**dc_ocp_dict)
-            instances.append(dc_obj)
+
+        if deployment_config or deployment:
+            d_name = pod_obj.get_labels().get("name")
+            d_ocp_dict = ocp.OCP(
+                kind=constants.DEPLOYMENTCONFIG
+                if deployment_config
+                else constants.DEPLOYMENT,
+                namespace=pod_obj.namespace,
+            ).get(resource_name=d_name)
+            d_obj = OCS(**d_ocp_dict)
+            instances.append(d_obj)
 
         else:
             instances.append(pod_obj)
@@ -1042,8 +1235,8 @@ def pod_factory_fixture(request, pvc_factory):
             helpers.wait_for_resource_state(pod_obj, status, timeout=300)
             pod_obj.reload()
         pod_obj.pvc = pvc
-        if deployment_config:
-            return dc_obj
+        if deployment_config or deployment:
+            return d_obj
         return pod_obj
 
     def finalizer():
@@ -1117,7 +1310,7 @@ def teardown_factory_fixture(request):
                         helpers.validate_pv_delete(instance.backed_pv)
                 except CommandFailed as ex:
                     log.warning(
-                        f"Resource is already in deleted state, skipping this step"
+                        "Resource is already in deleted state, skipping this step"
                         f"Error: {ex}"
                     )
 
@@ -1211,6 +1404,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         pvc=None,
+        access_mode=constants.ACCESS_MODE_RWO,
         service_account=None,
         size=None,
         custom_data=None,
@@ -1227,6 +1421,9 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
             pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
+            access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
+                This decides the access mode to be used for the PVC.
+                ReadWriteOnce is default.
             service_account (str): service account name for dc_pods
             size (int): The requested size for the PVC
             custom_data (dict): If provided then Pod object is created
@@ -1243,7 +1440,9 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
         if custom_data:
             dc_pod_obj = helpers.create_resource(**custom_data)
         else:
-            pvc = pvc or pvc_factory(interface=interface, size=size)
+            pvc = pvc or pvc_factory(
+                interface=interface, size=size, access_mode=access_mode
+            )
             sa_obj = sa_obj or service_account_factory(
                 project=pvc.project, service_account=service_account
             )
@@ -1285,9 +1484,9 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     """
     Configures polarion testsuite properties for junit xml
     """
-    polarion_project_id = config.REPORTING["polarion"]["project_id"]
+    polarion_project_id = ocsci_config.REPORTING["polarion"]["project_id"]
     record_testsuite_property("polarion-project-id", polarion_project_id)
-    jenkins_build_url = config.RUN.get("jenkins_build_url")
+    jenkins_build_url = ocsci_config.RUN.get("jenkins_build_url")
     if jenkins_build_url:
         record_testsuite_property("polarion-custom-description", jenkins_build_url)
     polarion_testrun_name = get_testrun_name()
@@ -1302,12 +1501,19 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     Configures additional custom testsuite properties for junit xml
     """
     # add logs url
-    logs_url = config.RUN.get("logs_url")
+    logs_url = ocsci_config.RUN.get("logs_url")
     if logs_url:
         record_testsuite_property("logs-url", logs_url)
 
     # add run_id
-    record_testsuite_property("run_id", config.RUN["run_id"])
+    record_testsuite_property("run_id", ocsci_config.RUN["run_id"])
+
+    # add cluster dir full path (on NFS share, if configured, it should contain
+    # full path to cluster dir on NFS share, starting with `/mnt/`)
+    if ocsci_config.RUN.get("cluster_dir_full_path"):
+        record_testsuite_property(
+            "cluster_dir_full_path", ocsci_config.RUN.get("cluster_dir_full_path")
+        )
 
     # Report Portal
     launch_name = reporting.get_rp_launch_name()
@@ -1318,11 +1524,11 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     for key, value in attributes.items():
         # Prefix with `rp_` so the rp_preproc upload script knows to use the property
         record_testsuite_property(f"rp_{key}", value)
-    launch_url = config.REPORTING.get("rp_launch_url")
+    launch_url = ocsci_config.REPORTING.get("rp_launch_url")
     if launch_url:
         record_testsuite_property("rp_launch_url", launch_url)
     # add markers as separated property
-    markers = config.RUN["cli_params"].get("-m", "").replace(" ", "-")
+    markers = ocsci_config.RUN["cli_params"].get("-m", "").replace(" ", "-")
     record_testsuite_property("rp_markers", markers)
 
 
@@ -1344,11 +1550,29 @@ def tier_marks_name():
     return tier_marks_name
 
 
+@pytest.fixture(scope="session")
+def upgrade_marks_name():
+    """
+    Gets the upgrade mark names
+
+    Returns:
+        list: list of upgrade mark names
+
+    """
+    upgrade_marks_name = []
+    for upgrade_mark in upgrade_marks:
+        try:
+            upgrade_marks_name.append(upgrade_mark().args[0].name)
+        except AttributeError:
+            log.error("upgrade mark does not exist")
+    return upgrade_marks_name
+
+
 @pytest.fixture(scope="function", autouse=True)
-def health_checker(request, tier_marks_name):
+def health_checker(request, tier_marks_name, upgrade_marks_name):
     skipped = False
-    dev_mode = config.RUN["cli_params"].get("dev_mode")
-    mcg_only_deployment = config.ENV_DATA["mcg_only_deployment"]
+    dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
+    mcg_only_deployment = ocsci_config.ENV_DATA["mcg_only_deployment"]
     if mcg_only_deployment:
         log.info("Skipping health checks for MCG only mode")
         return
@@ -1356,32 +1580,68 @@ def health_checker(request, tier_marks_name):
         log.info("Skipping health checks for development mode")
         return
 
-    if config.multicluster:
+    if ocsci_config.multicluster:
         if (
-            config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-            == config.get_acm_index()
+            ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+            == ocsci_config.get_active_acm_index()
         ):
             return
+
+    node = request.node
+
+    # ignore ceph health check for the TestFailurePropagator test cases
+    if "FailurePropagator" in str(node.cls):
+        return
 
     def finalizer():
         if not skipped:
             try:
-                teardown = config.RUN["cli_params"]["teardown"]
-                skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
-                if not (teardown or skip_ocs_deployment or mcg_only_deployment):
-                    ceph_health_check_base()
-                    log.info("Ceph health check passed at teardown")
+                teardown = ocsci_config.RUN["cli_params"]["teardown"]
+                skip_ocs_deployment = ocsci_config.ENV_DATA["skip_ocs_deployment"]
+                ceph_cluster_installed = ocsci_config.RUN.get("cephcluster")
+                if not (
+                    teardown
+                    or skip_ocs_deployment
+                    or mcg_only_deployment
+                    or not ceph_cluster_installed
+                ):
+                    ceph_health_retry = False
+                    for mark in node.iter_markers():
+                        if "ceph_health_retry" == mark.name:
+                            ceph_health_retry = True
+                    if ceph_health_retry:
+                        ceph_health_check(
+                            namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                        )
+                        log.info(
+                            "Ceph health check passed at teardown. (After test "
+                            "marked with @ceph_health_retry. For such TC we allow more re-tries)"
+                        )
+                    else:
+                        ceph_health_check_base()
+                        log.info("Ceph health check passed at teardown")
             except CephHealthException:
+                if not ocsci_config.RUN["skip_reason_test_found"]:
+                    squad_name = None
+                    for marker in node.iter_markers():
+                        if "_squad" in marker.name:
+                            squad_name = marker.name
+                            break
+                    ocsci_config.RUN["skip_reason_test_found"] = {
+                        "test_name": node.name,
+                        "squad": squad_name,
+                    }
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
                 ceph_health_check()
                 raise
 
-    node = request.node
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
-        if mark.name in tier_marks_name:
+        if mark.name in tier_marks_name + upgrade_marks_name and ocsci_config.RUN.get(
+            "cephcluster"
+        ):
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
@@ -1389,6 +1649,7 @@ def health_checker(request, tier_marks_name):
                     log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
+                ocsci_config.RUN["skipped_tests_ceph_health"] += 1
                 skipped = True
                 # skip because ceph is not in good health
                 pytest.skip("Ceph health check failed at setup")
@@ -1405,8 +1666,8 @@ def cluster(
     """
     log.info(f"All logs located at {ocsci_log_path()}")
 
-    teardown = config.RUN["cli_params"]["teardown"]
-    deploy = config.RUN["cli_params"]["deploy"]
+    teardown = ocsci_config.RUN["cli_params"]["teardown"]
+    deploy = ocsci_config.RUN["cli_params"]["deploy"]
     if teardown or deploy:
         factory = dep_factory.DeploymentFactory()
         deployer = factory.get_deployment()
@@ -1417,27 +1678,30 @@ def cluster(
         def cluster_teardown_finalizer():
             # If KMS is configured, clean up the backend resources
             # we are doing it before OCP cleanup
-            if config.DEPLOYMENT.get("kms_deployment"):
-                kms = KMS.get_kms_deployment()
-                kms.cleanup()
+            if ocsci_config.DEPLOYMENT.get("kms_deployment"):
+                try:
+                    kms = KMS.get_kms_deployment()
+                    kms.cleanup()
+                except Exception as ex:
+                    log.error(f"Failed to cleanup KMS. Exception is: {ex}")
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
         log.info("Will teardown cluster because --teardown was provided")
 
     # Download client
-    if config.DEPLOYMENT["skip_download_client"]:
+    if ocsci_config.DEPLOYMENT["skip_download_client"]:
         log.info("Skipping client download")
     else:
         force_download = (
-            config.RUN["cli_params"].get("deploy")
-            and config.DEPLOYMENT["force_download_client"]
+            ocsci_config.RUN["cli_params"].get("deploy")
+            and ocsci_config.DEPLOYMENT["force_download_client"]
         )
         get_openshift_client(force_download=force_download)
 
     # set environment variable for early testing of RHCOS
-    if config.ENV_DATA.get("early_testing"):
-        release_img = config.ENV_DATA["RELEASE_IMG"]
+    if ocsci_config.ENV_DATA.get("early_testing"):
+        release_img = ocsci_config.ENV_DATA["RELEASE_IMG"]
         log.info(f"Running early testing of RHCOS with release image: {release_img}")
         os.environ["RELEASE_IMG"] = release_img
         os.environ["OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"] = release_img
@@ -1446,9 +1710,13 @@ def cluster(
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
     else:
-        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        if ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             ibmcloud.login()
-    if not config.ENV_DATA["skip_ocs_deployment"]:
+    if "cephcluster" not in ocsci_config.RUN.keys():
+        check_clusters()
+    if not ocsci_config.ENV_DATA["skip_ocs_deployment"] and ocsci_config.RUN.get(
+        "cephcluster"
+    ):
         record_testsuite_property("rp_ocs_build", get_ocs_build_number())
 
 
@@ -1457,18 +1725,26 @@ def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
-
     # app labels of resources to be excluded for leftover check
-    exclude_labels = [constants.must_gather_pod_label]
+    exclude_labels = [
+        constants.must_gather_pod_label,
+        constants.S3CLI_APP_LABEL,
+        constants.MUST_GATHER_HELPER_LABEL,
+    ]
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
-    request.addfinalizer(
-        partial(get_status_after_execution, exclude_labels=exclude_labels)
-    )
-    get_status_before_execution(exclude_labels=exclude_labels)
+    if ocsci_config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+        log.error(
+            "Environment checker is NOT IMPLEMENTED for Fusion service. This needds to be updated"
+        )
+    else:
+        request.addfinalizer(
+            partial(get_status_after_execution, exclude_labels=exclude_labels)
+        )
+        get_status_before_execution(exclude_labels=exclude_labels)
 
 
 @pytest.fixture(scope="session")
@@ -1495,9 +1771,9 @@ def cluster_load(
     Run IO during the test execution
     """
     cl_load_obj = None
-    io_in_bg = config.RUN.get("io_in_bg")
-    log_utilization = config.RUN.get("log_utilization")
-    io_load = config.RUN.get("io_load")
+    io_in_bg = ocsci_config.RUN.get("io_in_bg")
+    log_utilization = ocsci_config.RUN.get("log_utilization")
+    io_load = ocsci_config.RUN.get("io_load")
     cluster_load_error = None
     cluster_load_error_msg = (
         "Cluster load might not work correctly during this run, because "
@@ -1537,13 +1813,13 @@ def cluster_load(
                 log.error(cluster_load_error_msg, ex)
                 cluster_load_error = ex
 
-        config.RUN["load_status"] = "running"
+        ocsci_config.RUN["load_status"] = "running"
 
         def finalizer():
             """
             Stop the thread that executed watch_load()
             """
-            config.RUN["load_status"] = "finished"
+            ocsci_config.RUN["load_status"] = "finished"
             if thread:
                 thread.join()
             if cluster_load_error:
@@ -1560,22 +1836,22 @@ def cluster_load(
             the IO load based on the cluster latency.
 
             """
-            while config.RUN["load_status"] != "finished":
+            while ocsci_config.RUN["load_status"] != "finished":
                 time.sleep(20)
                 try:
                     cl_load_obj.print_metrics(mute_logs=True)
                     if io_in_bg:
-                        if config.RUN["load_status"] == "running":
+                        if ocsci_config.RUN["load_status"] == "running":
                             cl_load_obj.adjust_load_if_needed()
-                        elif config.RUN["load_status"] == "to_be_paused":
+                        elif ocsci_config.RUN["load_status"] == "to_be_paused":
                             cl_load_obj.reduce_load(pause=True)
-                            config.RUN["load_status"] = "paused"
-                        elif config.RUN["load_status"] == "to_be_reduced":
+                            ocsci_config.RUN["load_status"] = "paused"
+                        elif ocsci_config.RUN["load_status"] == "to_be_reduced":
                             cl_load_obj.reduce_load(pause=False)
-                            config.RUN["load_status"] = "reduced"
-                        elif config.RUN["load_status"] == "to_be_resumed":
+                            ocsci_config.RUN["load_status"] = "reduced"
+                        elif ocsci_config.RUN["load_status"] == "to_be_resumed":
                             cl_load_obj.resume_load()
-                            config.RUN["load_status"] = "running"
+                            ocsci_config.RUN["load_status"] = "running"
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
@@ -1591,9 +1867,9 @@ def resume_cluster_load_implementation():
     Resume cluster load implementation
 
     """
-    config.RUN["load_status"] = "to_be_resumed"
+    ocsci_config.RUN["load_status"] = "to_be_resumed"
     try:
-        for load_status in TimeoutSampler(300, 3, config.RUN.get, "load_status"):
+        for load_status in TimeoutSampler(300, 3, ocsci_config.RUN.get, "load_status"):
             if load_status == "running":
                 break
     except TimeoutExpiredError:
@@ -1609,7 +1885,7 @@ def reduce_cluster_load_implementation(request, pause, resume=True):
         resume (bool): True for resuming the cluster load upon teardown, False for not resuming
 
     """
-    if config.RUN.get("io_in_bg"):
+    if ocsci_config.RUN.get("io_in_bg"):
 
         def finalizer():
             """
@@ -1621,10 +1897,19 @@ def reduce_cluster_load_implementation(request, pause, resume=True):
 
         request.addfinalizer(finalizer)
 
-        config.RUN["load_status"] = "to_be_paused" if pause else "to_be_reduced"
+        ocsci_config.RUN["load_status"] = "to_be_paused" if pause else "to_be_reduced"
         try:
-            for load_status in TimeoutSampler(300, 3, config.RUN.get, "load_status"):
+            for load_status in TimeoutSampler(
+                300, 3, ocsci_config.RUN.get, "load_status"
+            ):
                 if load_status in ["paused", "reduced"]:
+                    # Wait for 45 seconds for cluster load to pause/reduce effectively
+                    wait_time = 45
+                    log.info(
+                        f"Waiting for {wait_time} seconds for cluster load to"
+                        " pause/reduce..."
+                    )
+                    time.sleep(wait_time)
                     break
         except TimeoutExpiredError:
             log.error(
@@ -1647,7 +1932,7 @@ def resume_cluster_load(request):
     Resume the background cluster load
 
     """
-    if config.RUN.get("io_in_bg"):
+    if ocsci_config.RUN.get("io_in_bg"):
 
         def finalizer():
             """
@@ -1903,11 +2188,15 @@ def memory_leak_function(request):
         Memory leak data is written in below format
         date time PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
         """
-        oc = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+        oc = ocp.OCP(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
         while get_flag_status() == "running":
             for worker in node.get_worker_nodes():
                 filename = f"/tmp/{worker}-top-output.txt"
-                top_cmd = f"debug nodes/{worker} -- chroot /host top -n 2 b"
+                top_cmd = (
+                    "debug"
+                    f" nodes/{worker} --to-namespaces={ocsci_config.ENV_DATA['cluster_namespace']} --"
+                    " chroot /host top -n 2 b"
+                )
                 with open("/tmp/file.txt", "w+") as temp:
                     temp.write(
                         str(oc.exec_oc_cmd(command=top_cmd, out_yaml_format=False))
@@ -1990,7 +2279,7 @@ def ec2_instances(request, aws_obj):
 
 
 @pytest.fixture(scope="session")
-def cld_mgr(request, rgw_endpoint):
+def cld_mgr(request):
     """
     Returns a cloud manager instance that'll be used throughout the session
 
@@ -2030,12 +2319,13 @@ def rgw_obj_fixture(request):
         RGW: An RGW resource
     """
     rgw_deployments = get_deployments_having_label(
-        label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+        label=constants.RGW_APP_LABEL,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
     )
     try:
         storageclass = OCP(
             kind=constants.STORAGECLASS,
-            namespace=config.ENV_DATA["cluster_namespace"],
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
             resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW,
         ).get()
     except CommandFailed:
@@ -2054,62 +2344,20 @@ def rgw_deployments(request):
 
     """
     rgw_deployments = get_deployments_having_label(
-        label=constants.RGW_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+        label=constants.RGW_APP_LABEL,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
     )
     if rgw_deployments:
         # Force-skipping in case of IBM Cloud -
         # https://github.com/red-hat-storage/ocs-ci/issues/3863
-        if config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+        if ocsci_config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
             pytest.skip(
-                "RGW deployments were found, but test will be skipped because of BZ1926831"
+                "RGW deployments were found, but test will be skipped because of"
+                " BZ1926831"
             )
         return rgw_deployments
     else:
         pytest.skip("There is no RGW deployment available for this test.")
-
-
-@pytest.fixture(scope="session")
-def rgw_endpoint(request):
-    """
-    Expose RGW service and return external RGW endpoint address if available.
-
-    Returns:
-        string: external RGW endpoint
-
-    """
-    log.info("Looking for RGW service to expose")
-    oc = ocp.OCP(kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"])
-    rgw_service = oc.get(selector=constants.RGW_APP_LABEL)["items"]
-    if rgw_service:
-        if config.DEPLOYMENT["external_mode"]:
-            rgw_service = constants.RGW_SERVICE_EXTERNAL_MODE
-        else:
-            rgw_service = constants.RGW_SERVICE_INTERNAL_MODE
-        log.info(f"Service {rgw_service} found and will be exposed")
-        # custom hostname is provided because default hostname from rgw service
-        # is too long and OCP rejects it
-        oc = ocp.OCP(
-            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        route = oc.get(resource_name="noobaa-mgmt")
-        router_hostname = route["status"]["ingress"][0]["routerCanonicalHostname"]
-        rgw_hostname = f"rgw.{router_hostname}"
-        try:
-            oc.exec_oc_cmd(f"expose service/{rgw_service} --hostname {rgw_hostname}")
-        except CommandFailed as cmdfailed:
-            if "AlreadyExists" in str(cmdfailed):
-                log.warning("RGW route already exists.")
-        # new route is named after service
-        rgw_endpoint = oc.get(resource_name=rgw_service)
-        endpoint_obj = OCS(**rgw_endpoint)
-
-        def _finalizer():
-            endpoint_obj.delete()
-
-        request.addfinalizer(_finalizer)
-        return f"http://{rgw_hostname}"
-    else:
-        log.info("RGW service is not available")
 
 
 @pytest.fixture()
@@ -2129,14 +2377,14 @@ def mcg_obj_fixture(request, *args, **kwargs):
     Returns:
         MCG: An MCG resource
     """
-    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+    if ocsci_config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         log.warning("As openshift dedicated is used, no MCG resource is returned")
         return None
 
     mcg_obj = MCG(*args, **kwargs)
 
     def finalizer():
-        if config.ENV_DATA["platform"].lower() == "aws":
+        if ocsci_config.ENV_DATA["platform"].lower() == "aws":
             mcg_obj.cred_req_obj.delete()
 
     if kwargs.get("create_aws_creds"):
@@ -2145,14 +2393,21 @@ def mcg_obj_fixture(request, *args, **kwargs):
     return mcg_obj
 
 
-@pytest.fixture()
-def awscli_pod(request):
-    return awscli_pod_fixture(request, scope_name="function")
+@pytest.fixture(scope="session")
+def awscli_pod_session(request):
+    awscli_pods = get_pods_having_label(
+        constants.S3CLI_LABEL, ocsci_config.ENV_DATA["cluster_namespace"]
+    )
+    existing_pod = Pod(**awscli_pods[0]) if len(awscli_pods) > 0 else None
+    return existing_pod or awscli_pod_fixture(request, scope_name="session")
 
 
 @pytest.fixture(scope="session")
-def awscli_pod_session(request):
-    return awscli_pod_fixture(request, scope_name="session")
+def awscli_pod(request, awscli_pod_session):
+    # Used as a legacy fixture for backwards compatibility
+    # with tests who rely on the function-scope
+    # without the need for a wide refactor
+    return awscli_pod_session
 
 
 def awscli_pod_fixture(request, scope_name):
@@ -2175,39 +2430,132 @@ def awscli_pod_fixture(request, scope_name):
     log.info("Trying to create the AWS CLI service CA")
     service_ca_configmap = helpers.create_resource(**service_ca_data)
 
-    arch = get_system_architecture()
-    if arch.startswith("x86"):
-        pod_dict_path = constants.AWSCLI_POD_YAML
-    else:
-        pod_dict_path = constants.AWSCLI_MULTIARCH_POD_YAML
-
-    awscli_pod_dict = templating.load_yaml(pod_dict_path)
-    awscli_pod_dict["spec"]["volumes"][0]["configMap"][
+    awscli_sts_dict = templating.load_yaml(constants.S3CLI_MULTIARCH_STS_YAML)
+    awscli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
         "name"
     ] = service_ca_configmap_name
-    awscli_pod_name = create_unique_resource_name(
-        constants.AWSCLI_RELAY_POD_NAME, scope_name
-    )
-    awscli_pod_dict["metadata"]["name"] = awscli_pod_name
 
-    update_container_with_mirrored_image(awscli_pod_dict)
+    update_container_with_mirrored_image(awscli_sts_dict)
+    update_container_with_proxy_env(awscli_sts_dict)
 
-    awscli_pod_obj = Pod(**awscli_pod_dict)
-    assert awscli_pod_obj.create(
-        do_reload=True
-    ), f"Failed to create Pod {awscli_pod_name}"
-    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+    s3cli_sts_obj = helpers.create_resource(**awscli_sts_dict)
+    assert s3cli_sts_obj, "Failed to create S3CLI STS"
+
+    awscli_pod_obj = retry(IndexError, tries=3, delay=15)(
+        lambda: Pod(
+            **get_pods_having_label(
+                constants.S3CLI_LABEL, ocsci_config.ENV_DATA["cluster_namespace"]
+            )[0]
+        )
+    )()
+
+    OCP(
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"], kind="ConfigMap"
+    ).wait_for_resource(
         resource_name=service_ca_configmap.name, column="DATA", condition="1"
     )
-    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
+    helpers.wait_for_resource_state(
+        awscli_pod_obj, constants.STATUS_RUNNING, timeout=180
+    )
 
     def _awscli_pod_cleanup():
-        awscli_pod_obj.delete()
+        s3cli_sts_obj.delete()
         service_ca_configmap.delete()
 
     request.addfinalizer(_awscli_pod_cleanup)
 
     return awscli_pod_obj
+
+
+@pytest.fixture(scope="session")
+def scale_cli_pod(request):
+    return scale_cli_fixture(request, scope_name="session")
+
+
+def scale_cli_fixture(request, scope_name):
+    """
+    Creates AWSCLI pod for relaying commands which consists of
+    thousands of directories consisting millions of objects under large_objects/
+    Args:
+        scope_name (str): The name of the fixture's scope,
+        used for giving a descriptive name to the pod and configmap
+
+    Returns:
+        pod: A pod running the AWS CLI and consisting of large number of objects
+    """
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_data = templating.load_yaml(constants.SCALECLI_SERVICE_CA_YAML)
+    service_ca_configmap_name = create_unique_resource_name(
+        constants.SCALECLI_SERVICE_CA_CM_NAME, scope_name
+    )
+    service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    log.info("Trying to create the SCALE CLI service CA")
+    service_ca_configmap = helpers.create_resource(**service_ca_data)
+
+    # create scale-cli pod
+    pod_dict_path = constants.SCALECLI_POD_YAML
+    scalecli_pod_dict = templating.load_yaml(pod_dict_path)
+    scalecli_pod_dict["spec"]["volumes"][0]["configMap"][
+        "name"
+    ] = service_ca_configmap_name
+    scalecli_pod_name = create_unique_resource_name("scale-cli", scope_name)
+    scalecli_pod_dict["metadata"]["name"] = scalecli_pod_name
+
+    update_container_with_mirrored_image(scalecli_pod_dict)
+    update_container_with_proxy_env(scalecli_pod_dict)
+
+    scalecli_pod_obj = Pod(**scalecli_pod_dict)
+    assert scalecli_pod_obj.create(
+        do_reload=True
+    ), f"Failed to create pod {scalecli_pod_name}"
+    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+        resource_name=service_ca_configmap.name, column="DATA", condition="1"
+    )
+    helpers.wait_for_resource_state(
+        scalecli_pod_obj, constants.STATUS_RUNNING, timeout=600
+    )
+
+    def scalecli_pod_cleanup():
+        scalecli_pod_obj.delete()
+        service_ca_configmap.delete()
+
+    request.addfinalizer(scalecli_pod_cleanup)
+
+    return scalecli_pod_obj
+
+
+@pytest.fixture(scope="session")
+def javasdk_pod_session(request):
+    return javasdk_pod_fixture(request, scope_name="session")
+
+
+def javasdk_pod_fixture(request, scope_name):
+    """
+    Creates a new javasdk pod for executing s3 commands through java application
+    """
+    javas3_pod_dict = templating.load_yaml(constants.JAVA_SDK_S3_POD_YAML)
+    javas3_pod_name = create_unique_resource_name(constants.JAVAS3_POD_NAME, scope_name)
+    javas3_pod_dict["metadata"]["name"] = javas3_pod_name
+    update_container_with_mirrored_image(javas3_pod_dict)
+    update_container_with_proxy_env(javas3_pod_dict)
+    javas3_pod_obj = Pod(**javas3_pod_dict)
+
+    assert javas3_pod_obj.create(do_reload=True), f"Failed to create {javas3_pod_name}"
+    helpers.wait_for_resource_state(javas3_pod_obj, constants.STATUS_RUNNING)
+
+    # push java code to the pod created
+    java_src_code_path = constants.JAVA_SRC_CODE_PATH
+    target_path = "/app/"
+    assert javas3_pod_obj.copy_to_pod_rsync(
+        src_path=java_src_code_path, target_path=target_path
+    ), "Failed to copy java source code!!"
+
+    def _javas3_pod_cleanup():
+        javas3_pod_obj.delete()
+
+    request.addfinalizer(_javas3_pod_cleanup)
+
+    return javas3_pod_obj
 
 
 @pytest.fixture()
@@ -2242,6 +2590,24 @@ def nodes():
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
     return nodes
+
+
+@pytest.fixture()
+def nodes_multicluster():
+    """
+    Return a list of instances of the relevant platform nodes class
+    (e.g. AWSNodes, VMWareNodes) to be later used in the test
+    for nodes related operations, like nodes restart,
+    detach/attach volume, etc. Useful in multicluster scenarios.
+
+    """
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes_multicluster = []
+    for cluster in range(ocsci_config.nclusters):
+        ocsci_config.switch_ctx(cluster)
+        nodes = factory.get_nodes_platform()
+        nodes_multicluster.append(nodes)
+    return nodes_multicluster
 
 
 @pytest.fixture()
@@ -2306,7 +2672,7 @@ def verify_rgw_restart_count_fixture(request):
     """
     Verifies the RGW restart count at start and end of a test
     """
-    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+    if ocsci_config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         log.info("Getting RGW pod restart count before executing the test")
         initial_counts = get_rgw_restart_counts()
 
@@ -2441,7 +2807,10 @@ def bucket_factory_fixture(
             current_call_created_buckets.append(created_bucket)
             created_buckets.append(created_bucket)
             if verify_health:
-                created_bucket.verify_health(timeout=180, **kwargs)
+                created_bucket.verify_health(
+                    timeout=kwargs.pop("timeout") if "timeout" in kwargs else 180,
+                    **kwargs,
+                )
 
         return current_call_created_buckets
 
@@ -2662,7 +3031,28 @@ def default_storageclasses(request, teardown_factory_session):
     # TODO(fbalak): Use proper constants after
     # https://github.com/red-hat-storage/ocs-ci/issues/1056
     # is resolved
-    for sc_name in ("ocs-storagecluster-ceph-rbd", "ocs-storagecluster-cephfs"):
+    storage_classes = []
+    if ocsci_config.ENV_DATA.get("custom_default_storageclass_names"):
+        from ocs_ci.ocs.resources.storage_cluster import (
+            get_storageclass_names_from_storagecluster_spec,
+        )
+
+        sc_from_spec = get_storageclass_names_from_storagecluster_spec()
+        for component_key in [
+            constants.OCS_COMPONENTS_MAP["blockpools"],
+            constants.OCS_COMPONENTS_MAP["cephfs"],
+        ]:
+            sc_name = sc_from_spec.get(component_key)
+            if sc_name:
+                storage_classes.append(sc_name)
+            else:
+                raise ValueError(
+                    f"Custome Storageclass is not defined from {component_key} in storagecluster spec."
+                )
+    else:
+        storage_classes = [constants.CEPHBLOCKPOOL_SC, constants.CEPHFILESYSTEM_SC]
+
+    for sc_name in storage_classes:
         sc = OCS(kind=constants.STORAGECLASS, metadata={"name": sc_name})
         sc.reload()
         scs[constants.RECLAIM_POLICY_DELETE].append(sc)
@@ -2689,12 +3079,12 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
-    csv = ocp.OCP(
-        kind=constants.CLUSTER_SERVICE_VERSION,
+    sub = ocp.OCP(
+        kind=constants.SUBSCRIPTION,
         namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
     )
-    logging_csv = csv.get().get("items")
-    if logging_csv:
+    logging_sub = sub.get().get("items")
+    if logging_sub:
         log.info("Logging is already configured, Skipping Installation")
         return
 
@@ -2702,6 +3092,7 @@ def install_logging(request):
 
     # Gets OCP version to align logging version to OCP version
     ocp_version = version.get_semantic_ocp_version_from_config()
+
     logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
@@ -2723,6 +3114,14 @@ def install_logging(request):
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
+    # Checks for Elasticsearch operator
+    elastic_search_operator = OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
+    )
+    elastic_search_operator.wait_for_resource(
+        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
+    )
+
     # Creates a namespace openshift-logging
     ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
 
@@ -2741,8 +3140,14 @@ def install_logging(request):
     cluster_logging_operator = OCP(
         kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-    ocp_logging_obj.create_instance()
+    cluster_logging_operator.wait_for_resource(
+        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
+    )
+    if cluster_logging_operator:
+        log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
+        ocp_logging_obj.create_instance()
+    else:
+        log.error("The cluster logging operator pod is not created")
 
 
 @pytest.fixture
@@ -2832,6 +3237,7 @@ def pgsql_factory_fixture(request):
         samples=None,
         timeout=None,
         sc_name=None,
+        wait_for_pgbench_to_complete=True,
     ):
         """
         Factory to start pgsql workload
@@ -2843,8 +3249,8 @@ def pgsql_factory_fixture(request):
             transactions (int): Number of transactions
             scaling_factor (int): scaling factor
             samples (int): Number of samples to run
-
             timeout (int): Time in seconds to wait
+            wait_for_pgbench_to_complete (bool): If set to True, the fixture will wait for the pgbench run to complete
 
         """
         # Setup postgres
@@ -2861,14 +3267,15 @@ def pgsql_factory_fixture(request):
             timeout=timeout,
         )
 
-        # Wait for pg_bench pod to initialized and complete
-        pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        if wait_for_pgbench_to_complete:
+            # Wait for pg_bench pod to initialized and complete
+            pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
 
-        # Get pgbench pods
-        pgbench_pods = pgsql.get_pgbench_pods()
+            # Get pgbench pods
+            pgbench_pods = pgsql.get_pgbench_pods()
 
-        # Validate pgbench run and parse logs
-        pgsql.validate_pgbench_run(pgbench_pods)
+            # Validate pgbench run and parse logs
+            pgsql.validate_pgbench_run(pgbench_pods)
         return pgsql
 
     def finalizer():
@@ -2888,13 +3295,14 @@ def jenkins_factory_fixture(request):
     """
     jenkins = Jenkins()
 
-    def factory(num_projects=1, num_of_builds=1):
+    def factory(num_projects=1, num_of_builds=1, wait_for_build_to_complete=True):
         """
         Factory to start jenkins workload
 
         Args:
             num_projects (int): Number of Jenkins projects
             num_of_builds (int): Number of builds per project
+            wait_for_build_to_complete (bool): If set to True, the fixture will wait for the Jenkins build to complete
 
         """
         # Jenkins template
@@ -2913,10 +3321,11 @@ def jenkins_factory_fixture(request):
         jenkins.number_builds_per_project = num_of_builds
         # Start Builds
         jenkins.start_build()
-        # Wait build reach 'Complete' state
-        jenkins.wait_for_build_to_complete()
-        # Print table of builds
-        jenkins.print_completed_builds_results()
+        if wait_for_build_to_complete:
+            # Wait build reach 'Complete' state
+            jenkins.wait_for_build_to_complete()
+            # Print table of builds
+            jenkins.print_completed_builds_results()
 
         return jenkins
 
@@ -2944,6 +3353,7 @@ def couchbase_factory_fixture(request):
         sc_name=None,
         num_items=None,
         num_threads=None,
+        wait_for_pillowfights_to_complete=True,
     ):
         """
         Factory to start couchbase workload
@@ -2952,6 +3362,8 @@ def couchbase_factory_fixture(request):
             replicas (int): Number of couchbase workers to be deployed
             run_in_bg (bool): Run IOs in background as option
             skip_analyze (bool): Skip logs analysis as option
+            wait_for_pillowfight_to_complete (bool): If set to True, the fixture will wait for the pillowfight
+            workload to reach compelete state
 
         """
         # Create Couchbase subscription
@@ -2961,6 +3373,8 @@ def couchbase_factory_fixture(request):
         # Create couchbase workers
         couchbase.create_cb_cluster(replicas=3, sc_name=sc_name)
         couchbase.create_data_buckets()
+        # adding wait for the buckets created to be reconciled with the couchbase cluster
+        time.sleep(10)
         # Run couchbase workload
         couchbase.run_workload(
             replicas=replicas,
@@ -2968,6 +3382,8 @@ def couchbase_factory_fixture(request):
             num_items=num_items,
             num_threads=num_threads,
         )
+        if wait_for_pillowfights_to_complete:
+            couchbase.wait_for_pillowfights_to_complete()
         # Run sanity check on data logs
         couchbase.analyze_run(skip_analyze=skip_analyze)
 
@@ -3003,6 +3419,8 @@ def amq_factory_fixture(request):
         num_of_consumer_pods=1,
         value="10000",
         since_time=1800,
+        run_in_bg=True,
+        validate_messages=True,
     ):
         """
         Factory to start amq workload
@@ -3020,8 +3438,16 @@ def amq_factory_fixture(request):
             num_of_consumer_pods (int): Number of consumer pods to be created
             value (str): Number of messages to be sent and received
             since_time (int): Number of seconds to required to sent the msg
+            run_in_bg (bool): If set to True, validate of messages are done in a bg job
+            validate_messages (bool): If set to True, the fixture will validate that all the messages are
+            sent and recieved to Producer and Consumer Pods respectively.
 
         """
+        if run_in_bg and not validate_messages:
+            raise Exception(
+                "run_in_bg is not allowed to call when validate_messages is set to"
+                " False"
+            )
         # Setup kafka cluster
         amq.setup_amq_cluster(
             sc_name=sc_name, namespace=kafka_namespace, size=size, replicas=replicas
@@ -3043,12 +3469,18 @@ def amq_factory_fixture(request):
         log.info(f"Waiting for {waiting_time}sec to generate msg")
         time.sleep(waiting_time)
 
-        # Check messages are sent and received
-        threads = amq.run_in_bg(
-            namespace=kafka_namespace, value=value, since_time=since_time
-        )
+        if validate_messages:
+            if run_in_bg:
+                # Check messages are sent and received
+                threads = amq.run_in_bg(
+                    namespace=kafka_namespace, value=value, since_time=since_time
+                )
+                return amq, threads
+            else:
+                amq.validate_messages_are_produced()
+                amq.validate_messages_are_consumed()
 
-        return amq, threads
+        return amq
 
     def finalizer():
         """
@@ -3072,8 +3504,8 @@ def measurement_dir(tmp_path):
     Returns:
         str: Path to measurement directory
     """
-    if config.ENV_DATA.get("measurement_dir"):
-        measurement_dir = config.ENV_DATA.get("measurement_dir")
+    if ocsci_config.ENV_DATA.get("measurement_dir"):
+        measurement_dir = ocsci_config.ENV_DATA.get("measurement_dir")
         log.info(f"Using measurement dir from configuration: {measurement_dir}")
     else:
         measurement_dir = os.path.join(os.path.dirname(tmp_path), "measurement_results")
@@ -3088,7 +3520,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
     """
     Prepare multiple dc pods for the test
     Returns:
-        list: Pod instances
+        any: Pod instances
     """
 
     def factory(
@@ -3223,15 +3655,15 @@ def user_factory_session(request, htpasswd_identity_provider, htpasswd_path):
 
 
 @pytest.fixture(autouse=True)
-def log_alerts(request):
+def log_alerts(request, threading_lock):
     """
     Log alerts at the beginning and end of each test case. At the end of test
     case print a difference: what new alerts are in place after the test is
     complete.
 
     """
-    teardown = config.RUN["cli_params"].get("teardown")
-    dev_mode = config.RUN["cli_params"].get("dev_mode")
+    teardown = ocsci_config.RUN["cli_params"].get("teardown")
+    dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
     if teardown:
         return
     elif dev_mode:
@@ -3242,7 +3674,7 @@ def log_alerts(request):
     prometheus = None
 
     try:
-        prometheus = PrometheusAPI()
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
     except Exception:
         log.exception("There was a problem with connecting to Prometheus")
 
@@ -3257,7 +3689,8 @@ def log_alerts(request):
                 return alerts
             else:
                 log.warning(
-                    f"There was a problem with collecting alerts for analysis: {alerts_response.text}"
+                    "There was a problem with collecting alerts for analysis:"
+                    f" {alerts_response.text}"
                 )
                 return False
         except Exception:
@@ -3285,15 +3718,23 @@ def ceph_toolbox(request):
     This fixture initiates ceph toolbox pod for manually created deployment
     and if it does not already exist.
     """
-    deploy = config.RUN["cli_params"]["deploy"]
-    teardown = config.RUN["cli_params"].get("teardown")
-    skip_ocs = config.ENV_DATA["skip_ocs_deployment"]
+    teardown = ocsci_config.RUN["cli_params"].get("teardown")
+    if "cephcluster" not in ocsci_config.RUN.keys() and not teardown:
+        check_clusters()
+    deploy = ocsci_config.RUN["cli_params"]["deploy"]
+    skip_ocs = ocsci_config.ENV_DATA["skip_ocs_deployment"]
+    ceph_cluster = ocsci_config.RUN.get("cephcluster")
+    no_ocs = ceph_cluster or skip_ocs
     deploy_teardown = deploy or teardown
     managed_platform = (
-        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
-        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        ocsci_config.ENV_DATA["platform"].lower()
+        == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or ocsci_config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        or ocsci_config.ENV_DATA["platform"].lower() == constants.FUSIONAAS_PLATFORM
     )
-    if not (deploy_teardown or skip_ocs) or (managed_platform and not deploy_teardown):
+    if not (deploy_teardown or not no_ocs) or (
+        managed_platform and not deploy_teardown
+    ):
         try:
             # Creating toolbox pod
             setup_ceph_toolbox()
@@ -3328,31 +3769,43 @@ def node_drain_teardown(request):
 
 
 @pytest.fixture(scope="function")
-def node_restart_teardown(request, nodes):
+def node_restart_teardown(request, nodes_multicluster):
     """
     Make sure all nodes are up and in 'Ready' state and if not,
     try to make them 'Ready' by restarting the nodes.
 
     """
+    cluster_node_objs = []
+    for index in range(ocsci_config.nclusters):
+        ocsci_config.switch_ctx(index)
+        cluster_node_objs.append(get_node_objs())
 
     def finalizer():
-        # Start the powered off nodes
-        nodes.restart_nodes_by_stop_and_start_teardown()
-        try:
-            node.wait_for_nodes_status(status=constants.NODE_READY)
-        except ResourceWrongStatusException:
+        for index in range(ocsci_config.nclusters):
+            ocsci_config.switch_ctx(index)
+            # Start the powered off nodes
+            try:
+                nodes_multicluster[index].restart_nodes_by_stop_and_start_teardown()
+            except CommandFailed:
+                nodes_multicluster[index].start_nodes(cluster_node_objs[index])
+                ocp.wait_for_cluster_connectivity()
+
             # Restart the nodes if in NotReady state
-            not_ready_nodes = [
-                n
-                for n in node.get_node_objs()
-                if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
-            ]
-            if not_ready_nodes:
-                log.info(
-                    f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
-                )
-                nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
+            try:
                 node.wait_for_nodes_status(status=constants.NODE_READY)
+            except ResourceWrongStatusException:
+                not_ready_nodes = [
+                    n
+                    for n in node.get_node_objs()
+                    if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+                ]
+                if not_ready_nodes:
+                    log.info(
+                        "Nodes in NotReady status found:"
+                        f" {[n.name for n in not_ready_nodes]}"
+                    )
+                    nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
+                    node.wait_for_nodes_status(status=constants.NODE_READY)
 
     request.addfinalizer(finalizer)
 
@@ -3494,8 +3947,22 @@ def namespace_store_factory_session(
     )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
+def snapshot_factory_session(request):
+    return snapshot_factory_fixture(request)
+
+
+@pytest.fixture(scope="class")
+def snapshot_factory_class(request):
+    return snapshot_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def snapshot_factory(request):
+    return snapshot_factory_fixture(request)
+
+
+def snapshot_factory_fixture(request):
     """
     Snapshot factory. Calling this fixture creates a volume snapshot from the
     specified PVC
@@ -3580,8 +4047,22 @@ def multi_snapshot_factory(snapshot_factory):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope="class")
+def snapshot_restore_factory_class(request):
+    return snapshot_restore_factory_fixture(request)
+
+
+@pytest.fixture(scope="session")
+def snapshot_restore_factory_session(request):
+    return snapshot_restore_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def snapshot_restore_factory(request):
+    return snapshot_restore_factory_fixture(request)
+
+
+def snapshot_restore_factory_fixture(request):
     """
     Snapshot restore factory. Calling this fixture creates new PVC out of the
     specified VolumeSnapshot.
@@ -3598,6 +4079,7 @@ def snapshot_restore_factory(request):
         restore_pvc_yaml=None,
         access_mode=constants.ACCESS_MODE_RWO,
         status=constants.STATUS_BOUND,
+        timeout=60,
     ):
         """
         Args:
@@ -3615,19 +4097,25 @@ def snapshot_restore_factory(request):
                 PVC. ReadWriteOnce is default.
             status (str): If provided then factory waits for the PVC to reach
                 desired state.
+            timeout (int): Time in seconds to wait for the PVC to reach the desired status.
 
         Returns:
             PVC: Restored PVC object
 
         """
+        no_interface = False
         snapshot_info = snapshot_obj.get()
         size = size or snapshot_info["status"]["restoreSize"]
         restore_pvc_name = restore_pvc_name or (
             helpers.create_unique_resource_name(snapshot_obj.name, "restore")
         )
+        vol_snapshot_class = snapshot_info["spec"]["volumeSnapshotClassName"]
+        log.info(f"Volume snapshot class name: {vol_snapshot_class}")
 
-        if snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            helpers.default_volumesnapshotclass(constants.CEPHBLOCKPOOL).name
+        if (
+            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            or vol_snapshot_class
+            == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
         ):
             storageclass = (
                 storageclass
@@ -3635,8 +4123,12 @@ def snapshot_restore_factory(request):
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
             interface = constants.CEPHBLOCKPOOL
-        elif snapshot_info["spec"]["volumeSnapshotClassName"] == (
-            helpers.default_volumesnapshotclass(constants.CEPHFILESYSTEM).name
+        elif (
+            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            or vol_snapshot_class
+            == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+            or ocsci_config.ENV_DATA.get("cluster_type", "").lower()
+            == constants.MS_CONSUMER_TYPE
         ):
             storageclass = (
                 storageclass
@@ -3644,6 +4136,15 @@ def snapshot_restore_factory(request):
             )
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
             interface = constants.CEPHFILESYSTEM
+        elif (
+            snapshot_info["spec"]["volumeSnapshotClassName"]
+            == constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVM
+            or snapshot_info["spec"]["volumeSnapshotClassName"]
+            == constants.DEFAULT_VOLUMESNAPSHOTCLASS_LVMS
+        ):
+            restore_pvc_yaml = restore_pvc_yaml or constants.CSI_LVM_PVC_RESTORE_YAML
+            no_interface = True
+
         restored_pvc = create_restore_pvc(
             sc_name=storageclass,
             snap_name=snapshot_obj.name,
@@ -3656,9 +4157,10 @@ def snapshot_restore_factory(request):
         )
         instances.append(restored_pvc)
         restored_pvc.snapshot = snapshot_obj
-        restored_pvc.interface = interface
+        if not no_interface:
+            restored_pvc.interface = interface
         if status:
-            helpers.wait_for_resource_state(restored_pvc, status)
+            helpers.wait_for_resource_state(restored_pvc, status, timeout)
         return restored_pvc
 
     def finalizer():
@@ -3766,12 +4268,13 @@ def collect_logs_fixture(request):
         """
         Tracking both logs separately reduce changes of collision
         """
-        if not config.RUN["cli_params"].get("deploy") and not config.RUN[
+        if not ocsci_config.RUN["cli_params"].get("deploy") and not ocsci_config.RUN[
             "cli_params"
         ].get("teardown"):
-            if config.REPORTING["collect_logs_on_success_run"]:
+            if ocsci_config.REPORTING["collect_logs_on_success_run"]:
                 collect_ocs_logs("testcases", ocs=False, status_failure=False)
                 collect_ocs_logs("testcases", ocp=False, status_failure=False)
+                collect_pod_container_rpm_package("testcases")
 
     request.addfinalizer(finalizer)
 
@@ -3855,22 +4358,38 @@ def nb_ensure_endpoint_count(request):
             ):
                 if min_ep_count <= ready_nb_ep_count <= max_ep_count:
                     log.info(
-                        f"NooBaa endpoints stabilized. Ready endpoints: {ready_nb_ep_count}"
+                        "NooBaa endpoints stabilized. Ready endpoints:"
+                        f" {ready_nb_ep_count}"
                     )
                     break
                 log.info(
-                    f"Waiting for the NooBaa endpoints to stabilize. "
+                    "Waiting for the NooBaa endpoints to stabilize. "
                     f"Current ready count: {ready_nb_ep_count}"
                 )
         except TimeoutExpiredError:
             raise TimeoutExpiredError(
-                "NooBaa endpoints did not stabilize in time.\n"
-                f"Min count: {min_ep_count}, max count: {max_ep_count}, ready count: {ready_nb_ep_count}"
+                "NooBaa endpoints did not stabilize in time.\nMin count:"
+                f" {min_ep_count}, max count: {max_ep_count}, ready count:"
+                f" {ready_nb_ep_count}"
             )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="class")
+def pvc_clone_factory_class(request):
+    return pvc_clone_factory_fixture(request)
+
+
+@pytest.fixture(scope="session")
+def pvc_clone_factory_session(request):
+    return pvc_clone_factory_fixture(request)
+
+
+@pytest.fixture(scope="function")
 def pvc_clone_factory(request):
+    return pvc_clone_factory_fixture(request)
+
+
+def pvc_clone_factory_fixture(request):
     """
     Calling this fixture creates a clone from the specified PVC
 
@@ -3885,6 +4404,7 @@ def pvc_clone_factory(request):
         size=None,
         access_mode=None,
         volume_mode=None,
+        timeout=120,
     ):
         """
         Args:
@@ -3899,6 +4419,7 @@ def pvc_clone_factory(request):
                 the cloned PVC. eg: ReadWriteOnce, ReadOnlyMany, ReadWriteMany
             volume_mode (str): Volume mode for PVC. This should match the
                 volume mode of parent PVC
+            timeout (int): Time in seconds to wait for the PVC to reach the desired status.
 
         Returns:
             PVC: PVC instance
@@ -3907,19 +4428,25 @@ def pvc_clone_factory(request):
         assert (
             pvc_obj.provisioner in constants.OCS_PROVISIONERS
         ), f"Unknown provisioner in PVC {pvc_obj.name}"
+        no_interface = False
         if pvc_obj.provisioner == "openshift-storage.rbd.csi.ceph.com":
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             interface = constants.CEPHBLOCKPOOL
         elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
-
+        elif pvc_obj.provisioner in [
+            constants.LVM_PROVISIONER_4_11,
+            constants.LVM_PROVISIONER,
+        ]:
+            clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
+            no_interface = True
         size = size or pvc_obj.get().get("spec").get("resources").get("requests").get(
             "storage"
         )
         storageclass = storageclass or pvc_obj.backed_sc
         access_mode = access_mode or pvc_obj.get_pvc_access_mode
-        volume_mode = volume_mode or getattr(pvc_obj, "volume_mode", None)
+        volume_mode = volume_mode or pvc_obj.get_pvc_vol_mode
 
         # Create clone
         clone_pvc_obj = pvc.create_pvc_clone(
@@ -3935,10 +4462,10 @@ def pvc_clone_factory(request):
         instances.append(clone_pvc_obj)
         clone_pvc_obj.parent = pvc_obj
         clone_pvc_obj.volume_mode = volume_mode
-        clone_pvc_obj.interface = interface
-
+        if not no_interface:
+            clone_pvc_obj.interface = interface
         if status:
-            helpers.wait_for_resource_state(clone_pvc_obj, status)
+            helpers.wait_for_resource_state(clone_pvc_obj, status, timeout=timeout)
         return clone_pvc_obj
 
     def finalizer():
@@ -3964,12 +4491,49 @@ def pvc_clone_factory(request):
 
 @pytest.fixture(scope="session", autouse=True)
 def reportportal_customization(request):
-    if config.REPORTING.get("rp_launch_url"):
-        request.config._metadata["RP Launch URL:"] = config.REPORTING["rp_launch_url"]
+    if ocsci_config.REPORTING.get("rp_launch_url"):
+        request.config._metadata["RP Launch URL:"] = ocsci_config.REPORTING[
+            "rp_launch_url"
+        ]
+
+
+@pytest.fixture(scope="function")
+def login_factory(request):
+    return login_factory_fixture(request)
+
+
+@pytest.fixture(scope="class")
+def login_factory_class(request):
+    return login_factory_fixture(request)
+
+
+@pytest.fixture(scope="session")
+def login_factory_session(request):
+    return login_factory_fixture(request)
+
+
+def login_factory_fixture(request):
+    """
+    Calling this fixture will login into console using other user(user other than kubeadmin)
+    """
+    drivers = []
+
+    def factory(username, password):
+        driver = login_ui(username=username, password=password)
+        drivers.append(driver)
+        return driver
+
+    def finalizer():
+        for driver in drivers:
+            close_browser()
+
+    request.addfinalizer(finalizer)
+
+    return factory
 
 
 @pytest.fixture()
-def multi_pvc_clone_factory(pvc_clone_factory):
+def multi_pvc_clone_factory(pvc_clone_factory, pod_factory):
     """
     Calling this fixture creates clone from each PVC in the provided list of PVCs
 
@@ -3984,6 +4548,9 @@ def multi_pvc_clone_factory(pvc_clone_factory):
         access_mode=None,
         volume_mode=None,
         wait_each=False,
+        attach_pods=False,
+        verify_data_integrity=False,
+        file_name=None,
     ):
         """
         Args:
@@ -4000,6 +4567,10 @@ def multi_pvc_clone_factory(pvc_clone_factory):
                 volume mode of parent PVC
             wait_each(bool): True to wait for each PVC to be in status 'status'
                 before creating next PVC, False otherwise
+            attach_pods(bool): True if we want to attach PODs to the cloned PVCs, False otherwise.
+            verify_data_integrity(bool): True if we want to verify data integrity by checking the existence and md5sum
+                                            of file in the cloned PVC, False otherwise.
+            file_name(str): The name of the file for which data integrity is to be checked.
 
         Returns:
             PVC: List PVC instance
@@ -4009,6 +4580,7 @@ def multi_pvc_clone_factory(pvc_clone_factory):
 
         status_tmp = status if wait_each else ""
 
+        log.info("Started creation of clones of the PVCs.")
         for obj in pvc_obj:
             # Create clone
             clone_pvc_obj = pvc_clone_factory(
@@ -4025,6 +4597,34 @@ def multi_pvc_clone_factory(pvc_clone_factory):
         if status and not wait_each:
             for cloned_pvc in cloned_pvcs:
                 helpers.wait_for_resource_state(cloned_pvc, status)
+
+        log.info("Successfully created clones of the PVCs.")
+
+        if attach_pods:
+            # Attach PODs to cloned PVCs
+            cloned_pod_objs = list()
+            for cloned_pvc_obj in cloned_pvcs:
+                if cloned_pvc_obj.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+                    cloned_pod_objs.append(
+                        pod_factory(
+                            pvc=cloned_pvc_obj,
+                            raw_block_pv=True,
+                            status=constants.STATUS_RUNNING,
+                            pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+                        )
+                    )
+                else:
+                    cloned_pod_objs.append(
+                        pod_factory(pvc=cloned_pvc_obj, status=constants.STATUS_RUNNING)
+                    )
+
+            # Verify that the fio exists and md5sum matches
+            if verify_data_integrity:
+                verify_data_integrity_for_multi_pvc_objs(
+                    cloned_pod_objs, pvc_obj, file_name
+                )
+
+            return cloned_pvcs, cloned_pod_objs
 
         return cloned_pvcs
 
@@ -4159,7 +4759,7 @@ def setup_ui_fixture(request):
     driver = login_ui()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 
@@ -4175,11 +4775,29 @@ def setup_acm_ui_fixture(request):
     driver = login_to_acm()
 
     def finalizer():
-        close_browser(driver)
+        close_browser()
 
     request.addfinalizer(finalizer)
 
     return driver
+
+
+@pytest.fixture(scope="session", autouse=True)
+def use_client_proxy(request):
+    """
+    This fixture configure required env variables for using client http proxy
+    if configured.
+    """
+    if (
+        ocsci_config.DEPLOYMENT.get("proxy")
+        or ocsci_config.DEPLOYMENT.get("disconnected")
+        or ocsci_config.ENV_DATA.get("private_link")
+    ) and ocsci_config.ENV_DATA.get("client_http_proxy"):
+        log.info(
+            f"Configuring client proxy: {ocsci_config.ENV_DATA['client_http_proxy']}"
+        )
+        os.environ["http_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
+        os.environ["https_proxy"] = ocsci_config.ENV_DATA["client_http_proxy"]
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -4199,7 +4817,7 @@ def pv_encryption_kms_setup_factory(request):
     """
 
     # set the KMS provider based on KMS_PROVIDER env value.
-    if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
+    if ocsci_config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
         return pv_encryption_hpcs_setup_factory(request)
     else:
         return pv_encryption_vault_setup_factory(request)
@@ -4224,7 +4842,9 @@ def pv_encryption_vault_setup_factory(request):
         vault.update_vault_env_vars()
 
         # Check if cert secrets already exist, if not create cert resources
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(
+            kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
         except CommandFailed as cfe:
@@ -4243,7 +4863,9 @@ def pv_encryption_vault_setup_factory(request):
         vault.vault_create_policy(policy_name=vault_resource_name)
 
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(
+            kind="configmap", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
 
         try:
             ocp_obj.get_resource(
@@ -4254,9 +4876,12 @@ def pv_encryption_vault_setup_factory(request):
             for key in vdict.keys():
                 old_key = key
             vdict[new_kmsid] = vdict.pop(old_key)
+            vdict[new_kmsid][
+                "VAULT_ADDR"
+            ] = f"https://{vault.vault_server}:{vault.port}"
             vdict[new_kmsid]["VAULT_BACKEND_PATH"] = vault_resource_name
             if use_vault_namespace:
-                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault_resource_name
+                vdict[new_kmsid]["VAULT_NAMESPACE"] = vault.vault_namespace
             vault.kmsid = vault_resource_name
             if kv_version == "v1":
                 vdict[new_kmsid]["VAULT_BACKEND"] = "kv"
@@ -4280,10 +4905,82 @@ def pv_encryption_vault_setup_factory(request):
         """
         if len(KMS.get_encryption_kmsid()) > 1:
             KMS.remove_kmsid(vault.kmsid)
-        vault.remove_vault_backend_path()
-        vault.remove_vault_policy()
+        if vault.vault_namespace:
+            vault.remove_vault_backend_path(vault_namespace=vault.vault_namespace)
+            vault.remove_vault_policy(vault_namespace=vault.vault_namespace)
+        else:
+            vault.remove_vault_backend_path()
+            vault.remove_vault_policy()
         if vault.vault_namespace:
             vault.remove_vault_namespace()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="function")
+def pv_encryption_kmip_setup_factory(request):
+    """
+    Create KMIP resources and setup csi-kms-connection-details configMap
+
+    """
+    kmip = KMS.KMIP()
+
+    def factory():
+        """
+        Returns:
+            object: KMIP (KMS) object
+        """
+        kmip.update_kmip_env_vars()
+        get_ksctl_cli()
+        kmip.kmsid = create_unique_resource_name("test", "kmip")
+        kmip.kmip_secret_name = kmip.create_kmip_secret(type="csi")
+
+        # If csi-kms-connection-details exists, edit the configmap to add new kmip config
+        ocp_obj = OCP(
+            kind="configmap", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
+
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            # new_kmsid = vault_resource_name
+            vdict = defaults.KMIP_CSI_CONNECTION_CONF
+            for key in vdict.keys():
+                old_key = key
+            vdict[kmip.kmsid] = vdict.pop(old_key)
+            vdict[kmip.kmsid]["KMS_SERVICE_NAME"] = kmip.kmsid
+            vdict[kmip.kmsid][
+                "KMIP_ENDPOINT"
+            ] = f"{kmip.kmip_endpoint}:{kmip.kmip_port}"
+            vdict[kmip.kmsid]["KMIP_SECRET_NAME"] = kmip.kmip_secret_name
+            vdict[kmip.kmsid]["TLS_SERVER_NAME"] = kmip.kmip_tls_server_name
+            KMS.update_csi_kms_vault_connection_details(vdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                kmip.kmsid = "1-kmip"
+                kmip.create_kmip_csi_kms_connection_details()
+
+        return kmip
+
+    def finalizer():
+        """
+        Remove the kmip config from csi-kms-connection-details configMap
+
+        """
+        if len(KMS.get_encryption_kmsid()) > 1:
+            KMS.remove_kmsid(kmip.kmsid)
+        if kmip.kmip_secret_name:
+            run_cmd(
+                f"oc delete secret {kmip.kmip_secret_name} -n"
+                f" {ocsci_config.ENV_DATA['cluster_namespace']}"
+            )
+        if kmip.kmip_key_identifier:
+            kmip.delete_ciphertrust_key(key_id=kmip.kmip_key_identifier)
 
     request.addfinalizer(finalizer)
     return factory
@@ -4312,7 +5009,9 @@ def pv_encryption_hpcs_setup_factory(request):
 
         # Create or update hpcs related confimap.
         hpcs_resource_name = create_unique_resource_name("test", "hpcs")
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(
+            kind="configmap", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
         # If csi-kms-connection-details exists, edit the configmap to add new hpcs config
         try:
             ocp_obj.get_resource(
@@ -4353,7 +5052,7 @@ def pv_encryption_hpcs_setup_factory(request):
         hpcs.delete_resource(
             hpcs.ibm_kp_secret_name,
             "secret",
-            constants.OPENSHIFT_STORAGE_NAMESPACE,
+            ocsci_config.ENV_DATA["cluster_namespace"],
         )
 
     request.addfinalizer(finalizer)
@@ -4393,14 +5092,14 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             (ocs_ci.ocs.resource.ocs) ocs object of the CephBlockPool.
 
         """
-        blockpool_ui_object = BlockPoolUI(setup_ui)
+        blockpool_ui_object = BlockPoolUI()
         pool_name, pool_status = blockpool_ui_object.create_pool(
             replica=replica, compression=compression
         )
         if pool_status:
             log.info(
-                f"Pool {pool_name} with replica {replica} and compression {compression} was created and "
-                f"is in ready state"
+                f"Pool {pool_name} with replica {replica} and compression"
+                f" {compression} was created and is in ready state"
             )
             ocs_blockpool_obj = create_ocs_object_from_kind_and_name(
                 kind=constants.CEPHBLOCKPOOL,
@@ -4418,7 +5117,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
                 )
             raise PoolDidNotReachReadyState(
                 f"Pool {pool_name} with replica {replica} and compression {compression}"
-                f" did not reach ready state"
+                " did not reach ready state"
             )
 
     def finalizer():
@@ -4432,12 +5131,12 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             except CommandFailed:
                 log.warning("Pool is already deleted")
                 continue
-            blockpool_ui_obj = BlockPoolUI(setup_ui)
+            blockpool_ui_obj = BlockPoolUI()
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
                     f"Could not delete block pool {instances.name} from UI."
-                    f" Deleted from CLI"
+                    " Deleted from CLI"
                 )
 
     request.addfinalizer(finalizer)
@@ -4469,7 +5168,8 @@ def storageclass_factory_ui(request, cephblockpool_factory_ui, setup_ui):
 
 def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui):
     """
-    The function create new storageclass
+    The function create new storage class without encryption and creates an encrypted storage class vi UI
+    if the flag encryption is set to True
     """
     instances = []
 
@@ -4478,10 +5178,16 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
         compression=False,
         replica=3,
         create_new_pool=False,
-        encryption=False,  # not implemented yet
-        reclaim_policy=constants.RECLAIM_POLICY_DELETE,  # not implemented yet
+        encryption=False,
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE,
         default_pool=constants.DEFAULT_BLOCKPOOL,
         existing_pool=None,
+        backend_path=None,
+        vault_namespace=None,
+        vol_binding_mode="Immediate",
+        service_name=None,
+        kms_address=None,
+        tls_server_name=None,
     ):
         """
         Args:
@@ -4496,17 +5202,29 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             (ocs_ci.ocs.resource.ocs) ocs object of the storageclass.
 
         """
-        storageclass_ui_object = StorageClassUI(setup_ui)
-        if existing_pool is None and create_new_pool is False:
-            pool_name = default_pool
-        if create_new_pool is True:
-            pool_ocs_obj = cephblockpool_factory_ui(
-                replica=replica, compression=compression
+        global sc_name
+        storageclass_ui_object = StorageClassUI()
+        if encryption:
+            sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
+                backend_path=backend_path,
+                reclaim_policy=reclaim_policy,
+                provisioner=provisioner,
+                vol_binding_mode=vol_binding_mode,
+                service_name=service_name,
+                kms_address=kms_address,
+                tls_server_name=tls_server_name,
             )
-            pool_name = pool_ocs_obj.name
-        if existing_pool is not None:
-            pool_name = existing_pool
-        sc_name = storageclass_ui_object.create_storageclass(pool_name)
+        else:
+            if existing_pool is None and create_new_pool is False:
+                pool_name = default_pool
+            if create_new_pool is True:
+                pool_ocs_obj = cephblockpool_factory_ui(
+                    replica=replica, compression=compression
+                )
+                pool_name = pool_ocs_obj.name
+            if existing_pool is not None:
+                pool_name = existing_pool
+            sc_name = storageclass_ui_object.create_storageclass(pool_name)
         if sc_name is None:
             log.error("Storageclass was not created")
             raise StorageclassNotCreated(
@@ -4528,16 +5246,16 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             except CommandFailed:
                 log.warning("Storageclass is already deleted")
                 continue
-            storageclass_ui_obj = StorageClassUI(setup_ui)
+            storageclass_ui_obj = StorageClassUI()
             if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
                 instance.delete()
                 raise StorageClassNotDeletedFromUI(
                     f"Could not delete storageclass {instances.name} from UI."
-                    f"Deleted from CLI"
+                    "Deleted from CLI"
                 )
 
     request.addfinalizer(finalizer)
-    return
+    return factory
 
 
 @pytest.fixture()
@@ -4551,8 +5269,8 @@ def vault_tenant_sa_setup_factory(request):
 
     def factory(
         kv_version,
-        use_auth_path=False,
-        use_vault_namespace=True,
+        use_auth_path=True,
+        use_vault_namespace=False,
         use_backend=False,
     ):
         """
@@ -4570,7 +5288,9 @@ def vault_tenant_sa_setup_factory(request):
         vault.update_vault_env_vars()
 
         # Check if cert secrets already exist, if not create cert resources
-        ocp_obj = OCP(kind="secret", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(
+            kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
         try:
             ocp_obj.get_resource(resource_name="ocs-kms-ca-secret", column="NAME")
         except CommandFailed as cfe:
@@ -4594,17 +5314,19 @@ def vault_tenant_sa_setup_factory(request):
         vault.create_token_reviewer_resources()
         if use_auth_path and use_vault_namespace:
             vault.vault_kube_auth_setup(
-                auth_path=vault_resource_name, auth_namespace=vault_resource_name
+                auth_path=vault_resource_name, auth_namespace=vault.vault_namespace
             )
         elif use_auth_path:
             vault.vault_kube_auth_setup(auth_path=vault_resource_name)
         elif use_vault_namespace:
-            vault.vault_kube_auth_setup(auth_namespace=vault_resource_name)
+            vault.vault_kube_auth_setup(auth_namespace=vault.vault_namespace)
         else:
             vault.vault_kube_auth_setup()
 
         # If csi-kms-connection-details exists, edit the configmap to add new vault config
-        ocp_obj = OCP(kind="configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = OCP(
+            kind="configmap", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
         try:
             ocp_obj.get_resource(
                 resource_name="csi-kms-connection-details", column="NAME"
@@ -4613,10 +5335,31 @@ def vault_tenant_sa_setup_factory(request):
             for key in vdict.keys():
                 old_key = key
             vdict[vault.kmsid] = vdict.pop(old_key)
+            vdict[vault.kmsid][
+                "vaultAddress"
+            ] = f"https://{vault.vault_server}:{vault.port}"
             vdict[vault.kmsid]["vaultBackendPath"] = vault_resource_name
+            if not ocsci_config.ENV_DATA.get("VAULT_CA_ONLY", None):
+                vdict[vault.kmsid][
+                    "vaultClientCertFromSecret"
+                ] = get_default_if_keyval_empty(
+                    ocsci_config.ENV_DATA,
+                    "VAULT_CLIENT_CERT",
+                    defaults.VAULT_DEFAULT_CLIENT_CERT,
+                )
+                vdict[vault.kmsid][
+                    "vaultClientCertKeyFromSecret"
+                ] = get_default_if_keyval_empty(
+                    ocsci_config.ENV_DATA,
+                    "VAULT_CLIENT_KEY",
+                    defaults.VAULT_DEFAULT_CLIENT_KEY,
+                )
+            else:
+                vdict[vault.kmsid].pop("vaultClientCertFromSecret")
+                vdict[vault.kmsid].pop("vaultClientCertKeyFromSecret")
             if use_vault_namespace:
-                vdict[vault.kmsid]["vaultNamespace"] = vault_resource_name
-                vdict[vault.kmsid]["vaultAuthNamespace"] = vault_resource_name
+                vdict[vault.kmsid]["vaultNamespace"] = vault.vault_namespace
+                vdict[vault.kmsid]["vaultAuthNamespace"] = vault.vault_namespace
             else:
                 vdict[vault.kmsid].pop("vaultNamespace")
                 vdict[vault.kmsid].pop("vaultAuthNamespace")
@@ -4705,6 +5448,10 @@ def nsfs_interface_fixture(request):
         volumes = nsfs_deployment_data["spec"]["template"]["spec"]["volumes"][0]
         volumes["name"] = pvc_name
         volumes["persistentVolumeClaim"]["claimName"] = pvc_name
+
+        if ocsci_config.DEPLOYMENT.get("disconnected"):
+            update_container_with_mirrored_image(nsfs_deployment_data)
+
         deployment_obj = helpers.create_resource(**nsfs_deployment_data)
         created_deployments.append(deployment_obj)
         return deployment_obj
@@ -4761,16 +5508,23 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool)
 
         """
+
+        # Build the mcg-cli command for creating an account
         cli_cmd = "".join(
             (
                 f"account create {name}",
-                f" --allowed_buckets {','.join([bucketname for bucketname in allowed_buckets])}"
+                " --allowed_buckets"
+                f" {','.join([bucketname for bucketname in allowed_buckets])}"
                 if type(allowed_buckets) in (list, tuple)
+                and version.get_semantic_ocs_version_from_config()
+                < version.VERSION_4_12
                 else "",
-                " --full_permission=" + "True"
+                " --full_permission=True"
                 if type(allowed_buckets) is dict
                 and allowed_buckets.get("full_permission")
-                else "False",
+                and version.get_semantic_ocs_version_from_config()
+                < version.VERSION_4_12
+                else "",
                 f" --default_resource {default_resource}" if default_resource else "",
                 f" --uid {uid}" if uid else "",
                 f" --gid {gid}" if gid else "",
@@ -4779,15 +5533,19 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
                 " --nsfs_account_config=" + "True" if uid else "False",
             )
         )
+
+        # Create the account
         acc_creation_process_output = mcg_obj_session.exec_mcg_cmd(cli_cmd)
         created_accounts.append(name)
+
         # Verify that the account was created successfuly and that the response contains the needed data
-        assert (
-            "access_key" in str(acc_creation_process_output).lower()
-        ), f"Did not find access_key in account creation response. Response: {str(acc_creation_process_output)}"
+        assert "access_key" in str(acc_creation_process_output).lower(), (
+            "Did not find access_key in account creation response. Response:"
+            f" {str(acc_creation_process_output)}"
+        )
 
         acc_secret_dict = OCP(
-            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
+            kind="secret", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
         ).get(f"noobaa-account-{name}")
         return {
             "access_key_id": base64.b64decode(
@@ -4870,10 +5628,22 @@ def nsfs_bucket_factory_fixture(
         ]
         nsfs_interface_pod = Pod(
             **get_pods_having_label(
-                f"app={deployment_app_label}", config.ENV_DATA["cluster_namespace"]
+                f"app={deployment_app_label}",
+                ocsci_config.ENV_DATA["cluster_namespace"],
             )[0]
         )
         wait_for_pods_to_be_running(pod_names=[nsfs_interface_pod.name])
+
+        # Wait for the nooba-endpoint pods to reset and mount the PVC
+        nb_endpoint_pods = [
+            Pod(**pod_dict)
+            for pod_dict in get_pods_having_label(
+                constants.NOOBAA_ENDPOINT_POD_LABEL,
+                ocsci_config.ENV_DATA["cluster_namespace"],
+            )
+        ]
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in nb_endpoint_pods])
+
         # Apply the necessary permissions on the filesystem
         nsfs_interface_pod.exec_cmd_on_pod(f"chmod -R 777 {nsfs_obj.mount_path}")
         nsfs_interface_pod.exec_cmd_on_pod(f"groupadd -g {nsfs_obj.gid} nsfs-group")
@@ -4895,13 +5665,14 @@ def nsfs_bucket_factory_fixture(
         # Let the account propagate through the system
         time.sleep(15)
         # Create a boto3 S3 resource for commmunication with the NSFS bucket
-        nsfs_s3_client = boto3.resource(
+        nsfs_s3_resource = boto3.resource(
             "s3",
             verify=False,
             endpoint_url=nsfs_obj.s3_creds["endpoint"],
             aws_access_key_id=nsfs_obj.s3_creds["access_key_id"],
             aws_secret_access_key=nsfs_obj.s3_creds["access_key"],
         )
+        nsfs_obj.s3_client = nsfs_s3_resource.meta.client
         # Create a new NSFS bucket
         # Follow this flow if the bucket should be created on top of an existing directory
         if nsfs_obj.mount_existing_dir:
@@ -4910,7 +5681,8 @@ def nsfs_bucket_factory_fixture(
             )
             new_dir_path = f"/{nsfs_obj.bucket_name}"
             nsfs_interface_pod.exec_cmd_on_pod(
-                f"mkdir -m {nsfs_obj.existing_dir_mode} {nsfs_obj.mount_path}/{new_dir_path}"
+                "mkdir -m"
+                f" {nsfs_obj.existing_dir_mode} {nsfs_obj.mount_path}/{new_dir_path}"
             )
             rpc_bucket_creation_response = mcg_obj_session.send_rpc_query(
                 "bucket_api",
@@ -4952,9 +5724,9 @@ def nsfs_bucket_factory_fixture(
                 )
         # Otherwise, the new bucket will create a directory for itself
         else:
-            nsfs_obj.bucket_name = retry(ClientError, tries=4, delay=10)(
+            nsfs_obj.bucket_name = retry(CommandFailed, tries=4, delay=10)(
                 bucket_factory
-            )(s3resource=nsfs_s3_client, verify_health=nsfs_obj.verify_health)[0].name
+            )(s3resource=nsfs_s3_resource, verify_health=nsfs_obj.verify_health)[0].name
         nsfs_obj.mounted_bucket_path = f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
 
     def nsfs_bucket_factory_cleanup():
@@ -4971,6 +5743,93 @@ def nsfs_bucket_factory_fixture(
     return nsfs_bucket_factory_implementation
 
 
+@pytest.fixture(scope="class")
+def revert_noobaa_endpoint_scc_class(request):
+    """
+    This fixture reverts the noobaa-endpoint SCC back to the way it was before ODF 4.12.
+    See https://url.corp.redhat.com/b92fd1d for details.
+
+    """
+    return revert_noobaa_endpoint_scc_fixture(request)
+
+
+def revert_noobaa_endpoint_scc_fixture(request):
+    """
+    This fixture reverts the noobaa-endpoint SCC back to the way it was before ODF 4.12.
+    See https://url.corp.redhat.com/b92fd1d for details.
+
+    """
+
+    ocp_scc = ocp.OCP(
+        kind=constants.SCC, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+    )
+    nb_endpoint_scc_name = constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT_NAME
+    nb_endpoint_sa = constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT
+
+    # Abort if the noobaa-endpoint SCC has already been modified
+    scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+    if scc_dict["seLinuxContext"]["type"] == "MustRunAs" or scc_dict["users"]:
+        return
+
+    def revert_endpoint_scc_implementation():
+        """
+        1. Modify the noobaa-endpoint scc via oc patch
+        2. Verify that the changes were not reconciled
+
+        """
+        # Modify the noobaa-endpoint SCC
+        json_payload = [
+            {"op": "replace", "path": "/seLinuxContext/type", "value": "MustRunAs"},
+            {"op": "add", "path": "/users/0", "value": f"{nb_endpoint_sa}"},
+        ]
+
+        ocp_scc.patch(
+            resource_name=nb_endpoint_scc_name,
+            params=json_payload,
+            format_type="json",
+        )
+
+        # Verify the changes
+        scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+        assert (
+            scc_dict["seLinuxContext"]["type"] == "MustRunAs"
+        ), "Failed to modify the noobaa-db SCC seLinuxContext type"
+        assert (
+            constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT in scc_dict["users"]
+        ), "The noobaa-endpoint SA wasn't added to the noobaa-endpoint SCC"
+
+    def finalizer():
+        """
+        1. Restore the noobaa-endpoint SCC back to its default values
+        2. Verify that the changes were not reconciled
+
+        """
+
+        # Restore the noobaa-endpoint SCC back to it's default state
+        json_payload = [
+            {"op": "replace", "path": "/seLinuxContext/type", "value": "RunAsAny"},
+            {"op": "remove", "path": "/users/0", "value": f"{nb_endpoint_sa}"},
+        ]
+
+        ocp_scc.patch(
+            resource_name=nb_endpoint_scc_name,
+            params=json_payload,
+            format_type="json",
+        )
+
+        # Verify the changes
+        scc_dict = ocp_scc.get(resource_name=nb_endpoint_scc_name)
+        assert (
+            scc_dict["seLinuxContext"]["type"] == "RunAsAny"
+        ), "Failed to restore the default noobaa-endpoint SCC seLinuxContext type"
+        assert (
+            constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT not in scc_dict["users"]
+        ), "Failed to restore the default noobaa-endpoint SA status"
+
+    request.addfinalizer(finalizer)
+    revert_endpoint_scc_implementation()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def patch_consumer_toolbox_with_secret():
     """
@@ -4980,17 +5839,19 @@ def patch_consumer_toolbox_with_secret():
     """
     # Get the secret from provider if MS multicluster run
     if not (
-        config.multicluster
-        and config.ENV_DATA.get("platform", "").lower()
+        ocsci_config.multicluster
+        and ocsci_config.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
-        and not config.RUN["cli_params"].get("deploy")
+        and not ocsci_config.RUN["cli_params"].get("deploy")
+        and ocsci_config.ENV_DATA.get("platform").lower()
+        != constants.FUSIONAAS_PLATFORM
     ):
         return
 
-    restore_ctx_index = config.cur_index
+    restore_ctx_index = ocsci_config.cur_index
 
     # Get the admin key if available
-    ceph_admin_key = os.environ.get("CEPHADMINKEY") or config.AUTH.get(
+    ceph_admin_key = os.environ.get("CEPHADMINKEY") or ocsci_config.AUTH.get(
         "external", {}
     ).get("ceph_admin_key")
 
@@ -4998,20 +5859,21 @@ def patch_consumer_toolbox_with_secret():
         provider_cluster = ""
 
         # Identify the provider cluster
-        for cluster in config.clusters:
+        for cluster in ocsci_config.clusters:
             if cluster.ENV_DATA.get("cluster_type") == "provider":
                 provider_cluster = cluster
                 break
         if not provider_cluster:
             log.warning(
-                "Provider cluster not found to patch rook-ceph-tools deployment on consumers with ceph.admin key. "
-                "Assuming the toolbox on consumers are already fixed to run ceph commands."
+                "Provider cluster not found to patch rook-ceph-tools deployment on"
+                " consumers with ceph.admin key. Assuming the toolbox on consumers are"
+                " already fixed to run ceph commands."
             )
             return
 
         # Switch context to provider cluster
         log.info("Switching to the provider cluster context")
-        config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+        ocsci_config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
 
         # Get the key from provider cluster tools pod
         provider_tools_pod = get_ceph_tools_pod()
@@ -5022,9 +5884,9 @@ def patch_consumer_toolbox_with_secret():
         )
 
     # Patch the rook-ceph-tools deployment of all consumer clusters
-    for cluster in config.clusters:
+    for cluster in ocsci_config.clusters:
         if cluster.ENV_DATA.get("cluster_type") == "consumer":
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            ocsci_config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             consumer_tools_pod = get_ceph_tools_pod()
 
             # Check whether ceph command is working on tools pod.
@@ -5042,8 +5904,8 @@ def patch_consumer_toolbox_with_secret():
                 resource_name="rook-ceph-tools",
             )
             patch_value = (
-                f'[{{"op": "replace", "path": "/spec/template/spec/containers/0/env", '
-                f'"value":[{{"name": "ROOK_CEPH_USERNAME", "value": "client.admin"}}, '
+                '[{"op": "replace", "path": "/spec/template/spec/containers/0/env", '
+                '"value":[{"name": "ROOK_CEPH_USERNAME", "value": "client.admin"}, '
                 f'{{"name": "ROOK_CEPH_SECRET", "value": "{ceph_admin_key}"}}]}}]'
             )
             assert consumer_tools_deployment.patch(
@@ -5064,7 +5926,32 @@ def patch_consumer_toolbox_with_secret():
             helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
 
     log.info("Switching back to the initial cluster context")
-    config.switch_ctx(restore_ctx_index)
+    ocsci_config.switch_ctx(restore_ctx_index)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def toolbox_on_faas_consumer():
+    """
+    Create tools pod on FaaS consumer cluster at the start of a test run while using multicluster configuration
+
+    """
+    from ocs_ci.helpers.managed_services import create_toolbox_on_faas_consumer
+
+    if not (
+        ocsci_config.multicluster
+        and ocsci_config.ENV_DATA.get("platform", "").lower()
+        == constants.FUSIONAAS_PLATFORM
+        and ocsci_config.ENV_DATA["cluster_type"].lower() == constants.MS_CONSUMER_TYPE
+        and not ocsci_config.RUN["cli_params"].get("deploy")
+    ):
+        return
+
+    tools_pod = get_pods_having_label(
+        label=constants.TOOL_APP_LABEL,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+    )
+    if not tools_pod:
+        create_toolbox_on_faas_consumer()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -5075,19 +5962,21 @@ def switch_to_provider_for_test(request):
 
     """
     switched_to_provider = False
-    current_cluster = config.cluster_ctx
+    current_cluster = ocsci_config.cluster_ctx
     if (
         request.node.get_closest_marker("runs_on_provider")
-        and config.multicluster
+        and ocsci_config.multicluster
         and current_cluster.ENV_DATA.get("platform", "").lower()
         in constants.MANAGED_SERVICE_PLATFORMS
     ):
-        for cluster in config.clusters:
+        for cluster in ocsci_config.clusters:
             if cluster.ENV_DATA.get("cluster_type") == "provider":
                 provider_cluster = cluster
                 log.debug("Switching to the provider cluster context")
                 # TODO: Use 'switch_to_provider' function introduced in PR 5541
-                config.switch_ctx(provider_cluster.MULTICLUSTER["multicluster_index"])
+                ocsci_config.switch_ctx(
+                    provider_cluster.MULTICLUSTER["multicluster_index"]
+                )
                 switched_to_provider = True
                 break
 
@@ -5098,7 +5987,7 @@ def switch_to_provider_for_test(request):
         """
         if switched_to_provider:
             log.debug("Switching back to the previous cluster context")
-            config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
+            ocsci_config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
 
     request.addfinalizer(finalizer)
 
@@ -5122,6 +6011,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         deployment_config=False,
         sc_rbd=None,
         sc_cephfs=None,
+        pod_dict_path=None,
     ):
         """
         Args:
@@ -5150,6 +6040,8 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 of 'StorageClass' kind
             sc_cephfs (OCS): Cephfs storage class. ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind
+            pod_dict_path (str): YAML path for the pod.
+
         Returns:
             tuple: List of pvcs and pods
         """
@@ -5220,13 +6112,12 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             else:
                 interface = constants.CEPHBLOCKPOOL
 
-            # TODO: Remove pod_dict_path variable if issue 2524 is fixed
             if deployment_config:
-                pod_dict_path = constants.FEDORA_DC_YAML
+                pod_dict_path = pod_dict_path or constants.FEDORA_DC_YAML
             elif pvc_obj.volume_mode == "Block":
-                pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                pod_dict_path = pod_dict_path or constants.CSI_RBD_RAW_BLOCK_POD_YAML
             else:
-                pod_dict_path = ""
+                pod_dict_path = pod_dict_path if pod_dict_path else ""
 
             num_pods = (
                 pods_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
@@ -5267,29 +6158,759 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
     return factory
 
 
+@pytest.fixture()
+def multi_pvc_pod_lifecycle_factory(
+    project_factory, multi_pvc_factory, pod_factory, teardown_factory
+):
+    return _multi_pvc_pod_lifecycle_factory(
+        project_factory, multi_pvc_factory, pod_factory, teardown_factory
+    )
+
+
+@pytest.fixture()
+def multi_obc_lifecycle_factory(
+    bucket_factory, mcg_obj, awscli_pod_session, mcg_obj_session, test_directory_setup
+):
+    return _multi_obc_lifecycle_factory(
+        bucket_factory,
+        mcg_obj,
+        awscli_pod_session,
+        mcg_obj_session,
+        test_directory_setup,
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def set_live_must_gather_images(pytestconfig):
     """
     Set live must gather images
     """
-    live_deployment = config.DEPLOYMENT["live_deployment"]
-    ibm_cloud_platform = config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+    live_deployment = ocsci_config.DEPLOYMENT["live_deployment"]
+    managed_ibmcloud_platform = (
+        ocsci_config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and ocsci_config.ENV_DATA["deployment_type"] == "managed"
+    )
+    # For ROSA platforms, we use upstream must gather image
+    if ocsci_config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        log.debug(
+            "Live must gather image is not supported in Managed Service platforms"
+        )
+        return
     # As we cannot use internal build of must gather for IBM Cloud platform
     # we will use live must gather image as a W/A.
-    if live_deployment or ibm_cloud_platform:
+    if live_deployment or managed_ibmcloud_platform:
         update_live_must_gather_image()
     # For non GAed version of ODF as a W/A we need to use upstream must gather image
     # for IBM Cloud platform
     if (
-        ibm_cloud_platform
+        managed_ibmcloud_platform
         and not live_deployment
-        and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_11)
+        and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_13)
     ):
-        # There is a promise that in 4.10 or 4.11 there will be possible to change
-        # global pull secret. If that's the case, we can remove those workarounds.
-        config.REPORTING[
+        ocsci_config.REPORTING[
             "default_ocs_must_gather_image"
         ] = defaults.MUST_GATHER_UPSTREAM_IMAGE
-        config.REPORTING[
+        ocsci_config.REPORTING[
             "default_ocs_must_gather_latest_tag"
         ] = defaults.MUST_GATHER_UPSTREAM_TAG
+
+
+@pytest.fixture(scope="function")
+def create_scale_pods_and_pvcs_using_kube_job(request):
+    """
+    Create scale pods and PVCs using a kube job fixture. This fixture makes use of the
+    FioPodScale class to create the expected number of PODs+PVCs
+    """
+
+    orig_index = None
+    fio_scale = None
+
+    def factory(
+        scale_count=None,
+        pvc_per_pod_count=5,
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+        max_pvc_size=30,
+    ):
+        """
+        Create a factory for creating resources using k8s fixture.
+
+        Args:
+            scale_count (int): No of PVCs to be Scaled. Should be one of the values in the dict
+                "constants.SCALE_PVC_ROUND_UP_VALUE".
+            pvc_per_pod_count (int): Number of PVCs to be attached to single POD
+            Example, If 20 then 20 PVCs will be attached to single POD
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
+
+        Returns:
+            FioPodScale: The FioPodScale object
+
+        """
+        nonlocal orig_index
+        nonlocal fio_scale
+
+        if (
+            ocsci_config.multicluster
+            and ocsci_config.ENV_DATA.get("platform", "").lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+        ):
+            orig_index = ocsci_config.cur_index
+
+        # Scale FIO pods in the cluster
+        scale_count = scale_count or min(constants.SCALE_PVC_ROUND_UP_VALUE)
+        fio_scale = FioPodScale(
+            kind=constants.DEPLOYMENTCONFIG, node_selector=constants.SCALE_NODE_SELECTOR
+        )
+        kube_pod_obj_list, kube_pvc_obj_list = fio_scale.create_scale_pods(
+            scale_count=scale_count,
+            pvc_per_pod_count=pvc_per_pod_count,
+            start_io=start_io,
+            io_runtime=io_runtime,
+            pvc_size=pvc_size,
+            max_pvc_size=max_pvc_size,
+        )
+        kube_pod_obj_list_names = [p.name for p in kube_pod_obj_list]
+        kube_pvc_obj_list_names = [p.name for p in kube_pvc_obj_list]
+
+        log.info(
+            f"kube pod list = {kube_pod_obj_list_names}, kube pvc list ="
+            f" {kube_pvc_obj_list_names}"
+        )
+
+        return fio_scale
+
+    def finalizer():
+        if orig_index is not None:
+            ocsci_config.switch_ctx(orig_index)
+        log.info("Cleaning the fio_scale instance")
+        if fio_scale and not fio_scale.is_cleanup:
+            fio_scale.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="function")
+def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
+    request, create_scale_pods_and_pvcs_using_kube_job
+):
+    """
+    Create scale pods and PVCs using a kube job on MS consumers fixture. This fixture makes use of the
+    FioPodScale class to create the expected number of PODs+PVCs.
+    This fixture is for Managed service when using MS consumers.
+    """
+    orig_index = None
+    consumer_index_per_fio_scale_dict = {}
+
+    def factory(
+        scale_count=None,
+        pvc_per_pod_count=5,
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+        max_pvc_size=30,
+        consumer_indexes=None,
+    ):
+        """
+        Create a factory for creating scale pods and PVCs using k8s on MS consumers fixture.
+
+        Args:
+            scale_count (int): No of PVCs to be Scaled. Should be one of the values in the dict
+                "constants.SCALE_PVC_ROUND_UP_VALUE".
+            pvc_per_pod_count (int): Number of PVCs to be attached to single POD
+            Example, If 20 then 20 PVCs will be attached to single POD
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
+            consumer_indexes (list): the list of the consumer indexes to create scale pods and PVCs.
+                If not specified, it creates scale pods and PVCs on all the consumers.
+
+        Returns:
+            dict: Dictionary of the consumer index per fio_scale object associated with the consumer.
+
+        """
+        nonlocal orig_index
+        orig_index = ocsci_config.cur_index
+
+        scale_count = scale_count or min(constants.SCALE_PVC_ROUND_UP_VALUE)
+        consumer_indexes = consumer_indexes or ocsci_config.get_consumer_indexes_list()
+        for consumer_i in consumer_indexes:
+            ocsci_config.switch_ctx(consumer_i)
+
+            fio_scale = FioPodScale(
+                kind=constants.DEPLOYMENTCONFIG,
+                node_selector=constants.SCALE_NODE_SELECTOR,
+            )
+            kube_pod_obj_list, kube_pvc_obj_list = fio_scale.create_scale_pods(
+                scale_count=scale_count,
+                pvc_per_pod_count=pvc_per_pod_count,
+                start_io=start_io,
+                io_runtime=io_runtime,
+                pvc_size=pvc_size,
+                max_pvc_size=max_pvc_size,
+                obj_name_prefix=f"obj_c{consumer_i}_",
+            )
+            kube_pod_obj_list_names = [p.name for p in kube_pod_obj_list]
+            kube_pvc_obj_list_names = [p.name for p in kube_pvc_obj_list]
+
+            log.info(
+                f"kube pod list = {kube_pod_obj_list_names}, kube pvc list ="
+                f" {kube_pvc_obj_list_names}"
+            )
+
+            consumer_index_per_fio_scale_dict[consumer_i] = fio_scale
+
+        ocsci_config.switch_ctx(orig_index)
+        return consumer_index_per_fio_scale_dict
+
+    @switch_to_default_cluster_index_at_last
+    def finalizer():
+        log.info("Cleaning the fio_scale instances")
+        for consumer_i, fio_scale in consumer_index_per_fio_scale_dict.items():
+            ocsci_config.switch_ctx(consumer_i)
+            if not fio_scale.is_cleanup:
+                fio_scale.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def dr_workload(request):
+    """
+    Setup Busybox workload for RDR setup
+
+    """
+    instances = []
+
+    def factory(num_of_subscription=1, num_of_appset=0):
+        """
+        Args:
+            num_of_subscription (int): Number of Subscription type workload to be created
+            num_of_appset (int): Number of ApplicationSet type workload to be created
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class.
+
+        """
+        total_pvc_count = 0
+        for index in range(num_of_subscription):
+            workload_details = ocsci_config.ENV_DATA["dr_workload_subscription"][index]
+            workload = BusyBox(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        for index in range(num_of_appset):
+            workload_details = ocsci_config.ENV_DATA["dr_workload_appset"][index]
+            workload = BusyBox_AppSet(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+        if ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        return instances
+
+    def teardown():
+        failed_to_delete = False
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                failed_to_delete = True
+
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
+            )
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def lvm_storageclass_factory_class(request, storageclass_factory_class):
+    return lvm_storageclass_factory_fixture(request, storageclass_factory_class)
+
+
+@pytest.fixture(scope="session")
+def lvm_storageclass_factory_session(request, storageclass_factory_session):
+    return lvm_storageclass_factory_fixture(request, storageclass_factory_session)
+
+
+@pytest.fixture(scope="function")
+def lvm_storageclass_factory(request, storageclass_factory):
+    return lvm_storageclass_factory_fixture(request, storageclass_factory)
+
+
+def lvm_storageclass_factory_fixture(request, storageclass_factory):
+    """
+    Create lvm storageclass, if volume binding mode is wffc it stays with the default storageclass,
+    if volume binding mode is Immediate it create a new storageclass
+
+    """
+    instances = []
+
+    def factory(
+        volume_binding=constants.IMMEDIATE_VOLUMEBINDINGMODE,
+    ):
+        """
+        Args:
+            volume_binding (str): The volume binding mode for the stoargeclass
+
+        """
+        sc_obj = None
+        if volume_binding == constants.WFFC_VOLUMEBINDINGMODE:
+            sc_ocp_obj = OCP(kind="StorageClass", resource_name=constants.LVM_SC)
+            sc_obj = OCS(**sc_ocp_obj.data)
+            log.info(f"Will return default storageclass {sc_obj.name}")
+        elif volume_binding == constants.IMMEDIATE_VOLUMEBINDINGMODE:
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_11:
+                sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML_4_11)
+            elif version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+                sc_obj = templating.load_yaml(constants.CSI_LVM_STORAGECLASS_YAML)
+            sc_obj["metadata"]["name"] = create_unique_resource_name(
+                resource_description="immediate-test",
+                resource_type="storageclass",
+            )
+            sc_obj["volumeBindingMode"] = constants.IMMEDIATE_VOLUMEBINDINGMODE
+            sc_obj = storageclass_factory(custom_data=sc_obj)
+            log.info(f"Will return newly created storageclass {sc_obj.name}")
+            instances.append(sc_obj)
+        if sc_obj is not None:
+            return sc_obj
+        raise StorageclassNotCreated(
+            f"Could not create storageclass with {volume_binding}"
+        )
+
+    def finalizer():
+        """
+        Delete storageclass
+        """
+
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete(wait=True)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="session")
+def fedora_pod_session(request):
+    return fedora_pod_fixture(request, scope_name="session")
+
+
+def fedora_pod_fixture(request, scope_name):
+    """
+    Creates a new fedora pod containing ~500k files
+    on it in the folder /home/linux_tar_dir/
+
+    Args:
+        scope_name (str): The name of the fixture's scope,
+        used for giving a descriptive name to the pod and configmap
+
+    Returns:
+        pod: A fedora pod running
+
+    """
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_data = templating.load_yaml(constants.FEDORA_SERVICE_CA_YAML)
+    service_ca_configmap_name = create_unique_resource_name(
+        "fedora-service-ca", scope_name
+    )
+    service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    log.info("Trying to create the fedora service CA")
+    service_ca_configmap = helpers.create_resource(**service_ca_data)
+
+    # Create fedora pod
+    pod_dict_path = constants.FEDORA_WITH_LINUXTAR_FILES_YAML
+    fedora_pod_dict = templating.load_yaml(pod_dict_path)
+    fedora_pod_dict["spec"]["volumes"][0]["configMap"][
+        "name"
+    ] = service_ca_configmap_name
+    fedora_pod_name = create_unique_resource_name("fedora-pod", scope_name)
+    fedora_pod_dict["metadata"]["name"] = fedora_pod_name
+
+    update_container_with_mirrored_image(fedora_pod_dict)
+    update_container_with_proxy_env(fedora_pod_dict)
+
+    fedora_pod_obj = Pod(**fedora_pod_dict)
+    assert fedora_pod_obj.create(
+        do_reload=True
+    ), f"Failed to create Pod {fedora_pod_name}"
+    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+        resource_name=service_ca_configmap.name, column="DATA", condition="1"
+    )
+    helpers.wait_for_resource_state(
+        fedora_pod_obj, constants.STATUS_RUNNING, timeout=240
+    )
+
+    def fedora_pod_cleanup():
+        fedora_pod_obj.delete()
+        service_ca_configmap.delete()
+
+    request.addfinalizer(fedora_pod_cleanup)
+
+    return fedora_pod_obj
+
+
+@pytest.fixture()
+def scc_factory(request):
+    """
+    creates SecurityContextConstraints using this factory
+    """
+    scc_objs = []
+
+    def create_scc(scc_name=None, scc_dict=None, scc_dict_path=None):
+        scc_obj = helpers.create_scc(
+            scc_name=scc_name, scc_dict=scc_dict, scc_dict_path=scc_dict_path
+        )
+        scc_objs.append(scc_obj)
+        return scc_obj
+
+    def teardown():
+        for obj in scc_objs:
+            obj.delete()
+
+    request.addfinalizer(teardown)
+    return create_scc
+
+
+@pytest.fixture(scope="session")
+def krew_rook_ceph_install_factory(request):
+    """
+    Install rook-ceph plugin
+    """
+    RookCephPlugin()
+
+
+@pytest.fixture()
+def ceph_objectstore_factory(request, krew_rook_ceph_install_factory):
+    """
+    Setup CephObjectStoreTool instance
+    """
+    return ceph_objectstore_tool_fixture(request)
+
+
+def ceph_objectstore_tool_fixture(request):
+    """
+    Implementation of ceph_objectstore_factory()
+    """
+    cot_obj = CephObjectStoreTool()
+
+    def teardown():
+        deployment_in_debug = cot_obj.deployment_in_debug
+        for deployment_name in list(deployment_in_debug):
+            cot_obj.debug_stop(deployment_name=deployment_name)
+
+    request.addfinalizer(teardown)
+
+    return cot_obj
+
+
+@pytest.fixture()
+def ceph_monstore_factory(request, krew_rook_ceph_install_factory):
+    """
+    Setup MonStoreTool instance
+    """
+    return ceph_monstore_tool_fixture(request)
+
+
+def ceph_monstore_tool_fixture(request):
+    """
+    Implementation of ceph_monstore_factory()
+    """
+    mot_obj = MonStoreTool()
+
+    def teardown():
+        deployment_in_debug = mot_obj.deployment_in_debug
+        for deployment_name in list(deployment_in_debug):
+            mot_obj.debug_stop(deployment_name=deployment_name)
+
+    request.addfinalizer(teardown)
+
+    return mot_obj
+
+
+@pytest.fixture()
+def change_the_noobaa_log_level(request):
+    """
+    This fixture helps you set the noobaa log level to any of these ["all", "nsfs", "default_level"]
+    """
+    noobaa_cm = OCP(
+        kind="configmap",
+        resource_name="noobaa-config",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    def factory(level="all"):
+        assert level in ["all", "nsfs", "default_level"], "Invalid noobaa log level"
+        noobaa_cm.patch(
+            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
+        )
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+
+    def finalizer():
+        level = "default_level"
+        noobaa_cm.patch(
+            params=f'{{"data": {{"NOOBAA_LOG_LEVEL": "{level}"}}}}', format_type="merge"
+        )
+        wait_for_pods_to_be_running(pod_names=[pod.name for pod in get_noobaa_pods()])
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def add_env_vars_to_noobaa_core_class(request, mcg_obj_session):
+    """
+    Class-scoped fixture for adding env vars to the noobaa-core sts
+
+    """
+    return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
+
+
+def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
+    """
+    Add env vars to the noobaa-core sts
+
+    """
+    sts_obj = OCP(kind="StatefulSet", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
+    op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
+
+    added_env_vars = []
+
+    def add_env_vars_to_noobaa_core_implementation(new_env_vars_touples):
+        """
+        Implementation of add_env_vars_to_noobaa_core_fixture()
+
+        Args:
+            new_env_vars_touples (list): A list of touples, each containing the env var name and
+                value to be added to the noobaa-core sts
+                i.e. [("env_var_name_1", "env_var_value_1"), ("env_var_name_2", "env_var_value_2")]
+
+        """
+
+        nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+        sts_env_vars = nb_core_sts["spec"]["template"]["spec"]["containers"][0]["env"]
+        sts_env_vars = [env_var_in_sts["name"] for env_var_in_sts in sts_env_vars]
+
+        patch_ops = []
+
+        for env_var, value in new_env_vars_touples:
+            if env_var in sts_env_vars:
+                log.warning(f"Env var {env_var} already exists in the noobaa-core sts")
+                continue
+
+            # Copy and modify the template to create the required dict for the first addition
+            add_env_var_op = copy.deepcopy(op_template_dict)
+            add_env_var_op["op"] = "add"
+            add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
+            add_env_var_op["value"] = {"name": env_var, "value": str(value)}
+
+            patch_ops.append(copy.deepcopy(add_env_var_op))
+            added_env_vars.append(env_var)
+
+        log.info(
+            f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
+        )
+        sts_obj.patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=json.dumps(patch_ops),
+            format_type="json",
+        )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    def finalizer():
+        """
+        Remove any env vars that were added to the noobaa-core sts
+
+        """
+        log.info("Removing the added env vars from the noobaa-core statefulset:")
+
+        # Adjust the template for removal ops
+        remove_env_var_op = copy.deepcopy(op_template_dict)
+        remove_env_var_op["op"] = "remove"
+        remove_env_var_op["path"] = ""
+        del remove_env_var_op["value"]
+
+        for target_env_var in added_env_vars:
+            # Fetch the target's index from the noobaa-core statefulset
+            nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+            env_vars_in_sts = nb_core_sts["spec"]["template"]["spec"]["containers"][0][
+                "env"
+            ]
+            env_vars_names_in_sts = [
+                env_var_in_sts["name"] for env_var_in_sts in env_vars_in_sts
+            ]
+            target_index = env_vars_names_in_sts.index(target_env_var)
+            remove_env_var_op["path"] = f"{yaml_path_to_env_variables}/{target_index}"
+
+            # Patch the noobaa-core sts to remove the env var
+            sts_obj.patch(
+                resource_name=constants.NOOBAA_CORE_STATEFULSET,
+                params=json.dumps([remove_env_var_op]),
+                format_type="json",
+            )
+
+        # Reset the noobaa-core pod to apply the changes
+        mcg_obj_session.reset_core_pod()
+
+    request.addfinalizer(finalizer)
+    return add_env_vars_to_noobaa_core_implementation
+
+
+@pytest.fixture()
+def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
+    def factory(project_name):
+        return pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project_name,
+            size="10",
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def logwriter_workload_factory(request, teardown_factory):
+    def factory(pvc, logwriter_path):
+
+        dc_data = templating.load_yaml(logwriter_path)
+        dc_data["metadata"]["namespace"] = pvc.namespace
+        dc_data["spec"]["replicas"] = 4
+        dc_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = "quay.io/ocsci/logwriter:latest"
+        dc_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+            "claimName"
+        ] = pvc.name
+        logwriter_dc = helpers.create_resource(**dc_data)
+        teardown_factory(logwriter_dc)
+
+        logwriter_dc_obj = Deployment(
+            **get_deployments_having_label(
+                label="app=logwriter-cephfs", namespace=pvc.namespace
+            )[0]
+        )
+        logwriter_dc_pods = [
+            pod["metadata"]["name"]
+            for pod in get_pods_having_label(
+                label="app=logwriter-cephfs", namespace=pvc.namespace
+            )
+        ]
+        wait_for_pods_to_be_running(
+            namespace=pvc.namespace, pod_names=logwriter_dc_pods
+        )
+
+        return logwriter_dc_obj
+
+    return factory
+
+
+@pytest.fixture()
+def logreader_workload_factory(request, teardown_factory):
+    def factory(pvc, logreader_path, duration=30):
+
+        job_data = templating.load_yaml(logreader_path)
+        job_data["metadata"]["namespace"] = pvc.namespace
+        job_data["spec"]["completions"] = 4
+        job_data["spec"]["parallelism"] = 4
+        job_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+            "claimName"
+        ] = pvc.name
+        job_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = "quay.io/ocsci/logwriter:latest"
+        job_data["spec"]["template"]["spec"]["containers"][0]["command"][
+            2
+        ] = f"/opt/logreader.py -t {duration} *.log -d"
+        logreader_job = helpers.create_resource(**job_data)
+        teardown_factory(logreader_job)
+
+        logreader_job_obj = get_job_obj(
+            name="logreader-cephfs", namespace=pvc.namespace
+        )
+        logreader_job_pods = [
+            pod["metadata"]["name"]
+            for pod in get_pods_having_label(
+                label="app=logreader-cephfs", namespace=pvc.namespace
+            )
+        ]
+        wait_for_pods_to_be_running(
+            namespace=pvc.namespace, pod_names=logreader_job_pods
+        )
+
+        return logreader_job_obj
+
+    return factory
+
+
+@pytest.fixture()
+def setup_logwriter_cephfs_workload_factory(
+    request,
+    project_factory,
+    pvc_factory,
+    logwriter_cephfs_many_pvc_factory,
+    logwriter_workload_factory,
+    logreader_workload_factory,
+):
+    logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
+    logreader_path = constants.LOGWRITER_CEPHFS_READER
+    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
+    pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
+    logwriter_workload = logwriter_workload_factory(
+        pvc=pvc, logwriter_path=logwriter_path
+    )
+    logreader_workload = logreader_workload_factory(
+        pvc=pvc, logreader_path=logreader_path
+    )
+
+    return logwriter_workload, logreader_workload
+
+
+@pytest.fixture()
+def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_factory):
+
+    logwriter_sts_path = constants.LOGWRITER_STS_PATH
+    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
+    sts_data = templating.load_yaml(logwriter_sts_path)
+    sts_data["metadata"]["namespace"] = project.namespace
+    logwriter_sts = helpers.create_resource(**sts_data)
+    teardown_factory(logwriter_sts)
+    logwriter_sts_pods = [
+        pod["metadata"]["name"]
+        for pod in get_pods_having_label(
+            label="app=logwriter-rbd", namespace=project.namespace
+        )
+    ]
+    wait_for_pods_to_be_running(
+        namespace=project.namespace, pod_names=logwriter_sts_pods
+    )
+
+    return logwriter_sts

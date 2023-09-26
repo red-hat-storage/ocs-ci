@@ -6,6 +6,7 @@ from semantic_version import Version
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
+from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -16,12 +17,24 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.utility.ocp_upgrade import (
+    pause_machinehealthcheck,
+    resume_machinehealthcheck,
+)
+from ocs_ci.utility.version import (
+    get_semantic_ocp_running_version,
+    VERSION_4_8,
+)
+from ocs_ci.framework.pytest_customization.marks import (
+    purple_squad,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
 @ocp_upgrade
+@purple_squad
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health
@@ -76,6 +89,8 @@ class TestUpgradeOCP(ManageTest):
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
             ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
+            if ocp_upgrade_version:
+                target_image = ocp_upgrade_version
             if not ocp_upgrade_version:
                 ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
                 ocp_arch = config.UPGRADE["ocp_arch"]
@@ -83,11 +98,18 @@ class TestUpgradeOCP(ManageTest):
             elif ocp_upgrade_version.endswith(".nightly"):
                 target_image = expose_ocp_version(ocp_upgrade_version)
 
-            logger.info(f"Target image; {target_image}")
+            logger.info(f"Target image: {target_image}")
 
             image_path = config.UPGRADE["ocp_upgrade_path"]
             cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
+            # disconnected environment prerequisites
+            if config.DEPLOYMENT.get("disconnected"):
+                # mirror OCP release images to mirror registry
+                image_path, target_image, _, _ = mirror_ocp_release_images(
+                    image_path, target_image
+                )
+
             # Verify Upgrade subscription channel:
             ocp.patch_ocp_upgrade_channel(ocp_channel)
             for sampler in TimeoutSampler(
@@ -99,6 +121,10 @@ class TestUpgradeOCP(ManageTest):
                 if sampler:
                     logger.info(f"OCP Channel:{ocp_channel}")
                     break
+
+            # pause a MachineHealthCheck resource
+            if get_semantic_ocp_running_version() > VERSION_4_8:
+                pause_machinehealthcheck()
 
             # Upgrade OCP
             logger.info(f"full upgrade path: {image_path}:{target_image}")
@@ -116,10 +142,15 @@ class TestUpgradeOCP(ManageTest):
                     logger.info(f"{ocp_operator} upgrade will not be verified")
                     continue
                 # ############ End of Workaround ###############
+                if ocp_operator == "aro":
+                    logger.debug(
+                        f"{ocp_operator} do not match with OCP upgrade, check will be ignored!"
+                    )
+                    continue
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
                 for sampler in TimeoutSampler(
-                    timeout=2700,
+                    timeout=4000,
                     sleep=60,
                     func=ocp.confirm_cluster_operator_version,
                     target_version=target_image,
@@ -130,6 +161,10 @@ class TestUpgradeOCP(ManageTest):
                         break
                     else:
                         logger.info(f"{ocp_operator} upgrade did not completed yet!")
+
+            # resume a MachineHealthCheck resource
+            if get_semantic_ocp_running_version() > VERSION_4_8:
+                resume_machinehealthcheck()
 
             # post upgrade validation: check cluster operator status
             cluster_operators = ocp.get_all_cluster_operators()
@@ -160,8 +195,9 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
-        new_ceph_cluster = CephCluster()
-        # Increased timeout because of this bug:
-        # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
-        new_ceph_cluster.wait_for_rebalance(timeout=3000)
-        ceph_health_check(tries=90, delay=30)
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            new_ceph_cluster = CephCluster()
+            # Increased timeout because of this bug:
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
+            new_ceph_cluster.wait_for_rebalance(timeout=3000)
+            ceph_health_check(tries=160, delay=30)

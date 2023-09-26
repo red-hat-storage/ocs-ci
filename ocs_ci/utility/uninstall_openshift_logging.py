@@ -6,7 +6,7 @@ import logging
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, delete_pvcs
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.helpers import (
     fetch_used_size,
@@ -29,11 +29,47 @@ def check_pod_vanished(pod_names):
             raise UnexpectedBehaviour
 
 
+def delete_logging_namespaces(force=False):
+    """
+    Deleting namespaces
+    1. Openshift-operators-redhat
+    2. Openshift-logging
+
+    """
+    openshift_logging_namespace = ocp.OCP(
+        kind=constants.NAMESPACES, resource_name=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    openshift_operators_redhat_namespace = ocp.OCP(
+        kind=constants.NAMESPACES,
+        resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
+    )
+    try:
+        openshift_operators_redhat_namespace.delete(
+            resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
+            force=force,
+            wait=True,
+        )
+        logger.info("The project openshift-operators-redhat got deleted successfully")
+    except CommandFailed as e:
+        logger.info("Namespace not found" f"Error message {e}")
+
+    try:
+        openshift_logging_namespace.delete(
+            resource_name=constants.OPENSHIFT_LOGGING_NAMESPACE,
+            force=force,
+            wait=True,
+        )
+        logger.info("The namespace openshift-logging got deleted successfully")
+    except CommandFailed as e:
+        logger.info("Namespace not found" f"Error message {e}")
+
+
 def uninstall_cluster_logging():
     """
     Function to uninstall cluster-logging from the cluster
     Deletes the project "openshift-logging" and "openshift-operators-redhat"
     """
+
     # Validating the pods before deleting the instance
     pod_list = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
 
@@ -64,20 +100,23 @@ def uninstall_cluster_logging():
     clusterlogging_obj = ocp.OCP(
         kind=constants.CLUSTER_LOGGING, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    assert clusterlogging_obj.delete(resource_name="instance")
+    try:
+        clusterlogging_obj.delete(resource_name="instance", wait=True)
+        logger.info("Instance got deleted successfully")
+        check_pod_vanished(pod_names_list)
 
-    check_pod_vanished(pod_names_list)
+    except CommandFailed as error:
+        delete_logging_namespaces(force=True)
+        raise error
+
     for pvc_obj in pvc_objs:
         pv_obj = pvc_obj.backed_pv_obj
-
     assert delete_pvcs(pvc_objs=pvc_objs), "PVCs deletion failed"
-
     for pvc_obj in pvc_objs:
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name, timeout=300)
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
     logger.info("Verified: PVCs are deleted.")
     logger.info("Verified: PV are deleted")
-
     for pvc_name, uuid in pvc_uuid_map.items():
         rbd = verify_volume_deleted_in_backend(
             interface=constants.CEPHBLOCKPOOL, image_uuid=uuid, pool_name=cbp_name
@@ -100,22 +139,4 @@ def uninstall_cluster_logging():
     )
     rbac_role.delete(yaml_file=constants.EO_RBAC_YAML)
 
-    openshift_logging_namespace = ocp.OCP(
-        kind=constants.NAMESPACES, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
-    )
-    openshift_operators_redhat_namespace = ocp.OCP(
-        kind=constants.NAMESPACES,
-        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
-    )
-
-    if openshift_operators_redhat_namespace.get():
-        assert openshift_operators_redhat_namespace.delete(
-            resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
-        )
-        logger.info("The project openshift-opertors-redhat got deleted successfully")
-
-    if openshift_logging_namespace.get():
-        assert openshift_logging_namespace.delete(
-            resource_name=constants.OPENSHIFT_LOGGING_NAMESPACE
-        )
-        logger.info("The namespace openshift-logging got deleted successfully")
+    delete_logging_namespaces()

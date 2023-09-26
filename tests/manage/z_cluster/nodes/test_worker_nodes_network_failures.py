@@ -7,9 +7,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
     skipif_vsphere_ipi,
     skipif_ibm_power,
+    skipif_managed_service,
+    bugzilla,
+    brown_squad,
 )
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4b
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ceph_health_check
@@ -17,11 +21,14 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier4b
 @skipif_aws_i3
 @skipif_vsphere_ipi
 @skipif_ibm_power
+@skipif_managed_service
 @ignore_leftovers
+@bugzilla("2029690")
 class TestWorkerNodesFailure(ManageTest):
     """
     Test all worker nodes simultaneous abrupt network failure for ~300 seconds
@@ -100,7 +107,7 @@ class TestWorkerNodesFailure(ManageTest):
         ],
     )
     def test_all_worker_nodes_short_network_failure(
-        self, nodes, setup, node_restart_teardown
+        self, nodes, setup, mcg_obj, bucket_factory, node_restart_teardown
     ):
         """
         OCS-1432/OCS-1433:
@@ -109,6 +116,7 @@ class TestWorkerNodesFailure(ManageTest):
         - Reboot the unresponsive node after short duration of ~300 seconds
         - When unresponsive node recovers, app pods and ceph cluster should recover
         - Again run IOs from app pods
+        - Create OBC and read/write objects
         """
         pod_objs = setup
         worker_nodes = node.get_worker_nodes()
@@ -214,3 +222,15 @@ class TestWorkerNodesFailure(ManageTest):
 
         for pod_obj in new_pod_objs:
             pod.get_fio_rw_iops(pod_obj)
+
+        bucket_name = bucket_factory(interface="OC")[0].name
+        logger.info(f"Created new bucket {bucket_name}")
+        assert s3_put_object(
+            s3_obj=mcg_obj,
+            bucketname=bucket_name,
+            object_key="test-obj",
+            data="string data",
+        ), "Failed: Put object"
+        assert s3_get_object(
+            s3_obj=mcg_obj, bucketname=bucket_name, object_key="test-obj"
+        ), "Failed: Get object"

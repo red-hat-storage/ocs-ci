@@ -2,6 +2,7 @@ import pytest
 import logging
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier3, skipif_external_mode
 from tests.fixtures import (
     create_ceph_block_pool,
@@ -12,6 +13,7 @@ from tests.fixtures import (
 log = logging.getLogger(__name__)
 
 
+@green_squad
 @skipif_external_mode
 @tier3
 @pytest.mark.usefixtures(

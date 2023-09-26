@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster
+from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
@@ -20,8 +20,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_external_mode,
     skipif_ms_consumer,
+    brown_squad,
 )
-
+from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -68,7 +69,16 @@ def check_node_replacement_verification_steps(
             f"of osd nodes. Wait for the new created worker node to appear in the osd nodes"
         )
         timeout = 1500
-        new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        # In vSphere UPI platform, we are creating new node with same name as deleted
+        # node using terraform
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "upi"
+        ):
+            new_osd_node_name = old_node_name
+        else:
+            new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        log.info(f"Newly created OSD name: {new_osd_node_name}")
         assert new_osd_node_name, (
             f"New osd node not found after the node replacement process "
             f"while waiting for {timeout} seconds"
@@ -99,6 +109,10 @@ def check_node_replacement_verification_steps(
         old_node_name, new_node_name, new_osd_node_name, old_osd_ids
     )
 
+    # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+    if is_ms_provider_cluster() and config.is_consumer_exist():
+        assert node.consumers_verification_steps_after_provider_node_replacement()
+
 
 def delete_and_create_osd_node(osd_node_name):
     """
@@ -112,6 +126,14 @@ def delete_and_create_osd_node(osd_node_name):
     old_osd_ids = node.get_node_osd_ids(osd_node_name)
 
     old_osd_node_names = node.get_osd_running_nodes()
+
+    # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
+    if is_ms_provider_cluster() and config.is_consumer_exist():
+        pytest.skip(
+            "The test will not run with an MS provider and MS consumer clusters due to the BZ "
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2131581. issue for tracking: "
+            "https://github.com/red-hat-storage/ocs-ci/issues/6540"
+        )
 
     # error message for invalid deployment configuration
     msg_invalid = (
@@ -151,6 +173,7 @@ def delete_and_create_osd_node(osd_node_name):
     )
 
 
+@brown_squad
 @tier4a
 @ignore_leftovers
 @ipi_deployment_required
@@ -224,7 +247,12 @@ class TestNodeReplacementWithIO(ManageTest):
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
+        assert (
+            verify_storagecluster_nodetopology
+        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
+
+@brown_squad
 @tier4a
 @ignore_leftovers
 @skipif_bmpsi
@@ -265,13 +293,18 @@ class TestNodeReplacement(ManageTest):
             timeout=1800
         ), "Data re-balance failed to complete"
 
+        assert (
+            verify_storagecluster_nodetopology
+        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+
 
 @tier4a
+@brown_squad
 @ignore_leftovers
 @bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
-@skipif_ms_consumer
+@skipif_managed_service
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:
@@ -299,3 +332,7 @@ class TestNodeReplacementTwice(ManageTest):
             assert not (
                 node_name_to_delete in str(tree_output)
             ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"
+
+            assert (
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"

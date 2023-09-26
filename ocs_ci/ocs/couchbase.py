@@ -1,6 +1,7 @@
 """
 Couchbase workload class
 """
+import json
 import logging
 import random
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -126,7 +127,7 @@ class CouchBase(PillowFight):
         log.info("Successfully created secrets for Couchbase")
         self.cb_create_cb_secret = True
 
-    def create_cb_cluster(self, replicas=1, sc_name=None):
+    def create_cb_cluster(self, replicas=1, sc_name=None, image=None):
         """
         Deploy a Couchbase server using Couchbase operator
 
@@ -145,7 +146,16 @@ class CouchBase(PillowFight):
         """
         log.info("Creating Couchbase worker pods...")
         cb_example = templating.load_yaml(constants.COUCHBASE_WORKER_EXAMPLE)
-
+        if not image:
+            cb_package_manifest = PackageManifest(
+                resource_name="couchbase-enterprise-certified"
+            )
+            data = json.loads(
+                cb_package_manifest.get()["status"]["channels"][0]["currentCSVDesc"][
+                    "annotations"
+                ]["alm-examples"]
+            )
+            cb_example["spec"]["image"] = data[0]["spec"]["image"]
         if (
             storagecluster_independent_check()
             and config.ENV_DATA["platform"].lower()
@@ -188,7 +198,12 @@ class CouchBase(PillowFight):
         self.cb_create_bucket = True
 
     def run_workload(
-        self, replicas, num_items=None, num_threads=None, run_in_bg=False, timeout=1800
+        self,
+        replicas,
+        num_items=None,
+        num_threads=None,
+        num_of_cycles=None,
+        run_in_bg=False,
     ):
         """
         Running workload with pillow fight operator
@@ -196,6 +211,7 @@ class CouchBase(PillowFight):
             replicas (int): Number of pods
             num_items (int): Number of items to be loaded to the cluster
             num_threads (int): Number of threads
+            num_of_cycles (int): Specify the number of times the workload should cycle
             run_in_bg (bool) : Optional run IOs in background
 
         """
@@ -209,12 +225,22 @@ class CouchBase(PillowFight):
                 replicas=replicas,
                 num_items=num_items,
                 num_threads=num_threads,
-                timeout=timeout,
+                num_of_cycles=num_of_cycles,
             )
             return self.result
         PillowFight.run_pillowfights(
-            self, replicas=replicas, num_items=num_items, num_threads=num_threads
+            self,
+            replicas=replicas,
+            num_items=num_items,
+            num_threads=num_threads,
+            num_of_cycles=num_of_cycles,
         )
+
+    def wait_for_pillowfights_to_complete(self, timeout=3600):
+        """
+        Wait for the pillowfight workload to complete
+        """
+        PillowFight.wait_for_pillowfights_to_complete(self, timeout=timeout)
 
     def analyze_run(self, skip_analyze=False):
         """
@@ -313,7 +339,9 @@ class CouchBase(PillowFight):
         # Start measuring time
         start_time = datetime.now()
         # Run couchbase workload
-        self.run_workload(replicas=3, num_items=50000, timeout=10800)
+        self.run_workload(
+            replicas=3, num_items=50000, num_of_cycles=150000, timeout=10800
+        )
         # Calculate the PillowFight pod run time from running state to completed state
         end_time = datetime.now()
         diff_time = end_time - start_time

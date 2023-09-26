@@ -6,23 +6,26 @@ import time
 import statistics
 import os
 
-from ocs_ci.framework.testlib import performance
-from ocs_ci.helpers import helpers
+from ocs_ci.framework.pytest_customization.marks import grey_squad
+from ocs_ci.framework.testlib import performance, performance_a
+from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.ocs.exceptions import PVCNotCreated, PodNotCreated
+from ocs_ci.ocs.exceptions import PodNotCreated
 
 logger = logging.getLogger(__name__)
 
 
+@grey_squad
 @performance
+@performance_a
 class TestPodReattachTimePerformance(PASTest):
     """
     Test to verify Pod Reattach Time Performance
-    creates samples and measures average reattach time
+    creates samples and measures average total and csi reattach times
     """
 
     def setup(self):
@@ -30,8 +33,23 @@ class TestPodReattachTimePerformance(PASTest):
         Setting up test parameters
         """
         logger.info("Starting the test setup")
+        # Run the test in its own project (namespace)
+        self.create_test_project()
+        self.pvc_list = []
+
         super(TestPodReattachTimePerformance, self).setup()
         self.benchmark_name = "pod_reattach_time"
+
+    def teardown(self):
+        """
+        Cleanup the test environment
+        """
+        logger.info("Starting the test cleanup")
+
+        # Deleting the namespace used by the test
+        self.delete_test_project()
+
+        super(TestPodReattachTimePerformance, self).teardown()
 
     def init_full_results(self, full_results):
         """
@@ -91,20 +109,20 @@ class TestPodReattachTimePerformance(PASTest):
     )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_pod_reattach_time_performance(
-        self, pvc_factory, copies, timeout, total_time_limit
+        self, storageclass_factory, copies, timeout, total_time_limit
     ):
         """
         Test assign nodeName to a pod using RWX pvc
         Each kernel (unzipped) is 892M and 61694 files
         The test creates samples_num pvcs and pods, writes kernel files multiplied by number of copies
-        and calculates average reattach time and standard deviation
+        and calculates average total and csi reattach times and standard deviation
         """
         kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz"
         download_path = "tmp"
 
-        samples_num = 10
+        samples_num = 7
         if self.dev_mode:
-            samples_num = 2
+            samples_num = 3
 
         test_start_time = PASTest.get_time()
         helpers.pull_images(constants.PERF_IMAGE)
@@ -121,26 +139,29 @@ class TestPodReattachTimePerformance(PASTest):
         node_one = worker_nodes_list[0]
         node_two = worker_nodes_list[1]
 
-        time_measures, files_written_list, data_written_list = ([], [], [])
-        for sample_index in range(1, samples_num + 1):
-            # Create a PVC
-            accessmode = constants.ACCESS_MODE_RWX
-            if self.interface == constants.CEPHBLOCKPOOL:
-                accessmode = constants.ACCESS_MODE_RWO
+        time_measures, csi_time_measures, files_written_list, data_written_list = (
+            [],
+            [],
+            [],
+            [],
+        )
 
-            try:
-                pvc_obj = pvc_factory(
-                    interface=self.interface,
-                    access_mode=accessmode,
-                    status=constants.STATUS_BOUND,
-                    size="100",
-                )
-            except Exception as e:
-                logger.error(f"The PVC sample was not created, exception {str(e)}")
-                raise PVCNotCreated("PVC did not reach BOUND state.")
+        self.sc_obj = storageclass_factory(self.interface)
+        for sample_index in range(1, samples_num + 1):
+
+            csi_start_time = self.get_time("csi")
+
+            logger.info(f"Start creating PVC number {sample_index}.")
+            pvc_obj = helpers.create_pvc(
+                sc_name=self.sc_obj.name, size="100Gi", namespace=self.namespace
+            )
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
 
             # Create a pod on one node
             logger.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
+
+            pvc_obj.reload()
+            self.pvc_list.append(pvc_obj)
 
             try:
                 pod_obj1 = helpers.create_pod(
@@ -234,8 +255,14 @@ class TestPodReattachTimePerformance(PASTest):
                 raise ex.PerformanceException(
                     f"Pod creation time is {total_time} and greater than {total_time_limit} seconds"
                 )
+
+            csi_time = performance_lib.pod_attach_csi_time(
+                self.interface, pvc_obj.backed_pv, csi_start_time, pvc_obj.namespace
+            )
+            csi_time_measures.append(csi_time)
             logger.info(
-                f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds"
+                f"PVC #{pvc_obj.name} pod {pod_name} creation time took {total_time} seconds, "
+                f"csi time is {csi_time} seconds"
             )
             time_measures.append(total_time)
 
@@ -252,6 +279,17 @@ class TestPodReattachTimePerformance(PASTest):
         st_deviation = statistics.stdev(time_measures)
         logger.info(
             f"The standard deviation of {self.interface} pod creation time on {samples_num} PVCs is {st_deviation}"
+        )
+
+        csi_average = statistics.mean(csi_time_measures)
+        logger.info(
+            f"The average csi time of {self.interface} pod creation on {samples_num} PVCs is {csi_average} seconds"
+        )
+
+        csi_st_deviation = statistics.stdev(csi_time_measures)
+        logger.info(
+            f"The standard deviation of {self.interface} csi pod creation time on {samples_num} PVCs "
+            f"is {csi_st_deviation}"
         )
 
         files_written_average = statistics.mean(files_written_list)
@@ -282,6 +320,8 @@ class TestPodReattachTimePerformance(PASTest):
         full_results.add_key("data_average", data_written_average)
         full_results.add_key("pod_reattach_time_average", average)
         full_results.add_key("pod_reattach_standard_deviation", st_deviation)
+        full_results.add_key("pod_csi_reattach_time_average", csi_average)
+        full_results.add_key("pod_csi_reattach_standard_deviation", csi_st_deviation)
 
         test_end_time = PASTest.get_time()
 

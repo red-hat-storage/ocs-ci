@@ -48,29 +48,31 @@ class RGW(object):
 
         """
         secret_ocp_obj = OCP(kind=constants.SECRET, namespace=self.namespace)
-        route_ocp_obj = OCP(
-            kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
-        )
 
         if storagecluster_independent_check():
-            endpoint = route_ocp_obj.get(
+            secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
+            cos_ocp_obj = OCP(
+                kind=constants.CEPHOBJECTSTORE,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            cephobjectstore = cos_ocp_obj.get(
                 resource_name=constants.RGW_ROUTE_EXTERNAL_MODE
             )
-            if secret_name == constants.NOOBAA_OBJECTSTOREUSER_SECRET:
-                secret_name = constants.EXTERNAL_MODE_NOOBAA_OBJECTSTOREUSER_SECRET
-            elif secret_name == constants.CEPH_OBJECTSTOREUSER_SECRET:
-                secret_name = constants.CEPH_EXTERNAL_OBJECTSTOREUSER_SECRET
+            endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
         else:
-            endpoint = route_ocp_obj.get(
-                resource_name=constants.RGW_ROUTE_INTERNAL_MODE
+            route_ocp_obj = OCP(
+                kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
             )
+            endpoint = route_ocp_obj.get(
+                resource_name=constants.RGW_SERVICE_INTERNAL_MODE
+            )
+            endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
 
         creds_secret_obj = secret_ocp_obj.get(secret_name)
-        endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
         access_key = base64.b64decode(
             creds_secret_obj.get("data").get("AccessKey")
         ).decode("utf-8")
         secret_key = base64.b64decode(
             creds_secret_obj.get("data").get("SecretKey")
         ).decode("utf-8")
-        return (endpoint, access_key, secret_key)
+        return endpoint, access_key, secret_key

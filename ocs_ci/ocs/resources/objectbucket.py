@@ -16,6 +16,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
@@ -153,21 +154,8 @@ class ObjectBucket(ABC):
         self.mcg = mcg
         self.rgw = rgw
         self.bucketclass = bucketclass
-        self.replication_policy = (
-            None
-            if replication_policy is None
-            else [
-                {
-                    "rule_id": replication_policy[0],
-                    "destination_bucket": replication_policy[1],
-                    "filter": {
-                        "prefix": replication_policy[2]
-                        if replication_policy[2] is not None
-                        else ""
-                    },
-                }
-            ]
-        )
+        self.replication_policy = self.__parse_replication_policy(replication_policy)
+
         self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
@@ -176,10 +164,34 @@ class ObjectBucket(ABC):
         return hash(self.name)
 
     def __eq__(self, other):
-        if type(other) == str:
+        if isinstance(other, str):
             return self.name == other
-        elif type(other) == ObjectBucket:
+        elif isinstance(other, ObjectBucket):
             return self.name == other.name
+
+    def __parse_replication_policy(self, replication_policy):
+        if isinstance(replication_policy, McgReplicationPolicy):
+            replication_policy = replication_policy.to_dict()
+
+        elif replication_policy is None:
+            replication_policy = None
+
+        else:
+            replication_policy = {
+                "rules": [
+                    {
+                        "rule_id": replication_policy[0],
+                        "destination_bucket": replication_policy[1],
+                        "filter": {
+                            "prefix": replication_policy[2]
+                            if replication_policy[2] is not None
+                            else ""
+                        },
+                    }
+                ]
+            }
+
+        return replication_policy
 
     def delete(self, verify=True):
         """
@@ -248,11 +260,15 @@ class ObjectBucket(ABC):
             for health_check in TimeoutSampler(
                 timeout, interval, self.internal_verify_health
             ):
-                if health_check:
+                if not health_check:
+                    logger.info(f"{self.name} is unhealthy. Rechecking.")
+                elif self.mcg and not self.mcg.s3_verify_bucket_exists(self.name):
+                    logger.info(
+                        f"{self.name} is healthy, but not found in S3. Rechecking."
+                    )
+                else:
                     logger.info(f"{self.name} is healthy")
                     break
-                else:
-                    logger.info(f"{self.name} is unhealthy. Rechecking.")
         except TimeoutExpiredError:
             logger.error(
                 f"{self.name} did not reach a healthy state within {timeout} seconds."
@@ -319,6 +335,7 @@ class MCGCLIBucket(ObjectBucket):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         bc = f" --bucketclass {self.bucketclass.name}" if self.bucketclass else ""
+        quota = f" --max-size {self.quota}" if self.quota else ""
         with tempfile.NamedTemporaryFile(
             delete=True, mode="wb", buffering=0
         ) as replication_policy_file:
@@ -332,7 +349,7 @@ class MCGCLIBucket(ObjectBucket):
             )
 
             self.mcg.exec_mcg_cmd(
-                f"obc create --exact {self.name}{bc}{replication_policy}"
+                f"obc create --exact {self.name}{bc}{quota}{replication_policy}"
             )
 
     def internal_delete(self):
@@ -383,14 +400,20 @@ class MCGS3Bucket(ObjectBucket):
             self.s3resource = kwargs["s3resource"]
         else:
             self.s3resource = self.mcg.s3_resource
-
+        self.s3client = self.mcg.s3_client
         self.s3resource.create_bucket(Bucket=self.name)
 
     def internal_delete(self):
         """
         Deletes the bucket using the S3 API
         """
-        self.s3resource.Bucket(self.name).object_versions.delete()
+        response = self.s3client.get_bucket_versioning(Bucket=self.name)
+        logger.info(response)
+        if "Status" in response and response["Status"] == "Enabled":
+            for obj_version in self.s3resource.Bucket(self.name).object_versions.all():
+                obj_version.delete()
+        else:
+            self.s3resource.Bucket(self.name).objects.all().delete()
         self.s3resource.Bucket(self.name).delete()
 
     @property

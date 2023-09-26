@@ -8,10 +8,10 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
-
+import pandas as pd
 import pytest
 from junitparser import JUnitXml
-
+import ocs_ci.utility.memory
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.logger_factory import set_log_record_factory
 from ocs_ci.framework.exceptions import (
@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNotFoundError,
 )
+from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
@@ -39,7 +40,17 @@ from ocs_ci.utility.utils import (
     get_ocs_build_number,
     get_testrun_name,
     load_config_file,
+    create_stats_dir,
 )
+
+from ocs_ci.utility.memory import (
+    get_consumed_ram,
+    start_monitor_memory,
+    stop_monitor_memory,
+    get_peak_sum_mem,
+)
+from ocs_ci.ocs import constants
+from psutil._common import bytes2human
 
 __all__ = [
     "pytest_addoption",
@@ -121,6 +132,18 @@ def _pytest_addoption_cluster_specific(parser):
             dest=f"osd_size{suffix}",
             type=int,
             help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on.",
+        )
+        parser.addoption(
+            f"--lvmo-disks{suffix}",
+            dest=f"lvmo_disks{suffix}",
+            type=int,
+            help="Number of disks to add to node for LVMO",
+        )
+        parser.addoption(
+            f"--lvmo-disks-size{suffix}",
+            dest=f"lvmo_disks_size{suffix}",
+            type=int,
+            help="Size of the disks to add to lvmo in GB",
         )
 
 
@@ -302,6 +325,15 @@ def pytest_addoption(parser):
         loaded when run-ci starts
         """,
     )
+    parser.addoption(
+        "--install-lvmo",
+        dest="install_lvmo",
+        action="store_true",
+        default=False,
+        help="""
+            set for installing lvmo operator and lvmo cluster
+            """,
+    )
 
 
 def pytest_configure(config):
@@ -376,7 +408,9 @@ def pytest_configure(config):
                     del config._metadata[extra_meta]
 
             config._metadata["Test Run Name"] = get_testrun_name()
-            gather_version_info_for_report(config)
+            check_clusters()
+            if ocsci_config.RUN.get("cephcluster"):
+                gather_version_info_for_report(config)
     # switch the configuration context back to the default cluster
     ocsci_config.switch_default_cluster_ctx()
 
@@ -509,6 +543,19 @@ def process_cluster_cli_params(config):
     ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
+    install_lvmo = get_cli_param(config, "install_lvmo")
+    if install_lvmo:
+        ocsci_config.DEPLOYMENT["install_lvmo"] = True
+        number_of_disks = get_cli_param(config, "lvmo_disks")
+        if number_of_disks is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = 3
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks"] = number_of_disks
+        disk_size = get_cli_param(config, "lvmo_disks_size")
+        if disk_size is None:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = 200
+        else:
+            ocsci_config.DEPLOYMENT["lvmo_disks_size"] = disk_size
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
     if upgrade_ocs_registry_image:
         ocsci_config.UPGRADE["upgrade_ocs_registry_image"] = upgrade_ocs_registry_image
@@ -618,11 +665,24 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
     # we only look at actual failing test calls, not setup/teardown
-    if rep.failed and ocsci_config.RUN.get("cli_params").get("collect-logs"):
+    # Don't collect must-gather for deployment here since its already
+    # handled in deployment
+    if (
+        rep.failed
+        and ocsci_config.RUN.get("cli_params").get("collect-logs")
+        and not ocsci_config.RUN.get("cli_params").get("deploy")
+    ):
         test_case_name = item.name
         ocp_logs_collection = (
             True
-            if any(x in item.location[0] for x in ["ecosystem", "e2e/performance"])
+            if any(
+                x in item.location[0]
+                for x in [
+                    "ecosystem",
+                    "e2e/performance",
+                    "tests/manage/z_cluster",
+                ]
+            )
             else False
         )
         ocs_logs_collection = (
@@ -683,3 +743,109 @@ def set_log_level(config):
     """
     level = config.getini("log_cli_level") or "INFO"
     log.setLevel(logging.getLevelName(level))
+
+
+global consumed_ram_start_test
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    try:
+        start_monitor_memory()
+
+        global consumed_ram_start_test
+        consumed_ram_start_test = get_consumed_ram()
+
+        log.debug(
+            f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_ram_start_test)}"
+        )
+    except Exception:
+        log.exception("Got exception while start to monitor memory")
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item):
+    try:
+        _, peak_rss_table, peak_vms_table = stop_monitor_memory(save_csv=False)
+        log.info(
+            f"Peak rss consumers during {item.nodeid}:\n"
+            f"{peak_rss_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+        )
+        log.info(
+            f"Peak vms consumers during {item.nodeid}:\n"
+            f"{peak_vms_table.to_markdown(headers='keys', index=False, tablefmt='grid')}"
+        )
+
+        if ocsci_config.REPORTING.get("save_mem_report"):
+            stats_log_dir = create_stats_dir()
+
+            peak_rss_file_detailed = os.path.join(
+                stats_log_dir, f"{item.name}.peak_rss_table"
+            )
+            peak_vms_file_detailed = os.path.join(
+                stats_log_dir, f"{item.name}.peak_vms_table"
+            )
+            peak_rss_table.to_csv(peak_rss_file_detailed)
+            log.info(f"peak_rss_table saved to {peak_rss_file_detailed}")
+            peak_vms_table.to_csv(peak_vms_file_detailed)
+            log.info(f"peak_vms_table saved to {peak_vms_file_detailed}")
+
+        global consumed_ram_start_test
+        leaked_ram = consumed_ram_start_test - get_consumed_ram()
+        # rss of the process is drastically changes each measurement, meaning that
+        # processes may be closed immediately after measurement causing no leakage.
+        # leaked_ram intentionally left without check on negative digit to record
+        # gain of free memory
+        if leaked_ram > 0:
+            log.info(f"Leak RAM at the end of the test: {bytes2human(leaked_ram)}")
+        else:
+            log.info(
+                f"Free RAM gain at the end of the test: {bytes2human(leaked_ram * -1)}"
+            )
+
+        df_ram_max, df_virt_max = get_peak_sum_mem()
+
+        report_columns = [
+            "TC name",
+            "Peak total RAM consumed",
+            "Peak total VMS consumed",
+            "RAM leak",
+        ]
+        if "memory" not in ocsci_config.RUN:
+            ocsci_config.RUN["memory"] = pd.DataFrame(data=[], columns=report_columns)
+            ocsci_config.RUN["memory"].reset_index(drop=True, inplace=True)
+
+        df_report_line = pd.DataFrame(
+            [
+                [
+                    item.nodeid,
+                    df_ram_max[constants.RAM].values[0],
+                    df_virt_max[constants.VIRT].values[0],
+                    leaked_ram,
+                ]
+            ],
+            columns=report_columns,
+        )
+        df_report_line.reset_index(drop=True, inplace=True)
+        ocsci_config.RUN["memory"] = pd.concat(
+            [
+                ocsci_config.RUN["memory"],
+                df_report_line,
+            ]
+        )
+
+        log.debug("Report Memory performance report: ")
+        log.debug(
+            "\n".join(
+                ocsci_config.RUN["memory"].to_markdown(
+                    headers="keys", index=False, tablefmt="grid"
+                )
+            )
+        )
+    except Exception:
+        log.exception("Got exception while stop to monitor memory")
+    finally:
+        if hasattr(ocs_ci.utility.memory, "mon"):
+            mon = ocs_ci.utility.memory.mon
+            if mon and mon.is_alive():
+                mon.cancel()

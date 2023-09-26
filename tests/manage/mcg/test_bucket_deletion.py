@@ -13,6 +13,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     bugzilla,
     skipif_ocs_version,
+    skipif_mcg_only,
+    red_squad,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
 
 
+@red_squad
 @skipif_managed_service
 class TestBucketDeletion(MCGTest):
     """
@@ -93,7 +96,7 @@ class TestBucketDeletion(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
+                marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2354")],
             ),
             pytest.param(
                 *[
@@ -106,7 +109,7 @@ class TestBucketDeletion(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, pytest.mark.polarion_id("OCS-2354")],
+                marks=[tier1, skipif_mcg_only, pytest.mark.polarion_id("OCS-2354")],
             ),
         ],
         ids=[

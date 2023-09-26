@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     ManageTest,
@@ -9,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
 )
 from ocs_ci.ocs import machine, constants, ocp
+from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -27,6 +29,7 @@ from ocs_ci.ocs.node import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @ignore_leftovers
 @tier4a
 @aws_based_platform_required
@@ -45,6 +48,10 @@ class TestNodeReplacement(ManageTest):
             # Verify OSD encrypted
             if config.ENV_DATA.get("encryption_at_rest"):
                 osd_encryption_verification()
+
+            assert (
+                verify_storagecluster_nodetopology
+            ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
         request.addfinalizer(finalizer)
 

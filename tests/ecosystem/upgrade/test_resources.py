@@ -1,9 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.utility import version
 from ocs_ci.ocs.resources.pod import get_pod_logs
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     pre_upgrade,
@@ -14,7 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs import ocp, defaults
+from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import (
     wait_for_storage_pods,
     get_osd_pods,
@@ -44,7 +44,7 @@ def test_storage_pods_running(multiregion_mirror_setup_session):
 
 
 @pytest.mark.skipif(
-    config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
+    True, reason="This IO test case is problematic, and is disabled. See issue: #6108"
 )
 @pre_upgrade
 @brown_squad
@@ -59,7 +59,7 @@ def test_start_pre_upgrade_pod_io(pause_cluster_load, pre_upgrade_pods_running_i
 
 
 @pytest.mark.skipif(
-    config.RUN.get("io_in_bg"), reason="IO is running by --io-in-bg param"
+    True, reason="This IO test case is problematic, and is disabled. See issue: #6108"
 )
 @post_upgrade
 @brown_squad
@@ -149,7 +149,7 @@ def test_noobaa_service_mon_after_ocs_upgrade():
     if ocs_version <= version.get_semantic_version("4.7.4"):
         pytest.skip("The test is not supported on version less than 4.7.4")
     ocp_obj = ocp.OCP(
-        kind=constants.SERVICE_MONITORS, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.SERVICE_MONITORS, namespace=config.ENV_DATA["cluster_namespace"]
     )
     servicemon = ocp_obj.get()
     servicemonitors = servicemon["items"]

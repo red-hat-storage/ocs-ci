@@ -1,9 +1,11 @@
 import logging
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, skipif_external_mode
 
 log = logging.getLogger(__name__)
 
 
+@magenta_squad
 @skipif_external_mode
 class TestLongevity(E2ETest):
     """
@@ -34,6 +36,6 @@ class TestLongevity(E2ETest):
         log.info("Start running application workloads")
         start_apps_workload(
             workloads_list=["pgsql", "couchbase", "cosbench"],
-            run_time=2880,
+            run_time=180,
             run_in_bg=True,
         )

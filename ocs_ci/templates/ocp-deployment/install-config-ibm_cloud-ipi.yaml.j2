@@ -1,0 +1,35 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain | default('ibmcloud2.qe.rh-ocs.com') }}
+credentialsMode: Manual
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  platform:
+    ibmcloud:
+      type: {{ worker_instance_type | default('bx2-16x64') }}
+  replicas: {{ worker_replicas | default(3) }}
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  platform:
+    ibmcloud: {}
+  replicas: {{ master_replicas | default(3) }}
+metadata:
+  creationTimestamp: null
+  name: '{{ cluster_name }}'
+networking:
+  clusterNetwork:
+  - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
+    hostPrefix: {{ cluster_host_prefix | default(23) }}
+  machineNetwork:
+  - cidr: 10.0.0.0/16
+  networkType: {{ network_type | default('OVNKubernetes') }}
+  serviceNetwork:
+  - {{ service_network_cidr | default('172.30.0.0/16') }}
+platform:
+  ibmcloud:
+    region: {{ region | default('us-south') }}
+publish: External
+pullSecret: ''

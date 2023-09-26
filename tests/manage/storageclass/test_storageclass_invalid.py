@@ -6,8 +6,10 @@ import yaml
 
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import tier3, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -91,6 +93,7 @@ def invalid_storageclass(request):
     storageclass.delete()
 
 
+@green_squad
 @tier3
 class TestStorageClassInvalid(ManageTest):
     def test_storageclass_invalid(self, invalid_storageclass):
@@ -101,7 +104,7 @@ class TestStorageClassInvalid(ManageTest):
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_name = helpers.create_unique_resource_name("test", "pvc")
         pvc_data["metadata"]["name"] = pvc_name
-        pvc_data["metadata"]["namespace"] = defaults.ROOK_CLUSTER_NAMESPACE
+        pvc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         pvc_data["spec"]["storageClassName"] = invalid_storageclass["metadata"]["name"]
         logger.info(
             f"Create PVC {pvc_name} "

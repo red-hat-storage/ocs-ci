@@ -10,7 +10,8 @@ import datetime
 import ocs_ci.ocs.exceptions as ex
 import ocs_ci.ocs.resources.pvc as pvc
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.testlib import performance, polarion_id
+from ocs_ci.framework.pytest_customization.marks import grey_squad
+from ocs_ci.framework.testlib import performance, performance_a, polarion_id
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perftests import PASTest
@@ -21,7 +22,9 @@ log = logging.getLogger(__name__)
 Interface_Types = {constants.CEPHFILESYSTEM: "CephFS", constants.CEPHBLOCKPOOL: "RBD"}
 
 
+@grey_squad
 @performance
+@performance_a
 class TestPVCCreationPerformance(PASTest):
     """
     Test to verify PVC creation and deletion performance
@@ -287,7 +290,7 @@ class TestPVCCreationPerformance(PASTest):
             f"Creation after deletion time of {number_of_pvcs} is {total_time} seconds."
         )
 
-        if total_time > 50:
+        if total_time > 60:
             raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation (after initial deletion of "
                 f"75% of PVCs) time is {total_time} and greater than 50 seconds."

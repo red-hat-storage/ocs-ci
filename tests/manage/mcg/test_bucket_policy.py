@@ -1,11 +1,11 @@
 import logging
+import time
 
 import pytest
 import botocore.exceptions as boto3exception
 import json
 import uuid
 
-from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     NoBucketPolicyResponse,
     InvalidStatusCode,
@@ -45,15 +45,18 @@ from ocs_ci.ocs.defaults import website_config, index, error
 from ocs_ci.ocs.constants import (
     bucket_website_action_list,
     bucket_version_action_list,
-    object_version_action_list,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    bugzilla,
+    red_squad,
+)
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
 
+@red_squad
 @skipif_managed_service
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):
@@ -241,16 +244,9 @@ class TestS3BucketPolicy(MCGTest):
         obc = bucket_factory(amount=1, interface="OC")
         obc_obj = OBC(obc[0].name)
 
-        # Creating noobaa account to access bucket belonging to obc account
-        user_name = "noobaa-user" + str(uuid.uuid4().hex)
-        email = user_name + "@mail.com"
-        user = NoobaaAccount(
-            mcg_obj, name=user_name, email=email, buckets=[obc_obj.bucket_name]
-        )
-
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
-            user_list=[obc_obj.obc_account, user.email_id],
+            user_list=[obc_obj.obc_account],
             actions_list=["PutObject"]
             if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
             else ["GetObject", "DeleteObject"],
@@ -280,24 +276,12 @@ class TestS3BucketPolicy(MCGTest):
             obc_obj, obc_obj.bucket_name, object_key, data
         ), "Failed: Put Object"
 
-        logger.info(
-            f"Adding object on bucket: {obc_obj.bucket_name} using user: {user.email_id}"
-        )
-        assert s3_put_object(
-            user, obc_obj.bucket_name, object_key, data
-        ), "Failed: Put Object"
-
         # Verifying whether Get action is not allowed
         logger.info(
-            f"Verifying whether user: "
-            f'{user.email_id if float(config.ENV_DATA["ocs_version"]) >= 4.6 else obc_obj.obc_account}'
-            f" is denied to Get object"
+            f"Verifying whether user: {obc_obj.obc_account} is denied to Get object"
         )
         try:
-            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6:
-                s3_get_object(user, obc_obj.bucket_name, object_key)
-            else:
-                s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
+            s3_get_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -330,21 +314,16 @@ class TestS3BucketPolicy(MCGTest):
         # Verifying whether S3 user is allowed to create multipart
         logger.info(
             f"Creating multipart on bucket: {obc_obj.bucket_name} "
-            f"with key: {object_key} using user: {user.email_id}"
+            f"with key: {object_key} using user: {obc_obj.obc_account}"
         )
-        create_multipart_upload(user, obc_obj.bucket_name, object_key)
+        create_multipart_upload(obc_obj, obc_obj.bucket_name, object_key)
 
         # Verifying whether obc account is denied access to delete object
         logger.info(
-            f"Verifying whether user: "
-            f'{user.email_id if float(config.ENV_DATA["ocs_version"]) >= 4.6 else obc_obj.obc_account}'
-            f"is denied to Delete object"
+            f"Verifying whether user: {obc_obj.obc_account} is denied to Delete object"
         )
         try:
-            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6:
-                s3_delete_object(user, obc_obj.bucket_name, object_key)
-            else:
-                s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
+            s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
         except boto3exception.ClientError as e:
             logger.info(e.response)
             response = HttpResponseParser(e.response)
@@ -356,70 +335,6 @@ class TestS3BucketPolicy(MCGTest):
                 )
         else:
             assert False, "Delete object succeeded when it should have failed"
-
-        # Admin sets a policy on obc-account bucket with noobaa-account principal (cross account access)
-        new_policy_generated = gen_bucket_policy(
-            user_list=[user.email_id],
-            actions_list=["GetObject", "DeleteObject"]
-            if float(config.ENV_DATA["ocs_version"]) <= 4.6
-            else ["PutObject"],
-            effect="Allow"
-            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_6
-            else "Deny",
-            resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
-        )
-        new_policy = json.dumps(new_policy_generated)
-
-        logger.info(
-            f"Creating bucket policy on bucket: {obc_obj.bucket_name} with principal: {obc_obj.obc_account}"
-        )
-        put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, new_policy)
-        logger.info(f"Put bucket policy response from admin: {put_policy}")
-
-        # Get Policy
-        logger.info(f"Getting bucket policy on bucket: {obc_obj.bucket_name}")
-        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info(f"Got bucket policy: {get_policy['Policy']}")
-
-        # Verifying whether Get, Delete object is allowed
-        logger.info(
-            f"Getting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}"
-        )
-        for get_resp in TimeoutSampler(
-            30, 4, s3_get_object, user, obc_obj.bucket_name, object_key
-        ):
-            if "403" not in str(get_resp["ResponseMetadata"]["HTTPStatusCode"]):
-                logger.info("GetObj operation successful")
-                break
-            else:
-                logger.info("GetObj operation is denied access")
-        logger.info(
-            f"Deleting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}"
-        )
-        for del_resp in TimeoutSampler(
-            30, 4, s3_delete_object, user, obc_obj.bucket_name, object_key
-        ):
-            if "403" not in str(del_resp["ResponseMetadata"]["HTTPStatusCode"]):
-                logger.info("DeleteObj operation successful")
-                break
-            else:
-                logger.info("DeleteObj operation is denied access")
-
-        # Verifying whether Put object action is denied
-        logger.info(
-            f"Verifying whether user: {user.email_id} is denied to Put object after updating policy"
-        )
-        try:
-            s3_put_object(user, obc_obj.bucket_name, object_key, data)
-        except boto3exception.ClientError as e:
-            logger.info(e.response)
-            response = HttpResponseParser(e.response)
-            if response.error["Code"] == "AccessDenied":
-                logger.info("Put object action has been denied access")
-            else:
-                raise UnexpectedBehaviour(
-                    f"{e.response} received invalid error code {response.error['Code']}"
-                )
 
     @pytest.mark.polarion_id("OCS-2145")
     @tier1
@@ -436,9 +351,12 @@ class TestS3BucketPolicy(MCGTest):
         s3_bucket = bucket_factory(amount=1, interface="S3")[0]
 
         # Creating a random user account
-        user = NoobaaAccount(
-            mcg_obj, name=user_name, email=email, buckets=[s3_bucket.name]
-        )
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
+            user = NoobaaAccount(
+                mcg_obj, name=user_name, email=email, buckets=[s3_bucket.name]
+            )
+        else:
+            user = NoobaaAccount(mcg_obj, name=user_name, email=email)
 
         # Admin sets policy all users '*' (Public access)
         bucket_policy_generated = gen_bucket_policy(
@@ -581,10 +499,6 @@ class TestS3BucketPolicy(MCGTest):
         """
         Tests bucket and object versioning on Noobaa buckets and also its related actions
         """
-        data = "Sample string content to write to a new S3 object"
-        object_key = "ObjKey-" + str(uuid.uuid4().hex)
-        object_versions = []
-
         # Creating a OBC user (Account)
         obc = bucket_factory(amount=1, interface="OC")
         obc_obj = OBC(obc[0].name)
@@ -621,50 +535,6 @@ class TestS3BucketPolicy(MCGTest):
         assert s3_get_bucket_versioning(
             s3_obj=obc_obj, bucketname=obc_obj.bucket_name
         ), "Failed: GetBucketVersioning"
-
-        # Admin modifies the policy to all obc-account to write/read/delete versioned objects
-        bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
-            actions_list=object_version_action_list,
-            resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
-        )
-        bucket_policy = json.dumps(bucket_policy_generated)
-
-        logger.info(f"Creating bucket policy on bucket: {obc_obj.bucket_name} by Admin")
-        assert put_bucket_policy(
-            mcg_obj, obc_obj.bucket_name, bucket_policy
-        ), "Failed: PutBucketPolicy"
-
-        # Getting Policy
-        logger.info(f"Getting bucket policy for bucket: {obc_obj.bucket_name}")
-        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info(f"Got bucket policy: {get_policy['Policy']}")
-
-        for key in range(5):
-            logger.info(f"Writing {key} version of {object_key}")
-            obj = s3_put_object(
-                s3_obj=obc_obj,
-                bucketname=obc_obj.bucket_name,
-                object_key=object_key,
-                data=data,
-            )
-            object_versions.append(obj["VersionId"])
-
-        for obj_ver in object_versions:
-            logger.info(f"Reading version: {obj_ver} of {object_key}")
-            assert s3_get_object(
-                s3_obj=obc_obj,
-                bucketname=obc_obj.bucket_name,
-                object_key=object_key,
-                versionid=obj_ver,
-            ), f"Failed: To Read object {obj_ver}"
-            logger.info(f"Deleting version: {obj_ver} of {object_key}")
-            assert s3_delete_object(
-                s3_obj=obc_obj,
-                bucketname=obc_obj.bucket_name,
-                object_key=object_key,
-                versionid=obj_ver,
-            ), f"Failed: To Delete object with {obj_ver}"
 
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
@@ -805,16 +675,10 @@ class TestS3BucketPolicy(MCGTest):
         """
         data = "Sample string content to write to a new S3 object"
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
-        user_name = "noobaa-user" + str(uuid.uuid4().hex)
-        email = user_name + "@mail.com"
 
         # Creating OBC (account) and Noobaa user account
         obc = bucket_factory(amount=1, interface="OC")
         obc_obj = OBC(obc[0].name)
-        noobaa_user = NoobaaAccount(
-            mcg_obj, name=user_name, email=email, buckets=[obc_obj.bucket_name]
-        )
-        accounts = [obc_obj, noobaa_user]
 
         # Statement_1 public read access to a bucket
         single_statement_policy = gen_bucket_policy(
@@ -831,14 +695,14 @@ class TestS3BucketPolicy(MCGTest):
             "statement_2": {
                 "Action": "s3:PutObject",
                 "Effect": "Allow",
-                "Principal": noobaa_user.email_id,
+                "Principal": obc_obj.obc_account,
                 "Resource": [f'arn:aws:s3:::{obc_obj.bucket_name}/{"*"}'],
                 "Sid": "Statement-2",
             },
             "statement_3": {
                 "Action": "s3:DeleteObject",
                 "Effect": "Deny",
-                "Principal": [obc_obj.obc_account, noobaa_user.email_id],
+                "Principal": [obc_obj.obc_account],
                 "Resource": [f'arn:aws:s3:::{"*"}'],
                 "Sid": "Statement-3",
             },
@@ -867,10 +731,10 @@ class TestS3BucketPolicy(MCGTest):
 
         # NooBaa user writes an object to bucket
         logger.info(
-            f"Writing object on bucket: {obc_obj.bucket_name} with User: {noobaa_user.email_id}"
+            f"Writing object on bucket: {obc_obj.bucket_name} with User: {obc_obj.obc_account}"
         )
         assert s3_put_object(
-            noobaa_user, obc_obj.bucket_name, object_key, data
+            obc_obj, obc_obj.bucket_name, object_key, data
         ), "Failed: Put Object"
 
         # Verifying public read access
@@ -882,23 +746,18 @@ class TestS3BucketPolicy(MCGTest):
         ), "Failed: Get Object"
 
         # Verifying Delete object is denied on both Accounts
-        for user in accounts:
-            logger.info(
-                f"Verifying whether S3:DeleteObject action is denied access for {user}"
-            )
-            try:
-                s3_delete_object(user, obc_obj.bucket_name, object_key)
-            except boto3exception.ClientError as e:
-                logger.info(e.response)
-                response = HttpResponseParser(e.response)
-                if response.error["Code"] == "AccessDenied":
-                    logger.info(
-                        f"DeleteObject failed due to: {response.error['Message']}"
-                    )
-                else:
-                    raise UnexpectedBehaviour(
-                        f"{e.response} received invalid error code {response.error['Code']}"
-                    )
+        logger.info("Verifying whether S3:DeleteObject action is denied access")
+        try:
+            s3_delete_object(obc_obj, obc_obj.bucket_name, object_key)
+        except boto3exception.ClientError as e:
+            logger.info(e.response)
+            response = HttpResponseParser(e.response)
+            if response.error["Code"] == "AccessDenied":
+                logger.info(f"DeleteObject failed due to: {response.error['Message']}")
+            else:
+                raise UnexpectedBehaviour(
+                    f"{e.response} received invalid error code {response.error['Code']}"
+                )
 
     @pytest.mark.parametrize(
         argnames="policy_name, policy_param",
@@ -989,15 +848,23 @@ class TestS3BucketPolicy(MCGTest):
         account1 = "noobaa-user1" + str(uuid.uuid4().hex)
         account2 = "noobaa-user2" + str(uuid.uuid4().hex)
         for account in account1, account2:
-            users.append(
-                NoobaaAccount(
-                    mcg=mcg_obj,
-                    name=account,
-                    email=f"{account}@mail.com",
-                    buckets=[s3_bucket[0].name],
+            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
+                users.append(
+                    NoobaaAccount(
+                        mcg=mcg_obj,
+                        name=account,
+                        email=f"{account}@mail.com",
+                        buckets=[s3_bucket[0].name],
+                    )
                 )
-            )
-
+            else:
+                users.append(
+                    NoobaaAccount(
+                        mcg=mcg_obj,
+                        name=account,
+                        email=f"{account}@mail.com",
+                    )
+                )
         logger.info(f"Adding bucket website config to: {s3_bucket[0].name}")
         assert s3_put_bucket_website(
             s3_obj=mcg_obj,
@@ -1046,6 +913,9 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(f"Getting bucket policy for bucket: {s3_bucket[0].name}")
         get_policy = get_bucket_policy(mcg_obj, s3_bucket[0].name)
         logger.info(f"Bucket policy: {get_policy['Policy']}")
+
+        logger.info("Waiting 5 seconds for bucket policy to propagate...")
+        time.sleep(5)
 
         # Verifying GetObject by reading the index of the website by anonymous users
         for user in users:

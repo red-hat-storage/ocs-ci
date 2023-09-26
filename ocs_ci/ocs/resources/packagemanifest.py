@@ -72,7 +72,7 @@ class PackageManifest(OCP):
         selector = selector if selector else self.selector
 
         data = super(PackageManifest, self).get(**kwargs)
-        if type(data) == dict and (data.get("kind") == "List"):
+        if isinstance(data, dict) and (data.get("kind") == "List"):
             items = data["items"]
             data_len = len(items)
             if data_len == 0 and selector and resource_name:
@@ -227,7 +227,6 @@ class PackageManifest(OCP):
         timeout=60,
         sleep=3,
         label=None,
-        selector=None,
     ):
         """
         Wait for a packagemanifest exists.
@@ -238,7 +237,6 @@ class PackageManifest(OCP):
                 on of those has to be set!
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
-            selector (str): The resource selector to search with.
 
         Raises:
             ResourceNameNotSpecifiedException: in case the name is not
@@ -251,7 +249,6 @@ class PackageManifest(OCP):
             f" identified by name '{resource_name}'"
         )
         resource_name = resource_name if resource_name else self.resource_name
-        selector = selector if selector else self.selector
         self.check_name_is_specified(resource_name)
 
         for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=self.get):

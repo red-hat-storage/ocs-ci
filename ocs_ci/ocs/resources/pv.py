@@ -2,7 +2,7 @@ import logging
 from subprocess import TimeoutExpired
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,9 @@ def get_all_pvs(selector=None):
          dict: Dict of all pv in openshift-storage namespace
     """
     ocp_pv_obj = ocp.OCP(
-        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=selector
+        kind=constants.PV,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=selector,
     )
     return ocp_pv_obj.get()
 

@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
     UnsupportedFeatureError,
 )
+from ocs_ci.ocs.cluster import is_managed_service_cluster
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class FioPodScale(object):
         self._set_dc_deployment()
         self.namespace_list = list()
         self.kube_job_pvc_list, self.kube_job_pod_list = ([], [])
+        self.is_cleanup = False
 
     @property
     def kind(self):
@@ -93,6 +95,7 @@ class FioPodScale(object):
         start_io=True,
         io_runtime=None,
         pvc_size=None,
+        max_pvc_size=105,
     ):
         """
         Function to create PVC of different type and attach them to PODs and start IO.
@@ -105,6 +108,7 @@ class FioPodScale(object):
             start_io (bool): Binary value to start IO default it's True
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
 
         Returns:
             rbd_pvc_name (list): List all the rbd PVCs names created
@@ -131,6 +135,7 @@ class FioPodScale(object):
                 access_mode=constants.ACCESS_MODE_RWO,
                 sc_name=rbd_sc_obj,
                 pvc_size=pvc_size,
+                max_pvc_size=max_pvc_size,
             )
         )
         cephfs_pvc_dict_list.extend(
@@ -139,6 +144,7 @@ class FioPodScale(object):
                 access_mode=constants.ACCESS_MODE_RWX,
                 sc_name=cephfs_sc_obj,
                 pvc_size=pvc_size,
+                max_pvc_size=max_pvc_size,
             )
         )
 
@@ -233,6 +239,8 @@ class FioPodScale(object):
         start_io=True,
         io_runtime=None,
         pvc_size=None,
+        max_pvc_size=105,
+        obj_name_prefix="obj",
     ):
         """
         Main Function with scale pod creation flow and checks to add nodes
@@ -241,12 +249,15 @@ class FioPodScale(object):
         many time to reach the desired count.
 
         Args:
-            scale_count (int): No of PVCs to be Scaled
+            scale_count (int): No of PVCs to be Scaled. Should be one of the values in the dict
+                "constants.SCALE_PVC_ROUND_UP_VALUE".
             pvc_per_pod_count (int): Number of PVCs to be attached to single POD
             Example, If 20 then 20 PVCs will be attached to single POD
             start_io (bool): Binary value to start IO default it's True
             io_runtime (seconds): Runtime in Seconds to continue IO
             pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
+            obj_name_prefix (str): The prefix of the object name. The default value is 'obj'
 
         """
 
@@ -254,20 +265,30 @@ class FioPodScale(object):
         scale_count_dict = constants.SCALE_PVC_ROUND_UP_VALUE
         if scale_count in scale_count_dict:
             scale_pvc_count = scale_count_dict[scale_count]
+        else:
+            raise ValueError(
+                f"The scale count value has to match the following values: "
+                f"{[*constants.SCALE_PVC_ROUND_UP_VALUE]}"
+            )
 
         # Minimal scale creation count should be 750, code is optimized to
         # scale PVC's not more than 750 count.
         # Used max_pvc_count+10 in certain places to round up the value.
         # i.e. while attaching 20 PVCs to single pod with 750 PVCs last pod
         # will left out with 10 PVCs so to avoid the problem scaling 10 more.
-        min_pvc_count = 760
-        if scale_pvc_count < min_pvc_count:
-            raise UnexpectedBehaviour("Minimal scale PVC creation count should be 760")
+        if scale_pvc_count > 760:
+            min_pvc_count = 760
+        else:
+            min_pvc_count = scale_pvc_count
 
         self.ms_name = list()
 
         # Check for expected worker count
-        expected_worker_count = get_expected_worker_count(scale_count)
+        if is_managed_service_cluster():
+            expected_worker_count = 3
+        else:
+            expected_worker_count = get_expected_worker_count(scale_count)
+
         if check_and_add_enough_worker(expected_worker_count):
             if (
                 (
@@ -286,6 +307,11 @@ class FioPodScale(object):
                     config.ENV_DATA["deployment_type"] == "ipi"
                     and config.ENV_DATA["platform"].lower()
                     == constants.VSPHERE_PLATFORM
+                )
+                or (
+                    config.ENV_DATA["deployment_type"] == "ipi"
+                    and config.ENV_DATA["platform"].lower()
+                    == constants.IBMCLOUD_PLATFORM
                 )
             ):
                 for obj in machine.get_machineset_objs():
@@ -317,10 +343,11 @@ class FioPodScale(object):
                 rbd_pvc, fs_pvc, pod_running = self.create_multi_pvc_pod(
                     pvc_count=min_pvc_count,
                     pvcs_per_pod=pvc_per_pod_count,
-                    obj_name=f"obj{actual_itr_counter}",
+                    obj_name=f"{obj_name_prefix}{actual_itr_counter}",
                     start_io=start_io,
                     io_runtime=io_runtime,
                     pvc_size=pvc_size,
+                    max_pvc_size=max_pvc_size,
                 )
                 logger.info(
                     f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
@@ -398,6 +425,8 @@ class FioPodScale(object):
         if self.ms_name:
             for name in self.ms_name:
                 machine.delete_custom_machineset(name)
+
+        self.is_cleanup = True
 
 
 def delete_objs_parallel(obj_list, namespace, kind):
@@ -734,6 +763,11 @@ def get_expected_worker_count(scale_count=1500):
             and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
         ):
             expected_worker_count = worker_count_dict[scale_count]["vmware"]
+        elif (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+        ):
+            expected_worker_count = worker_count_dict[scale_count]["ibm_cloud"]
         else:
             raise UnsupportedPlatformError("Unsupported Platform")
         return expected_worker_count
@@ -820,7 +854,7 @@ def check_and_add_enough_worker(worker_count):
                         )
                     )
                 for ms in ms_name:
-                    machine.wait_for_new_node_to_be_ready(ms)
+                    machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             if len(ms_name) == 3:
                 exp_count = int(worker_count / 3)
             else:
@@ -828,7 +862,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -876,7 +910,7 @@ def check_and_add_enough_worker(worker_count):
                         )
                     )
                 for ms in ms_name:
-                    machine.wait_for_new_node_to_be_ready(ms)
+                    machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             if len(ms_name) == 3:
                 exp_count = int(worker_count / 3)
             else:
@@ -884,7 +918,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -930,7 +964,7 @@ def check_and_add_enough_worker(worker_count):
                         )
                     )
                 for ms in ms_name:
-                    machine.wait_for_new_node_to_be_ready(ms)
+                    machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             if len(ms_name) == 3:
                 exp_count = int(worker_count / 3)
             else:
@@ -938,7 +972,7 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -979,7 +1013,61 @@ def check_and_add_enough_worker(worker_count):
             for name in ms_name:
                 machine.add_node(machine_set=name, count=exp_count)
             for ms in ms_name:
-                machine.wait_for_new_node_to_be_ready(ms, 900)
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
+            worker_list = node.get_worker_nodes()
+            ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+            scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
+            ocs_worker_list.extend(scale_label_worker)
+            final_list = list(dict.fromkeys(ocs_worker_list))
+            for node_item in final_list:
+                if node_item in worker_list:
+                    worker_list.remove(node_item)
+            if worker_list:
+                helpers.label_worker_node(
+                    node_list=worker_list,
+                    label_key="scale-label",
+                    label_value="app-scale",
+                )
+            return True
+
+        # Add enough worker for IBM Cloud
+        if (
+            config.ENV_DATA["deployment_type"] == "ipi"
+            and config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+        ):
+            # Create machineset for app worker nodes on each IBM zone
+            # Each zone will have one app worker node
+            ms_name = list()
+            labels = [("node-role.kubernetes.io/app", "app-scale")]
+            for obj in machine.get_machineset_objs():
+                if "app" in obj.name:
+                    ms_name.append(obj.name)
+            if not ms_name:
+                if len(machine.get_machineset_objs()) == 3:
+                    for zone in ["1", "2", "3"]:
+                        ms_name.append(
+                            machine.create_custom_machineset(
+                                labels=labels,
+                                zone=zone,
+                            )
+                        )
+                else:
+                    ms_name.append(
+                        machine.create_custom_machineset(
+                            labels=labels,
+                            zone="1",
+                        )
+                    )
+                for ms in ms_name:
+                    machine.wait_for_new_node_to_be_ready(ms, timeout=900)
+            if len(ms_name) == 3:
+                exp_count = int(worker_count / 3)
+            else:
+                exp_count = worker_count
+            for name in ms_name:
+                machine.add_node(machine_set=name, count=exp_count)
+            for ms in ms_name:
+                machine.wait_for_new_node_to_be_ready(ms, timeout=900)
             worker_list = node.get_worker_nodes()
             ocs_worker_list = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
             scale_label_worker = machine.get_labeled_nodes(constants.SCALE_LABEL)
@@ -1077,7 +1165,7 @@ def increase_pods_per_worker_node_count(pods_per_node=500, pods_per_core=10):
 
 
 def construct_pvc_creation_yaml_bulk_for_kube_job(
-    no_of_pvc, access_mode, sc_name, pvc_size=None
+    no_of_pvc, access_mode, sc_name, pvc_size=None, max_pvc_size=105
 ):
     """
     Function to construct pvc.yaml to create bulk of pvc's using kube_job
@@ -1088,6 +1176,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
         sc_name (str): SC name for pvc creation
         pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
                 If None, random size pvc will be created
+        max_pvc_size (int): The max size of the pvc. It should be greater than 9
 
     Returns:
          pvc_dict_list (list): List of all PVC.yaml dicts
@@ -1096,10 +1185,18 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
 
     # Construct PVC.yaml for the no_of_required_pvc count
     # append all the pvc.yaml dict to pvc_dict_list and return the list
+    if max_pvc_size <= 9:
+        raise ValueError(
+            f"The max pvc size is {max_pvc_size}, and it should be greater than 9"
+        )
     pvc_dict_list = list()
     for i in range(no_of_pvc):
         pvc_name = helpers.create_unique_resource_name("test", "pvc")
-        size = f"{random.randrange(5, 105, 5)}Gi" if pvc_size is None else pvc_size
+        size = (
+            f"{random.randrange(5, max_pvc_size, 5)}Gi"
+            if pvc_size is None
+            else pvc_size
+        )
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_data["metadata"]["name"] = pvc_name
         del pvc_data["metadata"]["namespace"]
@@ -1296,8 +1393,13 @@ def check_all_pod_reached_running_state_in_kube_job(
             if while_iteration_count == 10 and dc_pod:
                 ocp_obj = OCP()
                 for i in pod_not_running_list:
-                    cmd = f"delete pod {i} -n {namespace}"
-                    ocp_obj.exec_oc_cmd(command=cmd, timeout=120)
+                    try:
+                        cmd = f"delete pod {i} -n {namespace}"
+                        ocp_obj.exec_oc_cmd(command=cmd, timeout=120)
+                    except CommandFailed as e:
+                        logger.warning(
+                            f"Failed to delete the pod {i} due to the error {str(e)}"
+                        )
 
             # Breaking while loop after 13 Iteration i.e. after 30*13 secs of wait_time
             # And if PODs are still not in Running state then there will be assert.
@@ -1352,6 +1454,8 @@ def attach_multiple_pvc_to_pod_dict(
     """
 
     pods_list, temp_list = ([], [])
+    if raw_block_pv:
+        pod_yaml = constants.PERF_BLOCK_POD_YAML
     for pvc_name in pvc_list:
         temp_list.append(pvc_name)
         if len(temp_list) == pvcs_per_pod:

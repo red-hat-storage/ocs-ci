@@ -63,6 +63,9 @@ class AWSBase(CloudDeploymentBase):
         # dict of cluster prefixes with special handling rules (for existence
         # check or during a cluster cleanup)
         self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        if ocp_version >= version.VERSION_4_12:
+            self.DEFAULT_STORAGECLASS = "gp2-csi"
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         super(AWSBase, self).deploy_ocp(log_cli_level)
@@ -207,7 +210,9 @@ class AWSIPI(AWSBase):
             self.host_network_update()
         lso_type = config.DEPLOYMENT.get("type")
         if lso_type == constants.AWS_EBS:
-            create_and_attach_volume_for_all_workers()
+            create_and_attach_volume_for_all_workers(
+                count=config.ENV_DATA.get("extra_disks", 1)
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -287,7 +292,11 @@ class AWSUPI(AWSBase):
                 "HOSTS_SCRIPT_DIR": self.upi_script_path,
                 "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
                 "DISABLE_MASTER_MACHINESET": "yes",
+                "DISABLE_WORKER_MACHINESET": "yes",
                 "INSTALLER_BIN": "openshift-install",
+                "num_workers_additional": str(
+                    config.ENV_DATA["num_workers_additional"]
+                ),
             }
             if config.DEPLOYMENT["preserve_bootstrap_node"]:
                 logger.info("Setting ENV VAR to preserve bootstrap node")
@@ -537,10 +546,13 @@ class AWSUPI(AWSBase):
         playbook
         """
         rhel_pod_name = "rhel-ansible"
-        # TODO: This method is creating only RHEL 7 pod. Once we would like to use
-        # different version of RHEL for running openshift ansible playbook, we need
-        # to update this method!
-        rhel_pod_obj = create_rhelpod(constants.DEFAULT_NAMESPACE, rhel_pod_name)
+        if Version.coerce(get_ocp_version()) >= Version.coerce("4.13"):
+            rhel_version_for_ansible = 8
+        else:
+            rhel_version_for_ansible = 7
+        rhel_pod_obj = create_rhelpod(
+            constants.DEFAULT_NAMESPACE, rhel_pod_name, rhel_version_for_ansible
+        )
         timeout = 4000  # For ansible-playbook
 
         # copy openshift-dev.pem to RHEL ansible pod
@@ -549,11 +561,9 @@ class AWSUPI(AWSBase):
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = constants.YUM_REPOS_PATH
         # Ansible playbook and dependency is described in the documentation to run
-        # on RHEL7 node
+        # on RHEL node
         # https://docs.openshift.com/container-platform/4.9/machine_management/adding-rhel-compute.html
-        repo_rhel_ansible = get_ocp_repo(
-            rhel_major_version=config.ENV_DATA["rhel_version_for_ansible"]
-        )
+        repo_rhel_ansible = get_ocp_repo(rhel_major_version=rhel_version_for_ansible)
         repo = get_ocp_repo()
         diff_rhel = repo != repo_rhel_ansible
         pod.upload(rhel_pod_obj.name, repo_rhel_ansible, repo_dst_path)
@@ -621,7 +631,7 @@ class AWSUPI(AWSBase):
             self.cluster_path, config.RUN.get("kubeconfig_location")
         )
         pod.upload(rhel_pod_obj.name, kubeconfig, "/")
-        pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         pod.upload(rhel_pod_obj.name, pull_secret_path, "/tmp/")
         host_file = self.build_ansible_inventory(hosts)
         pod.upload(rhel_pod_obj.name, host_file, "/")

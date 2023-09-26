@@ -5,20 +5,26 @@ Test to verify cluster health/stability when it's full (85%)
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster, get_percent_used_capacity
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.disruptive_operations import osd_node_reboot
 from ocs_ci.ocs.node import wait_for_nodes_status
-from ocs_ci.framework.pytest_customization.marks import system_test, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    system_test,
+    polarion_id,
+    magenta_squad,
+)
 from ocs_ci.helpers import sanity_helpers
 
 logger = logging.getLogger(__name__)
 
 
+@magenta_squad
 class TestFullClusterHealth(PASTest):
     """
     Test Cluster health when storage is ~85%
@@ -112,7 +118,7 @@ class TestFullClusterHealth(PASTest):
         pod_list = []
         rook_operator_pod = pod.get_ocs_operator_pod(
             ocs_label=constants.OPERATOR_LABEL,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         pod_list.append(rook_operator_pod)
 
@@ -152,7 +158,9 @@ class TestFullClusterHealth(PASTest):
         wait_for_nodes_status()
 
         # Check for Ceph pods
-        pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        pod_obj = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         assert pod_obj.wait_for_resource(
             condition="Running", selector="app=rook-ceph-mgr", timeout=600
         )
@@ -182,7 +190,7 @@ class TestFullClusterHealth(PASTest):
         wait_for_nodes_status()
 
         pod.wait_for_pods_to_be_running(
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, pod_names=[pod_obj.name]
+            namespace=config.ENV_DATA["cluster_namespace"], pod_names=[pod_obj.name]
         )
 
     def is_cluster_healthy(self):

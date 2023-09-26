@@ -1,22 +1,26 @@
 import os
 import logging
 import time
+import shlex
+import subprocess
 
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from ocs_ci.deployment import vmware
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
-from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.base_ui import BaseUI, SeleniumDriver
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import acm_ui_specific
 from ocs_ci.utility.utils import (
-    get_ocp_version,
     expose_ocp_version,
     run_cmd,
+    get_running_acm_version,
 )
 from ocs_ci.ocs.constants import (
+    ACM_CLUSTER_DESTROY_TIMEOUT,
     PLATFORM_XPATH_MAP,
     ACM_PLATOFRM_VSPHERE_CRED_PREFIX,
     VSPHERE_CA_FILE_PATH,
@@ -29,6 +33,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.ipam import IPAM
 
 
 log = logging.getLogger(__name__)
@@ -40,10 +45,8 @@ class AcmPageNavigator(BaseUI):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.ocp_version = get_ocp_version()
-        self.acm_page_nav = locators[self.ocp_version]["acm_page"]
+    def __init__(self):
+        super().__init__()
 
     def navigate_welcome_page(self):
         """
@@ -63,16 +66,23 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.acm_page_nav["Home"])
         self.do_click(locator=self.acm_page_nav["Overview_page"])
 
-    def navigate_clusters_page(self):
+    def navigate_clusters_page(self, timeout=120):
         """
         Navigate to ACM Clusters Page
 
         """
         log.info("Navigate into Clusters Page")
+        self.check_element_presence(
+            (
+                self.acm_page_nav["Infrastructure"][1],
+                self.acm_page_nav["Infrastructure"][0],
+            ),
+            timeout=timeout,
+        )
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Clusters_page"])
+        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout)
 
     def navigate_bare_metal_assets_page(self):
         """
@@ -105,7 +115,10 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Infrastructure_environments_page"])
+        self.do_click(
+            locator=self.acm_page_nav["Infrastructure_environments_page"],
+            enable_screenshot=True,
+        )
 
     def navigate_applications_page(self):
         """
@@ -113,7 +126,9 @@ class AcmPageNavigator(BaseUI):
 
         """
         log.info("Navigate into Applications Page")
-        self.do_click(locator=self.acm_page_nav["Applications"])
+        self.do_click(
+            locator=self.acm_page_nav["Applications"], timeout=120, avoid_stale=True
+        )
 
     def navigate_governance_page(self):
         """
@@ -131,6 +146,67 @@ class AcmPageNavigator(BaseUI):
         log.info("Navigate into Governance Page")
         self.do_click(locator=self.acm_page_nav["Credentials"])
 
+    def navigate_data_services(self):
+        """
+        Navigate to Data Services page on ACM UI, supported for ACM version 2.7 and above
+
+        """
+        log.info("Navigate to Data Policies page on ACM console")
+        find_element = self.wait_until_expected_text_is_found(
+            locator=self.acm_page_nav["data-services"],
+            expected_text="Data Services",
+            timeout=240,
+        )
+        if find_element:
+            element = self.driver.find_element_by_xpath(
+                "//button[normalize-space()='Data Services']"
+            )
+            if element.get_attribute("aria-expanded") == "false":
+                self.do_click(locator=self.acm_page_nav["data-services"])
+            data_policies = self.wait_until_expected_text_is_found(
+                locator=self.acm_page_nav["data-policies"],
+                expected_text="Data policies",
+                timeout=240,
+            )
+            if data_policies:
+                self.do_click(
+                    locator=self.acm_page_nav["data-policies"], enable_screenshot=True
+                )
+        else:
+            log.error("Couldn't navigate to data Services page on ACM UI")
+            raise NoSuchElementException
+
+    def navigate_from_ocp_to_acm_cluster_page(self):
+        """
+        For ACM version 2.7 and above we need to navigate from OCP
+        console to ACM multicluster page
+
+        """
+        # There is a modal dialog box which appears as soon as we login
+        # we need to click on close on that dialog box
+        if self.check_element_presence(
+            (
+                self.acm_page_nav["modal_dialog_close_button"][1],
+                self.acm_page_nav["modal_dialog_close_button"][0],
+            ),
+            timeout=200,
+        ):
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
+
+        if not self.check_element_presence(
+            (
+                self.acm_page_nav["click-local-cluster"][1],
+                self.acm_page_nav["click-local-cluster"][0],
+            ),
+            timeout=300,
+        ):
+            log.error("local-cluster is not found, can not switch to ACM console")
+            self.take_screenshot()
+            raise NoSuchElementException
+        self.do_click(self.acm_page_nav["click-local-cluster"])
+        log.info("Successfully navigated to ACM console")
+        self.take_screenshot()
+
 
 class ACMOCPClusterDeployment(AcmPageNavigator):
     """
@@ -138,19 +214,29 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
 
     """
 
-    def __init__(self, driver, platform, cluster_conf):
-        super().__init__(driver)
+    def __init__(self, platform, cluster_conf):
+        super().__init__()
         self.platform = platform
         self.cluster_conf = cluster_conf
         self.cluster_name = self.cluster_conf.ENV_DATA["cluster_name"]
         self.cluster_path = self.cluster_conf.ENV_DATA["cluster_path"]
         self.deploy_sync_mode = config.MULTICLUSTER.get("deploy_sync_mode", "async")
         self.deployment_status = None
+        self.destroy_status = None
         self.cluster_deploy_timeout = self.cluster_conf.ENV_DATA.get(
             "cluster_deploy_timeout", ACM_CLUSTER_DEPLOY_TIMEOUT
         )
+        self.cluster_destroy_timeout = self.cluster_conf.ENV_DATA.get(
+            "cluster_destroy_timeout", ACM_CLUSTER_DESTROY_TIMEOUT
+        )
         self.deployment_failed_reason = None
+        self.destroy_failed_reason = None
         self.deployment_start_time = 0
+        self.destroy_start_time = 0
+        self.acm_version = "_".join(get_running_acm_version().split(".")[:2])
+        print(self.acm_version)
+        # Update acm version specific dictionary
+        self.acm_page_nav.update(acm_ui_specific[f"acm_{self.acm_version}"])
 
     def create_cluster_prereq(self):
         raise NotImplementedError("Child class has to implement this method")
@@ -180,9 +266,12 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
                 log.error("Create cluster button not found")
                 raise ACMClusterDeployException("Can't continue with deployment")
             log.info("check 2:Found create cluster by index path")
+            time.sleep(10)
             self.do_click(locator=self.acm_page_nav["cc_create_cluster"], timeout=100)
             time.sleep(20)
-            if self.driver.current_url.endswith("create-cluster"):
+            if self.driver.current_url.endswith(
+                self.acm_page_nav["cc_create_cluster_endswith_url"]
+            ):
                 break
 
     def click_next_button(self):
@@ -330,6 +419,85 @@ class ACMOCPClusterDeployment(AcmPageNavigator):
         """
         raise NotImplementedError("Child class should implement this function")
 
+    def destroy_cluster(self):
+        """
+        ACM UI based destroy cluster,
+        select the cluster from UI, click on destroy
+
+        """
+        # Navigate to Clusters page
+        self.navigate_clusters_page()
+        # Click on cluster name from the table
+        locator = format_locator(self.acm_page_nav["cc_table_entry"], self.cluster_name)
+        self.do_click(locator=locator)
+        # Click on 'Actions' dropdown
+        action_dropdown = format_locator(
+            self.acm_page_nav["cc_delete_cluster_action_dropdown"],
+            f"{self.cluster_name}-actions",
+        )
+        self.do_click(action_dropdown, timeout=300)
+        # From the 'Actions' dropdown click on 'Destroy Cluster'
+        self.do_click(locator=self.acm_page_nav["cc_destroy_cluster"], timeout=300)
+        # A confirmation window pops up
+        # Fill cluster name in the confirmation window's text box
+        self.do_click(
+            self.acm_page_nav["cc_destroy_cluster_confirm_textbox"], timeout=300
+        )
+        self.do_send_keys(
+            self.acm_page_nav["cc_destroy_cluster_confirm_textbox"], self.cluster_name
+        )
+        # Click on destroy button
+        self.do_click(self.acm_page_nav["cc_destroy_button"], timeout=300)
+        loc = format_locator(
+            self.acm_page_nav["cc_cluster_being_destroyed_heading"], self.cluster_name
+        )
+        if not self.check_element_presence(locator=(By.XPATH, loc[0]), timeout=600):
+            raise ACMClusterDeployException(
+                "Something went wrong with destroy action "
+                f"for the cluster {self.cluster_name}"
+            )
+        self.destroy_status = "Destroying"
+        self.destroy_start_time = time.time()
+
+    def get_destroy_status(self):
+        """
+        Return the current status of destroy operation
+
+        """
+        self.navigate_clusters_page(timeout=300)
+        time.sleep(10)
+        locator = format_locator(self.acm_page_nav["cc_table_entry"], self.cluster_name)
+        if not self.check_element_presence((locator[1], locator[0]), timeout=300):
+            # Cluster deletion has happened
+            self.destroy_status = "Done"
+        else:
+            self.do_click(locator=locator, timeout=300)
+            loc = format_locator(
+                self.acm_page_nav["cc_cluster_being_destroyed_heading"],
+                self.cluster_name,
+            )
+            if not self.check_element_presence(
+                locator=(By.XPATH, loc[0]),
+                timeout=300,
+            ):
+                log.error("Cluster destroy status msg missing")
+                self.destroy_status = "Failed"
+            else:
+                elapsed_time = int(time.time() - self.destroy_start_time)
+                if elapsed_time > self.cluster_destroy_timeout:
+                    self.destroy_status = "Failed"
+                    self.destroy_failed_reason = "timeout"
+
+    def post_destroy_ops(self):
+        """
+        Post destroy ops should be implemented by child classes because
+        post destroy ops are mostly specific to the platform
+
+        """
+        raise NotImplementedError(
+            "Platform specific class has to implement post_destroy_ops"
+        )
+
 
 class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
     """
@@ -338,14 +506,15 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
 
     """
 
-    def __init__(self, driver, cluster_conf=None):
-        super().__init__(driver=driver, platform="vsphere", cluster_conf=cluster_conf)
+    def __init__(self, cluster_conf=None):
+        super().__init__(platform="vsphere", cluster_conf=cluster_conf)
         self.platform_credential_name = cluster_conf.ENV_DATA.get(
             "platform_credential_name",
             f"{ACM_PLATOFRM_VSPHERE_CRED_PREFIX}{self.cluster_name}",
         )
         # API VIP & Ingress IP
         self.ips = None
+        self.nvips = 2
         self.vsphere_network = None
 
     def create_cluster_prereq(self, timeout=600):
@@ -441,13 +610,25 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         }
         self.fill_multiple_textbox(vsphere_creds_dict)
         self.click_next_button()
+        # Skip 2 sections
+        # "Configuration for disconnected installation" and "Proxy"
+        for i in range(2):
+            self.click_next_button()
 
         # Pull Secret and SSH
         # 1. Pull secret
         # 2. SSH Private key
         # 3. SSH Public key
-        with open(os.path.join(DATA_DIR, "pull-secret"), "r") as fp:
-            pull_secret = fp.read()
+        pull_secret_str = f"cat {os.path.join(DATA_DIR, 'pull-secret')}"
+        jq_trimmed = "jq -c"
+        json_out = subprocess.Popen(
+            shlex.split(pull_secret_str), stdout=subprocess.PIPE
+        )
+        out = subprocess.Popen(
+            shlex.split(jq_trimmed), stdin=json_out.stdout, stdout=subprocess.PIPE
+        )
+        pull_secret = out.communicate()[0].decode()
+
         ssh_pub_key_path = os.path.expanduser(self.cluster_conf.DEPLOYMENT["ssh_key"])
         ssh_priv_key_path = os.path.expanduser(
             self.cluster_conf.DEPLOYMENT["ssh_key_private"]
@@ -488,7 +669,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         # Switch context to cluster which we are about to create
         prev_ctx = config.cur_index
         config.switch_ctx(self.cluster_conf.MULTICLUSTER["multicluster_index"])
-        self.ips = vmware.assign_ips(2)
+        self.ips = vmware.assign_ips(self.nvips)
         vmware.create_dns_records(self.ips)
         config.switch_ctx(prev_ctx)
         self.driver.close()
@@ -518,10 +699,9 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         self.click_next_button()
         self.fill_network_info()
         self.click_next_button()
-        # Skip proxy for now
-        self.click_next_button()
-        # Skip Automation for now
-        self.click_next_button()
+        # Skip proxy, disconnected install  and Automation for now
+        for i in range(3):
+            self.click_next_button()
         # We are at Review page
         self.do_click(
             locator=self.acm_page_nav["cc_deployment_yaml_toggle_button"], timeout=120
@@ -664,20 +844,41 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT["installer_version"])
         return f"{ACM_OCP_RELEASE_IMG_URL_PREFIX}:{vers}"
 
+    def post_destroy_ops(self):
+        """
+        Post destroy ops includes
+        1. Deleting DNS entries
+        2. Freeing the ips assigned
+
+        """
+        prev_ctx = config.cur_index
+        config.switch_ctx(self.cluster_conf.MULTICLUSTER["multicluster_index"])
+        vmware.delete_dns_records()
+        ipam = IPAM(appiapp="address")
+        hosts = [
+            f"{config.ENV_DATA.get('cluster_name')}-{i}" for i in range(self.nvips)
+        ]
+        ipam.release_ips(hosts)
+        config.switch_ctx(prev_ctx)
+
 
 class ACMOCPDeploymentFactory(object):
     def __init__(self):
         # All platform specific classes should have map here
-        self.platform_map = {"vsphereipi": ACMOCPPlatformVsphereIPI}
+        # For now point UPI to IPI deployment, because all DC credential
+        # file have UPI entries
+        self.platform_map = {
+            "vsphereipi": ACMOCPPlatformVsphereIPI,
+            "vsphereupi": ACMOCPPlatformVsphereIPI,
+        }
 
-    def get_platform_instance(self, driver, cluster_config):
+    def get_platform_instance(self, cluster_config):
         """
         Args:
-            driver: selenium UI driver object
             cluster_config (dict): Cluster Config object
         """
         platform_deployment = (
             f"{cluster_config.ENV_DATA['platform']}"
             f"{cluster_config.ENV_DATA['deployment_type']}"
         )
-        return self.platform_map[platform_deployment](driver, cluster_config)
+        return self.platform_map[platform_deployment](SeleniumDriver(), cluster_config)

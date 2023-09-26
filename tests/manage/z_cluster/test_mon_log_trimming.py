@@ -1,19 +1,21 @@
 import logging
 import random
 import threading
-import re
 import pytest
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, bugzilla, tier2
+from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.testlib import E2ETest, bugzilla, tier2, skipif_external_mode
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_mon_pods
-from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.helpers.helpers import get_mon_db_size_in_kb
 
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
+@skipif_external_mode
 @bugzilla("1941939")
 @pytest.mark.polarion_id("OCS-2526")
 class TestMonLogTrimming(E2ETest):
@@ -99,12 +101,12 @@ class TestMonLogTrimming(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    def check_mon_db_trim(self):
+    def check_mon_db_trim(self, mon_pod_obj):
         """
         Check mon db size while fio runs in the background
         """
         while not self.stop_checking_mon_db:
-            temp_mon_db_size = self.get_mon_db_size_in_kb()
+            temp_mon_db_size = get_mon_db_size_in_kb(mon_pod_obj)
             assert temp_mon_db_size is not None, "Failed to get mon db size"
             log.info(
                 f"Monitoring mon-{self.selected_mon_pod} db size: {temp_mon_db_size}K"
@@ -135,37 +137,21 @@ class TestMonLogTrimming(E2ETest):
             num_of_deletions = num_of_deletions + 1
         log.info(f"Number of osd deletions: {num_of_deletions}")
 
-    def get_mon_db_size_in_kb(self):
-        """
-        Get mon db size and returns the size in KB
-        The output of 'du -sh' command contains the size of the directory and its path as string
-        e.g. "67M\t/var/lib/ceph/mon/ceph-c/store.db"
-        The size is extracted by splitting the string with '\t'.
-        The size format for example: 1K, 234M, 2G
-        For uniformity, this test uses KB
-        """
-        size = self.selected_mon_pod_obj.exec_cmd_on_pod(
-            f"du -sh /var/lib/ceph/mon/ceph-{self.selected_mon_pod}/store.db",
-            out_yaml_format=False,
-        )
-        size = re.split("\t+", size)
-        assert len(size) > 0, f"Failed to get mon-{self.selected_mon_pod} db size"
-        size = size[0]
-        return convert_device_size(size + "i", "KB")
-
     def test_mon_log_trimming(self):
         """
         Check that mon db actually get trimmed while running fio and OSD Pod restart
 
         """
-        self.initial_db_size = self.get_mon_db_size_in_kb()
+        self.initial_db_size = get_mon_db_size_in_kb(self.selected_mon_pod_obj)
         log.info(f"Initial db size: {self.initial_db_size}K")
         self.fio_pod_obj.run_io(
             storage_type="fs",
             size="100M",
             runtime=480,
         )
-        thread1 = threading.Thread(target=self.check_mon_db_trim)
+        thread1 = threading.Thread(
+            target=self.check_mon_db_trim, args=(self.selected_mon_pod_obj,)
+        )
         thread1.start()
 
         thread2 = threading.Thread(target=self.restart_osd_pod)
@@ -180,7 +166,7 @@ class TestMonLogTrimming(E2ETest):
         thread1.join()
         thread2.join()
 
-        final_db_size = self.get_mon_db_size_in_kb()
+        final_db_size = get_mon_db_size_in_kb(self.selected_mon_pod_obj)
         log.info(f"Final db size: {final_db_size}K")
 
         assert self.mon_db_trim_count > 0, (

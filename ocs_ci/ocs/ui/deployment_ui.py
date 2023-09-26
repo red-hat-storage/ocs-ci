@@ -2,15 +2,19 @@ import logging
 import time
 
 
-from ocs_ci.ocs.ui.views import locators, osd_sizes, OCS_OPERATOR, ODF_OPERATOR
-from ocs_ci.ocs.ui.base_ui import PageNavigator
+from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
+from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.deployment.helpers.lso_helpers import (
+    add_disk_for_vsphere_platform,
+    create_optional_operators_catalogsource_non_ga,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -22,11 +26,8 @@ class DeploymentUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        self.dep_loc = locators[self.ocp_version]["deployment"]
-        if self.ocp_version_semantic <= version.VERSION_4_9:
-            self.validation_loc = locators[self.ocp_version]["validation"]
+    def __init__(self):
+        super().__init__()
 
     def verify_disks_lso_attached(self, timeout=600, sleep=20):
         """
@@ -51,8 +52,7 @@ class DeploymentUI(PageNavigator):
             expected_text=capacity_str,
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error(f" after {timeout} seconds")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError(f"Disks are not attached after {timeout} seconds")
 
     def install_ocs_operator(self):
         """
@@ -71,18 +71,21 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator_name is ODF_OPERATOR:
-            time.sleep(80)
-            self.refresh_popup()
+            try:
+                self.navigate_installed_operators_page()
+                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=500)
+            except Exception as e:
+                logger.error(f"Refresh pop-up does not exist: {e}")
+                self.refresh_page()
         self.verify_operator_succeeded(operator=self.operator_name)
-        self.refresh_popup()
 
-    def refresh_popup(self):
+    def refresh_popup(self, timeout=30):
         """
         Refresh PopUp
         """
         if self.check_element_text("Web console update is available"):
             logger.info("Web console update is available and Refresh web console")
-            self.do_click(locator=self.dep_loc["refresh_popup"])
+            self.do_click(locator=self.dep_loc["refresh_popup"], timeout=timeout)
 
     def install_local_storage_operator(self):
         """
@@ -94,9 +97,16 @@ class DeploymentUI(PageNavigator):
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
-            self.do_click(
-                self.dep_loc["choose_local_storage_version"], enable_screenshot=True
-            )
+            ocp_ga_version = get_ocp_ga_version(self.ocp_version_full)
+            if ocp_ga_version:
+                self.do_click(
+                    self.dep_loc["choose_local_storage_version"], enable_screenshot=True
+                )
+            else:
+                self.do_click(
+                    self.dep_loc["choose_local_storage_version_non_ga"],
+                    enable_screenshot=True,
+                )
 
             logger.info("Click Install LSO")
             self.do_click(self.dep_loc["click_install_lso"], enable_screenshot=True)
@@ -162,7 +172,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
         if self.ocp_version == "4.9":
             self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
-        elif self.ocp_version == "4.10":
+        elif self.ocp_version in ("4.10", "4.11", "4.12"):
             self.do_click(self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True)
         if config.DEPLOYMENT.get("local_storage"):
             self.install_lso_cluster()
@@ -170,6 +180,17 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["next"], enable_screenshot=True)
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
         self.create_storage_cluster()
+
+    def configure_in_transit_encryption(self):
+        """
+        Configure in_transit_encryption
+
+        """
+        if config.ENV_DATA.get("in_transit_encryption"):
+            logger.info("Enable in-transit encryption")
+            self.select_checkbox_status(
+                status=True, locator=self.dep_loc["enable_in_transit_encryption"]
+            )
 
     def install_lso_cluster(self):
         """
@@ -218,8 +239,7 @@ class DeploymentUI(PageNavigator):
             expected_text="Memory",
         )
         if not sample.wait_for_func_status(result=True):
-            logger.error("Nodes not found after 600 seconds")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError("Nodes not found after 600 seconds")
 
         if self.operator_name == OCS_OPERATOR:
             logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
@@ -237,6 +257,8 @@ class DeploymentUI(PageNavigator):
         self.enable_taint_nodes()
 
         self.configure_encryption()
+
+        self.configure_data_protection()
 
         self.create_storage_cluster()
 
@@ -257,7 +279,11 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             locator=self.dep_loc["storage_class_dropdown"], enable_screenshot=True
         )
-        self.do_click(locator=self.dep_loc[self.storage_class], enable_screenshot=True)
+        self.do_click(
+            locator=self.dep_loc[self.storage_class],
+            enable_screenshot=True,
+            copy_dom=True,
+        )
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
@@ -277,7 +303,10 @@ class DeploymentUI(PageNavigator):
         if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+            self.configure_in_transit_encryption()
             self.configure_encryption()
+
+        self.configure_data_protection()
 
         self.create_storage_cluster()
 
@@ -315,6 +344,14 @@ class DeploymentUI(PageNavigator):
             )
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
+    def configure_data_protection(self):
+        """
+        Configure Data Protection
+
+        """
+        if self.ocs_version_semantic >= version.VERSION_4_14:
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
+
     def enable_taint_nodes(self):
         """
         Enable taint Nodes
@@ -336,7 +373,12 @@ class DeploymentUI(PageNavigator):
         device_size = str(config.ENV_DATA.get("device_size"))
         osd_size = device_size if device_size in osd_sizes else "512"
         logger.info(f"Configure OSD Capacity {osd_size}")
-        self.choose_expanded_mode(mode=True, locator=self.dep_loc["osd_size_dropdown"])
+        if self.ocp_version_semantic >= version.VERSION_4_11:
+            self.do_click(self.dep_loc["osd_size_dropdown"], enable_screenshot=True)
+        else:
+            self.choose_expanded_mode(
+                mode=True, locator=self.dep_loc["osd_size_dropdown"]
+            )
         self.do_click(locator=self.dep_loc[osd_size], enable_screenshot=True)
 
     def verify_operator_succeeded(
@@ -380,7 +422,18 @@ class DeploymentUI(PageNavigator):
         self.navigate_operatorhub_page()
         self.navigate_installed_operators_page()
         logger.info(f"Search {operator} operator installed")
-        if self.ocp_version in ("4.7", "4.8", "4.9"):
+        if self.ocp_version_semantic >= version.VERSION_4_7:
+            sample = TimeoutSampler(
+                timeout=100,
+                sleep=10,
+                func=self.check_element_text,
+                expected_text=operator,
+            )
+            if not sample.wait_for_func_status(result=True):
+                logger.error(
+                    f"The {operator} installation did not start after 100 seconds"
+                )
+                self.take_screenshot()
             self.do_send_keys(
                 locator=self.dep_loc["search_operator_installed"],
                 text=operator,
@@ -411,6 +464,7 @@ class DeploymentUI(PageNavigator):
 
         """
         if config.DEPLOYMENT.get("local_storage"):
+            create_optional_operators_catalogsource_non_ga()
             add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()

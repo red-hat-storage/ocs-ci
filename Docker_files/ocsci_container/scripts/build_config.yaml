@@ -1,0 +1,10 @@
+AUTH:
+  external:
+    ceph_admin_key: "abcd"
+
+DEPLOYMENT:
+  storage_provider_endpoint: "a.b.c.d:31659"
+  force_deploy_multiple_clusters: True
+
+ENV_DATA:
+  provider_name: "provider"

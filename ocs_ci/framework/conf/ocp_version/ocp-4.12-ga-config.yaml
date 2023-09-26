@@ -1,0 +1,19 @@
+---
+# Config file for OCP GA 4.12 stable channel
+
+RUN:
+  client_version: '4.12-ga'
+
+DEPLOYMENT:
+  ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+  installer_version: "4.12-ga"
+  terraform_version: "0.12.26"
+  # ignition_version can be found here
+  # https://docs.openshift.com/container-platform/4.10/post_installation_configuration/machine-configuration-tasks.html#machine-config-overview-post-install-machine-configuration-tasks
+  ignition_version: "3.2.0"
+  ocp_channel: "stable"
+ENV_DATA:
+  # TODO: This we will need to update to update to released version once we
+  # will upload to DCs
+  vm_template: "rhcos-4.12.0-x86_64-vmware.x86_64"
+  acm_hub_channel: release-2.7 # To be changed when acm 2.8 get's released

@@ -2,16 +2,26 @@ import logging
 import pytest
 import random
 
+from ocs_ci.framework import config
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
+from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier1,
+    acceptance,
+    bugzilla,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.resources import pod as res_pod
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
 
+@green_squad
 class TestPvcAssignPodNode(ManageTest):
     """
     Automates the following test cases:
@@ -21,7 +31,26 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-1257 - RBD: Assign nodeName to a POD using RWX PVC
     """
 
+    def verify_access_token_notin_odf_pod_logs(self):
+        """
+        This function will verify logs of kube-rbac-proxy container in odf-operator-controller-manager pod
+        shouldn't contain api access token
+        """
+        odf_operator_pod_objs = res_pod.get_all_pods(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector_label="app.kubernetes.io/name",
+            selector=[constants.ODF_SUBSCRIPTION],
+        )
+        error_msg = "Authorization: Bearer"
+        pod_log = res_pod.get_pod_logs(
+            pod_name=odf_operator_pod_objs[0].name, container="kube-rbac-proxy"
+        )
+        assert not (
+            error_msg in pod_log
+        ), f"Logs should not contain the error message '{error_msg}'"
+
     @acceptance
+    @bugzilla("2136852")
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface"],
@@ -71,8 +100,14 @@ class TestPvcAssignPodNode(ManageTest):
 
         # Run IO
         logger.info(f"Running IO on pod {pod_obj.name}")
-        pod_obj.run_io(storage_type="fs", size="512M", runtime=30)
+        pod_obj.run_io(storage_type="fs", size="512M", runtime=30, invalidate=0)
         pod.get_fio_rw_iops(pod_obj)
+
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (ocs_version >= version.VERSION_4_12) and (
+            config.ENV_DATA.get("platform") != constants.FUSIONAAS_PLATFORM
+        ):
+            self.verify_access_token_notin_odf_pod_logs()
 
     @acceptance
     @tier1
@@ -139,7 +174,7 @@ class TestPvcAssignPodNode(ManageTest):
             pod_obj.reload()
             assert pod.verify_node_name(pod_obj, selected_node), (
                 f"Pod {pod_obj.name} is running on a different node "
-                f"than the selected node"
+                "than the selected node"
             )
 
         # Run IOs on all pods. FIO Filename is kept same as pod name
@@ -152,8 +187,15 @@ class TestPvcAssignPodNode(ManageTest):
                     size="512M",
                     runtime=30,
                     fio_filename=pod_obj.name,
+                    invalidate=0,
                 )
 
         # Check IO from all pods
         for pod_obj in pod_list:
             pod.get_fio_rw_iops(pod_obj)
+
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (ocs_version >= version.VERSION_4_12) and (
+            config.ENV_DATA.get("platform") != constants.FUSIONAAS_PLATFORM
+        ):
+            self.verify_access_token_notin_odf_pod_logs()

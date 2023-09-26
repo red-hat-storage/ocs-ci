@@ -146,6 +146,23 @@ class MultiClusterConfig:
         self.single_cluster_default = True
         self._single_cluster_init_cluster_configs()
 
+    @property
+    def default_cluster_ctx(self):
+        """
+        Get the default cluster context.
+        The default cluster context will be defined by the default index as defined in the
+        'ENV DATA' param 'default_cluster_context_index'
+
+        Returns:
+            ocs_ci.framework.Config: The default cluster context
+
+        """
+        # Get the default index. If not found, the default value is 0
+        default_index = self.cluster_ctx.ENV_DATA.get(
+            "default_cluster_context_index", 0
+        )
+        return self.clusters[default_index]
+
     def _single_cluster_init_cluster_configs(self):
         self.clusters.insert(0, Config())
         self.cluster_ctx = self.clusters[0]
@@ -189,20 +206,44 @@ class MultiClusterConfig:
         ]
         self.to_dict = self.cluster_ctx.to_dict
         if self.RUN.get("kubeconfig"):
-            logger.debug("switching kubeconfig")
             os.environ["KUBECONFIG"] = self.RUN.get("kubeconfig")
 
     def switch_ctx(self, index=0):
         self.cluster_ctx = self.clusters[index]
         self.cur_index = index
         self._refresh_ctx()
+        # Log the switch after changing the current index
+        logger.info(f"Switched to cluster: {self.current_cluster_name()}")
 
     def switch_acm_ctx(self):
-        self.switch_ctx(self.get_acm_index())
+        self.switch_ctx(self.get_active_acm_index())
 
-    def get_acm_index(self):
+    def get_active_acm_index(self):
+        """
+        Retrieve the active ACM cluster index.
+
+        Returns:
+            int: The multicluster_index of the active ACM cluster config.
+
+        """
+        for cluster in self.clusters:
+            if cluster.MULTICLUSTER["active_acm_cluster"]:
+                return cluster.MULTICLUSTER["multicluster_index"]
+        # if no active cluster is found, designate one
+        return self.designate_active_acm_cluster()
+
+    def designate_active_acm_cluster(self):
+        """
+        Set one of the ACM clusters as the active ACM cluster. This is done in
+        the event that none of the ACM clusters are set as active.
+
+        Returns:
+            int: The multicluster index of the newly designated active ACM cluster
+
+        """
         for cluster in self.clusters:
             if cluster.MULTICLUSTER["acm_cluster"]:
+                cluster.MULTICLUSTER["active_acm_cluster"] = True
                 return cluster.MULTICLUSTER["multicluster_index"]
 
     def switch_default_cluster_ctx(self):
@@ -301,6 +342,92 @@ class MultiClusterConfig:
 
         """
         self.switch_ctx(self.get_cluster_index_by_name(cluster_name))
+
+    def current_cluster_name(self):
+        """
+        Get the Cluster name of the current context
+
+        Returns:
+            str: The cluster name which is stored as str in config (None if key not exist)
+
+        """
+        return self.ENV_DATA.get("cluster_name")
+
+    def is_provider_exist(self):
+        """
+        Check if the provider cluster exists in the clusters
+
+        Returns:
+            bool: True, if the provider cluster exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return "provider" in cluster_types
+
+    def is_consumer_exist(self):
+        """
+        Check if the consumer cluster exists in the clusters
+
+        Returns:
+            bool: True, if the consumer cluster exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return "consumer" in cluster_types
+
+    def is_cluster_type_exist(self, cluster_type):
+        """
+        Check if the given cluster type exists in the clusters
+
+        Args:
+            cluster_type (str): The cluster type
+
+        Returns:
+            bool: True, if the given cluster type exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return cluster_type in cluster_types
+
+    def get_cluster_type_indices_list(self, cluster_type):
+        """
+        Get the cluster type indices
+
+        Returns:
+            list: the cluster type indices
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find any cluster with the cluster type
+
+        """
+        cluster_type_indices_list = []
+        for i, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_type"] == cluster_type:
+                cluster_type_indices_list.append(i)
+
+        if not cluster_type_indices_list:
+            raise ClusterNotFoundException(
+                f"Didn't find any cluster with the cluster type '{cluster_type}'"
+            )
+
+        return cluster_type_indices_list
+
+    def switch_to_cluster_by_cluster_type(self, cluster_type, num_of_cluster=0):
+        """
+        Switch to the cluster with the given cluster type
+
+        Args:
+            cluster_type (str): The cluster type
+            num_of_cluster (int): The cluster index to switch to. The default cluster number
+                is 0 - which means it will switch to the first cluster.
+                1 - is the second, 2 - is the third, and so on.
+        Raises:
+            ClusterNotFoundException: In case it didn't find any cluster with the cluster type
+
+        """
+        self.switch_ctx(
+            self.get_cluster_type_indices_list(cluster_type)[num_of_cluster]
+        )
 
 
 config = MultiClusterConfig()

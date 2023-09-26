@@ -12,6 +12,10 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import utils, templating, system
+from ocs_ci.deployment.disconnected import (
+    get_ocp_release_image,
+    mirror_ocp_release_images,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -25,13 +29,15 @@ class OCPDeployment:
         self.pull_secret = {}
         self.metadata = {}
         self.deployment_platform = config.ENV_DATA["platform"].lower()
+        self.sno = config.ENV_DATA["sno"]
         self.deployment_type = config.ENV_DATA["deployment_type"].lower()
         if not hasattr(self, "flexy_deployment"):
             self.flexy_deployment = False
-        if (
-            not self.flexy_deployment
-            and self.deployment_platform != constants.IBMCLOUD_PLATFORM
-        ):
+        ibmcloud_managed_deployment = (
+            self.deployment_platform == constants.IBMCLOUD_PLATFORM
+            and self.deployment_type == "managed"
+        )
+        if not self.flexy_deployment and not ibmcloud_managed_deployment:
             self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.cluster_name = config.ENV_DATA["cluster_name"]
@@ -58,7 +64,7 @@ class OCPDeployment:
         Returns:
             dict: content of pull secret
         """
-        pull_secret_path = os.path.join(constants.TOP_DIR, "data", "pull-secret")
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         with open(pull_secret_path, "r") as f:
             # Parse, then unparse, the JSON file.
             # We do this for two reasons: to ensure it is well-formatted, and
@@ -114,6 +120,14 @@ class OCPDeployment:
                 "stored at: %s",
                 self.cluster_path,
             )
+        if not self.flexy_deployment and config.DEPLOYMENT.get("disconnected"):
+            ocp_relase_image = get_ocp_release_image()
+            if constants.SHA_SEPARATOR in ocp_relase_image:
+                ocp_image_path, ocp_version = ocp_relase_image.split("@")
+            else:
+                ocp_image_path, ocp_version = ocp_relase_image.split(":")
+            _, _, ics, _ = mirror_ocp_release_images(ocp_image_path, ocp_version)
+            config.RUN["imageContentSources"] = ics
         if (
             not self.flexy_deployment
             and config.ENV_DATA["deployment_type"] != "managed"

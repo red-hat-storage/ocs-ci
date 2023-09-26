@@ -1,11 +1,10 @@
 import logging
 from time import sleep
-
 from selenium.webdriver.support.wait import WebDriverWait
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+from ocs_ci.ocs.ui.helpers_ui import get_element_by_text
 
-from ocs_ci.utility import version
-from ocs_ci.ocs.ui.base_ui import PageNavigator
-from ocs_ci.ocs.ui.views import locators
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +15,9 @@ class MCGStoreUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
+    def __init__(self):
+        super().__init__()
         self.wait = WebDriverWait(self.driver, 30)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.ocs_loc = locators[ocs_version]["ocs_operator"]
-        self.mcg_stores = locators[ocs_version]["mcg_stores"]
 
     def create_store_ui(self, kind, store_name, secret_name, target_bucket):
         """
@@ -94,11 +90,8 @@ class BucketClassUI(PageNavigator):
 
     """
 
-    def __init__(self, driver):
-        super().__init__(driver)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.ocs_loc = locators[ocs_version]["ocs_operator"]
-        self.bucketclass = locators[ocs_version]["bucketclass"]
+    def __init__(self):
+        super().__init__()
 
     def create_standard_bucketclass_ui(self, bc_name, policy, store_list):
         """
@@ -151,8 +144,11 @@ class BucketClassUI(PageNavigator):
     def set_multi_namespacestore_policy(self, nss_name_lst):
         for nss_name in nss_name_lst:
             self.do_send_keys(self.generic_locators["search_resource_field"], nss_name)
+            sleep(1)
             self.do_click(self.generic_locators["check_first_row_checkbox"])
+            sleep(1)
             self.do_click(self.generic_locators["remove_search_filter"])
+            sleep(2)
 
         self.do_click(self.bucketclass["nss_dropdown"])
         self.do_click_by_id(nss_name_lst[0])
@@ -241,76 +237,43 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.generic_locators["confirm_action"])
 
 
-class ObcUI(PageNavigator):
-    """
-    A class representation for abstraction of OBC-related OpenShift UI actions
+class NamespaceStoreUI(ObjectService):
+    def __init__(self):
+        super().__init__()
+        self.sc_loc = self.obc_loc
 
-    """
-
-    def __init__(self, driver):
-        super().__init__(driver)
-        ocs_version = f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-        self.obc_loc = locators[ocs_version]["obc"]
-
-    def create_obc_ui(self, obc_name, storageclass, bucketclass=None):
+    def create_namespace_store(
+        self,
+        namespace_store_name,
+        namespace_store_provider,
+        namespace_store_pvc_name,
+        namespace_store_folder,
+    ):
         """
-        Create an OBC via the UI
 
         Args:
-            obc_name (str): The name to grant the OBC
-            storageclass (str): The storageclass to be used by the OBC
-            bucketclass (str): The bucketclass to be used by the OBC
+            namespace_store_name (str): the namespace store
+            namespace_store_provider (str):  the provider [aws, filesystem, azure]
+            namespace_store_pvc_name (str): pvc name for file system mode
+            namespace_store_folder (str): the folder name for mount point to fs.
 
         """
-        self.navigate_object_bucket_claims_page()
+        logger.info("Create namespace-store via UI")
 
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.do_click(self.generic_locators["select_openshift-storage_project"])
+        self.nav_object_storage_page().navigate_namespace_store_tab()
+        self.do_click(self.sc_loc["namespace_store_create"])
+        self.do_send_keys(self.sc_loc["namespace_store_name"], namespace_store_name)
 
-        logger.info("Click on 'Create Object Bucket Claim'")
-        self.do_click(self.generic_locators["create_resource_button"])
+        if namespace_store_provider == "fs":
+            self.do_click(self.sc_loc["namespace_store_provider"])
+            self.do_click(self.sc_loc["namespace_store_filesystem"])
+            sleep(2)
+            self.do_click(self.sc_loc["namespace_store_pvc_expand"])
+            self.do_click(get_element_by_text(namespace_store_pvc_name))
+            self.do_send_keys(
+                self.sc_loc["namespace_store_folder"], namespace_store_folder
+            )
 
-        logger.info("Enter OBC name")
-        self.do_send_keys(self.obc_loc["obc_name"], obc_name)
-
-        logger.info("Select Storage Class")
-        self.do_click(self.obc_loc["storageclass_dropdown"])
-        self.do_send_keys(self.obc_loc["storageclass_text_field"], storageclass)
-        self.do_click(self.generic_locators["first_dropdown_option"])
-
-        if bucketclass:
-            logger.info("Select BucketClass")
-            self.do_click(self.obc_loc["bucketclass_dropdown"])
-            self.do_send_keys(self.obc_loc["bucketclass_text_field"], bucketclass)
-            self.do_click(self.generic_locators["first_dropdown_option"])
-
-        logger.info("Create OBC")
-        self.do_click(self.generic_locators["submit_form"])
-
-    def delete_obc_ui(self, obc_name):
-        """
-        Delete an OBC via the UI
-
-        obc_name (str): Name of the OBC to be deleted
-
-        """
-        self.navigate_object_bucket_claims_page()
-
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.do_click(self.generic_locators["select_openshift-storage_project"])
-
-        self.do_send_keys(self.generic_locators["search_resource_field"], text=obc_name)
-
-        logger.info(f"Go to OBC {obc_name} Page")
-        self.do_click(self.obc_loc["first_obc_link"])
-
-        logger.info("Click on Actions")
-        self.do_click(self.generic_locators["actions"])
-
-        logger.info("Click on 'Delete OBC'")
-        self.do_click(self.obc_loc["delete_obc"])
-
-        logger.info("Confirm OBC Deletion")
-        self.do_click(self.generic_locators["confirm_action"])
+        self.take_screenshot()
+        self.do_click(self.sc_loc["namespace_store_create_item"])
+        self.take_screenshot()

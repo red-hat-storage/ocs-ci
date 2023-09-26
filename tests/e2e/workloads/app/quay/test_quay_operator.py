@@ -3,9 +3,14 @@ from time import sleep
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, skipif_ocs_version
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    skipif_ocs_version,
+    magenta_squad,
+)
 from ocs_ci.framework.testlib import E2ETest, workloads
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.quay_operator import (
     QuayOperator,
@@ -17,7 +22,11 @@ from ocs_ci.ocs.quay_operator import (
     quay_super_user_login,
 )
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+)
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +43,12 @@ def quay_operator(request):
     return quay_operator
 
 
+@retry(CommandFailed, tries=10, delay=10, backoff=1)
+def _exec_cmd(cmd):
+    exec_cmd(cmd)
+
+
+@magenta_squad
 @workloads
 class TestQuayWorkload(E2ETest):
     """
@@ -94,12 +109,11 @@ class TestQuayWorkload(E2ETest):
         # Create quay registry
         quay_operator.create_quay_registry()
         log.info("Waiting for quay endpoint to start serving")
-        sleep(90)
+        sleep(120)
         endpoint = quay_operator.get_quay_endpoint()
 
         log.info("Pulling test image")
-        exec_cmd(f"podman pull {constants.COSBENCH_IMAGE}")
-
+        _exec_cmd(f"podman pull {constants.COSBENCH_IMAGE}")
         log.info("Getting the Super user token")
         token = get_super_user_token(endpoint)
 
@@ -120,18 +134,18 @@ class TestQuayWorkload(E2ETest):
         create_quay_org(endpoint, token, org_name)
 
         log.info("Tagging a test image")
-        exec_cmd(f"podman tag {constants.COSBENCH_IMAGE} {podman_url}/{test_image}")
+        _exec_cmd(f"podman tag {constants.COSBENCH_IMAGE} {podman_url}/{test_image}")
         log.info(f"Pushing the test image to quay repo: {repo_name}")
-        exec_cmd(f"podman push {podman_url}/{test_image} --tls-verify=false")
+        _exec_cmd(f"podman push {podman_url}/{test_image} --tls-verify=false")
 
         log.info(f"Validating whether the image can be pull from quay: {repo_name}")
-        exec_cmd(f"podman pull {podman_url}/{test_image} --tls-verify=false")
+        _exec_cmd(f"podman pull {podman_url}/{test_image} --tls-verify=false")
 
         # TODO: Trigger build
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=constants.NOOBAA_CORE_POD_LABEL,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )[0]
         )
         pod_obj.delete(force=True)
@@ -143,7 +157,7 @@ class TestQuayWorkload(E2ETest):
             sleep=60,
         )
         log.info("Pulling the image again from quay, post noobaa core failure")
-        exec_cmd(f"podman pull {podman_url}/{test_image} --tls-verify=false")
+        _exec_cmd(f"podman pull {podman_url}/{test_image} --tls-verify=false")
 
         log.info(f"Deleting the repository: {repo_name}")
         delete_quay_repository(

@@ -9,19 +9,22 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.6.0",
+    version="4.14.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
     license="MIT",
     install_requires=[
         "apache-libcloud==3.1.0",
-        "cryptography==36.0.2",
+        "cryptography==39.0.1",
         "docopt==0.6.2",
-        "gevent==20.9.0",
+        # https://pypi.org/project/gevent/ the latest version resolves problem for Mac M1 chips
+        # This issue is caused by a program attempting to load an x86_64-only library from a native arm64 process.
+        # More https://stackoverflow.com/questions/71443345/gevent-cant-be-installed-on-m1-mac-using-poetry
+        "gevent==21.12.0",
         "reportportal-client==3.2.3",
         "requests==2.23.0",
-        "paramiko==2.10.1",
+        "paramiko==2.11.0",
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
         "openshift==0.11.2",
@@ -29,29 +32,28 @@ setup(
         "munch==2.5.0",
         "pytest==6.2.5",
         "pytest-logger==0.5.1",
-        'dataclasses==0.7;python_version < "3.7"',
         "pytest-html==3.1.1",
         "pytest-metadata==1.11.0",
         "bs4==0.0.1",
         "gspread==3.6.0",
+        "google-auth-oauthlib==0.7.1",
         "oauth2client==4.1.3",
         "pytest_marker_bugzilla>=0.9.3",
         "pyvmomi==7.0",
         "python-hcl2==3.0.1",
-        # issue opened for botocore
-        # https://github.com/boto/botocore/issues/1872
-        # till above issue fixed, manually pointing python-dateutil to 2.8.0
-        "python-dateutil==2.8.0",
+        "python-dateutil==2.8.2",
         "pytest-ordering==0.6",
         "funcy==1.14",
         "semantic-version==2.8.5",
         "jsonschema>=3.2.0",
-        "google-cloud-storage==1.29.0",
-        "google-auth==1.35.0",
+        "google-cloud-storage==2.6.0",
+        "google-auth==2.14.1",
         "elasticsearch==7.14.0",
-        "numpy==1.21.0",
+        "numpy==1.22.0",
+        "pandas==1.5.2",
+        "tabulate==0.9.0",
         "python-ipmi==0.4.2",
-        "scipy==1.6.0",
+        "scipy==1.8.1",
         "PrettyTable==0.7.2",
         "azure-common==1.1.25",
         "azure-mgmt-compute==12.0.0",
@@ -63,12 +65,15 @@ setup(
         "python-cinderclient==7.1.0",
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
-        "GitPython==3.1.7",
+        "GitPython==3.1.30",
         "selenium==3.141.0",
-        "webdriver-manager==3.2.2",
+        "webdriver-manager==4.0.0",
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
-        "greenlet<1.0.0",
+        # by default program attempting to load an x86_64-only library from a native arm64 process
+        # Beginning with gevent 20.12.0, 64-bit ARM binaries are distributed on PyPI for aarch64 manylinux2014
+        # compatible systems. Resolves problem for m1 Mac chips
+        "greenlet==1.1.2",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser",
         "flaky==3.7.0",
@@ -78,6 +83,13 @@ setup(
         "mysql-connector-python==8.0.27",
         "pytest-repeat",
         "pexpect>=4.8.0",
+        # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
+        "protobuf==4.21.7",
+        "ping3>=4.0.3",
+        "psutil==5.9.0",
+        "azure-identity==1.12.0",
+        "azure-mgmt-storage==21.0.0",
+        "fauxfactory",
     ],
     entry_points={
         "console_scripts": [

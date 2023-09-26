@@ -26,11 +26,19 @@ class UnexpectedBehaviour(Exception):
     pass
 
 
+class UnexpectedInput(Exception):
+    pass
+
+
 class ClassCreationException(Exception):
     pass
 
 
 class ResourceLeftoversException(Exception):
+    pass
+
+
+class ObjectsStillBeingDeletedException(Exception):
     pass
 
 
@@ -240,6 +248,10 @@ class RDMDiskNotFound(Exception):
     pass
 
 
+class PassThroughEnabledDeviceNotFound(Exception):
+    pass
+
+
 class ExternalClusterDetailsException(Exception):
     pass
 
@@ -261,6 +273,14 @@ class ExternalClusterRGWEndPointMissing(Exception):
 
 
 class ExternalClusterRGWEndPointPortMissing(Exception):
+    pass
+
+
+class ExternalClusterCephfsMissing(Exception):
+    pass
+
+
+class ExternalClusterCephSSHAuthDetailsMissing(Exception):
     pass
 
 
@@ -372,6 +392,14 @@ class HPCSDeploymentError(Exception):
     pass
 
 
+class KMIPDeploymentError(Exception):
+    pass
+
+
+class KMIPOperationError(Exception):
+    pass
+
+
 class KMSNotSupported(Exception):
     pass
 
@@ -460,6 +488,10 @@ class ManagedServiceAddonDeploymentError(Exception):
     pass
 
 
+class ManagedServiceSecurityGroupNotFound(Exception):
+    pass
+
+
 class ConfigurationError(Exception):
     pass
 
@@ -480,7 +512,19 @@ class ACMClusterDeployException(Exception):
     pass
 
 
+class ACMClusterImportException(Exception):
+    pass
+
+
 class RDRDeploymentException(Exception):
+    pass
+
+
+class MDRDeploymentException(Exception):
+    pass
+
+
+class ACMClusterDestroyException(Exception):
     pass
 
 
@@ -513,4 +557,87 @@ class UnsupportedWorkloadError(Exception):
 
 
 class RebootEventNotFoundException(Exception):
+    pass
+
+
+class ConnectivityFail(Exception):
+    pass
+
+
+class ROSAProdAdminLoginFailedException(Exception):
+    pass
+
+
+class Md5CheckFailed(Exception):
+    pass
+
+
+class ZombieProcessFoundException(Exception):
+    pass
+
+
+class LvSizeWrong(Exception):
+    pass
+
+
+class LvDataPercentSizeWrong(Exception):
+    pass
+
+
+class LvThinUtilNotChanged(Exception):
+    pass
+
+
+class ThinPoolUtilityWrong(Exception):
+    pass
+
+
+class LVMOHealthException(Exception):
+    pass
+
+
+class VolumesExistError(Exception):
+    pass
+
+
+class ExternalClusterNodeRoleNotFound(Exception):
+    pass
+
+
+class UnexpectedODFAccessException(Exception):
+    pass
+
+
+class UnknownOperationForTerraformVariableUpdate(Exception):
+    pass
+
+
+class TerrafromFileNotFoundException(Exception):
+    pass
+
+
+class IncorrectUiOptionRequested(Exception):
+    def __init__(self, text, func=None):
+        super().__init__(text)
+        if func is not None:
+            func()
+
+
+class ReturnedEmptyResponseException(Exception):
+    pass
+
+
+class ArchitectureNotSupported(Exception):
+    pass
+
+
+class MissingSquadDecoratorError(Exception):
+    pass
+
+
+class PDBNotCreatedException(Exception):
+    pass
+
+
+class UnableUpgradeConnectionException(Exception):
     pass

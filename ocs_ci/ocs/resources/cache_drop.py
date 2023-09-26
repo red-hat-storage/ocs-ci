@@ -3,6 +3,7 @@ import logging
 import http.client
 
 # OCS-CI modules
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 
@@ -31,7 +32,7 @@ class OSDCashDrop(OCP):
         """
         super(OSDCashDrop, self).__init__(
             kind="POD",
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="rook-ceph-osd-cache-drop",
         )
         self.crd = constants.RIPSAW_DROP_CACHE

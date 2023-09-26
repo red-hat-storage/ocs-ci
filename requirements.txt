@@ -1,2 +1,2 @@
--e git+https://gitlab.com/mbukatov/ocp-network-split.git@v0.1.0#egg=ocp-network-split
+-e git+https://gitlab.com/mbukatov/ocp-network-split.git@v0.3.0#egg=ocp-network-split
 -e .

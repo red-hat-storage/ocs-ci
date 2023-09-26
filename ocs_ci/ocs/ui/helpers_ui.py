@@ -9,7 +9,6 @@ from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +43,7 @@ def ui_deployment_conditions():
         constants.AWS_PLATFORM,
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
+        constants.GCP_PLATFORM,
     ):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
@@ -75,20 +75,20 @@ def ui_deployment_conditions():
         return True
 
 
-def format_locator(locator, string_to_insert):
+def format_locator(locator, *args):
     """
     Use this function format_locator when working with dynamic locators.
 
     Args:
         locator (tuple): (GUI element needs to operate on (str), type (By))
-        string_to_insert (str): Name of the variable (string) which contains the dynamic web element
+        *args (str): Name of the variable (string) which contains the dynamic web element
             when generated on certain action
 
     return:
         formats the locator using .format() function which takes string to be inserted as an argument
 
     """
-    return locator[0].format(string_to_insert), locator[1]
+    return locator[0].format(*args), locator[1]
 
 
 def ui_add_capacity_conditions():
@@ -102,7 +102,6 @@ def ui_add_capacity_conditions():
     ocp_version = get_ocp_version()
     is_external = config.DEPLOYMENT["external_mode"]
     is_disconnected = config.DEPLOYMENT.get("disconnected")
-    is_lso = config.DEPLOYMENT.get("local_storage")
     is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
@@ -118,15 +117,25 @@ def ui_add_capacity_conditions():
         constants.AWS_PLATFORM,
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
+        constants.GCP_PLATFORM,
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
-    elif ocp_version not in ("4.7", "4.8", "4.9", "4.10"):
+    elif ocp_version not in (
+        "4.7",
+        "4.8",
+        "4.9",
+        "4.10",
+        "4.11",
+        "4.12",
+        "4.13",
+        "4.14",
+    ):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
         )
         return False
-    elif is_external or is_disconnected or is_proxy or is_lso:
+    elif is_external or is_disconnected or is_proxy:
         if is_external:
             logger.info(
                 "Add capacity via UI is not automated at the moment on external cluster"
@@ -138,10 +147,6 @@ def ui_add_capacity_conditions():
         if is_proxy:
             logger.info(
                 "Add capacity via UI is not automated at the moment on proxy cluster"
-            )
-        if is_lso:
-            logger.info(
-                "Add capacity via UI is not automated at the moment on lso cluster"
             )
         return False
     else:
@@ -166,10 +171,10 @@ def ui_add_capacity(osd_size_capacity_requested):
         device_sets_required + old_storage_devices_sets_count
     )
     logger.info("Add capacity via UI")
-    setup_ui = login_ui()
-    add_ui_obj = AddReplaceDeviceUI(setup_ui)
+    login_ui()
+    add_ui_obj = AddReplaceDeviceUI()
     add_ui_obj.add_capacity_ui()
-    close_browser(setup_ui)
+    close_browser()
     return new_storage_devices_sets_count
 
 
@@ -182,3 +187,13 @@ def get_element_type(element_name):
     """
 
     return (f"//a[contains(@title,'{element_name}')]", By.XPATH)
+
+
+def get_element_by_text(text):
+    """
+    This function accepts a text as an argument and returns the element type by creating XPATH for it.
+    This is helpful when we are creating dynamic names for PVC's, Pod's, Namespaces's etc. and want to interact
+    with the same on UI.
+
+    """
+    return (f"//*[text()= '{text}']", By.XPATH)

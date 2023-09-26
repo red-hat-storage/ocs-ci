@@ -1,5 +1,11 @@
 import logging
 import pytest
+
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_external_mode,
+    brown_squad,
+)
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
@@ -9,7 +15,9 @@ from ocs_ci.framework.testlib import ManageTest, tier2
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 @tier2
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-2481")
 @pytest.mark.bugzilla("1859033")
 class TestDeleteRookCephMonPod(ManageTest):
@@ -29,7 +37,7 @@ class TestDeleteRookCephMonPod(ManageTest):
             self.rook_detect_pod_name = None
             rook_operator_pod = pod.get_ocs_operator_pod(
                 ocs_label=constants.OPERATOR_LABEL,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             )
             assert rook_operator_pod, "No rook operator pod found"
             log.info(f"Found rook-operator pod {rook_operator_pod.name}. Deleting it.")
@@ -42,7 +50,7 @@ class TestDeleteRookCephMonPod(ManageTest):
                     1,
                     pod.get_pods_having_label,
                     constants.ROOK_CEPH_DETECT_VERSION_LABEL,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 ):
                     if len(pod_list) > 0:
                         self.rook_detect_pod_name = (
@@ -50,7 +58,7 @@ class TestDeleteRookCephMonPod(ManageTest):
                         )
                         rook_detect_pod_list = pod.get_pod_objs(
                             pod_names=[self.rook_detect_pod_name],
-                            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                            namespace=config.ENV_DATA["cluster_namespace"],
                         )
                         if len(rook_detect_pod_list) > 0:
                             log.info(
@@ -85,7 +93,7 @@ class TestDeleteRookCephMonPod(ManageTest):
                 1,
                 pod.get_pods_having_label,
                 constants.ROOK_CEPH_DETECT_VERSION_LABEL,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
             ):
                 if len(pod_list) == 0:
                     break

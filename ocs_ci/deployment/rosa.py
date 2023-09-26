@@ -4,19 +4,35 @@ This module contains platform specific methods and classes for deployment
 on Openshfit Dedicated Platform.
 """
 
-
 import logging
 import os
 
+from botocore.exceptions import ClientError
+
 from ocs_ci.deployment.cloud import CloudDeploymentBase
+from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.utils import ceph_health_check, get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    get_ocp_version,
+    TimeoutSampler,
+    retry,
+)
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
-from ocs_ci.ocs.managedservice import update_pull_secret, patch_consumer_toolbox
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ManagedServiceSecurityGroupNotFound,
+    TimeoutExpiredError,
+)
+from ocs_ci.ocs.managedservice import (
+    update_non_ga_version,
+    update_pull_secret,
+    patch_consumer_toolbox,
+)
 from ocs_ci.ocs.resources import pvc
 
 logger = logging.getLogger(name=__file__)
@@ -59,15 +75,38 @@ class ROSAOCP(BaseOCPDeployment):
             log_cli_level (str): openshift installer's log level
 
         """
-        rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+        if (
+            config.ENV_DATA.get("appliance_mode", False)
+            and config.ENV_DATA.get("cluster_type", "") == "provider"
+        ):
+            rosa.appliance_mode_cluster(self.cluster_name)
+        else:
+            rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
-        ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
         password_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
         )
-        ocm.get_kubeadmin_password(self.cluster_name, password_path)
+
+        # generate kubeconfig and kubeadmin-password files
+        if config.ENV_DATA["ms_env_type"] == "staging":
+            ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
+            ocm.get_kubeadmin_password(self.cluster_name, password_path)
+        if config.ENV_DATA["ms_env_type"] == "production":
+            if config.ENV_DATA.get("appliance_mode"):
+                logger.info(
+                    "creating admin account for cluster in production environment with "
+                    "appliance mode deployment is not supported"
+                )
+                return
+            else:
+                rosa_prod_cluster = ROSAProdEnvCluster(self.cluster_name)
+                rosa_prod_cluster.create_admin_and_login()
+                rosa_prod_cluster.generate_kubeconfig_file(skip_tls_verify=True)
+                rosa_prod_cluster.generate_kubeadmin_password_file()
+
         self.test_cluster()
 
     def destroy(self, log_level="DEBUG"):
@@ -78,21 +117,34 @@ class ROSAOCP(BaseOCPDeployment):
             log_level (str): log level openshift-installer (default: DEBUG)
 
         """
-        cluster_details = ocm.get_cluster_details(self.cluster_name)
-        cluster_id = cluster_details.get("id")
-        ocm.destroy_cluster(self.cluster_name)
-        sample = TimeoutSampler(
-            timeout=1000,
-            sleep=20,
-            func=self.cluster_present,
-            cluster_name=self.cluster_name,
-        )
-        if not sample.wait_for_func_status(result=False):
-            err_msg = f"Failed to delete {self.cluster_name}"
-            logger.error(err_msg)
-            raise TimeoutExpiredError(err_msg)
-        rosa.delete_operator_roles(cluster_id)
-        rosa.delete_oidc_provider(cluster_id)
+        try:
+            cluster_details = ocm.get_cluster_details(self.cluster_name)
+            cluster_id = cluster_details.get("id")
+            delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
+            if not delete_status:
+                ocm.destroy_cluster(self.cluster_name)
+            logger.info("Waiting for ROSA cluster to be uninstalled")
+            sample = TimeoutSampler(
+                timeout=14400,
+                sleep=300,
+                func=self.cluster_present,
+                cluster_name=self.cluster_name,
+            )
+            if not sample.wait_for_func_status(result=False):
+                err_msg = f"Failed to delete {self.cluster_name}"
+                logger.error(err_msg)
+                raise TimeoutExpiredError(err_msg)
+            rosa.delete_operator_roles(cluster_id)
+            rosa.delete_oidc_provider(cluster_id)
+        except CommandFailed as err:
+            if "There are no subscriptions or clusters with identifier or name" in str(
+                err
+            ):
+                logger.info(
+                    f"Cluster {self.cluster_name} doesn't exists, no other action is required."
+                )
+            else:
+                raise
 
     def cluster_present(self, cluster_name):
         """
@@ -195,13 +247,44 @@ class ROSA(CloudDeploymentBase):
                 timeout=600,
             )
 
-        if config.DEPLOYMENT.get("pullsecret_workaround"):
+        if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
+            "not_ga_wa"
+        ):
             update_pull_secret()
+        if config.DEPLOYMENT.get("not_ga_wa"):
+            update_non_ga_version()
         if config.ENV_DATA.get("cluster_type") == "consumer":
-            patch_consumer_toolbox()
+            retry((CommandFailed, AssertionError), tries=5, delay=30, backoff=1)(
+                patch_consumer_toolbox
+            )()
 
         # Verify health of ceph cluster
         ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+
+        # Workaround for the bug 2166900
+        if config.ENV_DATA.get("cluster_type") == "consumer":
+            configmap_obj = ocp.OCP(
+                kind=constants.CONFIGMAP,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            rook_ceph_mon_configmap = configmap_obj.get(
+                resource_name=constants.ROOK_CEPH_MON_ENDPOINTS
+            )
+            rook_ceph_csi_configmap = configmap_obj.get(
+                resource_name=constants.ROOK_CEPH_CSI_CONFIG
+            )
+            for configmap in (rook_ceph_csi_configmap, rook_ceph_mon_configmap):
+                if not configmap.get("data").get("csi-cluster-config-json"):
+                    logger.warning(
+                        f"Configmap {configmap['metadata']['name']} do not contain csi-cluster-config-json."
+                    )
+                    logger.warning(configmap)
+                    logger.info("Deleting rook-ceph-operator as a workaround")
+                    rook_operator_pod = get_operator_pods(
+                        operator_label=constants.OPERATOR_LABEL,
+                        namespace=config.ENV_DATA["cluster_namespace"],
+                    )
+                    rook_operator_pod[0].delete(wait=False)
 
     def destroy_ocs(self):
         """
@@ -233,52 +316,74 @@ class ROSA(CloudDeploymentBase):
         worker_pattern = f"{infrastructure_id}-worker*"
         worker_instances = self.aws.get_instances_by_name_pattern(worker_pattern)
         security_groups = worker_instances[0]["security_groups"]
-        sg_id = security_groups[0]["GroupId"]
+        sg_id = None
+        for security_group in security_groups:
+            if "terraform" in security_group["GroupName"]:
+                sg_id = security_group["GroupId"]
+                break
+        if not sg_id:
+            raise ManagedServiceSecurityGroupNotFound
+
         security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
         # The ports are not 100 % clear yet. Taken from doc:
         # https://docs.google.com/document/d/1RM8tmMbvnJcOZFdsqbCl9RvHXBv5K2ZI6ziQ-YTloGk/edit#
-        security_group.authorize_ingress(
-            DryRun=False,
-            IpPermissions=[
-                {
-                    "FromPort": 6800,
-                    "ToPort": 7300,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph OSDs"},
-                    ],
-                },
-                {
-                    "FromPort": 3300,
-                    "ToPort": 3300,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule1"}
-                    ],
-                },
-                {
-                    "FromPort": 6789,
-                    "ToPort": 6789,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph MONs rule2"},
-                    ],
-                },
-                {
-                    "FromPort": 9283,
-                    "ToPort": 9283,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "Ceph Manager"},
-                    ],
-                },
-                {
-                    "FromPort": 31659,
-                    "ToPort": 31659,
-                    "IpProtocol": "tcp",
-                    "IpRanges": [
-                        {"CidrIp": "10.0.0.0/16", "Description": "API Server"},
-                    ],
-                },
-            ],
-        )
+        machine_cidr = config.ENV_DATA.get("machine_cidr", "10.0.0.0/16")
+        rules = [
+            {
+                "FromPort": 6800,
+                "ToPort": 7300,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph OSDs"},
+                ],
+            },
+            {
+                "FromPort": 3300,
+                "ToPort": 3300,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph MONs rule1"}
+                ],
+            },
+            {
+                "FromPort": 6789,
+                "ToPort": 6789,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph MONs rule2"},
+                ],
+            },
+            {
+                "FromPort": 9283,
+                "ToPort": 9283,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "Ceph Manager"},
+                ],
+            },
+            {
+                "FromPort": 31659,
+                "ToPort": 31659,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": machine_cidr, "Description": "API Server"},
+                ],
+            },
+        ]
+        for rule in rules:
+            try:
+                security_group.authorize_ingress(
+                    DryRun=False,
+                    IpPermissions=[rule],
+                )
+            except ClientError as err:
+                if (
+                    err.response.get("Error", {}).get("Code")
+                    == "InvalidPermission.Duplicate"
+                ):
+                    logger.debug(
+                        f"Security group '{sg_id}' already contains the required rule "
+                        f"({err.response.get('Error', {}).get('Message')})."
+                    )
+                else:
+                    raise
