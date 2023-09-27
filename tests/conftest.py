@@ -1527,7 +1527,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                             "marked with @ceph_health_retry. For such TC we allow more re-tries)"
                         )
                     else:
-                        ceph_health_check_base()
+                        ceph_health_check()
                         log.info("Ceph health check passed at teardown")
             except CephHealthException:
                 if not config.RUN["skip_reason_test_found"]:
