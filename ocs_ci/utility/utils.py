@@ -36,6 +36,7 @@ from paramiko import SSHClient, AutoAddPolicy
 from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
+from jinja2 import FileSystemLoader, Environment
 
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
@@ -4443,65 +4444,18 @@ def add_time_report_to_email(session, soup):
     """
     Takes the time report dictionary and converts it into HTML table
     """
-    table_body_html = ""
-
     data = GV.TIMEREPORT_DICT
     sorted_data = dict(
         sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
     )
-    count = 1
-    for test, values in sorted_data.items():
-        if count > 5:
-            break
-        table_body_html += f"""
-        <tr>
-            <td scope="row"
-            style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {test}</td>
-            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {values.get("setup", 'NA')}</td>
-            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {values.get("call", 'NA')}</td>
-            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {values.get("teardown", 'NA')}</td>
-            <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
-            {values.get("total", 'NA')}</td>
-        </tr>
-        """
-        count += 1
 
-    table_html_template = f"""
-    <table style="border-collapse: collapse; width: 100%; border: 1px solid #ddd;font-size:small">
-        <caption style="font-size:medium; text-align:left; font-weight:bold">
-            Most Time-Consuming Test Cases in seconds
-        </caption>
-        <thead>
-            <tr>
-            <th scope="col"
-            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
-            Test Name
-            </th>
-            <th scope="col"
-            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
-            Setup Time</th>
-            <th scope="col"
-            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
-            Call Time</th>
-            <th scope="col"
-            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
-            Teardown Time</th>
-            <th scope="col"
-            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
-            Total Time</th>
-            </tr>
-        </thead>
-        <tbody>
-            {table_body_html}
-        </tbody>
-    </table>
-    """
+    file_loader = FileSystemLoader(constants.HTML_REPORT_TEMPLATE_DIR)
+    env = Environment(loader=file_loader)
+    table_html_template = env.get_template("test_time_table.html.j2")
+    data = list(sorted_data.items())
+    table_html = table_html_template.render(sorted_data=data[:5])
     summary_tag = soup.find("h2", string="Summary")
     time_div = soup.new_tag("div")
-    table = BeautifulSoup(table_html_template, "html.parser")
+    table = BeautifulSoup(table_html, "html.parser")
     time_div.append(table)
     summary_tag.insert_after(time_div)

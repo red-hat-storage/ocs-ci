@@ -2313,3 +2313,6 @@ NOOBAA_REGIONS_CODE_URL = (
     "https://github.com/noobaa/noobaa-operator/blob/master/pkg/util/util.go#L1108"
 )
 AWS_REGIONS_DOC_URL = "https://docs.aws.amazon.com/general/latest/gr/rande.html"
+
+# dir of template for html reports
+HTML_REPORT_TEMPLATE_DIR = "ocs_ci/templates/html_reports/"
