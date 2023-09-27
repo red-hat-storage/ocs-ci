@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     managed_service_required,
     skipif_ms_provider,
     blue_squad,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.ocs.ocp import OCP
 
@@ -13,6 +14,7 @@ log = logging.getLogger(__name__)
 
 
 @blue_squad
+@skipif_disconnected_cluster
 @pytest.mark.polarion_id("OCS-2718")
 @tier2
 @managed_service_required

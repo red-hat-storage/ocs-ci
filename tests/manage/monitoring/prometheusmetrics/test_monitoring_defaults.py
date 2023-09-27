@@ -12,6 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     metrics_for_external_mode_required,
     blue_squad,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
@@ -165,6 +166,7 @@ def test_ceph_metrics_available():
 
 
 @blue_squad
+@skipif_disconnected_cluster
 @tier1
 @metrics_for_external_mode_required
 @pytest.mark.post_ocp_upgrade
