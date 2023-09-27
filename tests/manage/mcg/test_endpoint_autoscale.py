@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 # @pytest.mark.polarion_id("OCS-XXXX")
 # Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
 @red_squad
-@skipif_ocs_version(["<4.5", ">4.6"])
+@skipif_ocs_version(["<4.5", "<4.14"])
 @skipif_managed_service
 @tier1
 class TestEndpointAutoScale(MCGTest):
@@ -32,7 +32,7 @@ class TestEndpointAutoScale(MCGTest):
                 ("name", "job1"),
                 ("name", "job2"),
                 ("name", "job3"),
-                ("runtime", "900"),
+                ("runtime", "1200"),
             ],
             "job1": [
                 ("iodepth", "4"),
