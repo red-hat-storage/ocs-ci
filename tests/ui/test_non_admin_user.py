@@ -18,7 +18,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     E2ETest,
 )
-from time import sleep
 from ocs_ci.utility.utils import ceph_health_check
 
 
