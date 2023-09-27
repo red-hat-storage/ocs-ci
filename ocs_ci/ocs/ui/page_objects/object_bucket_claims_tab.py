@@ -64,7 +64,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
 
     def check_obc_option(self, username, text="Object Bucket Claims"):
         """
-        check OBC is visible to user after giving admin access
+        Check OBC is visible to user after giving admin access
 
         Args:
             username (str): user's username

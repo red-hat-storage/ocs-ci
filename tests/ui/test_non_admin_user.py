@@ -53,11 +53,10 @@ class TestOBCUi(ManageTest):
     @polarion_id("OCS-4620")
     def test_project_admin_obcs_access(self, user_factory, login_factory):
         """
-        Test if project admin can view the list of OBCs
+        Test if user with admin access to the project can view the list of OBCs
 
         """
         user = user_factory()
-        sleep(5)
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
         assert obc_ui_obj.check_obc_option(
