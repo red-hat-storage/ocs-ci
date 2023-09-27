@@ -3015,6 +3015,7 @@ def check_ceph_cmd_execute_successfully():
         logger.warning(f"Failed to execute the ceph command due to the error {str(ex)}")
         return False
 
+
 def get_mon_pod_by_pvc_name(pvc_name: str):
     """
     Function to get monitor pod by pvc_name label
