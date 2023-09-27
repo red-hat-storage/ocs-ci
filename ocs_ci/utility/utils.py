@@ -1486,6 +1486,14 @@ def parse_html_for_email(soup):
             data = td.text.replace("&apos", "")
             td.string = data
 
+    skips_ceph_health_ratio = config.RUN.get("skipped_on_ceph_health_ratio")
+    if skips_ceph_health_ratio > 0:
+        skipped = soup.body.find_all(attrs={"class": "skipped"})
+        skipped_number = skipped[0].string.split(" ")[0]
+        skipped[0].string.replace_with(
+            f"{skipped_number} skipped ({skips_ceph_health_ratio * 100}% on Ceph health)"
+        )
+
     main_header = soup.find("h1")
     main_header.string.replace_with("OCS-CI RESULTS")
 
