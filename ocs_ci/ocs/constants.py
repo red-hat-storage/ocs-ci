@@ -2311,4 +2311,3 @@ NOOBAA_REGIONS_CODE_URL = (
     "https://github.com/noobaa/noobaa-operator/blob/master/pkg/util/util.go#L1108"
 )
 AWS_REGIONS_DOC_URL = "https://docs.aws.amazon.com/general/latest/gr/rande.html"
-
