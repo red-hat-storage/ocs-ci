@@ -835,7 +835,6 @@ def setup_ceph_toolbox(force_setup=False):
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
             return
-
         if (
             ocsci_config.ENV_DATA.get("platform").lower()
             == constants.FUSIONAAS_PLATFORM
