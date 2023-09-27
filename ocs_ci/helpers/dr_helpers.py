@@ -17,8 +17,9 @@ from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
     get_primary_cluster_config,
-    get_passive_acm_index
+    get_passive_acm_index,
 )
+from ocs_ci.utility import version, templating
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,7 @@ def failover(
     namespace,
     workload_type=constants.SUBSCRIPTION,
     workload_placement_name=None,
+    switch_ctx=None,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -140,10 +142,11 @@ def failover(
         namespace (str): Namespace where workload is running
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    switch_ctx if switch_ctx else config.switch_acm_ctx()
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
@@ -171,6 +174,7 @@ def relocate(
     namespace,
     workload_type=constants.SUBSCRIPTION,
     workload_placement_name=None,
+    switch_ctx=None,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -180,10 +184,11 @@ def relocate(
         namespace (str): Namespace where workload is running
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    switch_ctx if switch_ctx else config.switch_acm_ctx()
     relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","preferredCluster":"{preferred_cluster}"}}}}'
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
@@ -811,13 +816,14 @@ def get_managed_cluster_node_ips():
     return cluster_data
 
 
-def enable_fence(drcluster_name):
+def enable_fence(drcluster_name, switch_ctx=None):
     """
     Once the managed cluster is fenced, all communication
     from applications to the ODF external storage cluster will fail
 
     Args:
         drcluster_name (str): Name of the DRcluster which needs to be fenced
+        switch_ctx (int): The cluster index by the cluster name
 
     """
 
@@ -825,7 +831,7 @@ def enable_fence(drcluster_name):
         f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
     )
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    switch_ctx if switch_ctx else config.switch_acm_ctx()
     fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=fence_params, format_type="merge"):
@@ -864,13 +870,14 @@ def configure_drcluster_for_fencing():
     config.switch_ctx(old_ctx)
 
 
-def enable_unfence(drcluster_name):
+def enable_unfence(drcluster_name, switch_ctx=None):
     """
     The OpenShift cluster to be Unfenced is the one where applications
     are not currently running and the cluster that was Fenced earlier.
 
     Args:
         drcluster_name (str): Name of the DRcluster which needs to be fenced
+        switch_ctx (int): The cluster index by the cluster name
 
     """
 
@@ -878,7 +885,7 @@ def enable_unfence(drcluster_name):
         f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
     )
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    switch_ctx if switch_ctx else config.switch_acm_ctx()
     unfence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_UNFENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=unfence_params, format_type="merge"):
@@ -887,13 +894,14 @@ def enable_unfence(drcluster_name):
     config.switch_ctx(restore_index)
 
 
-def fence_state(drcluster_name, fence_state):
+def fence_state(drcluster_name, fence_state, switch_ctx=None):
     """
     Sets the specified clusterFence state
 
     Args:
        drcluster_name (str): Name of the DRcluster which needs to be fenced
        fence_state (str): Specify the clusterfence state either constants.ACTION_UNFENCE and ACTION_FENCE
+       switch_ctx (int): The cluster index by the cluster name
 
     """
 
@@ -901,7 +909,7 @@ def fence_state(drcluster_name, fence_state):
         f"Edit the DRCluster {drcluster_name} cluster clusterfence state {fence_state}  "
     )
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    switch_ctx if switch_ctx else config.switch_acm_ctx()
     params = f'{{"spec":{{"clusterFence":"{fence_state}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=params, format_type="merge"):
@@ -912,7 +920,7 @@ def fence_state(drcluster_name, fence_state):
     config.switch_ctx(restore_index)
 
 
-def get_fence_state(drcluster_name):
+def get_fence_state(drcluster_name, switch_ctx=None):
     """
     Returns the clusterfence state of given drcluster
 
@@ -921,10 +929,11 @@ def get_fence_state(drcluster_name):
 
     Returns:
         state (str): If drcluster are fenced: Fenced or Unfenced, else None if not defined
+        switch_ctx (int): The cluster index by the cluster name
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    switch_ctx if switch_ctx else config.switch_acm_ctx()
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     state = drcluster_obj.get().get("spec").get("clusterFence")
     config.switch_ctx(restore_index)
@@ -988,16 +997,18 @@ def restore_backup():
     config.switch_ctx(restore_index)
 
 
-def verify_drpolicy_cli():
+def verify_drpolicy_cli(switch_ctx=None):
     """
     Function to verify DRPolicy status
 
     Returns:
         bool: True if the status is in succeed state, else False
+        switch_ctx (int): The cluster index by the cluster name
 
     """
+
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    switch_ctx if switch_ctx else config.switch_acm_ctx()
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
     if status.get("reason") == "Succeeded":
