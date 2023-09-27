@@ -82,6 +82,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
+    get_osd_count,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -1335,6 +1336,18 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"] = {
                     "storageClassName": storageclassnames["encryption"]
                 }
+        # Bluestore for RDR greenfield deployments: 4.14 onwards
+        if (
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
+            and config.multicluster
+            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+        ):
+            rdr_bluestore_annotation = {
+                "ocs.openshift.io/clusterIsDisasterRecoveryTarget": "true"
+            }
+            merge_dict(
+                cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
+            )
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -1521,6 +1534,7 @@ class Deployment(object):
         """
         set_registry_to_managed_state()
         image = None
+        ceph_cluster = None
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
@@ -1634,6 +1648,34 @@ class Deployment(object):
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+
+        # In case of RDR, check for bluestore on osds: 4.14 onwards
+        if (
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
+            and config.multicluster
+            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+        ):
+            if not ceph_cluster:
+                ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
+            store_type = ceph_cluster.get().get("items")[0]["status"]["storage"]["osd"][
+                "storeType"
+            ]
+            if "bluestore-rdr" in store_type.keys():
+                logger.info("OSDs with bluestore found ")
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    f"OSDs were not brought up with bluestore! instead we have {store_type} "
+                )
+
+            if store_type["bluestore-rdr"] == get_osd_count():
+                logger.info(
+                    f"OSDs found matching with bluestore-rdr count {store_type['bluestore-rdr']}"
+                )
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    f"OSDs count mismatch! bluestore-rdr count = {store_type['bluestore-rdr']} "
+                    f"actual osd count = {get_osd_count()}"
+                )
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
