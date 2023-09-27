@@ -9,7 +9,6 @@ from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import ObjectBucketClaimsTab
 
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.ocs import ocp
 from ocs_ci.framework.testlib import (
     ManageTest,
     ui,
