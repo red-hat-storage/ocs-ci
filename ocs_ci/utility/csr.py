@@ -134,7 +134,9 @@ def get_nodes_csr():
     return csr_nodes
 
 
-def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=None):
+def wait_for_all_nodes_csr_and_approve(
+    timeout=900, sleep=10, expected_node_num=None, ignore_existing_csr=None
+):
     """
     Wait for CSR to generate for nodes
 
@@ -142,6 +144,10 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         timeout (int): Time in seconds to wait
         sleep (int): Sampling time in seconds
         expected_node_num (int): Number of nodes to verify CSR is generated
+        ignore_existing_csr (dct): Existing CSR to ignore
+        e.g:{
+            'compute-1': ['csr-64vkw']
+            }
 
     Returns:
          bool: True if all nodes are generated CSR
@@ -175,8 +181,21 @@ def wait_for_all_nodes_csr_and_approve(timeout=900, sleep=10, expected_node_num=
         if Version.coerce(ocp_version) >= Version.coerce("4.9"):
             expected_node_num += 2
 
+    if ignore_existing_csr:
+        node_name_to_ignore = list(ignore_existing_csr.keys())[0]
+
     for csr_nodes in TimeoutSampler(timeout=timeout, sleep=sleep, func=get_nodes_csr):
         logger.debug(f"CSR data: {csr_nodes}")
+        if ignore_existing_csr:
+            # If new and old csr data for ignore node is same, then delete the entry
+            # from current csr.
+            if (
+                csr_nodes[node_name_to_ignore]
+                == ignore_existing_csr[node_name_to_ignore]
+            ):
+                logger.debug(f"Ignoring already existing CSR {ignore_existing_csr}")
+                del csr_nodes[node_name_to_ignore]
+
         if len(csr_nodes.keys()) == expected_node_num:
             logger.info(f"CSR generated for all {expected_node_num} nodes")
             approve_pending_csr()
