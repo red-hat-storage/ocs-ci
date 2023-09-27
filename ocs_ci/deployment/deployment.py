@@ -1664,7 +1664,7 @@ class Deployment(object):
                 logger.info("OSDs with bluestore found ")
             else:
                 raise UnexpectedDeploymentConfiguration(
-                    f"OSDs were not brought up with bluestore! instead we have {store_type} "
+                    f"OSDs were not brought up with Regional DR bluestore! instead we have {store_type} "
                 )
 
             if store_type["bluestore-rdr"] == get_osd_count():
