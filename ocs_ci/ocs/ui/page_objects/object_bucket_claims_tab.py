@@ -62,8 +62,15 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         }
         self.sc_loc = self.obc_loc
 
-    def check_obc_option(self, text="Object Bucket Claims"):
-        """check OBC is visible to user after giving admin access"""
+    def check_obc_option(self, username, text="Object Bucket Claims"):
+        """
+        check OBC is visible to user after giving admin access
+
+        Args:
+            username (str): user's username
+            text (str): text to be found on OBC page
+
+        """
 
         sc_name = create_unique_resource_name("namespace-", "interface")
         self.do_click(self.sc_loc["Developer_dropdown"])
@@ -71,14 +78,17 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         self.do_click(self.sc_loc["create_project"])
         self.do_send_keys(self.sc_loc["project_name"], sc_name)
         self.do_click(self.sc_loc["save_project"])
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        ocp_obj = OCP()
+        ocp_obj.exec_oc_cmd(
+            f"adm policy add-role-to-user admin {username} -n {sc_name}"
+        )
+        BucketsUI.navigate_object_bucket_claims_page(self)
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
         )
         if not obc_found:
             logger.info("user is not able to access OBC")
             self.take_screenshot()
-            return None
         else:
             logger.info("user is able to access OBC")
 
@@ -86,6 +96,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
         namespaces.append(namespace_obj)
         delete_projects(namespaces)
+        return obc_found
 
     def _check_obc_cannot_be_used_before(self, rule_exp):
         """

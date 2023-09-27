@@ -52,22 +52,18 @@ class TestOBCUi(ManageTest):
     @skipif_ibm_cloud_managed
     @bugzilla("2031705")
     @polarion_id("OCS-4620")
-    def test_create_storageclass_rbd(self, user_factory, login_factory):
-        """Create user"""
+    def test_project_admin_obcs_access(self, user_factory, login_factory):
+        """
+        Test if project admin can view the list of OBCs
+
+        """
         user = user_factory()
-        sleep(30)
-
-        """ Create RoleBinding """
-        ocp_obj = ocp.OCP()
-        ocp_obj.exec_oc_cmd(
-            f"-n openshift-storage create rolebinding {user[0]} --role=mcg-operator.v4.11.0-noobaa-odf-ui-548459769c "
-            f"--user={user[0]} "
-        )
-
-        """Login using created user"""
+        sleep(5)
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
-        obc_ui_obj.check_obc_option()
+        assert obc_ui_obj.check_obc_option(
+            user[0]
+        ), f"User {user[0]} wasn't able to see the list of OBCs"
 
 
 @black_squad
