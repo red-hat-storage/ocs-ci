@@ -47,6 +47,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -913,7 +914,11 @@ class TestS3BucketPolicy(MCGTest):
             logger.info(
                 f"Getting object using user: {user.email_id} on bucket: {s3_bucket[0].name} "
             )
-            assert s3_get_object(
+            retry_s3_get_object = retry(boto3exception.ClientError, tries=4, delay=10)(
+                s3_get_object
+            )
+
+            assert retry_s3_get_object(
                 user, s3_bucket[0].name, "index.html"
             ), f"Failed: Get Object by user {user.email_id}"
 
