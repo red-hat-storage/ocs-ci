@@ -28,6 +28,7 @@ from ocs_ci.helpers.helpers import (
     modify_statefulset_replica_count,
     validate_pv_delete,
 )
+from ocs_ci.utility.kms import is_kms_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,10 @@ def noobaa_db_backup_and_recovery_locally(
             "noobaa-server",
             "noobaa-endpoints",
         ]
+        if is_kms_enabled():
+            secrets = [
+                secret for secret in secrets if secret != "noobaa-root-master-key"
+            ]
         secrets_yaml = [
             ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
         ]
