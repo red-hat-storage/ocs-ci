@@ -2147,6 +2147,7 @@ def ocsci_log_path():
     """
     additional_info = ""
     deployment = config.RUN["cli_params"].get("deploy")
+    teardown = config.RUN["cli_params"].get("teardown")
     markers = config.RUN["cli_params"].get("-m", [])
     upgrade_markers = ["ocs_upgrade", "ocp_upgrade"]
     upgrade = any(item in markers for item in upgrade_markers)
@@ -2156,6 +2157,8 @@ def ocsci_log_path():
             additional_info += "-ocp"
         if config.ENV_DATA.get("skip_ocp_deployment"):
             additional_info += "-odf"
+    elif teardown:
+        additional_info += "-destroy"
     else:
         if upgrade:
             additional_info += "-upgrade"
@@ -2168,7 +2171,7 @@ def ocsci_log_path():
     return os.path.expanduser(
         os.path.join(
             config.RUN["log_dir"],
-            f"ocs-ci-logs{additional_info}-{config.RUN['run_id']}",
+            f"ocs-ci-logs-{config.RUN['run_id']}{additional_info}",
         )
     )
 

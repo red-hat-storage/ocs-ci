@@ -45,7 +45,7 @@ class CustomLoggerFilter(logging.Filter):
             )
 
 
-def separator(symbol_="-", val=None, new_line=True):
+def separator(symbol_="-", val="", new_line=True):
     """
     Creates nice separator text which center the val surrounded by separator with width of terminal.
 
@@ -62,6 +62,4 @@ def separator(symbol_="-", val=None, new_line=True):
     if not new_line:
         new_line_char = ""
     terminal_width = shutil.get_terminal_size(fallback=(80, 40))[0]
-    if not val:
-        return f"{new_line_char}{symbol_ * terminal_width}"
     return f"{new_line_char}{val.center(terminal_width, symbol_)}"

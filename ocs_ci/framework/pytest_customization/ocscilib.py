@@ -217,6 +217,11 @@ def pytest_addoption(parser):
         help="IOs throughput target percentage. Value should be between 0 to 100",
     )
     parser.addoption(
+        "--run-id",
+        dest="run_id",
+        help="Number representing unique ID of the execution",
+    )
+    parser.addoption(
         "--log-cluster-utilization",
         dest="log_cluster_utilization",
         action="store_true",
