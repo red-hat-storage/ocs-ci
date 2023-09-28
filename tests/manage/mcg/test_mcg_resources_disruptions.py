@@ -197,17 +197,7 @@ class TestMCGResourcesDisruptions(MCGTest):
                     f'"value": "{service_account}"}}]',
                     format_type="json",
                 )
-            if not helpers.validate_scc_policy(
-                sa_name=scc_name,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-                scc_name=scc_name,
-            ):
-                ocp_scc.patch(
-                    resource_name=scc_name,
-                    params='[{"op": "add", "path": "/users/0", '
-                    f'"value": "{service_account}"}}]',
-                    format_type="json",
-                )
+
             if (
                 pod_data_list.get("metadata").get("annotations").get("openshift.io/scc")
                 == constants.ANYUID
@@ -256,20 +246,14 @@ class TestMCGResourcesDisruptions(MCGTest):
             == scc_name
         ), "Invalid default scc"
 
-        log.info("Deleting the user array from the Noobaa scc")
-        ocp_scc.patch(
-            resource_name=scc_name,
-            params='[{"op": "remove", "path": "/users/0", '
-            f'"value": "{service_account}"}}]',
-            format_type="json",
-        )
+        log.info("Verifying the SA is not present in noobaa scc")
         assert not helpers.validate_scc_policy(
             sa_name=scc_name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             scc_name=scc_name,
         ), "SA name is present in noobaa scc"
 
-        log.info("Adding the noobaa system sa user to anyuid scc")
+        log.info("Adding the noobaa-db system sa user to anyuid scc")
         ocp_scc.patch(
             resource_name=constants.ANYUID,
             params='[{"op": "add", "path": "/users/0", '
