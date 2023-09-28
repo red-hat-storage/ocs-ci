@@ -74,6 +74,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 log = logging.getLogger(__name__)
 
@@ -1036,8 +1037,14 @@ def get_in_transit_encryption_config_state():
         bool: True if in-transit encryption is enabled, False if it is disabled, or None if an error occurred.
 
     """
+    cluster_name = (
+        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+        if storagecluster_independent_check()
+        else constants.DEFAULT_CLUSTERNAME
+    )
+
     ocp_obj = StorageCluster(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=cluster_name,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
@@ -1067,8 +1074,14 @@ def set_in_transit_encryption(enabled=True):
         log.info("Existing in-transit encryption state is same as desire state.")
         return True
 
+    cluster_name = (
+        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+        if storagecluster_independent_check()
+        else constants.DEFAULT_CLUSTERNAME
+    )
+
     ocp_obj = StorageCluster(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=cluster_name,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
