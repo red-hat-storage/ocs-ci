@@ -38,6 +38,8 @@ def setup(**kwargs):
         bool: True if setup succeeds else False
     """
     io_pod = kwargs["pod"]
+    if "fio" in io_pod.exec_cmd_on_pod(command="fio --version"):
+        return True
     # For first cut doing simple fio install
     distro = find_distro(io_pod)
     pkg_mgr = DISTROS[distro]
