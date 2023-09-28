@@ -125,7 +125,7 @@ class TestNfsEnable(ManageTest):
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
-        platform = config.ENV_DATA.get("platform", "").lower()
+
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
         log.info(f"nfs mount point out of cluster is----- {self.test_folder}")
@@ -151,11 +151,10 @@ class TestNfsEnable(ManageTest):
             self.namespace,
         )
 
-        if platform == constants.AWS_PLATFORM:
-            # Create loadbalancer service for nfs
-            self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
-                self.storage_cluster_obj,
-            )
+        # Create loadbalancer service for nfs
+        self.hostname_add = nfs_utils.create_nfs_load_balancer_service(
+            self.storage_cluster_obj,
+        )
         yield
 
         log.info("-----Teardown-----")
@@ -167,11 +166,9 @@ class TestNfsEnable(ManageTest):
             self.sc,
             nfs_ganesha_pod_name,
         )
-        if platform == constants.AWS_PLATFORM:
-            # Delete ocs nfs Service
-            nfs_utils.delete_nfs_load_balancer_service(
-                self.storage_cluster_obj,
-            )
+        nfs_utils.delete_nfs_load_balancer_service(
+            self.storage_cluster_obj,
+        )
 
     def teardown(self):
         """
