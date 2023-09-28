@@ -1571,7 +1571,7 @@ def get_active_acm_index():
 
 def get_passive_acm_index():
     """
-    Get index of active acm cluster
+    Get index of passive acm cluster
     """
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["passive_acm_cluster"]:
