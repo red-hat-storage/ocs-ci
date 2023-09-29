@@ -18,6 +18,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 from urllib.parse import urlparse
@@ -547,6 +548,17 @@ class BaseUI:
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
+
+    def clear_with_ctrl_a_del(self, locator, timeout=30):
+        """
+        Clear the existing text using CTRL + a and then Del keys,
+        as on some elements .clear() function doesn't always work correctly.
+
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        element.send_keys(Keys.CONTROL, "a")
+        element.send_keys(Keys.DELETE)
 
     def wait_until_expected_text_is_found(self, locator, expected_text, timeout=60):
         """
