@@ -4488,6 +4488,7 @@ def archive_ceph_crashes(toolbox_pod):
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
 
 
+<<<<<<< HEAD
 def add_time_report_to_email(session, soup):
     """
     Takes the time report dictionary and converts it into HTML table
@@ -4507,3 +4508,23 @@ def add_time_report_to_email(session, soup):
     table = BeautifulSoup(table_html, "html.parser")
     time_div.append(table)
     summary_tag.insert_after(time_div)
+=======
+def get_oadp_version():
+    """
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "oadp-operator", namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    for csv in csv_list:
+        if "oadp-operator" in csv:
+            # extract version string
+            cmd = f"oc get csv/{csv} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide | awk {{'print $4'}}"
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            out = p.communicate()
+            return out[0].splitlines[1].decode()
+>>>>>>> 4c498d43 (Handle OADP versions specific pod names)
