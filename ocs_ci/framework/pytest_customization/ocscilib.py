@@ -662,6 +662,7 @@ def pytest_collection_modifyitems(session, config, items):
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
+    ocsci_config.RUN["number_of_tests"] = len(item.session.items)
     outcome = yield
     rep = outcome.get_result()
     # we only look at actual failing test calls, not setup/teardown
