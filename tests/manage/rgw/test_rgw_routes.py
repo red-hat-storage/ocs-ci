@@ -72,7 +72,7 @@ class TestRGWRoutes:
         log.info(
             "Asserting that RGW's service is exposed by both http and https routes"
         )
-        assert route_dict["spec"]["to"]["name"] == route_name
+        assert route_dict["spec"]["to"]["name"] == constants.RGW_SERVICE_INTERNAL_MODE
         assert route_dict["spec"]["port"]["targetPort"] == url_prefix
 
         log.info("Asserting that the endpoint uses a TLS termination policy")
