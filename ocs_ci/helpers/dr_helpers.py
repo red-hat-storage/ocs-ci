@@ -146,7 +146,7 @@ def failover(
 
     """
     restore_index = config.cur_index
-    switch_ctx if switch_ctx else config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
@@ -188,7 +188,7 @@ def relocate(
 
     """
     restore_index = config.cur_index
-    switch_ctx if switch_ctx else config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","preferredCluster":"{preferred_cluster}"}}}}'
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
@@ -831,7 +831,7 @@ def enable_fence(drcluster_name, switch_ctx=None):
         f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
     )
     restore_index = config.cur_index
-    switch_ctx if switch_ctx else config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=fence_params, format_type="merge"):
@@ -885,7 +885,7 @@ def enable_unfence(drcluster_name, switch_ctx=None):
         f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
     )
     restore_index = config.cur_index
-    switch_ctx if switch_ctx else config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     unfence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_UNFENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=unfence_params, format_type="merge"):
@@ -909,7 +909,7 @@ def fence_state(drcluster_name, fence_state, switch_ctx=None):
         f"Edit the DRCluster {drcluster_name} cluster clusterfence state {fence_state}  "
     )
     restore_index = config.cur_index
-    switch_ctx if switch_ctx else config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     params = f'{{"spec":{{"clusterFence":"{fence_state}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=params, format_type="merge"):
@@ -933,7 +933,7 @@ def get_fence_state(drcluster_name, switch_ctx=None):
 
     """
     restore_index = config.cur_index
-    switch_ctx if switch_ctx else config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     state = drcluster_obj.get().get("spec").get("clusterFence")
     config.switch_ctx(restore_index)
@@ -1008,7 +1008,7 @@ def verify_drpolicy_cli(switch_ctx=None):
     """
 
     restore_index = config.cur_index
-    switch_ctx if switch_ctx else config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
     if status.get("reason") == "Succeeded":
