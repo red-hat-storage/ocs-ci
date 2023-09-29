@@ -153,6 +153,9 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
 
         # Restore new hub
         restore_backup()
+        wait_time = 300
+        logger.info(f"Wait {wait_time} until restores are taken ")
+        time.sleep(wait_time)
 
         # Validate the secondary managed cluster are imported
         validate_cluster_import(cluster_name=secondary_cluster_name)
@@ -165,9 +168,10 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
 
         # Wait or verify the drpolicy is in validated state
         if config.RUN.get("mdr_failover_via_ui"):
+            config.switch_ctx(get_passive_acm_index())
             verify_drpolicy_ui(acm_obj, 0)
         else:
-            verify_drpolicy_cli()
+            verify_drpolicy_cli(switch_ctx=get_passive_acm_index())
 
         # ToDo: Deploy application in both managed cluster and
         #  to verify the applications are present in secondary cluster
@@ -175,7 +179,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         # Fenced the primary managed cluster
         enable_fence(
             drcluster_name=self.primary_cluster_name,
-            switch_ctx=config.switch_ctx(get_passive_acm_index()),
+            switch_ctx=get_passive_acm_index(),
         )
 
         # Application Failover to Secondary managed cluster
@@ -192,7 +196,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
             failover(
                 failover_cluster=secondary_cluster_name,
                 namespace=workload.workload_namespace,
-                switch_ctx=config.switch_ctx(get_passive_acm_index()),
+                switch_ctx=get_passive_acm_index(),
             )
 
         # Verify application are running in other managedcluster
@@ -231,7 +235,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         validate_cluster_import(cluster_name=self.primary_cluster_name)
 
         # Validate klusterlet addons are running on managed cluster
-        config.switch_to_cluster_by_name(self.primary_cluster_name)
+        config.switch_ctx(managed_cluster_index)
         wait_for_pods_to_be_running(
             namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
         )
@@ -247,7 +251,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         # Unfenced the managed cluster which was Fenced earlier
         enable_unfence(
             drcluster_name=self.primary_cluster_name,
-            switch_ctx=config.switch_ctx(get_passive_acm_index()),
+            switch_ctx=get_passive_acm_index(),
         )
 
         # Reboot the nodes which unfenced
@@ -275,7 +279,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
             relocate(
                 secondary_cluster_name,
                 workload.workload_namespace,
-                switch_ctx=config.switch_ctx(get_passive_acm_index()),
+                switch_ctx=get_passive_acm_index(),
             )
 
         # Verify resources deletion from previous primary or current secondary cluster
