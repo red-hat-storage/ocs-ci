@@ -44,6 +44,7 @@
 /tests/e2e/performance/ @red-hat-storage/grey-squad
 /tests/e2e/scale/ @red-hat-storage/orange-squad
 /tests/encryption @red-hat-storage/green-squad
+/tests/ui/ @red-hat-storage/black-squad
 
 # The `docs/*` pattern will match files like
 # `docs/getting-started.md` but not further nested files like
