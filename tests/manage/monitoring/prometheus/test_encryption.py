@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import tier4a, skipif_managed_service, skipif_no_kms
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -10,6 +11,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@blue_squad
 @tier4a
 @pytest.mark.polarion_id("OCS-5154")
 @skipif_no_kms
