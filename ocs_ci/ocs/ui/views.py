@@ -276,6 +276,16 @@ generic_locators = {
         By.CSS_SELECTOR,
     ),
     "close_modal_btn": ("//button[@id='modal-close-action']", By.XPATH),
+    # project name in the dropdown header
+    "project_selected": (
+        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project: {}')]",
+        By.XPATH,
+    ),
+    # project name in the dropdown list
+    "test-project-link": (
+        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
 }
 
 ocs_operator_locators = {
@@ -514,7 +524,11 @@ pvc_4_9 = {
 }
 
 pvc_4_10 = {
-    "test-project-link": ("(//*[contains(text(),'{}')])[1]", By.XPATH),
+    # similar to generic["test-project-link"]
+    "test-project-link": (
+        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
 }
 
 pvc_4_12 = {
@@ -987,10 +1001,6 @@ block_pool = {
     ),
     "save_pool_edit": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
-    "pool_cannot_be_deleted_warning": (
-        "//p[@data-test='pool-bound-message']",
-        By.XPATH,
-    ),
 }
 
 storageclass = {
@@ -1146,41 +1156,6 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "blockpool_status": ("//span[@data-test='status-text']", By.XPATH),
-    "capacity_breakdown_cards": (
-        "//*[@class='capacity-breakdown-card__legend-link']",
-        By.XPATH,
-    ),
-    "capacity_breakdown_card": (
-        "(//*[@class='capacity-breakdown-card__legend-link'])[{}]",
-        By.XPATH,
-    ),
-    # get size in such format: 'ocs-stora...2.06 GiB'
-    "capacity_breakdown_card_size": (
-        "((//*[@class='capacity-breakdown-card__legend-link'])[{}]/child::*)[1]",
-        By.XPATH,
-    ),
-    "req_capacity_dropdown_selected": (
-        "//div[@id='breakdown-card-title']/following-sibling::*//*[@class = 'pf-c-select__toggle-text']",
-        By.XPATH,
-    ),
-    "req_capacity_dropdown_btn_one": (
-        "//div[@class='pf-c-select ceph-capacity-breakdown-card-header__dropdown']",
-        By.XPATH,
-    ),
-    "req_capacity_dropdown_btn_two": (
-        "(//span[@class='pf-c-select__toggle-arrow'])[2]",
-        By.XPATH,
-    ),
-    "req_capacity_dropdown_list_option": (
-        "//*[@class='pf-c-select__menu-item' and contains(text(), '{}')]",
-        By.XPATH,
-    ),
-    "req_capacity_dropdown_namespace": (
-        "//button[@data-test='odf-capacity-breakdown-card-pvc-namespace-dropdown']",
-        By.XPATH,
-    ),
-    "req_capacity_dropdown_namespace_input": ("search-bar", By.ID),
-    "req_capacity_dropdown_namespace_input_select": ("//li[@id='{}-link']", By.XPATH),
 }
 
 validation_4_7 = {

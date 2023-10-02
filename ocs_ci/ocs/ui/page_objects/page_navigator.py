@@ -1,15 +1,12 @@
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.support.wait import WebDriverWait
-
+from selenium.common.exceptions import (
+    NoSuchElementException,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.base_ui import BaseUI, logger
 from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
 from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler
 
 
 class PageNavigator(BaseUI):
@@ -366,39 +363,38 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-        if self.ocp_version_full in (version.VERSION_4_10, version.VERSION_4_11):
-            default_projects_is_checked = self.driver.find_element_by_xpath(
-                "//span[@class='pf-c-switch__toggle']"
+        # if project is already selected, skip and proceed further
+        if self.get_elements(
+            format_locator(self.generic_locators["project_selected"], project_name)
+        ):
+            self.take_screenshot("namespace_selected")
+            logger.info("Project already selected")
+            self.do_click(
+                format_locator(self.generic_locators["project_selected"], project_name)
             )
+            return True
 
-            if (
-                default_projects_is_checked.get_attribute("data-checked-state")
-                == "false"
-            ):
-                logger.info("Show default projects")
-                self.do_click(self.page_nav["show-default-projects"])
-        else:
-            default_projects_is_checked = self.driver.find_element_by_css_selector(
-                "input[class='pf-c-switch__input']"
-            )
-            if (
-                default_projects_is_checked.get_attribute("data-checked-state")
-                == "false"
-            ):
-                logger.info("Show default projects")
-                self.do_click(self.page_nav["show-default-projects"])
+        default_projects_is_checked = self.driver.find_element_by_css_selector(
+            "input[class='pf-c-switch__input']"
+        )
+        if default_projects_is_checked.get_attribute("data-checked-state") == "false":
+            logger.info("Show default projects")
+            self.do_click(self.page_nav["show-default-projects"])
 
         logger.info(f"Wait and select namespace {project_name}")
         wait_for_project = self.wait_until_expected_text_is_found(
-            locator=format_locator(self.pvc_loc["test-project-link"], project_name),
+            locator=format_locator(
+                self.generic_locators["test-project-link"], project_name
+            ),
             expected_text=f"{project_name}",
             timeout=10,
         )
         if wait_for_project:
             self.do_click(
-                format_locator(self.pvc_loc["test-project-link"], project_name)
+                format_locator(self.generic_locators["test-project-link"], project_name)
             )
             logger.info(f"Namespace {project_name} selected")
+            return True
         else:
             raise NoSuchElementException(f"Namespace {project_name} not found on UI")
 
@@ -414,28 +410,9 @@ class PageNavigator(BaseUI):
             bool: True if the resource was found, False otherwise
         """
 
-        def _retrieve_current_status_from_ui():
-            resource_status = WebDriverWait(self.driver, timeout).until(
-                ec.visibility_of_element_located(
-                    self.generic_locators["resource_status"][::-1]
-                )
-            )
-            logger.info(f"Resource status is {resource_status.text}")
-            return resource_status
-
         logger.info(
             f"Verifying that the resource has reached a {status_to_check} status"
         )
-        try:
-            for resource_ui_status in TimeoutSampler(
-                timeout,
-                3,
-                _retrieve_current_status_from_ui,
-            ):
-                if resource_ui_status.text.lower() == status_to_check.lower():
-                    return True
-        except TimeoutExpiredError:
-            logger.error(
-                "The resource did not reach the expected state within the time limit."
-            )
-            return False
+        return self.wait_until_expected_text_is_found(
+            self.generic_locators["resource_status"], status_to_check, timeout
+        )
