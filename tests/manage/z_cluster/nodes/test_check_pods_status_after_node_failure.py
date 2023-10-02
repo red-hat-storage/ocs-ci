@@ -210,7 +210,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         else:
             log.info(f"Starting the node '{node_name}' again...")
             nodes.start_nodes(nodes=[ocs_node])
-            wait_for_nodes_status(node_names=[node_name])
+            wait_for_nodes_status(node_names=[node_name], timeout=360)
             log.info("Waiting for all the pods to be running")
             wait_for_pods_to_be_running(timeout=600)
 
