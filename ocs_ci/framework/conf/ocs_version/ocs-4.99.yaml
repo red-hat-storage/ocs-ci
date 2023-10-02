@@ -4,10 +4,10 @@ DEPLOYMENT:
   default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.99"
   default_latest_tag: 'latest-4.99'
   ocs_csv_channel: "stable-4.99"
-  default_ocp_version: '4.11'
+  default_ocp_version: '4.15'
 ENV_DATA:
   ocs_version: '4.99'
 REPORTING:
-  default_ocs_must_gather_latest_tag: 'latest-4.11'
+  default_ocs_must_gather_latest_tag: 'latest-4.15'
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   us_ds: 'US'
