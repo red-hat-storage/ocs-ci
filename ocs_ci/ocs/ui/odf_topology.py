@@ -190,7 +190,8 @@ def get_deployment_details_cli(deployment_name) -> dict:
         or node_metadata.get("labels") is None
     ):
         deployment_details["labels"] = ""
-    deployment_details["labels"] = node_metadata.get("labels")
+    else:
+        deployment_details["labels"] = node_metadata.get("labels")
     deployment_details[
         "annotation"
     ] = f"{len(node_metadata.get('annotations'))} annotation"
