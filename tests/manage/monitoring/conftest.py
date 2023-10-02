@@ -21,6 +21,7 @@ from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
+from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
@@ -995,5 +996,48 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
     # wait for ceph to return into HEALTH_OK state after mgr deployment
     # is returned back to normal
     ceph_health_check(tries=20, delay=15)
+
+    return measured_op
+
+
+@pytest.fixture
+def measure_rewrite_kms_endpoint(request, measurement_dir, threading_lock):
+    """
+    Change kms endpoint address to invalid value, measure the time when it was
+    rewritten and alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for rewritting
+            the endpont
+    """
+    original_endpoint = get_kms_endpoint()
+    logger.debug(f"Original kms endpoint is {original_endpoint}")
+
+    def change_kms_endpoint():
+        """
+        Change value of KMS configuration for 3 minutes.
+        """
+        # run_time of operation
+        run_time = 60 * 3
+        invalid_endpoint = original_endpoint[0:-1]
+        logger.info(
+            f"Changing value of kms endpoint in cluster configuration to {invalid_endpoint}"
+        )
+        set_kms_endpoint(invalid_endpoint)
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return
+
+    def teardown():
+        logger.info(f"Restoring KMS endpoint to {original_endpoint}")
+        set_kms_endpoint(original_endpoint)
+        logger.info("KMS endpoint restored")
+
+    request.addfinalizer(teardown)
+
+    test_file = os.path.join(measurement_dir, "measure_rewrite_kms_endpoint.json")
+    measured_op = measure_operation(change_kms_endpoint, test_file)
+
+    teardown()
 
     return measured_op
