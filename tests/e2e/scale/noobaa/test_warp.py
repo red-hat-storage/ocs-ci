@@ -55,25 +55,25 @@ class TestWarp(E2ETest):
             ),
             pytest.param(
                 *[1, "OC",
-                    {
-                        "interface": "OC",
-                        "backingstore_dict": {"aws": [(1, "eu-central-1")]}}],
+                  {
+                      "interface": "OC",
+                      "backingstore_dict": {"aws": [(1, "eu-central-1")]}}],
             ),
             pytest.param(
                 *[1, "OC",
-                    {
+                  {
                       "interface": "OC",
                       "backingstore_dict": {"azure": [(1, None)]}}],
             ),
             pytest.param(
                 *[1, "OC",
-                    {
+                  {
                       "interface": "OC",
                       "backingstore_dict": {"gcp": [(1, None)]}}],
             ),
             pytest.param(
                 *[1, "OC",
-                    {
+                  {
                       "interface": "OC",
                       "backingstore_dict": {"ibmcos": [(1, None)]}}],
             ),
