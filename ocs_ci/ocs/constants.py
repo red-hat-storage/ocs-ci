@@ -1474,11 +1474,12 @@ NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
 
 
 # Services
-RGW_SERVICE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
 # Routes
 RGW_ROUTE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_ROUTE_INTERNAL_MODE_SECURE = "ocs-storagecluster-cephobjectstore-secure"
 RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
 
 # Miscellaneous
