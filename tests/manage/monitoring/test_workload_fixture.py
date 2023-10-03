@@ -43,7 +43,7 @@ from datetime import datetime
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, skipif_mcg_only
 from ocs_ci.framework.testlib import tier1, skipif_managed_service
 from ocs_ci.utility.prometheus import PrometheusAPI
 
@@ -182,6 +182,7 @@ def test_workload_rbd_cephfs_minimal(
 
 
 @blue_squad
+@skipif_mcg_only
 @tier1
 @pytest.mark.polarion_id("OCS-2125")
 @skipif_managed_service
