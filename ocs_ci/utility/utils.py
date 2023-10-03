@@ -4523,8 +4523,19 @@ def get_oadp_version():
     for csv in csv_list:
         if "oadp-operator" in csv:
             # extract version string
+<<<<<<< HEAD
             cmd = f"oc get csv/{csv} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide | awk {{'print $4'}}"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
             out = p.communicate()
             return out[0].splitlines[1].decode()
 >>>>>>> 4c498d43 (Handle OADP versions specific pod names)
+=======
+            cmd = f"oc get csv/{csv} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide "
+            awk_cmd = "awk {{'print $4'}}"
+            p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
+            outbuf = subprocess.Popen(
+                shlex.split(awk_cmd), stdin=p.stdout, stdout=subprocess.PIPE
+            )
+            out = outbuf.communicate()
+            return out[0].splitlines()[1].decode()
+>>>>>>> b6c07332 (Fix output redirection issues)
