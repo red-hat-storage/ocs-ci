@@ -50,7 +50,8 @@ class TestOBCUi(ManageTest):
     @skipif_ibm_cloud_managed
     @bugzilla("2031705")
     @polarion_id("OCS-4620")
-    def test_project_admin_obcs_access(self, user_factory, login_factory):
+    @pytest.mark.parametrize("admin", [True, False])
+    def test_project_admin_obcs_access(self, user_factory, login_factory, admin):
         """
         Test if user with admin access to the project can view the list of OBCs
 
@@ -58,9 +59,9 @@ class TestOBCUi(ManageTest):
         user = user_factory()
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
-        assert obc_ui_obj.check_obc_option(
-            user[0]
-        ), f"User {user[0]} wasn't able to see the list of OBCs"
+        assert admin == obc_ui_obj.check_obc_option(
+            user[0], admin=admin
+        ), f"User {user[0]} is project admin: {admin} but permissions to OBCs page didn't match."
 
 
 @black_squad

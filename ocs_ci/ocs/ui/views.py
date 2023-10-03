@@ -286,6 +286,10 @@ generic_locators = {
         "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
         By.XPATH,
     ),
+    "alert_description": (
+        "//div[@class='pf-c-alert__description']",
+        By.XPATH,
+    ),
 }
 
 ocs_operator_locators = {

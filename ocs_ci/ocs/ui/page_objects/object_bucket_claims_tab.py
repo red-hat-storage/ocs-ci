@@ -62,13 +62,14 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         }
         self.sc_loc = self.obc_loc
 
-    def check_obc_option(self, username, text="Object Bucket Claims"):
+    def check_obc_option(self, username, text="Object Bucket Claims", admin=True):
         """
-        Check OBC is visible to user after giving admin access
+        Check if list of OBCs is visible to user after giving admin access
 
         Args:
             username (str): user's username
             text (str): text to be found on OBC page
+            admin (bool): whether the user will be given admin access
 
         """
 
@@ -79,18 +80,26 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         self.do_send_keys(self.sc_loc["project_name"], sc_name)
         self.do_click(self.sc_loc["save_project"])
         ocp_obj = OCP()
-        ocp_obj.exec_oc_cmd(
-            f"adm policy add-role-to-user admin {username} -n {sc_name}"
-        )
+        if admin:
+            ocp_obj.exec_oc_cmd(
+                f"adm policy add-role-to-user admin {username} -n {sc_name}"
+            )
         BucketsUI.navigate_object_bucket_claims_page(self)
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
         )
-        if not obc_found:
-            logger.info("user is not able to access OBC")
-            self.take_screenshot()
-        else:
-            logger.info("user is able to access OBC")
+        logger.info(f"User is able to access OBCs page: {obc_found}")
+        try:
+            self.wait_until_expected_text_is_found(
+                locator=self.generic_locators["alert_description"],
+                expected_text="cannot list resource",
+                timeout=10,
+            )
+            obc_found = False
+            logger.info("User is not permitted to view the list of OBCs")
+        except TimeoutException:
+            logger.info("No issues with permissions found.")
+        self.take_screenshot()
 
         namespaces = []
         namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
