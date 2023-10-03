@@ -199,38 +199,6 @@ def test_monitoring_reporting_ok_when_idle(workload_idle):
 @skipif_managed_service
 @skipif_ocs_version("<4.6")
 class TestCephMonitoringAvailable:
-    @pytest.fixture(scope="class")
-    def enable_rbd_metrics(self, request):
-        self.ct_pod = pod.get_ceph_tools_pod()
-        self.pools_enabled = self.ct_pod.exec_ceph_cmd(
-            "ceph config get mgr mgr/prometheus/rbd_stats_pools", out_yaml_format=False
-        )
-
-        def restore_ceph_rbd_metrics_settings():
-            self.ct_pod.exec_ceph_cmd(
-                'ceph config set mgr mgr/prometheus/rbd_stats_pools ""',
-                out_yaml_format=False,
-            )
-            pools_enabled = ",".join(self.pools_enabled)
-            self.ct_pod.exec_ceph_cmd(
-                f'ceph config set mgr mgr/prometheus/rbd_stats_pools "{pools_enabled}"',
-                out_yaml_format=False,
-            )
-
-        default_pool = (
-            constants.DEFAULT_CEPHBLOCKPOOL_EXTERNAL
-            if config.DEPLOYMENT["external_mode"]
-            else constants.DEFAULT_CEPHBLOCKPOOL
-        )
-
-        # set all pools to be monitored by prometheus
-        if not (default_pool in self.pools_enabled or "*" in self.pools_enabled):
-            self.ct_pod.exec_ceph_cmd(
-                'ceph config set mgr mgr/prometheus/rbd_stats_pools "*"',
-                out_yaml_format=False,
-            )
-            request.addfinalizer(restore_ceph_rbd_metrics_settings)
-
     @blue_squad
     @metrics_for_external_mode_required
     @tier1
