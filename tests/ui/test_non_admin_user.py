@@ -46,6 +46,7 @@ class TestOBCUi(ManageTest):
         request.addfinalizer(finalizer)
 
     @ui
+    @black_squad
     @tier2
     @skipif_ibm_cloud_managed
     @bugzilla("2031705")
