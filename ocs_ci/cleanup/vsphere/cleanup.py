@@ -44,26 +44,25 @@ def delete_cluster(vsphere, cluster_name, cluster_path=None):
         # If the resource pool doesn't exist, assume its IPI deployment
         config.ENV_DATA["vsphere_cluster_type"] = "ipi"
         delete_ipi_nodes(vsphere, cluster_name)
-        return
+    else:
+        # Get all VM's in resource pool
+        vms = vsphere.get_all_vms_in_pool(cluster_name, datacenter, cluster)
+        if not vms:
+            logger.info(f"There is no VM's in resource pool {cluster_name}")
+            # delete the resource pool even though it empty
+            vsphere.destroy_pool(cluster_name, datacenter, cluster)
+            return
 
-    # Get all VM's in resource pool
-    vms = vsphere.get_all_vms_in_pool(cluster_name, datacenter, cluster)
-    if not vms:
-        logger.info(f"There is no VM's in resource pool {cluster_name}")
-        # delete the resource pool even though it empty
+        # Delete the disks
+        logger.info("Deleting disks from VM's")
+        vm_names = []
+        for vm in vms:
+            vm_names.append(vm.name)
+            vsphere.remove_disks(vm)
+        config.ENV_DATA["vm_names"] = vm_names
+
+        # delete the resource pool
         vsphere.destroy_pool(cluster_name, datacenter, cluster)
-        return
-
-    # Delete the disks
-    logger.info("Deleting disks from VM's")
-    vm_names = []
-    for vm in vms:
-        vm_names.append(vm.name)
-        vsphere.remove_disks(vm)
-    config.ENV_DATA["vm_names"] = vm_names
-
-    # delete the resource pool
-    vsphere.destroy_pool(cluster_name, datacenter, cluster)
 
     # destroy the folder in templates
     if cluster_path:
@@ -198,10 +197,11 @@ def vsphere_cleanup():
         1. Delete disks
         2. Delete VM's
         3. Delete Resource Pool
-        4. Remove IP's from IPAM server
-        5. Removes Resource records from Hosted Zone
-        6. Removes Hosted Zone from AWS
-        7. Removes records from Base Domain
+        4. Delete folder in templates
+        5. Remove IP's from IPAM server
+        6. Removes Resource records from Hosted Zone
+        7. Removes Hosted Zone from AWS
+        8. Removes records from Base Domain
 
     """
     parser = argparse.ArgumentParser(
