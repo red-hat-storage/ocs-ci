@@ -1175,7 +1175,7 @@ def login_ui(console_url=None, username=None, password=None):
         password = password.rstrip()
     ocp_version = get_ocp_version()
     login_loc = locators[ocp_version]["login"]
-
+    page_nav_loc = locators[ocp_version]["page"]
     browser = ocsci_config.UI_SELENIUM.get("browser_type")
     if browser == "chrome":
         logger.info("chrome browser")
@@ -1303,7 +1303,14 @@ def login_ui(console_url=None, username=None, password=None):
     )
     element.click()
     if default_console is True and username is constants.KUBEADMIN:
-        WebDriverWait(driver, 60).until(ec.title_is(login_loc["ocp_page"]))
+        WebDriverWait(driver, 60).until(
+            ec.visibility_of_element_located(
+                (
+                    page_nav_loc["page_navigator_sidebar"][1],
+                    page_nav_loc["page_navigator_sidebar"][0],
+                )
+            )
+        )
     if username is not constants.KUBEADMIN:
         element = wait.until(ec.element_to_be_clickable((login_loc["skip_tour"])))
         element.click()
