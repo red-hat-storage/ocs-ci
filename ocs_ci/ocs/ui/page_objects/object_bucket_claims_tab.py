@@ -1,5 +1,6 @@
 import random
 import string
+from selenium.common.exceptions import TimeoutException
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
