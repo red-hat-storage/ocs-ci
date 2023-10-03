@@ -4,7 +4,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_pod
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla, polarion_id
 from ocs_ci.ocs.resources.pod import run_io_in_bg
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -78,11 +78,15 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
 
         # Try to perform IO, expected to fail, Recreate pod by setting fsGroup
         # Try to run IO again, It should pass
+
+        file_path = "/var/lib/www/html/"
+        err_msg = "Permission denied"
         try:
             for pod in pod_objs:
-                run_io_in_bg(pod, expect_to_fail=True)
-        except TimeoutExpiredError:
-            log.exception("Cannot write !!! Permission denied")
+                pod.exec_cmd_on_pod(f'bash -c "touch {file_path}sample"')
+        except CommandFailed as err:
+            assert err_msg in str(err), f"Unexpected error {str(err)}"
+            log.info("IOs on pod failed as expected.")
             log.info("Recreate pod adding fsgroup permission and run IO again")
             scc.update(new_scc)
             for pod in pod_objs:
@@ -104,6 +108,6 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
                     timeout=120,
                     sleep=3,
                 )
-                run_io_in_bg(pod)
-
+                thread = run_io_in_bg(pod)
+                thread.join()
             log.info("IO runs successfully")
