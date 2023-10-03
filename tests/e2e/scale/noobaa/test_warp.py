@@ -2,6 +2,7 @@ import logging
 import pytest
 from ocs_ci.ocs import warp
 from ocs_ci.utility import utils
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.scale_noobaa_lib import (
     get_noobaa_pods_status,
     check_memory_leak_in_noobaa_endpoint_log,
@@ -40,7 +41,56 @@ class TestWarp(E2ETest):
 
     @bugzilla("2089630")
     @pytest.mark.polarion_id("OCS-4001")
-    def test_s3_benchmark_warp(self, warps3, mcg_obj, bucket_factory):
+    @pytest.mark.parametrize(
+        argnames="amount,interface,bucketclass_dict",
+        argvalues=[
+            pytest.param(
+                *[1, "OC", None],
+            ),
+            pytest.param(
+                *[1, "OC",
+                  {
+                      "interface": "OC",
+                      "backingstore_dict": {"pv": [(1, 100, DEFAULT_STORAGECLASS_RBD)]}}],
+            ),
+            pytest.param(
+                *[1, "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]}}],
+            ),
+            pytest.param(
+                *[1, "OC",
+                    {
+                      "interface": "OC",
+                      "backingstore_dict": {"azure": [(1, None)]}}],
+            ),
+            pytest.param(
+                *[1, "OC",
+                    {
+                      "interface": "OC",
+                      "backingstore_dict": {"gcp": [(1, None)]}}],
+            ),
+            pytest.param(
+                *[1, "OC",
+                    {
+                      "interface": "OC",
+                      "backingstore_dict": {"ibmcos": [(1, None)]}}],
+            ),
+        ],
+        ids=[
+            "OC-DEFAULT-BACKINGSTORE",
+            "OC-PVPOOL",
+            "OC-AWS",
+            "OC-AZURE",
+            "OC-GCP",
+            "OC-IBMCOS",
+        ]
+    )
+    def test_s3_benchmark_warp(
+        self, warps3, mcg_obj, backingstore_factory,
+        bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict
+    ):
         """
         Test flow:
         * Create a single object bucket
@@ -50,7 +100,7 @@ class TestWarp(E2ETest):
         """
 
         # Create an Object bucket
-        object_bucket = bucket_factory(amount=1, interface="OC", verify_health=False)[0]
+        object_bucket = bucket_factory(amount, interface, bucketclass=bucketclass_dict, verify_health=False)[0]
         object_bucket.verify_health(timeout=180)
 
         # Check noobaa pods status before running Warp benchmark
@@ -63,8 +113,8 @@ class TestWarp(E2ETest):
             secret_key=mcg_obj.access_key,
             duration="60m",
             concurrent=20,
-            objects=100,
-            obj_size="1.5MiB",
+            objects=5000,
+            obj_size="4KB",
             validate=True,
             timeout=4000,
             multi_client=False,
