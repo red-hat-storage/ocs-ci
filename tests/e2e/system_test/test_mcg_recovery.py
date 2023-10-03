@@ -30,35 +30,33 @@ class TestMCGRecovery(E2ETest):
     )
     def test_mcg_db_backup_recovery(
         self,
-        setup_mcg_system,
+        setup_mcg_bg_features,
         bucket_amount,
         object_amount,
-        verify_mcg_system_recovery,
         snapshot_factory,
         noobaa_db_backup_and_recovery,
+        validate_mcg_bg_features,
     ):
-        mcg_sys_dict = setup_mcg_system(bucket_amount, object_amount)
-
-        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
-
-        verify_mcg_system_recovery(mcg_sys_dict)
-
-    def test_sample(self, setup_mcg_bg_features):
 
         feature_setup_map = setup_mcg_bg_features(
-            num_of_buckets=10,
-            is_disruptive=False,
+            num_of_buckets=bucket_amount,
+            object_amount=object_amount,
+            is_disruptive=True,
             skip_any_features=["caching", "nsfs", "rgw kafka"],
         )
 
+        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
         import time
 
-        log.error("Waiting for 5 mins")
-        time.sleep(300)
+        time.sleep(60)
+        event, threads = validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=False,
+            skip_any_features=["caching", "nsfs", "rgw kafka"],
+            object_amount=object_amount,
+        )
 
-        feature_setup_map["executor"]["event"].set()
-        log.error("asked the background process to stop executing")
-        for th in feature_setup_map["executor"]["threads"]:
+        event.set()
+        for th in threads:
             th.result()
-
-        log.error("Done executing")
+        log.info("No issues seen with the MCG bg feature validation")

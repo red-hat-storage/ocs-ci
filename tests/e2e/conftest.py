@@ -1029,7 +1029,7 @@ def validate_mcg_bg_features(
 
         # if any already running background validation threads
         # then stop those threads
-        if feature_setup_map["executor"] is not None:
+        if feature_setup_map["executor"]["event"] is not None:
             feature_setup_map["executor"]["event"].set()
             for t in feature_setup_map["executor"]["threads"]:
                 t.result()
@@ -1216,7 +1216,8 @@ def setup_mcg_bg_features(
 
         all_buckets = list()
         feature_setup_map = dict()
-        feature_setup_map["executor"] = None
+        feature_setup_map["executor"] = dict()
+        feature_setup_map["executor"]["event"] = None
 
         # skip any features if one wants to skip
         features = ["replication", "caching", "expiration", "nsfs", "rgw kafka"]
@@ -1276,7 +1277,6 @@ def setup_mcg_bg_features(
             skip_any_features=skip_any_features,
             object_amount=object_amount,
         )
-        feature_setup_map["executor"] = dict()
         feature_setup_map["executor"]["event"] = event
         feature_setup_map["executor"]["threads"] = threads
         return feature_setup_map
