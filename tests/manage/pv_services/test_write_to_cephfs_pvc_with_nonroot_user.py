@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_pod
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla, polarion_id
 from ocs_ci.ocs.resources.pod import run_io_in_bg
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -10,6 +11,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@magenta_squad
 @bugzilla("2176354")
 @polarion_id("OCS-5139")
 class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
