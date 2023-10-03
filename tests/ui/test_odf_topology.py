@@ -26,20 +26,29 @@ from ocs_ci.ocs.ui.odf_topology import (
     get_node_details_cli,
     get_node_names_of_the_pods_by_pattern,
 )
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
 def teardown_nodes_job(request, nodes):
-    def finalizer():
+    def finalizer_restart_nodes_by_stop_and_start_teardown():
         """
         Make sure all nodes are up again
 
         """
         nodes.restart_nodes_by_stop_and_start_teardown()
 
-    request.addfinalizer(finalizer)
+    def finalizer_wait_cluster_healthy():
+        """
+        Make sure health check is OK after node returned to cluster after restart to avoid
+        'Ceph cluster health is not OK. Health: HEALTH_WARN 1/3 mons down, quorum d,e' error
+        """
+        ceph_health_check(tries=60, delay=10)
+
+    request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
+    request.addfinalizer(finalizer_wait_cluster_healthy)
 
 
 @pytest.fixture()
