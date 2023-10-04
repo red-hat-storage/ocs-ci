@@ -90,15 +90,14 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
         )
         logger.info(f"User is able to access OBCs page: {obc_found}")
-        try:
-            self.wait_until_expected_text_is_found(
-                locator=self.generic_locators["alert_description"],
-                expected_text="cannot list resource",
-                timeout=10,
-            )
+        if self.wait_until_expected_text_is_found(
+            locator=self.generic_locators["alert_description"],
+            expected_text="cannot list resource",
+            timeout=10,
+        ):
             obc_found = False
             logger.info("User is not permitted to view the list of OBCs")
-        except TimeoutException:
+        else:
             logger.info("No issues with permissions found.")
         self.take_screenshot()
 
