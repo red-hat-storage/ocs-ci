@@ -11,7 +11,11 @@ from copy import deepcopy
 from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
-from ocs_ci.ocs.exceptions import VMMaxDisksReachedException, ResourcePoolNotFound
+from ocs_ci.ocs.exceptions import (
+    ResourcePoolNotFound,
+    VMMaxDisksReachedException,
+    VSLMNotFoundException,
+)
 from ocs_ci.ocs.constants import (
     GB2KB,
     VM_DISK_TYPE,
@@ -1621,3 +1625,58 @@ class VSPHERE(object):
             f"Timeout error: Failed to {action} Network adapter '{label}' on Virtual Machine with IP: {ip}."
         )
         return False
+
+    def get_storage_object_manger(self):
+        """
+        Gets the vStorageObjectManager
+
+        Returns:
+             vim.vslm.vcenter.VStorageObjectManager: vStorageObjectManager
+
+        """
+        return self.get_content.vStorageObjectManager
+
+    def get_vslm_id(self, volume_id, datastore, storage):
+        """
+        Gets the VSLM ID
+
+        Args:
+            volume_id (str): Volume ID
+            datastore (vim.Datastore): Datastore instance
+            storage (vim.vslm.vcenter.VStorageObjectManager): vStorageObjectManager
+
+        Returns:
+            vim.vslm.ID
+
+        Raises:
+            VSLMNotFoundException: In case VSLM not found
+
+        """
+        vslms = storage.ListVStorageObject(datastore)
+        for vslm in vslms:
+            if vslm.id == volume_id:
+                return vslm
+        else:
+            logger.error(f"vslm not found for volume {volume_id}")
+            raise VSLMNotFoundException
+
+    def get_volume_path(self, volume_id, datastore_name, datacenter_name):
+        """
+        Gets the Volume path
+
+        Args:
+            volume_id (str): Volume ID
+            datastore_name (str): Name of the Datastore
+            datacenter_name (str): Name of the Datacenter
+
+        Returns:
+            str: Path to the volume
+
+        """
+        ds = self.find_datastore_by_name(datastore_name, datacenter_name)
+        storage = self.get_storage_object_manger()
+        vslm = self.get_vslm_id(volume_id, ds, storage)
+        vstorage_object = storage.RetrieveVStorageObject(vslm, ds)
+        volume_path = vstorage_object.config.backing.filePath
+        logger.debug(f"File path for volume {volume_id} is `{volume_path}`")
+        return volume_path
