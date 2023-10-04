@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_pod
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla, polarion_id
 from ocs_ci.ocs.resources.pod import run_io_in_bg
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
-@magenta_squad
+@green_squad
 @bugzilla("2176354")
 @polarion_id("OCS-5139")
 class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
@@ -88,8 +88,12 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
                 pod.exec_cmd_on_pod(f'bash -c "touch {file_path}sample"')
         except CommandFailed as err:
             assert err_msg in str(err), f"Unexpected error {str(err)}"
-            log.info("IOs on pod failed as expected.")
-            log.info("Recreate pod adding fsgroup permission and run IO again")
+            log.info(
+                f"The file creation failed with a permission denied error, as expected. Error: {err}"
+            )
+            log.info(
+                "Recreating the pod with added fsgroup permission and trying to create the file again"
+            )
             scc.update(new_scc)
             for pod in pod_objs:
                 pod.delete()
