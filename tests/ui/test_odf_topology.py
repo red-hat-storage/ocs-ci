@@ -273,6 +273,12 @@ class TestODFTopology(object):
         alerts = api.wait_for_alert(name=constants.ALERT_NODEDOWN, state="firing")
         test_checks = dict()
         test_checks["prometheus_CephNodeDown_alert_fired"] = len(alerts) > 0
+        if not test_checks["prometheus_CephNodeDown_alert_fired"]:
+            logger.error(
+                f"Prometheus alert '{constants.ALERT_NODEDOWN}' is not triggered"
+            )
+        else:
+            logger.info(f"alerts found: {str(alerts)}")
 
         min_wait_for_update = 3
         logger.info(f"wait {min_wait_for_update}min to get UI updated with alert")
@@ -317,6 +323,12 @@ class TestODFTopology(object):
         alerts = api.wait_for_alert(name=constants.ALERT_NODEDOWN)
         test_checks = dict()
         test_checks["prometheus_CephNodeDown_alert_removed"] = len(alerts) == 0
+        if not test_checks["prometheus_CephNodeDown_alert_removed"]:
+            logger.error(
+                f"Prometheus alert '{constants.ALERT_NODEDOWN}' is not removed"
+            )
+        else:
+            logger.info(f"alerts found: {str(alerts)}")
 
         logger.info(
             f"sleep {min_wait_for_update}min to update UI and remove {constants.ALERT_NODEDOWN} alert"
