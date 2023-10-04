@@ -27,6 +27,7 @@ from ocs_ci.ocs.ui.odf_topology import (
     get_node_names_of_the_pods_by_pattern,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility import prometheus
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ def teardown_nodes_job(request, nodes):
         Make sure health check is OK after node returned to cluster after restart to avoid
         'Ceph cluster health is not OK. Health: HEALTH_WARN 1/3 mons down, quorum d,e' error
         """
-        ceph_health_check(tries=60, delay=10)
+        ceph_health_check(tries=60, delay=30)
 
     request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
     request.addfinalizer(finalizer_wait_cluster_healthy)
@@ -267,14 +268,19 @@ class TestODFTopology(object):
         )
         nodes.stop_nodes(nodes=[random_node_under_test], force=True)
 
-        min_wait_for_update = 8
-        logger.info(f"wait {min_wait_for_update}min to get UI updated")
+        api = prometheus.PrometheusAPI()
+        logger.info(f"Verifying whether {constants.ALERT_NODEDOWN} has been triggered")
+        alerts = api.wait_for_alert(name=constants.ALERT_NODEDOWN, state="firing")
+        test_checks = dict()
+        test_checks["prometheus_CephNodeDown_alert_fired"] = len(alerts) > 0
+
+        min_wait_for_update = 3
+        logger.info(f"wait {min_wait_for_update}min to get UI updated with alert")
         time.sleep(min_wait_for_update * 60)
 
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
         topology_tab.nodes_view.read_presented_topology()
 
-        test_checks = dict()
         test_checks[
             "cluster_in_danger_state_check_pass"
         ] = topology_tab.nodes_view.is_cluster_in_danger()
@@ -306,6 +312,11 @@ class TestODFTopology(object):
             f"return node back to working state and check '{constants.ALERT_NODEDOWN}' alert removed"
         )
         nodes.start_nodes(nodes=[random_node_under_test], wait=True)
+
+        logger.info(f"Verifying whether {constants.ALERT_NODEDOWN} has been triggered")
+        alerts = api.wait_for_alert(name=constants.ALERT_NODEDOWN)
+        test_checks = dict()
+        test_checks["prometheus_CephNodeDown_alert_removed"] = len(alerts) == 0
 
         logger.info(
             f"sleep {min_wait_for_update}min to update UI and remove {constants.ALERT_NODEDOWN} alert"
