@@ -633,3 +633,7 @@ class IncorrectUiOptionRequested(Exception):
 
 class ReturnedEmptyResponseException(Exception):
     pass
+
+
+class VSLMNotFoundException(Exception):
+    pass

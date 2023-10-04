@@ -271,9 +271,7 @@ class VMWareNodes(NodesBase):
         """
         if not pvs:
             pvs = get_deviceset_pvs()
-        return [
-            pv.get().get("spec").get("vsphereVolume").get("volumePath") for pv in pvs
-        ]
+        return [pv.get().get("spec").get("csi").get("volumeHandle") for pv in pvs]
 
     def get_node_by_attached_volume(self, volume):
         """
@@ -522,6 +520,23 @@ class VMWareNodes(NodesBase):
 
         """
         return [self.vsphere.get_vm_by_ip(ip, dc) for ip in node_ips]
+
+    def get_volume_path(self, volume_handle):
+        """
+        Fetches the volume path for the volumeHandle
+
+        Args:
+            volume_handle (str): volumeHandle which exists in PV
+
+        Returns:
+            str: volume path of PV
+
+        """
+        return self.vsphere.get_volume_path(
+            volume_id=volume_handle,
+            datastore_name=self.datastore,
+            datacenter_name=self.datacenter,
+        )
 
 
 class AWSNodes(NodesBase):
