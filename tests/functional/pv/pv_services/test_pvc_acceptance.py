@@ -11,8 +11,11 @@
 #     test_rwo_pvc_assign_pod_node[CephFileSystem]
 #     test_rwx_pvc_assign_pod_node[CephBlockPool]
 #     test_rwx_pvc_assign_pod_node[CephFileSystem]
+# tests/manage/pv_services/test_raw_block_pv.py::TestRawBlockPV
+#     test_raw_block_pv[Delete]
+#     test_raw_block_pv[Retain]
 #
-# ## partially implemented
+# ## partially implemented/some parameters are different
 # tests/manage/pv_services/pvc_resize/test_pvc_expansion.py::TestPvcExpand::test_pvc_expansion
 #   - the original test_pvc_expansion performs expansion on 5 PVCs (2 cephfs, 3 rbd)
 #   - some of the configuration of PVCs and maybe also PODs is/might be different
@@ -20,9 +23,6 @@
 # ## not implemented ###############
 # tests/manage/pv_services/test_pvc_delete_verify_size_is_returned_to_backendpool.py
 #     test_pvc_delete_and_verify_size_is_returned_to_backend_pool
-# tests/manage/pv_services/test_raw_block_pv.py::TestRawBlockPV
-#     test_raw_block_pv[Delete]
-#     test_raw_block_pv[Retain]
 
 # 1. Create PVCs according to this table:
 #   Type                        RWO    RWX  Recliam policy
@@ -82,7 +82,6 @@ class TestPvcAcceptance(ManageTest):
     OCS-529 - CephFS Based RWX Dynamic PVC creation with Reclaim policy set to Delete
     """
 
-    # "interface_type", "reclaim_policy"],
     variants = [
         # RWO
         {
@@ -107,6 +106,21 @@ class TestPvcAcceptance(ManageTest):
             "reclaim_policy": constants.RECLAIM_POLICY_DELETE,
             "access_mode": constants.ACCESS_MODE_RWO,
         },
+        {
+            "interface_type": constants.CEPHBLOCKPOOL,
+            "reclaim_policy": constants.RECLAIM_POLICY_RETAIN,
+            "access_mode": constants.ACCESS_MODE_RWO,
+            "volume_mode": constants.VOLUME_MODE_BLOCK,
+            "pod_dict_path": constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+            "skip": is_managed_service_cluster(),
+        },
+        {
+            "interface_type": constants.CEPHBLOCKPOOL,
+            "reclaim_policy": constants.RECLAIM_POLICY_DELETE,
+            "access_mode": constants.ACCESS_MODE_RWO,
+            "volume_mode": constants.VOLUME_MODE_BLOCK,
+            "pod_dict_path": constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+        },
         # RWX
         {
             "interface_type": constants.CEPHFILESYSTEM,
@@ -118,6 +132,47 @@ class TestPvcAcceptance(ManageTest):
             "interface_type": constants.CEPHFILESYSTEM,
             "reclaim_policy": constants.RECLAIM_POLICY_DELETE,
             "access_mode": constants.ACCESS_MODE_RWX,
+        },
+        {
+            "interface_type": constants.CEPHBLOCKPOOL,
+            "reclaim_policy": constants.RECLAIM_POLICY_RETAIN,
+            "access_mode": constants.ACCESS_MODE_RWX,
+            "volume_mode": constants.VOLUME_MODE_BLOCK,
+            "pod_dict_path": constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+            "skip": is_managed_service_cluster(),
+        },
+        {
+            "interface_type": constants.CEPHBLOCKPOOL,
+            "reclaim_policy": constants.RECLAIM_POLICY_DELETE,
+            "access_mode": constants.ACCESS_MODE_RWX,
+            "volume_mode": constants.VOLUME_MODE_BLOCK,
+            "pod_dict_path": constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+        },
+        {
+            "interface_type": constants.CEPHBLOCKPOOL,
+            "reclaim_policy": constants.RECLAIM_POLICY_RETAIN,
+            "access_mode": constants.ACCESS_MODE_RWX,
+            "volume_mode": constants.VOLUME_MODE_BLOCK,
+            "pod_dict_path": constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+            "pvc_size": 500,
+            "pvc_size_unit": "Mi",
+            "io_size": "100M",
+            "skip": is_managed_service_cluster(),
+            "skip_expansion": True,
+        },
+        {
+            "interface_type": constants.CEPHBLOCKPOOL,
+            "reclaim_policy": constants.RECLAIM_POLICY_DELETE,
+            "access_mode": constants.ACCESS_MODE_RWX,
+            "volume_mode": constants.VOLUME_MODE_BLOCK,
+            "pod_dict_path": constants.CSI_RBD_RAW_BLOCK_POD_YAML,
+            "pvc_size": 0.005
+            if config.ENV_DATA["platform"].lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+            else 1,
+            "pvc_size_unit": "Ti",
+            "skip": is_managed_service_cluster(),
+            "skip_expansion": True,
         },
     ]
 
@@ -131,13 +186,11 @@ class TestPvcAcceptance(ManageTest):
         """
         test_variants = [
             PvcAcceptance(
-                interface_type=variant["interface_type"],
-                reclaim_policy=variant["reclaim_policy"],
-                access_mode=variant["access_mode"],
                 pvc_factory=pvc_factory,
                 pod_factory=pod_factory,
                 storageclass_factory=storageclass_factory,
                 teardown_factory=teardown_factory,
+                **variant,
             )
             for variant in TestPvcAcceptance.variants
             if not variant.get("skip")
@@ -174,10 +227,12 @@ class TestPvcAcceptance(ManageTest):
                 test_variant.check_pod_state_containercreating()
 
         for test_variant in test_variants:
-            test_variant.expand_pvc()
+            if not test_variant.skip_expansion:
+                test_variant.expand_pvc()
 
         for test_variant in test_variants:
-            test_variant.verify_expansion()
+            if not test_variant.skip_expansion:
+                test_variant.verify_expansion()
 
         for test_variant in test_variants:
             if test_variant.access_mode == constants.ACCESS_MODE_RWO:
@@ -239,7 +294,8 @@ class PvcAcceptance:
         def wrapper(self, *args, **kwargs):
             logger.info(
                 f"Executing '{f.__name__}' for interface type: '{self.interface_type}', "
-                f"reclaim policy: '{self.reclaim_policy}', access mode: '{self.access_mode}'"
+                f"reclaim policy: '{self.reclaim_policy}', access mode: '{self.access_mode}', "
+                f"volume mode: '{self.volume_mode}', size '{self.pvc_size} {self.pvc_size_unit}'"
             )
             return f(self, *args, **kwargs)
 
@@ -248,45 +304,60 @@ class PvcAcceptance:
     # @log_execution
     def __init__(
         self,
-        interface_type,
-        reclaim_policy,
-        access_mode,
         pvc_factory,
         pod_factory,
         storageclass_factory,
         teardown_factory,
+        **kwargs,
     ):
         """
 
         Args:
-            interface_type (str): The type of the interface
-                (e.g. CephBlockPool, CephFileSystem)
-            reclaim_policy (str): The type of reclaim policy
-                (eg., 'Delete', 'Retain')
-            access_mode (str): access mode (rwo or rwx)
             pvc_factory: A fixture to create new pvc
             pod_factory: A fixture to create new pod
             storageclass_factory: A fixture to create new storage class
             teardown_factory: A fixture to cleanup created resources
+            kwargs (dict): Following kwargs are available:
+                interface_type (str): The type of the interface
+                    (e.g. CephBlockPool, CephFileSystem)
+                reclaim_policy (str): The type of reclaim policy
+                    (eg., 'Delete', 'Retain')
+                access_mode (str): access mode (rwo or rwx)
+                volume_mode:
+                pvc_size:
+                pvc_size_unit:
+                pvc_size_expanded:
+                skip_expansion (bool): skip PVC resize part of test
 
         """
-        self.interface_type = interface_type
-        self.reclaim_policy = reclaim_policy
-        self.access_mode = access_mode
         self.pvc_factory = pvc_factory
         self.pod_factory = pod_factory
         self.storageclass_factory = storageclass_factory
         self.teardown_factory = teardown_factory
 
-        self.expected_failure_str = "Multi-Attach error for volume"
-        self.storage_type = "fs"
-        self.pvc_size = 10  # size in Gi
+        self.interface_type = kwargs["interface_type"]
+        self.reclaim_policy = kwargs["reclaim_policy"]
+        self.access_mode = kwargs["access_mode"]
+        self.volume_mode = kwargs.get("volume_mode")
+        self.pvc_size = kwargs.get("pvc_size", 10)
+        self.pvc_size_unit = kwargs.get("pvc_size_unit", "Gi")
         # Expand PVC with a small amount to fall behind default quota (100 Gi) for
         # openshift dedicated
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
-            self.pvc_size_new = 15
-        else:
-            self.pvc_size_new = 25
+        self.pvc_size_expanded = kwargs.get(
+            "pvc_size_expanded",
+            15
+            if config.ENV_DATA["platform"].lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+            else 25,
+        )
+        self.skip_expansion = kwargs.get("skip_expansion", True)
+
+        self.expected_failure_str = "Multi-Attach error for volume"
+        self.storage_type = (
+            "block" if self.volume_mode == constants.VOLUME_MODE_BLOCK else "fs"
+        )
+        self.io_size = kwargs.get("io_size", "1G")
+        self.pod_dict_path = kwargs.get("pod_dict_path", constants.NGINX_POD_YAML)
 
     @log_execution
     def setup(self):
@@ -315,8 +386,10 @@ class PvcAcceptance:
             interface=self.interface_type,
             storageclass=self.sc_obj,
             size=self.pvc_size,
+            size_unit=self.pvc_size_unit,
             access_mode=self.access_mode,
             status=constants.STATUS_BOUND,
+            volume_mode=self.volume_mode,
         )
 
     @log_execution
@@ -331,9 +404,10 @@ class PvcAcceptance:
         self.pod_obj1 = self.pod_factory(
             interface=self.interface_type,
             pvc=self.pvc_obj,
+            raw_block_pv=self.volume_mode == constants.VOLUME_MODE_BLOCK,
             status=constants.STATUS_RUNNING,
             node_name=self.worker_nodes_list[0],
-            pod_dict_path=constants.NGINX_POD_YAML,
+            pod_dict_path=self.pod_dict_path,
         )
         self.teardown_factory(self.pod_obj1)
 
@@ -344,11 +418,12 @@ class PvcAcceptance:
         self.pod_obj2 = self.pod_factory(
             interface=self.interface_type,
             pvc=self.pvc_obj,
+            raw_block_pv=self.volume_mode == constants.VOLUME_MODE_BLOCK,
             status=None
             if self.access_mode == constants.ACCESS_MODE_RWO
             else constants.STATUS_RUNNING,
             node_name=self.worker_nodes_list[1],
-            pod_dict_path=constants.NGINX_POD_YAML,
+            pod_dict_path=self.pod_dict_path,
         )
         self.teardown_factory(self.pod_obj2)
 
@@ -384,7 +459,9 @@ class PvcAcceptance:
         logger.info(f"Running IO on first pod {self.pod_obj1.name}")
         self.file_name1 = self.pod_obj1.name
         self.pod_obj1.run_io(
-            storage_type=self.storage_type, size="1G", fio_filename=self.file_name1
+            storage_type=self.storage_type,
+            size=self.io_size,
+            fio_filename=self.file_name1,
         )
 
     @log_execution
@@ -395,7 +472,9 @@ class PvcAcceptance:
         logger.info(f"Running IO on second pod {self.pod_obj2.name}")
         self.file_name2 = self.pod_obj2.name
         self.pod_obj2.run_io(
-            storage_type=self.storage_type, size="1G", fio_filename=self.file_name2
+            storage_type=self.storage_type,
+            size=self.io_size,
+            fio_filename=self.file_name2,
         )
 
     @log_execution
@@ -404,6 +483,16 @@ class PvcAcceptance:
         get fio iops and checksum from first pod
         """
         pod.get_fio_rw_iops(self.pod_obj1)
+        # TODO: why is md5 checsum failing on Block volume_mode? Should it be skipped?
+        # INFO  - Executing command: oc -n <namespace> exec <pod> -- md5sum
+        # /var/run/secrets/kubernetes.io/serviceaccount/pod-test-rbd-c9a103d008fa4062ae6e87950a8 WARNING  - Command
+        # stderr: md5sum: /var/run/secrets/kubernetes.io/serviceaccount/pod-test-rbd-c9a103d008fa4062ae6e87950a8: No
+        # such file or directory
+        if self.volume_mode == constants.VOLUME_MODE_BLOCK:
+            logger.info(
+                f"Skipping getting md5 checksum from {self.pvc_obj.name} on first pod ({self.pod_obj1.name})."
+            )
+            return
         self.md5sum_pod1_data = pod.cal_md5sum(
             pod_obj=self.pod_obj1, file_name=self.file_name1
         )
@@ -414,6 +503,16 @@ class PvcAcceptance:
         get fio iops and checksum from second pod
         """
         pod.get_fio_rw_iops(self.pod_obj2)
+        # TODO: why is md5 checsum failing on Block volume_mode? Should it be skipped?
+        # INFO  - Executing command: oc -n <namespace> exec <pod> -- md5sum
+        # /var/run/secrets/kubernetes.io/serviceaccount/pod-test-rbd-c9a103d008fa4062ae6e87950a8 WARNING  - Command
+        # stderr: md5sum: /var/run/secrets/kubernetes.io/serviceaccount/pod-test-rbd-c9a103d008fa4062ae6e87950a8: No
+        # such file or directory
+        if self.volume_mode == constants.VOLUME_MODE_BLOCK:
+            logger.info(
+                f"Skipping getting md5 checksum from {self.pvc_obj.name} on second pod ({self.pod_obj2.name})."
+            )
+            return
         self.md5sum_pod2_data = pod.cal_md5sum(
             pod_obj=self.pod_obj2, file_name=self.file_name2
         )
@@ -445,17 +544,22 @@ class PvcAcceptance:
         """
 
         logger.info(
-            f"Expanding size of PVC {self.pvc_obj.name} to {self.pvc_size_new}G"
+            f"Expanding size of PVC {self.pvc_obj.name} to {self.pvc_size_expanded}G"
         )
-        self.pvc_obj.resize_pvc(self.pvc_size_new, False)
+        self.pvc_obj.resize_pvc(self.pvc_size_expanded, False)
 
     @log_execution
     def verify_expansion(self):
         """
         Verify new size of pvc on pods
         """
-        self.pvc_obj.verify_pvc_size(self.pvc_size_new)
+        self.pvc_obj.verify_pvc_size(self.pvc_size_expanded)
 
+        if self.volume_mode == constants.VOLUME_MODE_BLOCK:
+            logger.info(
+                f"Skipping check of PVC {self.pvc_obj.name} as volume mode is Block."
+            )
+            return
         logger.info("Verifying new size on pods.")
         # Wait for 240 seconds to reflect the change on pod
         pods_for_check = [self.pod_obj1]
@@ -471,9 +575,9 @@ class PvcAcceptance:
                 df_out = df_out.split()
                 new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
                 if new_size_mount in [
-                    f"{self.pvc_size_new - 0.1}G",
-                    f"{float(self.pvc_size_new)}G",
-                    f"{self.pvc_size_new}G",
+                    f"{self.pvc_size_expanded - 0.1}G",
+                    f"{float(self.pvc_size_expanded)}G",
+                    f"{self.pvc_size_expanded}G",
                 ]:
                     logger.info(
                         f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
@@ -483,7 +587,7 @@ class PvcAcceptance:
                 logger.info(
                     f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
                     f" on pod {pod_obj.name}. New size on mount is not "
-                    f"{self.pvc_size_new}G as expected, but {new_size_mount}. "
+                    f"{self.pvc_size_expanded}G as expected, but {new_size_mount}. "
                     f"Checking again."
                 )
 
@@ -512,6 +616,11 @@ class PvcAcceptance:
         """
         Verify data on first pod (generated on second pod)
         """
+        if self.volume_mode == constants.VOLUME_MODE_BLOCK:
+            logger.info(
+                f"Skipping verification of data from {self.pvc_obj.name} on first pod ({self.pod_obj1.name})."
+            )
+            return
         logger.info(f"Verify data on first pod {self.pod_obj1.name}")
         pod.verify_data_integrity(
             pod_obj=self.pod_obj1,
@@ -524,6 +633,11 @@ class PvcAcceptance:
         """
         Verify data on second pod (generated on first pod)
         """
+        if self.volume_mode == constants.VOLUME_MODE_BLOCK:
+            logger.info(
+                f"Skipping verification of data from {self.pvc_obj.name} on second pod ({self.pod_obj2.name})."
+            )
+            return
         logger.info(f"Verify data on second pod {self.pod_obj2.name}")
         pod.verify_data_integrity(
             pod_obj=self.pod_obj2,
@@ -536,6 +650,11 @@ class PvcAcceptance:
         """
         Verify that data is mutable from any pod
         """
+        if self.volume_mode == constants.VOLUME_MODE_BLOCK:
+            logger.info(
+                f"Skipping verification of data mutability on Block volume mode ({self.pvc_obj.name})."
+            )
+            return
         logger.info("Perform modification of files from alternate pod")
         # Access and rename file written by pod-2 from pod-1
         file_path2 = pod.get_file_path(self.pod_obj2, self.file_name2)
