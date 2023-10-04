@@ -5,7 +5,7 @@ import copy
 import re
 import time
 
-import botocore.exceptions as botoexceptions
+from uuid import uuid4
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.bucket_utils import (
     random_object_round_trip_verification,
@@ -27,8 +27,27 @@ logger = logging.getLogger(__name__)
 def create_muliple_types_provider_obcs(
     num_of_buckets, bucket_types, cloud_providers, bucket_factory
 ):
+    """
+    This function creates valid OBCs of different cloud providers
+    and bucket types
+
+    Args:
+        num_of_buckets (int): Number of buckets
+        bucket_types (dict): Dict representing mapping between
+            bucket type and relevant configuration
+        cloud_providers (dict): Dict representing mapping between
+            cloud providers and relevant configuration
+        bucket_factory (fixture): bucket_factory fixture method
+
+    Returns:
+        List: list of created buckets
+
+    """
+
     def get_all_combinations_map(providers, bucket_types):
         """
+        Create valid combination of cloud-providers and bucket-types
+
         Args:
             providers (dict): dictionary representing cloud
                 providers and the respective config
@@ -36,6 +55,7 @@ def create_muliple_types_provider_obcs(
                 types of bucket and the respective config
         Returns:
             List: containing all the possible combination of buckets
+
         """
         all_combinations = dict()
 
@@ -69,13 +89,13 @@ def create_muliple_types_provider_obcs(
                 )
             )
 
-    for i in range(0, buckets_left):
+    for index in range(0, buckets_left):
         buckets.extend(
             bucket_factory(
                 interface="OC",
                 amount=1,
                 bucketclass=all_combination_of_obcs[
-                    list(all_combination_of_obcs.keys())[i]
+                    list(all_combination_of_obcs.keys())[index]
                 ],
             )
         )
@@ -121,11 +141,12 @@ def validate_mcg_bucket_replicaton(
                 upload_dir=bidi_uploaded_objs_dir_1,
                 download_dir=bidi_downloaded_objs_dir_1,
                 amount=object_amount,
-                pattern="FirstBiDi",
+                pattern=f"FirstBiDi-{uuid4().hex}",
                 wait_for_replication=True,
                 second_bucket_name=second_bucket.name,
                 mcg_obj=mcg_obj_session,
                 cleanup=True,
+                timeout=1200,
             )
 
             random_object_round_trip_verification(
@@ -134,11 +155,12 @@ def validate_mcg_bucket_replicaton(
                 upload_dir=bidi_uploaded_objs_dir_2,
                 download_dir=bidi_downloaded_objs_dir_2,
                 amount=object_amount,
-                pattern="SecondBiDi",
+                pattern=f"SecondBiDi-{uuid4().hex}",
                 wait_for_replication=True,
                 second_bucket_name=first_bucket.name,
                 mcg_obj=mcg_obj_session,
                 cleanup=True,
+                timeout=1200,
             )
             if event.is_set():
                 run_in_bg = False
@@ -176,73 +198,70 @@ def validate_mcg_caching(
 
     """
     while True:
-        verified_buckets = list()
         for bucket in cache_buckets:
-            try:
-                cache_uploaded_objs_dir = uploaded_objects_dir + "/cache"
-                cache_uploaded_objs_dir_2 = uploaded_objects_dir + "/cache_2"
-                cache_downloaded_objs_dir = downloaded_obejcts_dir + "/cache"
-                underlying_bucket_name = bucket.bucketclass.namespacestores[0].uls_name
+            cache_uploaded_objs_dir = uploaded_objects_dir + "/cache"
+            cache_uploaded_objs_dir_2 = uploaded_objects_dir + "/cache_2"
+            cache_downloaded_objs_dir = downloaded_obejcts_dir + "/cache"
+            underlying_bucket_name = bucket.bucketclass.namespacestores[0].uls_name
 
-                # Upload a random object to the bucket
-                logger.info(f"Uploading to the cache bucket: {bucket.name}")
-                objs_written_to_cache_bucket = write_random_test_objects_to_bucket(
-                    awscli_pod_session,
-                    bucket.name,
-                    cache_uploaded_objs_dir,
-                    pattern="Cache-",
-                    mcg_obj=mcg_obj_session,
-                )
-                wait_for_cache(
-                    mcg_obj_session,
-                    bucket.name,
-                    objs_written_to_cache_bucket,
-                    timeout=300,
-                )
+            # Upload a random object to the bucket
+            logger.info(f"Uploading to the cache bucket: {bucket.name}")
+            obj_name = f"Cache-{uuid4().hex}"
+            objs_written_to_cache_bucket = write_random_test_objects_to_bucket(
+                awscli_pod_session,
+                bucket.name,
+                cache_uploaded_objs_dir,
+                pattern=obj_name,
+                mcg_obj=mcg_obj_session,
+            )
+            wait_for_cache(
+                mcg_obj_session,
+                bucket.name,
+                objs_written_to_cache_bucket,
+                timeout=300,
+            )
 
-                # Write a random, larger object directly to the underlying storage of the bucket
-                logger.info(
-                    f"Uploading to the underlying bucket {underlying_bucket_name} directly"
-                )
-                write_random_test_objects_to_bucket(
-                    awscli_pod_session,
-                    underlying_bucket_name,
-                    cache_uploaded_objs_dir_2,
-                    pattern="Cache-",
-                    s3_creds=cld_mgr.aws_client.nss_creds,
-                    bs="2M",
-                )
+            # Write a random, larger object directly to the underlying storage of the bucket
+            logger.info(
+                f"Uploading to the underlying bucket {underlying_bucket_name} directly"
+            )
+            write_random_test_objects_to_bucket(
+                awscli_pod_session,
+                underlying_bucket_name,
+                cache_uploaded_objs_dir_2,
+                pattern=obj_name,
+                s3_creds=cld_mgr.aws_client.nss_creds,
+                bs="2M",
+            )
 
-                # Download the object from the cache bucket
-                sync_object_directory(
-                    awscli_pod_session,
-                    f"s3://{bucket.name}",
-                    cache_downloaded_objs_dir,
-                    mcg_obj_session,
-                )
+            # Download the object from the cache bucket
+            awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {cache_downloaded_objs_dir}")
+            sync_object_directory(
+                awscli_pod_session,
+                f"s3://{bucket.name}",
+                cache_downloaded_objs_dir,
+                mcg_obj_session,
+            )
 
-                assert verify_s3_object_integrity(
-                    original_object_path=f"{cache_uploaded_objs_dir}/Cache-0",
-                    result_object_path=f"{cache_downloaded_objs_dir}/Cache-0",
+            assert verify_s3_object_integrity(
+                original_object_path=f"{cache_uploaded_objs_dir}/{obj_name}0",
+                result_object_path=f"{cache_downloaded_objs_dir}/{obj_name}0",
+                awscli_pod=awscli_pod_session,
+            ), "The uploaded and downloaded cached objects have different checksums"
+
+            assert (
+                verify_s3_object_integrity(
+                    original_object_path=f"{cache_uploaded_objs_dir_2}/{obj_name}0",
+                    result_object_path=f"{cache_downloaded_objs_dir}/{obj_name}0",
                     awscli_pod=awscli_pod_session,
-                ), "The uploaded and downloaded cached objects have different checksums"
+                )
+                is False
+            ), "The cached object was replaced by the new one before the TTL has expired"
+            logger.info(f"Verified caching for bucket: {bucket.name}")
 
-                assert (
-                    verify_s3_object_integrity(
-                        original_object_path=f"{cache_uploaded_objs_dir_2}/Cache-0",
-                        result_object_path=f"{cache_downloaded_objs_dir}/Cache-0",
-                        awscli_pod=awscli_pod_session,
-                    )
-                    is False
-                ), "The cached object was replaced by the new one before the TTL has expired"
-                verified_buckets.append(bucket.name)
-                if event.is_set():
-                    run_in_bg = False
-                    break
-            except Exception:
-                logger.warning(f"verified so far: {verified_buckets}")
-
-                raise
+            if event.is_set():
+                run_in_bg = False
+                break
 
         if not run_in_bg:
             logger.warning("Stopping noobaa caching verification")
@@ -269,14 +288,10 @@ def validate_rgw_kafka_notification(kafka_rgw_dict, event, run_in_bg=False):
     kafka_topic = kafka_rgw_dict["kafka_topic"]
 
     while True:
+        data = data + f"{uuid4().hex}"
 
-        try:
-
-            def put_object_to_bucket(bucket_name, key, body):
-                return s3_client.put_object(Bucket=bucket_name, Key=key, Body=body)
-
-        except botoexceptions.ClientError:
-            logger.warning("s3 put object timedout but ignoring as of now")
+        def put_object_to_bucket(bucket_name, key, body):
+            return s3_client.put_object(Bucket=bucket_name, Key=key, Body=body)
 
         assert put_object_to_bucket(
             bucketname, "key-1", data
@@ -345,7 +360,10 @@ def validate_mcg_object_expiration(
 
             for i in range(object_amount):
                 s3_put_object(
-                    mcg_obj, bucket.name, f"{prefix}/obj-key-{i}", "Some random data"
+                    mcg_obj,
+                    bucket.name,
+                    f"{prefix}/obj-key-{uuid4().hex}",
+                    "Some random data",
                 )
             expire_objects_in_bucket(bucket.name)
             sample_if_objects_expired(mcg_obj, bucket.name)

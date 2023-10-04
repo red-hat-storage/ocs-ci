@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
@@ -26,7 +27,7 @@ class TestMCGRecovery(E2ETest):
 
     @pytest.mark.parametrize(
         argnames=["bucket_amount", "object_amount"],
-        argvalues=[pytest.param(2, 15)],
+        argvalues=[pytest.param(5, 5)],
     )
     def test_mcg_db_backup_recovery(
         self,
@@ -42,21 +43,18 @@ class TestMCGRecovery(E2ETest):
             num_of_buckets=bucket_amount,
             object_amount=object_amount,
             is_disruptive=True,
-            skip_any_features=["caching", "nsfs", "rgw kafka"],
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
 
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
-        import time
 
+        # wait 1 min for complete stabilization
         time.sleep(60)
-        event, threads = validate_mcg_bg_features(
+
+        validate_mcg_bg_features(
             feature_setup_map,
             run_in_bg=False,
-            skip_any_features=["caching", "nsfs", "rgw kafka"],
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
             object_amount=object_amount,
         )
-
-        event.set()
-        for th in threads:
-            th.result()
         log.info("No issues seen with the MCG bg feature validation")

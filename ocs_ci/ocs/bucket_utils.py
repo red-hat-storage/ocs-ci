@@ -1333,6 +1333,7 @@ def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=No
 
     Returns:
         bool: True if all the objects exist in the cache as expected, False otherwise
+
     """
     res = mcg_obj.send_rpc_query(
         "object_api",
@@ -1344,7 +1345,7 @@ def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=No
     list_objects_res = [name["key"] for name in res.get("reply").get("objects")]
     if not expected_objects_names:
         expected_objects_names = []
-    # if set(expected_objects_names) == set(list_objects_res):
+
     for obj in expected_objects_names:
         if obj not in list_objects_res:
             logger.warning(
@@ -1774,6 +1775,7 @@ def random_object_round_trip_verification(
     cleanup=False,
     result_pod=None,
     result_pod_path=None,
+    **kwargs,
 ):
     """
     Writes random objects in a pod, uploads them to a bucket,
@@ -1817,7 +1819,7 @@ def random_object_round_trip_verification(
     )
     written_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {upload_dir}").split(" ")
     if wait_for_replication:
-        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name)
+        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name, **kwargs)
         bucket_name = second_bucket_name
     # Download the random objects that were uploaded to the bucket
     sync_object_directory(
@@ -1917,49 +1919,18 @@ def create_aws_bs_using_cli(
     )
 
 
-def change_expiration_query_interval(new_interval):
-    """
-    Change how often noobaa should check for object expiration
-    By default it will be 8 hours
-    Args:
-        new_interval (int): New interval in minutes
-    """
-
-    from ocs_ci.ocs.resources.pod import (
-        get_noobaa_core_pod,
-        wait_for_pods_to_be_running,
-    )
-
-    nb_core_pod = get_noobaa_core_pod()
-    new_interval = new_interval * 60 * 1000
-    params = (
-        '[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", '
-        f'"value": {{ "name": "CONFIG_JS_LIFECYCLE_INTERVAL", "value": "{new_interval}" }}}}]'
-    )
-    OCP(kind="statefulset", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).patch(
-        resource_name=constants.NOOBAA_CORE_STATEFULSET,
-        params=params,
-        format_type="json",
-    )
-    logger.info(f"Updated the expiration query interval to {new_interval} ms")
-    nb_core_pod.delete()
-    wait_for_pods_to_be_running(pod_names=[nb_core_pod.name], timeout=300)
-
-
-def expire_objects_in_bucket(bucket_name, new_expire_interval=None):
+def expire_objects_in_bucket(bucket_name):
     """
     Manually expire the objects in a bucket
+
     Args:
         bucket_name (str): Name of the bucket
-        new_expire_interval (int): New expiration interval
+
     """
 
     from ocs_ci.ocs.resources.pod import (
         get_noobaa_db_pod,
     )
-
-    if new_expire_interval is not None and isinstance(new_expire_interval, int):
-        change_expiration_query_interval(new_expire_interval)
 
     creation_time = f"{date.today().year-1}-06-25T14:18:28.712Z"
     nb_db_pod = get_noobaa_db_pod()

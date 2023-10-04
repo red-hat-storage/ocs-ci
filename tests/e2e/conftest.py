@@ -827,6 +827,9 @@ def setup_mcg_caching_feature_buckets(request, bucket_factory):
         all_buckets = create_muliple_types_provider_obcs(
             number_of_buckets, cache_type, cloud_providers, bucket_factory
         )
+        logger.info(
+            f"These are the cache buckets created: {[bucket.name for bucket in all_buckets]}"
+        )
         return all_buckets
 
     return factory
@@ -834,7 +837,7 @@ def setup_mcg_caching_feature_buckets(request, bucket_factory):
 
 @pytest.fixture()
 def setup_mcg_expiration_feature_buckets(
-    request, bucket_factory, mcg_obj, change_noobaa_lifecycle_interval
+    request, bucket_factory, mcg_obj, reduce_expiration_interval
 ):
     """
     This fixture does the setup for validating MCG replication
@@ -859,9 +862,9 @@ def setup_mcg_expiration_feature_buckets(
         """
         type = dict()
         type["data"] = bucket_types["data"]
-
+        reduce_expiration_interval(interval=2)
         logger.info("Changed noobaa lifecycle interval to 2 minutes")
-        change_noobaa_lifecycle_interval(interval=2)
+
         expiration_rule = {
             "Rules": [
                 {
