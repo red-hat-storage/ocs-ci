@@ -195,6 +195,7 @@ def test_monitoring_reporting_ok_when_idle(workload_idle):
     osds_msg = "ceph_osd_{up,in} metrics should indicate no OSD issues"
     assert all(osd_validations), osds_msg
 
+
 @skipif_mcg_only
 @skipif_managed_service
 @skipif_ocs_version("<4.6")
