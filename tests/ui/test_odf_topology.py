@@ -226,6 +226,7 @@ class TestODFTopology(object):
             )
 
     @tier4a
+    @bugzilla("2242132")
     @ignore_leftovers
     @polarion_id("OCS-4905")
     def test_stop_start_node_validate_topology(
@@ -321,14 +322,13 @@ class TestODFTopology(object):
 
         logger.info(f"Verifying whether {constants.ALERT_NODEDOWN} has been triggered")
         alerts = api.wait_for_alert(name=constants.ALERT_NODEDOWN)
-        test_checks = dict()
+
         test_checks["prometheus_CephNodeDown_alert_removed"] = len(alerts) == 0
         if not test_checks["prometheus_CephNodeDown_alert_removed"]:
             logger.error(
                 f"Prometheus alert '{constants.ALERT_NODEDOWN}' is not removed"
             )
-        else:
-            logger.info(f"alerts found: {str(alerts)}")
+            logger.error(f"alerts found: {str(alerts)}")
 
         logger.info(
             f"sleep {min_wait_for_update}min to update UI and remove {constants.ALERT_NODEDOWN} alert"
