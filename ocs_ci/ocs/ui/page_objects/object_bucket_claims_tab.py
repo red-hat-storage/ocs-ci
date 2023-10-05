@@ -56,7 +56,7 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         ocp_obj.exec_oc_cmd(
             f"adm policy add-role-to-user admin {username} -n {sc_name}"
         )
-        BucketsUI.navigate_object_bucket_claims_page(self)
+        self.navigate_object_bucket_claims_page()
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
         )
