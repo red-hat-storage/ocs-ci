@@ -848,14 +848,14 @@ def gracefully_reboot_ocp_nodes(
     gracefully_reboot_nodes()
 
 
-def verify_failover_relocate_status_cli(namespace):
+def failover_relocate_status_cli(namespace, action=constants.ACTION_FAILOVER):
     """
-    Function to verify current status of in progress Failover/Relocate operation in hub using drpc status
+    Get the current status of in progress Failover/Relocate operation in hub using drpc status
 
     Args:
-        action (str): action "Failover" or "Relocate" which was taken on the workloads
         namespace (str): the namespace of the drpc resources
-        timeout (int): timeout to wait for certain elements to be found on the ACM UI
+        action (str): action "Failover" or "Relocate" which was taken on the workloads,
+                    "Failover" is set to default
 
     Returns:
         bool: True if the action is succeed without any errors, else False
@@ -866,7 +866,6 @@ def verify_failover_relocate_status_cli(namespace):
     config.switch_acm_ctx()
     # Verify the drpc status of application
     drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace)
-    action = drpc_obj.get().get("items")[0].get("spec").get("action")
     state = drpc_obj.get().get("items")[0].get("status").get("phase")
     progression_state = drpc_obj.get().get("items")[0].get("status").get("progression")
     peer_ready_state = (
@@ -899,6 +898,44 @@ def verify_failover_relocate_status_cli(namespace):
     config.switch_ctx(restore_index)
 
 
+def verify_failover_relocate_status_cli(
+    namespace, action=constants.ACTION_FAILOVER, timeout=200, sleep=10
+):
+    """
+    Function to verify current status of in progress Failover/Relocate operation in hub using drpc status
+
+    Args:
+        namespace (str): the namespace of the drpc resources
+        action (str): action "Failover" or "Relocate" which was taken on the workloads,
+                "Failover" is set to default
+        timeout (int): timeout to wait for certain elements to be found or reach state
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True if the action is succeed without any errors, else False
+
+    """
+
+    try:
+        for status in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=failover_relocate_status_cli,
+            namespace=namespace,
+            action=action,
+        ):
+            #
+            if status:
+                logger.info(f" {action} successfully verified! ")
+                return True
+
+    except TimeoutExpiredError:
+        logger.warning(
+            f"{action} didn't reach the expected state " f"after {timeout} seconds"
+        )
+        return False
+
+
 def verify_ramen_pod_running_and_not_restarted(
     pod_restart_count=0, namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE
 ):
@@ -918,14 +955,17 @@ def verify_ramen_pod_running_and_not_restarted(
     pod_obj_list = get_all_pods(namespace=namespace)
     for pod_obj in pod_obj_list:
         restart_count = (
-            pod_obj.get("status").get("containerStatuses")[0].get("restartCount")
+            pod_obj.get("status")
+            .get("status")
+            .get("containerStatuses")[0]
+            .get("restartCount")
         )
-        pod_state = pod_obj.get("status").get("phase")
+        pod_state = pod_obj.get("status").get("status").get("phase")
         if pod_state == "Running" and restart_count == pod_restart_count:
             logger.info(f"Pod {pod_obj.name} is running state and not restarted ")
+            return True
         logger.error(
             f"Pod {pod_obj.name} is in {pod_state} state and restart count of pod {restart_count}"
         )
         logger.info(f"{pod_obj}")
         return False
-    return True
