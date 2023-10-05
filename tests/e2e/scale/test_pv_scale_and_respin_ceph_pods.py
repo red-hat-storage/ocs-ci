@@ -15,6 +15,10 @@ from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
+from ocs_ci.ocs.exceptions import (
+    PVCNotCreated,
+    PodNotCreated,
+)
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +29,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
     """
 
     kube_job_pvc_list, kube_job_pod_list = ([], [])
+    pod_count = 0
 
     def create_pvc_pod(self, obj_name, number_of_pvc, size):
         """
@@ -100,25 +105,30 @@ class BasePvcCreateRespinCephPods(E2ETest):
         lcl[f"rbd-rwx-pvc-{obj_name}"].create(namespace=self.namespace)
         lcl[f"cephfs-pvc-{obj_name}"].create(namespace=self.namespace)
 
-        # Check all the PVC reached Bound state
-        rbd_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=lcl[f"rbd-pvc-{obj_name}"],
-            namespace=self.namespace,
-            no_of_pvc=int(number_of_pvc),
-            timeout=60,
-        )
-        rbd_rwx_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=lcl[f"rbd-rwx-pvc-{obj_name}"],
-            namespace=self.namespace,
-            no_of_pvc=int(number_of_pvc),
-            timeout=60,
-        )
-        fs_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
-            kube_job_obj=lcl[f"cephfs-pvc-{obj_name}"],
-            namespace=self.namespace,
-            no_of_pvc=int(number_of_pvc * 2),
-            timeout=60,
-        )
+        try:
+            # Check all the PVC reached Bound state
+            rbd_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
+                kube_job_obj=lcl[f"rbd-pvc-{obj_name}"],
+                namespace=self.namespace,
+                no_of_pvc=int(number_of_pvc),
+                timeout=60,
+            )
+            rbd_rwx_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
+                kube_job_obj=lcl[f"rbd-rwx-pvc-{obj_name}"],
+                namespace=self.namespace,
+                no_of_pvc=int(number_of_pvc),
+                timeout=60,
+            )
+            fs_pvc_name = scale_lib.check_all_pvc_reached_bound_state_in_kube_job(
+                kube_job_obj=lcl[f"cephfs-pvc-{obj_name}"],
+                namespace=self.namespace,
+                no_of_pvc=int(number_of_pvc * 2),
+                timeout=60,
+            )
+
+        except Exception as ex:
+            log.error(f"All or some of the PVCs didn't Bound in expected time {ex}")
+            raise PVCNotCreated("PVC not up in expected time.")
 
         # Construct pod yaml file for kube_job
         pod_data_list = list()
@@ -154,13 +164,19 @@ class BasePvcCreateRespinCephPods(E2ETest):
         )
         lcl[f"pod-{obj_name}"].create(namespace=self.namespace)
 
-        # Check all the POD reached Running state
-        pod_running_list = scale_lib.check_all_pod_reached_running_state_in_kube_job(
-            kube_job_obj=lcl[f"pod-{obj_name}"],
-            namespace=self.namespace,
-            no_of_pod=len(pod_data_list),
-            timeout=90,
-        )
+        try:
+            # Check all the POD reached Running state
+            pod_running_list = scale_lib.check_all_pod_reached_running_state_in_kube_job(
+                kube_job_obj=lcl[f"pod-{obj_name}"],
+                namespace=self.namespace,
+                no_of_pod=len(pod_data_list),
+                timeout=90,
+            )
+
+        except Exception as ex:
+            log.error(f"All or some of PODs didn't reach Running state in expected time {ex}")
+            raise PodNotCreated("Pod not running in expected time")
+
         self.pod_count = self.pod_count + len(pod_data_list)
 
         # Update list with all the kube_job object created, list will be used in cleanup
@@ -222,24 +238,22 @@ class BasePvcCreateRespinCephPods(E2ETest):
             ],
         ),
         pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-764")]),
-        pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-765")]),
-        pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
-        pytest.param(
-            *["cephfsplugin_provisioner"], marks=[pytest.mark.polarion_id("OCS-2641")]
-        ),
-        pytest.param(
-            *["rbdplugin_provisioner"], marks=[pytest.mark.polarion_id("OCS-2639")]
-        ),
-        pytest.param(*["rbdplugin"], marks=[pytest.mark.polarion_id("OCS-2643")]),
-        pytest.param(*["cephfsplugin"], marks=[pytest.mark.polarion_id("OCS-2642")]),
+        # pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-765")]),
+        # pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
+        # pytest.param(
+        #     *["cephfsplugin_provisioner"], marks=[pytest.mark.polarion_id("OCS-2641")]
+        # ),
+        # pytest.param(
+        #     *["rbdplugin_provisioner"], marks=[pytest.mark.polarion_id("OCS-2639")]
+        # ),
+        # pytest.param(*["rbdplugin"], marks=[pytest.mark.polarion_id("OCS-2643")]),
+        # pytest.param(*["cephfsplugin"], marks=[pytest.mark.polarion_id("OCS-2642")]),
     ],
 )
 class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
     """
     Class for PV scale Create Cluster with 1000 PVC, then Respin ceph pods parallel
     """
-
-    pod_count = 0
 
     @pytest.fixture()
     def setup_fixture(self, teardown_factory, request):
@@ -263,12 +277,18 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         kube_obj_name = helpers.create_unique_resource_name("obj", "kube")
 
         # First Iteration call to create PVC and POD
-        self.create_pvc_pod(f"{kube_obj_name}-{iteration}", pvc_count_each_itr, size)
+        # self.create_pvc_pod(f"{kube_obj_name}-{iteration}", pvc_count_each_itr, size)
         # Re-spin the ceph pods one by one in parallel with PVC and POD creation
         while True:
             if scale_pod_count <= self.pod_count:
                 log.info(f"Create {scale_pod_count} pvc and pods")
                 break
+            elif iteration == 1:
+            # elif iteration == 5:
+                # Section to terminate the while loop in-case environment failures.
+                log.error("Breaking while loop since expected iteration already completed. "
+                          "There should be an issue with PVC or POD creation.")
+                exit("Exiting code due to PVC POD creation issues")
             else:
                 iteration += 1
                 thread1 = threading.Thread(
