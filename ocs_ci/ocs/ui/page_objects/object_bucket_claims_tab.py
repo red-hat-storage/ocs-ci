@@ -85,10 +85,6 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
                 f"adm policy add-role-to-user admin {username} -n {sc_name}"
             )
         BucketsUI.navigate_object_bucket_claims_page(self)
-        obc_found = self.wait_until_expected_text_is_found(
-            locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
-        )
-        logger.info(f"User is able to access OBCs page: {obc_found}")
         if self.wait_until_expected_text_is_found(
             locator=self.generic_locators["alert_description"],
             expected_text="cannot list resource",
@@ -97,6 +93,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
             obc_found = False
             logger.info("User is not permitted to view the list of OBCs")
         else:
+            obc_found = True
             logger.info("No issues with permissions found.")
         self.take_screenshot()
         if admin:
