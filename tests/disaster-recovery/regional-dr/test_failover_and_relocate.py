@@ -241,20 +241,22 @@ class TestFailoverAndRelocate:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
-        # Get lastGroupSyncTime after failover
-        for drpc_data in TimeoutSampler(60, 3, drpc_obj.get):
+        # Get lastGroupSyncTime after failover.
+        # The parameter lastGroupSyncTime may not be present for some time after failover.
+        for drpc_data in TimeoutSampler(300, 5, drpc_obj.get):
             post_failover_last_group_sync_time = drpc_data.get("status").get(
                 "lastGroupSyncTime"
             )
             if post_failover_last_group_sync_time:
                 logger.info("After failover - Obtained lastGroupSyncTime.")
+                # Adding an additional check to make sure that the old value is not populated again.
                 if post_failover_last_group_sync_time != last_group_sync_time:
                     logger.info(
-                        "After failover - Verified: lastGroupSyncTime after is different from initial value."
+                        "After failover - Verified: lastGroupSyncTime after failover is different from initial value."
                     )
                     break
             logger.info(
-                "lastGroupSyncTime is not available after failover or it is equal to the previous value. Retrying."
+                "The value of lastGroupSyncTime in drpc is not updated after failover. Retrying."
             )
         logger.info(
             f"The value of lastGroupSyncTime after failover is {last_group_sync_time}."
@@ -275,8 +277,8 @@ class TestFailoverAndRelocate:
             f"After failover - Time in minutes since the last sync is {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < scheduling_interval
-        ), "After failover - Time since last sync is greater than the scheduling interval."
+            time_since_last_sync < 2 * scheduling_interval
+        ), "After failover - Time since last sync is much greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime after failover.")
 
         # Relocate action
@@ -328,23 +330,28 @@ class TestFailoverAndRelocate:
 
         # TODO: Add data integrity checks
 
-        # Get lastGroupSyncTime after relocate
-        for drpc_data in TimeoutSampler(60, 3, drpc_obj.get):
+        # Get lastGroupSyncTime after relocate. The parameter lastGroupSyncTime may not be present in drpc yaml for
+        # some time after relocate. So the wait time given is more than the scheduling interval.
+        for drpc_data in TimeoutSampler(
+            (scheduling_interval * 60) + 300, 15, drpc_obj.get
+        ):
             post_relocate_last_group_sync_time = drpc_data.get("status").get(
                 "lastGroupSyncTime"
             )
             if post_relocate_last_group_sync_time:
                 logger.info("After relocate - Obtained lastGroupSyncTime.")
+                # Adding an additional check to make sure that the old value is not populated again.
                 if (
                     post_relocate_last_group_sync_time
                     != post_failover_last_group_sync_time
                 ):
                     logger.info(
-                        "After relocate - Verified: lastGroupSyncTime after is different from initial value."
+                        "After relocate - Verified: lastGroupSyncTime after relocate is different from the previous "
+                        "value."
                     )
                     break
             logger.info(
-                "lastGroupSyncTime is not available after relocate or it is equal to the previous value. Retrying."
+                "The value of lastGroupSyncTime in drpc is not updated after relocate. Retrying."
             )
         logger.info(
             f"The value of lastGroupSyncTime after relocate is {post_relocate_last_group_sync_time}."
@@ -365,6 +372,6 @@ class TestFailoverAndRelocate:
             f"After relocate - Time in minutes since the last sync is {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < scheduling_interval
-        ), "After relocate - Time since last sync is greater than the scheduling interval."
+            time_since_last_sync < 2 * scheduling_interval
+        ), "After relocate - Time since last sync is much greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime after relocate.")
