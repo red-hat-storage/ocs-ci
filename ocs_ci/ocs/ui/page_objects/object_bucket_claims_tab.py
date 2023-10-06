@@ -74,14 +74,14 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
 
         """
 
-        sc_name = create_unique_resource_name("namespace-", "interface")
-        self.do_click(self.sc_loc["Developer_dropdown"])
-        self.do_click(self.sc_loc["select_administrator"], timeout=5)
-        self.do_click(self.sc_loc["create_project"])
-        self.do_send_keys(self.sc_loc["project_name"], sc_name)
-        self.do_click(self.sc_loc["save_project"])
-        ocp_obj = OCP()
         if admin:
+            sc_name = create_unique_resource_name("namespace-", "interface")
+            self.do_click(self.sc_loc["Developer_dropdown"])
+            self.do_click(self.sc_loc["select_administrator"], timeout=5)
+            self.do_click(self.sc_loc["create_project"])
+            self.do_send_keys(self.sc_loc["project_name"], sc_name)
+            self.do_click(self.sc_loc["save_project"])
+            ocp_obj = OCP()
             ocp_obj.exec_oc_cmd(
                 f"adm policy add-role-to-user admin {username} -n {sc_name}"
             )
@@ -100,11 +100,11 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         else:
             logger.info("No issues with permissions found.")
         self.take_screenshot()
-
-        namespaces = []
-        namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
-        namespaces.append(namespace_obj)
-        delete_projects(namespaces)
+        if admin:
+            namespaces = []
+            namespace_obj = OCP(kind=constants.NAMESPACE, namespace=sc_name)
+            namespaces.append(namespace_obj)
+            delete_projects(namespaces)
         return obc_found
 
     def _check_obc_cannot_be_used_before(self, rule_exp):
