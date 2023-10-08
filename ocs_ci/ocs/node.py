@@ -2768,3 +2768,19 @@ def generate_new_nodes_and_osd_running_nodes_ipi(
         log.info(f"osd running worker nodes: {osd_running_worker_nodes}")
 
     return osd_running_worker_nodes[:num_of_nodes]
+
+
+def is_node_rack_or_zone_exist(failure_domain, node_name):
+    """
+    Check if the node rack/zone exist
+
+    Args:
+        failure_domain (str): The failure domain
+        node_name (str): The node name
+
+    Returns:
+        bool: True if the node rack/zone exist. False otherwise
+
+    """
+    node_obj = get_node_objs([node_name])[0]
+    return get_node_rack_or_zone(failure_domain, node_obj) is not None

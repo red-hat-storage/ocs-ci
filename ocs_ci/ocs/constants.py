@@ -184,6 +184,7 @@ TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
+OPENSHIFT_API_CLUSTER_OPERATOR = "kube-apiserver"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
@@ -650,6 +651,7 @@ FIO_IO_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io.yaml")
 FIO_IO_RW_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io_rw.yaml")
 FIO_IO_FILLUP_PARAMS_YAML = os.path.join(TEMPLATE_FIO_DIR, "workload_io_fillup.yaml")
 FIO_DC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fio_dc.yaml")
+FIO_DEPLOYMENT_YAML = os.path.join(TEMPLATE_FIO_DIR, "fedora_deployment.yaml")
 
 # fio configuration files
 FIO_S3 = os.path.join(TEMPLATE_FIO_DIR, "config_s3.fio")
@@ -1033,6 +1035,12 @@ MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
+ARO_VNET = "aro-vnet"
+ARO_VNET_ADDRESS_PREFIXES = "10.0.0.0/22"
+ARO_WORKER_SUBNET = "worker-subnet"
+ARO_MASTER_SUBNET = "master-subnet"
+ARO_WORKER_SUBNET_ADDRESS_PREFIXES = "10.0.2.0/23"
+ARO_MASTER_SUBNET_ADDRESS_PREFIXES = "10.0.0.0/23"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"

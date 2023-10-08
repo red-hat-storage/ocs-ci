@@ -24,9 +24,15 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
 )
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
-from ocs_ci.utility import version
+from ocs_ci.utility import version, ssl_certs
 from ocs_ci.utility.connection import Connection
-from ocs_ci.utility.utils import upload_file, encode, decode
+from ocs_ci.utility.utils import (
+    upload_file,
+    encode,
+    decode,
+    download_file,
+    wait_for_machineconfigpool_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +124,25 @@ class ExternalCluster(object):
         upload_file(self.host, script_path, script_path, self.user, self.password)
         return script_path
 
+    def upload_rgw_cert_ca(self):
+        """
+        Upload RGW Cert CA to RHCS cluster
+
+        Returns:
+            str: absolute path to the CA Cert
+
+        """
+        rgw_cert_ca_path = get_and_apply_rgw_cert_ca()
+        remote_rgw_cert_ca_path = "/tmp/rgw-cert-ca.pem"
+        upload_file(
+            self.host,
+            rgw_cert_ca_path,
+            remote_rgw_cert_ca_path,
+            self.user,
+            self.password,
+        )
+        return remote_rgw_cert_ca_path
+
     def get_admin_keyring(self):
         """
         Fetches admin keyring from external RHCS cluster and updates to config.EXTERNAL_MODE
@@ -134,7 +159,8 @@ class ExternalCluster(object):
         """
         Fetches rgw endpoint api port.
 
-        For ceph 5.x, get port information from ceph config dump and for
+        For ceph 6.x, get port information from cephadm ls,
+        for ceph 5.x, get port information from ceph config dump and for
         ceph 4.x, get port information from ceph.conf on rgw node
 
         Returns:
@@ -143,27 +169,55 @@ class ExternalCluster(object):
         """
         port = None
         try:
-            # For ceph 5.x versions
-            cmd = "ceph config dump -f json"
-            _, out, _ = self.rhcs_conn.exec_cmd(cmd)
-            config_dump = json.loads(out)
-            for each in config_dump:
-                if each["name"].lower() == "rgw_frontends":
-                    port = each["value"].split("=")[-1]
-                    break
-            # if port doesn't have value, need to check ceph.conf from rgw node
-            if not port:
-                raise AttributeError(
-                    "config dump has no rgw port information. checking ceph.conf file on rgw node"
-                )
-        except Exception as ex:
-            # For ceph 4.x versions
-            logger.info(ex)
-            cmd = "grep -e '^rgw frontends' /etc/ceph/ceph.conf"
+            # For ceph 6.x versions
+            cmd = "cephadm ls"
             rgw_node = get_rgw_endpoint()
             rgw_conn = Connection(host=rgw_node, user=self.user, password=self.password)
             _, out, _ = rgw_conn.exec_cmd(cmd)
-            port = out.split(":")[-1]
+            daemons = json.loads(out)
+            port = [
+                daemon["ports"][0]
+                for daemon in daemons
+                if daemon["service_name"].startswith("rgw")
+            ][0]
+            # if port doesn't have value, need to check followup way
+            if not port:
+                raise AttributeError(
+                    "Command `cephadm ls` output doesn't have information about rgw port."
+                )
+        except Exception as ex:
+            logger.info(f"{ex})")
+            try:
+                # For ceph 5.x versions
+                cmd = "ceph config dump -f json"
+                _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+                config_dump = json.loads(out)
+                for each in config_dump:
+                    if each["name"].lower() == "rgw_frontends":
+                        # normal deployment: "beast port=80"
+                        # RGW with SSL: "beast ssl_port=443 ssl_certificate=config://rgw/cert/rgw.rgw.ssl"
+                        for option in each["value"].split():
+                            if "port=" in option:
+                                port = option.split("=")[-1]
+                        break
+                # if port doesn't have value, need to check ceph.conf from rgw node
+                if not port:
+                    raise AttributeError(
+                        "config dump has no rgw port information. checking ceph.conf file on rgw node"
+                    )
+            except Exception as ex:
+                # For ceph 4.x versions
+                logger.info(ex)
+                cmd = "grep -e '^rgw frontends' /etc/ceph/ceph.conf"
+                rgw_node = get_rgw_endpoint()
+                rgw_conn = Connection(
+                    host=rgw_node,
+                    user=self.user,
+                    private_key=self.ssh_key,
+                    password=self.password,
+                )
+                _, out, _ = rgw_conn.exec_cmd(cmd)
+                port = out.split(":")[-1]
 
         if not port:
             raise ExternalClusterRGWEndPointPortMissing
@@ -209,6 +263,11 @@ class ExternalCluster(object):
         """
         # upload exporter script to external RHCS cluster
         script_path = self.upload_exporter_script()
+
+        # upload RGW CA Cert and add required params (for RGW with SSL)
+        if config.EXTERNAL_MODE.get("rgw_secure"):
+            remote_rgw_cert_ca_path = self.upload_rgw_cert_ca()
+            params = f"{params} --rgw-tls-cert-path {remote_rgw_cert_ca_path}"
 
         # get external RHCS rhel version
         rhel_version = self.get_rhel_version()
@@ -364,6 +423,31 @@ def generate_exporter_script():
     )
 
     return external_cluster_details_exporter.name
+
+
+def get_and_apply_rgw_cert_ca():
+    """
+    Downloads CA Certificate of RGW if SSL is used and apply it to be trusted
+    by the OCP cluster
+
+    Returns:
+        str: path to the downloaded RGW Cert CA
+
+    """
+    rgw_cert_ca_path = tempfile.NamedTemporaryFile(
+        mode="w+",
+        prefix="rgw-cert-ca",
+        suffix=".pem",
+        delete=False,
+    ).name
+    download_file(
+        config.EXTERNAL_MODE["rgw_cert_ca"],
+        rgw_cert_ca_path,
+    )
+    # configure the CA cert to be trusted by the OCP cluster
+    ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
+    wait_for_machineconfigpool_status("all", timeout=1800)
+    return rgw_cert_ca_path
 
 
 def get_rgw_endpoint():

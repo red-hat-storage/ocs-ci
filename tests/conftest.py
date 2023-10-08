@@ -285,6 +285,16 @@ def pytest_collection_modifyitems(session, items):
                 items.remove(item)
 
 
+def pytest_collection_finish(session):
+    """
+    A pytest hook to get all collected tests post their collection modifications done in the varius
+    pytest_collection_modifyitems hook functions
+    Args:
+        session: pytest session
+    """
+    config.RUN["number_of_tests"] = len(session.items)
+
+
 @pytest.fixture()
 def supported_configuration():
     """
@@ -1025,6 +1035,7 @@ def pod_factory_fixture(request, pvc_factory):
         command=None,
         command_args=None,
         subpath=None,
+        deployment=False,
     ):
         """
         Args:
@@ -1050,6 +1061,7 @@ def pod_factory_fixture(request, pvc_factory):
             command_args (list): The arguments to be sent to the command running
                 on the pod
             subpath (str): Value of subPath parameter in pod yaml
+            deployment (bool): True for Deployment creation, False otherwise
 
         Returns:
             object: helpers.create_pod instance
@@ -1074,15 +1086,20 @@ def pod_factory_fixture(request, pvc_factory):
                 command_args=command_args,
                 subpath=subpath,
                 deploy_pod_status=status,
+                deployment=deployment,
             )
             assert pod_obj, "Failed to create pod"
-        if deployment_config:
-            dc_name = pod_obj.get_labels().get("name")
-            dc_ocp_dict = ocp.OCP(
-                kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace
-            ).get(resource_name=dc_name)
-            dc_obj = OCS(**dc_ocp_dict)
-            instances.append(dc_obj)
+
+        if deployment_config or deployment:
+            d_name = pod_obj.get_labels().get("name")
+            d_ocp_dict = ocp.OCP(
+                kind=constants.DEPLOYMENTCONFIG
+                if deployment_config
+                else constants.DEPLOYMENT,
+                namespace=pod_obj.namespace,
+            ).get(resource_name=d_name)
+            d_obj = OCS(**d_ocp_dict)
+            instances.append(d_obj)
 
         else:
             instances.append(pod_obj)
@@ -1090,8 +1107,8 @@ def pod_factory_fixture(request, pvc_factory):
             helpers.wait_for_resource_state(pod_obj, status, timeout=300)
             pod_obj.reload()
         pod_obj.pvc = pvc
-        if deployment_config:
-            return dc_obj
+        if deployment_config or deployment:
+            return d_obj
         return pod_obj
 
     def finalizer():
@@ -1426,6 +1443,10 @@ def health_checker(request, tier_marks_name):
 
     node = request.node
 
+    # ignore ceph health check for the TestFailurePropagator test cases
+    if "FailurePropagator" in str(node.cls):
+        return
+
     def finalizer():
         if not skipped:
             try:
@@ -1454,6 +1475,15 @@ def health_checker(request, tier_marks_name):
                         ceph_health_check_base()
                         log.info("Ceph health check passed at teardown")
             except CephHealthException:
+                if not config.RUN["skip_reason_test_found"]:
+                    squad_name = None
+                    for marker in node.iter_markers():
+                        if "_squad" in marker.name:
+                            squad_name = marker.name
+                    config.RUN["skip_reason_test_found"] = {
+                        "test_name": node.name,
+                        "squad": squad_name,
+                    }
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
@@ -1470,6 +1500,7 @@ def health_checker(request, tier_marks_name):
                     log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
+                config.RUN["skipped_tests_ceph_health"] += 1
                 skipped = True
                 # skip because ceph is not in good health
                 pytest.skip("Ceph health check failed at setup")

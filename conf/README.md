@@ -57,6 +57,15 @@ run it belongs here.
 * `log_utilization` - Enable logging of cluster utilization metrics every 10 seconds. Set via --log-cluster-utilization
 * `use_ocs_worker_for_scale` - Use OCS workers for scale testing (Default: false)
 * `load_status` - Current status of IO load
+* `skip_reason_test_found` - In the case the cluster left unhealthy, this param is used to determine the
+  test case that is likely to cause that
+* `skipped_tests_ceph_health` - The number of tests that got skipped due to Ceph being unhealthy
+* `number_of_tests` - The number of tests being collected for the test execution
+* `skipped_on_ceph_health_ratio` - The ratio of tests skipped due to Ceph unhealthy against the
+  number of tests being collected for the test execution
+* `skipped_on_ceph_health_threshold` - The allowed threshold for the ratio of tests skipped due to Ceph unhealthy against the
+  number of tests being collected for the test execution. The default value is set to 0.1 (10%).
+  For acceptance suite, the value would be set to 0
 
 #### DEPLOYMENT
 
@@ -286,6 +295,8 @@ Configuration specific to external Ceph cluster
 * `admin_keyring`
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
+* `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
+* `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
 
 ##### login
 

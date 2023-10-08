@@ -1464,6 +1464,14 @@ def parse_html_for_email(soup):
             data = td.text.replace("&apos", "")
             td.string = data
 
+    skips_ceph_health_ratio = config.RUN.get("skipped_on_ceph_health_ratio")
+    if skips_ceph_health_ratio > 0:
+        skipped = soup.body.find_all(attrs={"class": "skipped"})
+        skipped_number = skipped[0].string.split(" ")[0]
+        skipped[0].string.replace_with(
+            f"{skipped_number} skipped ({skips_ceph_health_ratio * 100}% on Ceph health)"
+        )
+
     main_header = soup.find("h1")
     main_header.string.replace_with("OCS-CI RESULTS")
 
@@ -3699,7 +3707,7 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=900):
+def wait_for_machineconfigpool_status(node_type, timeout=900, skip_tls_verify=False):
     """
     Check for Machineconfigpool status
 
@@ -3708,6 +3716,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
             status is updated.
             e.g: worker, master and all if we want to check for all nodes
         timeout (int): Time in seconds to wait
+        skip_tls_verify (bool): True if allow skipping TLS verification
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -3721,7 +3730,11 @@ def wait_for_machineconfigpool_status(node_type, timeout=900):
 
     for role in node_types:
         log.info(f"Checking machineconfigpool status for {role} nodes")
-        ocp_obj = ocp.OCP(kind=constants.MACHINECONFIGPOOL, resource_name=role)
+        ocp_obj = ocp.OCP(
+            kind=constants.MACHINECONFIGPOOL,
+            resource_name=role,
+            skip_tls_verify=skip_tls_verify,
+        )
         machine_count = ocp_obj.get()["status"]["machineCount"]
 
         assert ocp_obj.wait_for_resource(

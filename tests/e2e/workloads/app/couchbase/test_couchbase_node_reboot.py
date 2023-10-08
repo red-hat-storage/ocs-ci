@@ -25,7 +25,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 log = logging.getLogger(__name__)
 
 
-@skipif_ocp_version(">=4.12")
+@skipif_ocp_version(">=4.13")
 @workloads
 @ignore_leftovers
 class TestCouchBaseNodeReboot(E2ETest):
