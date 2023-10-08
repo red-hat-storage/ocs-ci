@@ -739,7 +739,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
         )
         cluster_kubeconfig = provider_kubeconfig
     else:
-        cluster_kubeconfig = ""
+        cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_pod_obj = OCP(
