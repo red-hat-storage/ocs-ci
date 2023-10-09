@@ -168,10 +168,10 @@ class BasePvcCreateRespinCephPods(E2ETest):
             # Check all the POD reached Running state
             pod_running_list = (
                 scale_lib.check_all_pod_reached_running_state_in_kube_job(
-                kube_job_obj=lcl[f"pod-{obj_name}"],
-                namespace=self.namespace,
-                no_of_pod=len(pod_data_list),
-                timeout=90,
+                    kube_job_obj=lcl[f"pod-{obj_name}"],
+                    namespace=self.namespace,
+                    no_of_pod=len(pod_data_list),
+                    timeout=90,
                 )
             )
 
