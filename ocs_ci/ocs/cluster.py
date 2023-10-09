@@ -2982,22 +2982,6 @@ def get_lvm_full_version():
     return full_version
 
 
-def set_osd_op_complaint_time(osd_op_complaint_time_val: float) -> dict:
-    """
-    Set osd_op_complaint_time to the given value
-
-    Args:
-        osd_op_complaint_time_val (float): Value in seconds to set osd_op_complaint_time to
-
-    Returns:
-        dict: output of the command
-    """
-    ct_pod = pod.get_ceph_tools_pod()
-    return ct_pod.exec_ceph_cmd(
-        f"ceph config set osd osd_op_complaint_time {osd_op_complaint_time_val}"
-    )
-
-
 def get_full_ratio_from_osd_dump():
     """
     Get the full ratio value from osd map
