@@ -229,7 +229,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 fio_filename=f"{pod_obj.name}_io",
             )
 
-    @polarion_id("")
+    @polarion_id("OCS-5176")
     def test_resource_deletion_during_pvc_pod_creation_deletion_and_io(
         self, setup_base, multi_pvc_factory, pod_factory
     ):
