@@ -1969,7 +1969,7 @@ bluestore_prefer_deferred_size_hdd = 0
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
-debug_mon = 20
+debug_mon = 30
 debug_ms = 1
 debug_paxos = 20
 debug_crush = 20
