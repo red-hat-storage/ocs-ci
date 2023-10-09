@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     metrics_for_external_mode_required,
     blue_squad,
     skipif_mcg_only,
+    bugzilla,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
@@ -167,6 +168,7 @@ def test_ceph_metrics_available():
     assert list_of_metrics_without_results == [], msg
 
 
+@bugzilla("2238400")
 @skipif_mcg_only
 @blue_squad
 @tier1
