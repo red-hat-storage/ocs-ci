@@ -12,7 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -680,7 +680,16 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                 results[name]["delete"][
                                     "start"
                                 ] = extruct_timestamp_from_log(line)
-                        if re.search(f'delete "{pv_name}": succeeded', line):
+                        if (
+                            re.search(f'delete "{pv_name}": succeeded', line)
+                            and (
+                                version.get_semantic_ocs_version_from_config()
+                                <= version.VERSION_4_13
+                            )
+                        ) or re.search(
+                            f'delete "{pv_name}": persistentvolume deleted succeeded',
+                            line,
+                        ):
                             if results[name]["delete"]["end"] is None:
                                 results[name]["delete"][
                                     "end"
