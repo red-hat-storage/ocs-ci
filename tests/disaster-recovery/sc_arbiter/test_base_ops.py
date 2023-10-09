@@ -40,8 +40,6 @@ class TestBaseOperations:
         bucket_factory,
         rgw_bucket_factory,
         add_lso_nodes_and_teardown,
-        setup_logwriter_cephfs_workload_factory,
-        setup_logwriter_rbd_workload_factory,
     ):
         """
         This test will perform base operations like add capacity,
