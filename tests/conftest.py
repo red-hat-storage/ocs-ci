@@ -6930,6 +6930,7 @@ def add_nodes():
     """
     Test for adding worker nodes to the cluster while IOs
     """
+    from ocs_ci.framework import config
 
     def factory(
         ocs_nodes=False,

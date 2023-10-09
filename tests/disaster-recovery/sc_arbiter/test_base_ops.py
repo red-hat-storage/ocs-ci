@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-# import time
+import time
 
 # from ocs_ci.ocs.resources.storage_cluster import add_capacity_lso
 # from ocs_ci.ocs.flowtest import FlowOperations
@@ -40,6 +40,8 @@ class TestBaseOperations:
         bucket_factory,
         rgw_bucket_factory,
         add_lso_nodes_and_teardown,
+        setup_logwriter_cephfs_workload_factory,
+        setup_logwriter_rbd_workload_factory,
     ):
         """
         This test will perform base operations like add capacity,
@@ -94,9 +96,11 @@ class TestBaseOperations:
 
         # add node to the data-zone and turn off the original node
         orginal_node = data_nodes[0]
-        logger.info(orginal_node)
+        logger.info(f"Original node: {orginal_node}")
         add_lso_nodes_and_teardown(
             node_count=1,
             ocs_nodes=True,
             other_labels=[f"{constants.ZONE_LABEL}={data_zones[0]}"],
         )
+        logger.info("Done adding node")
+        time.sleep(600)
