@@ -191,7 +191,7 @@ class TestBulkCloneCreation(PASTest):
                 resource_count=self.pvc_count,
                 namespace=self.namespace,
                 status=constants.STATUS_COMPLETED,
-                timeout=5400, #old value 1200
+                timeout=1200,
                 sleep_time=30,
             )
             log.info("All the PODs completed writing data to the PVC's")
@@ -224,7 +224,7 @@ class TestBulkCloneCreation(PASTest):
                     resource_count=self.pvc_count * 2,
                     namespace=self.namespace,
                     status=constants.STATUS_BOUND,
-                    timeout=5400,#old value 1200
+                    timeout=1200,
                     sleep_time=30,
                 )
             except Exception as ex:
@@ -252,7 +252,7 @@ class TestBulkCloneCreation(PASTest):
             )
 
             log.info(
-                f"Total creation time = {total_time} secs, csi creation time = {csi_creation_time} secs,"
+                f"Total creation time = {total_time} secs, csi creation time = {csi_creation_time},"
                 f" data size = {self.total_files_size} MB, speed = {speed} MB/sec "
                 f"for {self.interface} clone in bulk of {self.pvc_count} clones."
             )
