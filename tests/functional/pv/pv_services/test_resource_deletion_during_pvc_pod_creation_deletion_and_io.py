@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4c,
     polarion_id,
+    green_squad,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -40,6 +41,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
+@green_squad
 class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
     """
     This class consists of tests which verifies resource deletion during multiple operations such as
