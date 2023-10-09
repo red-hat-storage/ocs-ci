@@ -70,6 +70,11 @@ class TestCustomStorageClassNames:
             OCS_COMPONENTS_MAP["blockpools"],
         ]
         for sc_type in self.sc_type_list:
+            if (config.ENV_DATA.get("platform").lower() == "aws") and (
+                sc_type == OCS_COMPONENTS_MAP["rgw"]
+            ):
+                continue
+
             random_sc_name = f"custom-{sc_type}-{gen_alpha()}".lower()
             log.info(
                 f"Adding custom storageclass '{random_sc_name}' of type '{sc_type}' in storagecluster spec."
