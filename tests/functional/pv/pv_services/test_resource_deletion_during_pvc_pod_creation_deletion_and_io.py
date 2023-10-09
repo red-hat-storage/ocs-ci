@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4c,
     polarion_id,
-    skipif_external_mode,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -41,7 +40,6 @@ log = logging.getLogger(__name__)
 
 @tier4
 @tier4c
-@skipif_external_mode
 class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
     """
     This class consists of tests which verifies resource deletion during multiple operations such as
@@ -238,17 +236,26 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         and IO are progressing
 
         """
-        ceph_csi_pods_to_delete = [
-            "cephfsplugin",
-            "rbdplugin",
-            "cephfsplugin_provisioner",
-            "rbdplugin_provisioner",
-            "operator",
-            "mgr",
-            "mon",
-            "osd",
-            "mds",
-        ]
+        if config.DEPLOYMENT["external_mode"]:
+            ceph_csi_pods_to_delete = [
+                "cephfsplugin",
+                "rbdplugin",
+                "cephfsplugin_provisioner",
+                "rbdplugin_provisioner",
+                "operator",
+            ]
+        else:
+            ceph_csi_pods_to_delete = [
+                "cephfsplugin",
+                "rbdplugin",
+                "cephfsplugin_provisioner",
+                "rbdplugin_provisioner",
+                "operator",
+                "mgr",
+                "mon",
+                "osd",
+                "mds",
+            ]
 
         (
             pvc_objs,
@@ -421,20 +428,20 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         log.info("Setup for running IO is completed on all pods.")
 
         # Start IO on pods having PVCs to delete to load data
-        # pods_for_pvc_io = [
-        #     pod_obj
-        #     for pod_obj in pods_for_pvc
-        #     if pod_obj.pvc
-        #     in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_for_pvc])
-        # ]
-        # log.info("Starting IO on pods having PVCs to delete.")
-        # self.run_io_on_pods(pods_for_pvc_io)
-        # log.info("IO started on pods having PVCs to delete.")
-        #
-        # log.info("Fetching IO results from the pods having PVCs to delete.")
-        # for pod_obj in pods_for_pvc_io:
-        #     pod_obj.get_fio_results(300)
-        # log.info("Verified IO result on pods having PVCs to delete.")
+        pods_for_pvc_io = [
+            pod_obj
+            for pod_obj in pods_for_pvc
+            if pod_obj.pvc
+            in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_for_pvc])
+        ]
+        log.info("Starting IO on pods having PVCs to delete.")
+        self.run_io_on_pods(pods_for_pvc_io)
+        log.info("IO started on pods having PVCs to delete.")
+
+        log.info("Fetching IO results from the pods having PVCs to delete.")
+        for pod_obj in pods_for_pvc_io:
+            pod_obj.get_fio_results(300)
+        log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
         assert self.delete_pods(
