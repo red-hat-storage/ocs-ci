@@ -1,6 +1,6 @@
 import pytest
 
-from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods, get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp
 
