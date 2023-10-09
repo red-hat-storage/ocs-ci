@@ -6196,3 +6196,35 @@ def scc_factory(request):
 
     request.addfinalizer(teardown)
     return create_scc
+
+
+@pytest.fixture()
+def set_osd_op_complaint_time(request, reduced_osd_complaint_time: float) -> dict:
+    """
+    Set osd_op_complaint_time to the given value
+
+    Args:
+        request: Pytest request object
+        reduced_osd_complaint_time (float): Value in seconds to set osd_op_complaint_time to
+
+    Returns:
+        dict: output of the command
+    """
+    ct_pod = get_ceph_tools_pod()
+    cmd_status = ct_pod.exec_ceph_cmd(
+        f"ceph config set osd osd_op_complaint_time {reduced_osd_complaint_time}"
+    )
+
+    def finalizer():
+        """
+        Set default values for:
+          osd_op_complaint_time=30.000000
+        """
+        # set the osd_op_complaint_time to selected monitor back to default value
+        ct_pod.exec_ceph_cmd(
+            f"ceph config set osd osd_op_complaint_time {constants.DEFAULT_OSD_OP_COMPLAINT_TIME}"
+        )
+
+    request.addfinalizer(finalizer)
+
+    return cmd_status
