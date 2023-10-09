@@ -194,10 +194,6 @@ class TestCephOSDSlowOps(object):
         self.test_pass = None
         self.pod_objs = []
 
-        reduced_osd_complaint_time = 0.1
-
-        set_osd_op_complaint_time(reduced_osd_complaint_time)
-
         def finalizer_delete_resources():
             """
             Delete resources created during the test
@@ -260,6 +256,9 @@ class TestCephOSDSlowOps(object):
     @tier3
     @pytest.mark.polarion_id("OCS-5158")
     @blue_squad
+    @pytest.mark.parametrize(
+        argnames=["reduced_osd_complaint_time"], argvalues=[pytest.param(0.1)]
+    )
     def test_ceph_osd_slow_ops_alert(self, setup):
         """
         Test to verify bz #1966139, more info about Prometheus alert - #1885441
