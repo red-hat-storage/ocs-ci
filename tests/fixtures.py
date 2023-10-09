@@ -339,35 +339,3 @@ def create_serviceaccount(request):
         namespace=class_instance.project_obj.namespace,
     )
     assert class_instance.sa_obj, "Failed to create serviceaccount"
-
-
-@pytest.fixture()
-def set_osd_op_complaint_time(request, osd_op_complaint_time_val: float) -> dict:
-    """
-    Set osd_op_complaint_time to the given value
-
-    Args:
-        request: Pytest request object
-        osd_op_complaint_time_val (float): Value in seconds to set osd_op_complaint_time to
-
-    Returns:
-        dict: output of the command
-    """
-    ct_pod = get_ceph_tools_pod()
-    cmd_status = ct_pod.exec_ceph_cmd(
-        f"ceph config set osd osd_op_complaint_time {osd_op_complaint_time_val}"
-    )
-
-    def finalizer():
-        """
-        Set default values for:
-          osd_op_complaint_time=30.000000
-        """
-        # set the osd_op_complaint_time to selected monitor back to default value
-        ct_pod.exec_ceph_cmd(
-            f"ceph config set osd osd_op_complaint_time {osd_op_complaint_time_val}"
-        )
-
-    request.addfinalizer(finalizer)
-
-    return cmd_status
