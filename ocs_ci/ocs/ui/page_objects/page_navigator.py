@@ -107,9 +107,9 @@ class PageNavigator(BaseUI):
         self.navigate_storage()
         self.do_click(locator=self.page_nav["object_storage"], timeout=90)
 
-        from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 
-        return ObjectService()
+        return ObjectStorage()
 
     def nav_object_storage_page(self):
         """
@@ -120,9 +120,9 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["object_storage_page"], timeout=90)
         self.page_has_loaded(retries=15)
-        from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 
-        return ObjectService()
+        return ObjectStorage()
 
     def navigate_quickstarts_page(self):
         """

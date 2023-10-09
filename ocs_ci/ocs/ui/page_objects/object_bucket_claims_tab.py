@@ -5,46 +5,20 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.mcg_ui import logger
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import CreateResourceForm
-from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
+from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage, logger
+from ocs_ci.ocs.ui.page_objects.resource_page import ResourcePage
 from tests.conftest import delete_projects
 
 
-class BucketsUI(PageNavigator, ResourceList):
-    """
-    A class representation for abstraction of OBC or OB-related OpenShift UI actions
-
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def select_openshift_storage_project(self, cluster_namespace):
-        """
-        Helper function to select openshift-storage project
-
-        Args:
-            cluster_namespace (str): project name will be selected from the list
-
-        Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
-        """
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(project_name=cluster_namespace)
-
-
-class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
+class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
     """
     A class representation for abstraction of OBC-related OpenShift UI actions
 
     """
 
     def __init__(self):
-        BucketsUI.__init__(self)
-        CreateResourceForm.__init__(self)
+        ObjectStorage.__init__(self)
         self.name_input_loc = self.obc_loc["obc_name"]
         self.rules = {
             constants.UI_INPUT_RULES_OBJECT_BUCKET_CLAIM[
@@ -82,7 +56,7 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         ocp_obj.exec_oc_cmd(
             f"adm policy add-role-to-user admin {username} -n {sc_name}"
         )
-        BucketsUI.navigate_object_bucket_claims_page(self)
+        self.navigate_object_bucket_claims_page()
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
         )
@@ -147,12 +121,14 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
             storageclass (str): The storageclass to be used by the OBC
             bucketclass (str): The bucketclass to be used by the OBC
 
+        Returns:
+            ResourcePage: The page object of the newly created OBC
         """
         # create_obc_ui procedure should start from home page even if prev test failed in the middle
         self.navigate_OCP_home_page()
         self.navigate_object_bucket_claims_page()
 
-        self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
+        self.select_project(config.ENV_DATA["cluster_namespace"])
 
         logger.info("Click on 'Create Object Bucket Claim'")
         self.do_click(self.generic_locators["create_resource_button"])
@@ -179,6 +155,8 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
 
+        return ResourcePage()
+
     def select_openshift_storage_default_project(self):
         """
         Helper function to select openshift-storage project
@@ -200,6 +178,6 @@ class ObjectBucketClaimsTab(ObjectService, BucketsUI, CreateResourceForm):
         """
         self.navigate_object_bucket_claims_page()
 
-        self.select_openshift_storage_project(config.ENV_DATA["cluster_namespace"])
+        self.select_project(config.ENV_DATA["cluster_namespace"])
 
         self.delete_resource(delete_via, obc_name)

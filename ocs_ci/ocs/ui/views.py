@@ -266,6 +266,7 @@ generic_locators = {
         "//td[@id='name']//a[contains(text(), '{}')]",
         By.XPATH,
     ),
+    "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
         "//td[@id='name']//a[contains(text(), '{}')]"
         "/../../..//button[@aria-label='Actions']",
@@ -304,17 +305,33 @@ ocs_operator_locators = {
 }
 
 mcg_stores = {
-    "store_name": ('input[data-test*="store-name"]', By.CSS_SELECTOR),
-    "provider_dropdown": ('button[data-test*="store-provider"]', By.CSS_SELECTOR),
-    "aws_provider": ("AWS S3-link", By.ID),
-    "aws_region_dropdown": ("region", By.ID),
-    "us_east_2_region": ("us-east-2-link", By.ID),
-    "aws_secret_dropdown": ("secret-dropdown", By.ID),
     "aws_secret_search_field": (
         'input[data-test-id="dropdown-text-filter"]',
         By.CSS_SELECTOR,
     ),
     "target_bucket": ("target-bucket", By.ID),
+    "store_provider_dropdown": (
+        "//label[@for='provider-name']/../following-sibling::*",
+        By.XPATH,
+    ),
+    "store_dropdown_option": (
+        "//ul[@ class='pf-c-dropdown__menu']//a[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "store_secret_option": ("//*[contains(text(), '{}')]", By.XPATH),
+    "store_region_dropdown": (
+        "//label[@for='region']/../following-sibling::*",
+        By.XPATH,
+    ),
+    "store_secret_dropdown": (
+        "//label[@for='secret-dropdown']/../following-sibling::*",
+        By.XPATH,
+    ),
+    "store_target_bucket_input": ("//input[@id='target-bucket']", By.XPATH),
+    "create_store_btn": (
+        "//button[@type='submit']",
+        By.XPATH,
+    ),
 }
 
 bucketclass = {
@@ -1631,6 +1648,7 @@ locators = {
         "storageclass": {**storageclass, **storageclass_4_9},
         "bucketclass": bucketclass,
         "topology": topology,
+        "mcg_stores": mcg_stores,
     },
     "4.13": {
         "login": {**login, **login_4_11},

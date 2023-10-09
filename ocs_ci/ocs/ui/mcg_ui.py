@@ -1,87 +1,8 @@
-import logging
 from time import sleep
-from selenium.webdriver.support.wait import WebDriverWait
+from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage, logger
 from ocs_ci.ocs.ui.helpers_ui import get_element_by_text
-
-
-logger = logging.getLogger(__name__)
-
-
-class MCGStoreUI(PageNavigator):
-    """
-    A class representation for abstraction of MCG store related OpenShift UI actions
-
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.wait = WebDriverWait(self.driver, 30)
-
-    def create_store_ui(self, kind, store_name, secret_name, target_bucket):
-        """
-        Create an MCG store via the UI
-
-        Args:
-            kind (str): The store kind - backingstore | namespacestore
-            store_name (str): The name to grant to the store
-            secret_name (str): The name of the secret to used to connect the store to AWS
-            target_bucket (str): The AWS S3 bucket to use as a host for the store
-
-        """
-        self.navigate_to_ocs_operator_page()
-
-        logger.info("Enter the store section")
-        self.do_click(self.ocs_loc[f"{kind}_page"])
-
-        logger.info("Create a new store")
-        self.do_click(self.generic_locators["create_resource_button"])
-
-        logger.info("Enter store name")
-        self.do_send_keys(self.mcg_stores["store_name"], store_name)
-
-        logger.info("Pick AWS as the provider")
-        self.do_click(self.mcg_stores["provider_dropdown"])
-        self.do_click(self.mcg_stores["aws_provider"])
-
-        logger.info("Pick the us-east-2 region")
-        self.do_click(self.mcg_stores["aws_region_dropdown"])
-        self.do_click(self.mcg_stores["us_east_2_region"])
-
-        logger.info("Pick secret")
-        self.do_click(self.mcg_stores["aws_secret_dropdown"])
-        self.do_send_keys(self.mcg_stores["aws_secret_search_field"], secret_name)
-        self.do_click(self.generic_locators["first_dropdown_option"])
-
-        logger.info("Enter target bucket name")
-        self.do_send_keys(self.mcg_stores["target_bucket"], target_bucket)
-        logger.info("Submit form")
-        self.do_click(self.generic_locators["submit_form"])
-
-    def delete_store_ui(self, kind, store_name):
-        """
-        Delete an MCG store via the UI
-
-        store_name (str): Name of the store to be deleted
-
-        """
-        self.navigate_to_ocs_operator_page()
-
-        logger.info("Enter the store section")
-        self.do_click(self.ocs_loc[f"{kind}_page"])
-
-        logger.info("Search for the store")
-        self.do_send_keys(self.generic_locators["search_resource_field"], store_name)
-
-        logger.info("Open store kebab menu")
-        self.do_click(self.generic_locators["kebab_button"])
-
-        logger.info(f"Click on 'Delete {kind}'")
-        self.do_click(self.generic_locators["delete_resource_kebab_button"])
-
-        logger.info("Confirm store Deletion")
-        self.do_click(self.generic_locators["confirm_action"])
 
 
 class BucketClassUI(PageNavigator):
@@ -237,7 +158,7 @@ class BucketClassUI(PageNavigator):
         self.do_click(self.generic_locators["confirm_action"])
 
 
-class NamespaceStoreUI(ObjectService):
+class NamespaceStoreUI(ObjectStorage):
     def __init__(self):
         super().__init__()
         self.sc_loc = self.obc_loc
@@ -260,7 +181,7 @@ class NamespaceStoreUI(ObjectService):
         """
         logger.info("Create namespace-store via UI")
 
-        self.nav_object_storage_page().navigate_namespace_store_tab()
+        self.nav_object_storage_page().nav_namespace_store_tab()
         self.do_click(self.sc_loc["namespace_store_create"])
         self.do_send_keys(self.sc_loc["namespace_store_name"], namespace_store_name)
 
@@ -272,6 +193,11 @@ class NamespaceStoreUI(ObjectService):
             self.do_click(get_element_by_text(namespace_store_pvc_name))
             self.do_send_keys(
                 self.sc_loc["namespace_store_folder"], namespace_store_folder
+            )
+        else:
+            raise IncorrectUiOptionRequested(
+                "Only fs is supported with this method. Rest options are supported with "
+                "'object_storage.nav_namespace_store_tab().create_store()'"
             )
 
         self.take_screenshot()

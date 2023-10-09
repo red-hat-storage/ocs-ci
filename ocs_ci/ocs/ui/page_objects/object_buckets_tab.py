@@ -2,14 +2,11 @@ import json
 
 import requests
 from selenium.webdriver.common.by import By
-
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.mcg_ui import logger
-from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import BucketsUI
-from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
+from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage, logger
 
 
-class ObjectBucketsTab(ObjectService, BucketsUI):
+class ObjectBucketsTab(ObjectStorage):
     def __init__(self):
         super().__init__()
 

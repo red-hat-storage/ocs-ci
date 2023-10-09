@@ -3,14 +3,12 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
-from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
-from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList, logger
+from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage, logger
 
 
-class NameSpaceStoreTab(ObjectService, CreateResourceForm, ResourceList):
+class NameSpaceStoreTab(ObjectStorage, CreateResourceForm):
     def __init__(self):
-        ObjectService.__init__(self)
-        CreateResourceForm.__init__(self)
+        ObjectStorage.__init__(self)
         self.rules = {
             constants.UI_INPUT_RULES_NAMESPACE_STORE[
                 "rule1"
