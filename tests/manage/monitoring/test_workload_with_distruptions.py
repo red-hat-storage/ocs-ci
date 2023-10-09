@@ -45,7 +45,6 @@ from ocs_ci.ocs import fiojob
 from ocs_ci.ocs.cluster import (
     CephCluster,
     get_percent_used_capacity,
-    set_osd_op_complaint_time,
     get_full_ratio_from_osd_dump,
 )
 from ocs_ci.ocs.fiojob import get_timeout
@@ -188,14 +187,31 @@ def test_workload_with_checksum_verify(
 
 class TestCephOSDSlowOps(object):
     @pytest.fixture(scope="function")
-    def setup(self, request, pod_factory, multi_pvc_factory):
+    def setup(self, request, pod_factory, multi_pvc_factory, set_osd_op_complaint_time):
         """
         Set preconditions to trigger CephOSDSlowOps
         """
         self.test_pass = None
+        self.pod_objs = []
+
         reduced_osd_complaint_time = 0.1
 
         set_osd_op_complaint_time(reduced_osd_complaint_time)
+
+        def finalizer_delete_resources():
+            """
+            Delete resources created during the test
+            """
+
+            # delete resources
+            for pod_obj in self.pod_objs:
+                pod_obj.delete()
+                pod_obj.delete(wait=True)
+
+            for pvc_obj in self.pvc_objs:
+                pvc_obj.delete(wait=True)
+
+        request.addfinalizer(finalizer_delete_resources)
 
         ceph_cluster = CephCluster()
 
@@ -224,7 +240,6 @@ class TestCephOSDSlowOps(object):
             num_of_pvc=num_of_load_objs,
             wait_each=True,
         )
-        self.pod_objs = []
 
         for pvc_obj in self.pvc_objs:
             pod_obj = pod_factory(
@@ -241,24 +256,6 @@ class TestCephOSDSlowOps(object):
             )
 
         self.start_workload_time = time.perf_counter()
-
-        def finalizer():
-            """
-            Set default values for:
-              osd_op_complaint_time=30.000000
-            """
-            # set the osd_op_complaint_time to selected monitor back to default value
-            set_osd_op_complaint_time(constants.DEFAULT_OSD_OP_COMPLAINT_TIME)
-
-            # delete resources
-            for pod_obj in self.pod_objs:
-                pod_obj.delete()
-                pod_obj.delete(wait=True)
-
-            for pvc_obj in self.pvc_objs:
-                pvc_obj.delete(wait=True)
-
-        request.addfinalizer(finalizer)
 
     @tier3
     @pytest.mark.polarion_id("OCS-5158")
