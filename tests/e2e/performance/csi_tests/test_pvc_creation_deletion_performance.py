@@ -159,7 +159,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         """
         # wait up to 20 Min for all pod(s) to compleat running IO, this tuned for up to
         # 120 PVCs of 25GiB each.
-        timeout = 3600 #old value 1200
+        timeout = 3600  # old value 1200
         pod_objs = []
         # Create PODs, connect them to the PVCs and run IO on them
         for pvc_obj in self.pvc_objs:
