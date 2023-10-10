@@ -112,6 +112,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         msg = "ceph mgr dashboard route should not be deployed as part of OCS"
         assert "ceph-mgr-dashboard" not in route_name, msg
 
+
 @bugzilla("2238400")
 @blue_squad
 @tier1
