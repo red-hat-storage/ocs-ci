@@ -992,6 +992,28 @@ class CephCluster(object):
         time.sleep(30)
         self.RBD.exec_oc_cmd(f"patch {patch}")
 
+    def get_ceph_free_capacity(self):
+        """
+        Function to calculate the free capacity of a cluster
+
+        Returns:
+            float: The free capacity of a cluster (in GB)
+
+        """
+        replica = int(self.get_ceph_default_replica())
+        if replica > 0:
+            logger.info(f"Number of replica : {replica}")
+            ct_pod = pod.get_ceph_tools_pod()
+            output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+            total_avail = output.get("stats").get("total_bytes")
+            total_used = output.get("stats").get("total_used_raw_bytes")
+            total_free = total_avail - total_used
+            return total_free / replica / constants.BYTES_IN_GB
+        else:
+            # if the replica number is 0, usable capacity can not be calculate
+            # so, return 0 as usable capacity.
+            return 0
+
 
 class CephHealthMonitor(threading.Thread):
     """
@@ -1562,6 +1584,7 @@ def validate_pg_balancer():
         logger.info("pg_balancer is not active")
 
 
+@retry((ZeroDivisionError, CommandFailed))
 def get_percent_used_capacity():
     """
     Function to calculate the percentage of used capacity in a cluster
@@ -2957,3 +2980,16 @@ def get_lvm_full_version():
     image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
     full_version = image.split(":")[1]
     return full_version
+
+
+def get_full_ratio_from_osd_dump():
+    """
+    Get the full ratio value from osd map
+
+    Returns:
+        float: full ratio value
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    logger.info("Checking the values of ceph osd full ratios in osd map")
+    osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
+    return float(osd_dump_dict["full_ratio"])
