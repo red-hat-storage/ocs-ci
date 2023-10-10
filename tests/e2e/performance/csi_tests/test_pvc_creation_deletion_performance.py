@@ -157,7 +157,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             TimeoutExpiredError : if not all completed I/O whithin 20 Min.
 
         """
-        # wait up to 20 Min for all pod(s) to compleat running IO, this tuned for up to
+        # wait up to 60 Min for all pod(s) to complete running IO, this tuned for up to
         # 120 PVCs of 25GiB each.
         timeout = 3600  # old value 1200
         pod_objs = []
