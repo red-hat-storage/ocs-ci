@@ -5,6 +5,7 @@ The results are uploaded to the ES server
 """
 import logging
 import re
+import json
 
 import pytest
 
@@ -179,6 +180,9 @@ class TestBulkCloneCreation(PASTest):
                 project=self.namespace,
                 tmp_path=tmp_path,
             )
+
+            log.debug(f"PODs data list is : {json.dumps(pod_dict_list, indent=3)}")
+
             job_pod_file.create(namespace=self.namespace)
 
             # Check all PODs are in Completed state
