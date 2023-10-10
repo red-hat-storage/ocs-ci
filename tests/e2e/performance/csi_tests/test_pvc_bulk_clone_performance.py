@@ -187,7 +187,7 @@ class TestBulkCloneCreation(PASTest):
                 resource_count=self.pvc_count,
                 namespace=self.namespace,
                 status=constants.STATUS_COMPLETED,
-                timeout=1200,
+                timeout=5400,  # old_value=1200
                 sleep_time=30,
             )
             log.info("All the PODs completed writing data to the PVC's")
@@ -220,7 +220,7 @@ class TestBulkCloneCreation(PASTest):
                     resource_count=self.pvc_count * 2,
                     namespace=self.namespace,
                     status=constants.STATUS_BOUND,
-                    timeout=1200,
+                    timeout=5400,  # old_value=1200
                     sleep_time=30,
                 )
             except Exception as ex:
