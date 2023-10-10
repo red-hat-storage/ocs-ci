@@ -641,3 +641,7 @@ class PDBNotCreatedException(Exception):
 
 class UnableUpgradeConnectionException(Exception):
     pass
+
+
+class VSLMNotFoundException(Exception):
+    pass
