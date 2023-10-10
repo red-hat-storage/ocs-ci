@@ -39,6 +39,7 @@ class TestWarp(E2ETest):
     to ensure that noobaa pods are still in a running state
     """
 
+    GCP_ACCOUNT_SKIP = "GCP Account Credentials Issue"
     @bugzilla("2089630")
     @pytest.mark.polarion_id("OCS-4001")
     @pytest.mark.parametrize(
@@ -70,6 +71,7 @@ class TestWarp(E2ETest):
                   {
                       "interface": "OC",
                       "backingstore_dict": {"gcp": [(1, None)]}}],
+                marks=[pytest.mark.skip(GCP_ACCOUNT_SKIP),],
             ),
             pytest.param(
                 *[1, "OC",
@@ -89,7 +91,8 @@ class TestWarp(E2ETest):
     )
     def test_s3_benchmark_warp(
         self, warps3, mcg_obj, backingstore_factory,
-        bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict
+        bucket_class_factory, bucket_factory, amount,
+        interface, bucketclass_dict,
     ):
         """
         Test flow:
@@ -100,7 +103,9 @@ class TestWarp(E2ETest):
         """
 
         # Create an Object bucket
-        object_bucket = bucket_factory(amount, interface, bucketclass=bucketclass_dict, verify_health=False)[0]
+        object_bucket = bucket_factory(amount, interface,
+                                       bucketclass=bucketclass_dict,
+                                       verify_health=False)[0]
         object_bucket.verify_health(timeout=180)
 
         # Check noobaa pods status before running Warp benchmark
