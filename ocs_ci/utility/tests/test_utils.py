@@ -7,7 +7,7 @@ from sys import platform
 import pytest
 
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility import utils
+from ocs_ci.utility import utils, version
 
 
 def test_mask_secret_null():
@@ -166,3 +166,27 @@ def test_get_none_obj_attr():
 
 def test_get_empty_attr():
     assert utils.get_attr_chain(A(1), "") is None
+
+
+class B:
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return "B-object"
+
+
+@pytest.mark.parametrize(
+    "data_to_filter,expected_output",
+    [
+        ({"a": "A", "b": "B"}, {"a": "A", "b": "B"}),
+        ({"v": version.VERSION_4_12}, {"v": "4.12"}),
+        ({"o": B()}, {"o": "B-object"}),
+        ({"t": [1, 2, B()]}, {"t": [1, 2, "B-object"]}),
+        ({"t": tuple([1, 2, B()])}, {"t": [1, 2, "B-object"]}),
+        ([1, 2, B()], [1, 2, "B-object"]),
+        (tuple([1, 2, B()]), [1, 2, "B-object"]),
+    ],
+)
+def test_filter_unrepresentable_values(data_to_filter, expected_output):
+    assert utils.filter_unrepresentable_values(data_to_filter) == expected_output
