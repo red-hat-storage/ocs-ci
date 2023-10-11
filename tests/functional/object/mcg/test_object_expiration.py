@@ -22,7 +22,11 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_s3_path,
     wait_for_object_count_in_bucket,
 )
-from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecycleConfig, ExpirationRule
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
+    LifecycleConfig,
+    ExpirationRule,
+    LifecycleFilter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +81,7 @@ class TestObjectExpiration(MCGTest):
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
         lifecycle_config = LifecycleConfig(
-            ExpirationRule(days=1, prefix=prefix_to_expire)
+            ExpirationRule(days=1, filter=LifecycleFilter(prefix=prefix_to_expire))
         )
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=lifecycle_config.as_dict()
@@ -163,7 +167,7 @@ class TestObjectExpiration(MCGTest):
 
         # 2. Edit the expiration policy to disable it
         logger.info("Disabling the expiration policy")
-        lifecycle_config.rules[0].status = "Disabled"
+        lifecycle_config.rules[0].is_enabled = False
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=lifecycle_config.as_dict()
         )
