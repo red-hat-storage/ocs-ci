@@ -4521,8 +4521,9 @@ def get_oadp_version():
         "oadp-operator", namespace=constants.ACM_HUB_BACKUP_NAMESPACE
     )
     for csv in csv_list:
-        if "oadp-operator" in csv:
+        if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
+<<<<<<< HEAD
 <<<<<<< HEAD
             cmd = f"oc get csv/{csv} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide | awk {{'print $4'}}"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
@@ -4531,6 +4532,9 @@ def get_oadp_version():
 >>>>>>> 4c498d43 (Handle OADP versions specific pod names)
 =======
             cmd = f"oc get csv/{csv} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide "
+=======
+            cmd = f"oc get csv/{csv['metadata']['name']} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide "
+>>>>>>> 2f8a2b5c (Fix oadp-operator version fetch issue)
             awk_cmd = "awk {{'print $4'}}"
             p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
             outbuf = subprocess.Popen(
