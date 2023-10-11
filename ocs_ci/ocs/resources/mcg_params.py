@@ -21,7 +21,6 @@ class NSFS:
         mount_path (str): The path to the mount point of the NSFS
         uid (int): The UID of the user that will be used to create the NSFS
         gid (int): The GID of the user that will be used to create the NSFS
-        verify_health (bool): Whether to verify the health of the NSFS bucket after its creation
     """
 
     method: str = "CLI"
@@ -34,7 +33,6 @@ class NSFS:
     mount_path: str = "/nsfs"
     uid: int = 5678
     gid: int = 1234
-    verify_health: bool = True
     """
     State parameters; These should not be modified unless needed, and will be (over/)written
     after the NSFS object will be passed to the bucket factory.
