@@ -2764,6 +2764,49 @@ def censor_values(data_to_censor):
     return data_to_censor
 
 
+def filter_unrepresentable_values(data_to_filter):
+    """
+    This function filter values in dictionary or list which are not possible convert
+    to yaml (e.g. objects), to prevent following error raised from yaml.safe_dump
+    yaml.representer.RepresenterError("cannot represent an object",...)
+    It is performed recursively for nested dictionaries or lists.
+
+    Args:
+        data_to_filter (dict|list|tuple): Data to censor.
+
+    Returns:
+        dict: filtered data
+
+    """
+    if isinstance(data_to_filter, tuple):
+        data_to_filter = list(data_to_filter)
+    if isinstance(data_to_filter, dict):
+        for key in data_to_filter:
+            if data_to_filter[key] is None:
+                continue
+            if isinstance(data_to_filter[key], tuple):
+                data_to_filter[key] = list(data_to_filter[key])
+            if isinstance(data_to_filter[key], (dict, list)):
+                filter_unrepresentable_values(data_to_filter[key])
+            elif not isinstance(
+                data_to_filter[key], (dict, list, tuple, str, int, float)
+            ):
+                data_to_filter[key] = str(data_to_filter[key])
+    if isinstance(data_to_filter, (list, tuple)):
+        for i in range(len(data_to_filter)):
+            if data_to_filter[i] is None:
+                continue
+            if isinstance(data_to_filter[i], tuple):
+                data_to_filter[i] = list(data_to_filter[i])
+            if isinstance(data_to_filter[i], (dict, list)):
+                data_to_filter = filter_unrepresentable_values(data_to_filter[i])
+            elif not isinstance(
+                data_to_filter[i], (dict, list, tuple, str, int, float)
+            ):
+                data_to_filter[i] = str(data_to_filter[i])
+    return data_to_filter
+
+
 def dump_config_to_file(file_path):
     """
     Dump the config to the yaml file with censored secret values.
@@ -2774,6 +2817,7 @@ def dump_config_to_file(file_path):
     """
     config_copy = deepcopy(config.to_dict())
     censor_values(config_copy)
+    filter_unrepresentable_values(config_copy)
     with open(file_path, "w+") as fs:
         yaml.safe_dump(config_copy, fs)
 
