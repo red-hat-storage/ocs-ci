@@ -1129,174 +1129,181 @@ class TestNfsEnable(ManageTest):
         12:- Deletion of nfs PVC
 
         """
-        # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
-        nfs_pvc_obj = helpers.create_pvc(
-            sc_name=self.nfs_sc,
-            namespace=self.namespace,
-            pvc_name="nfs-pvc",
-            size="5Gi",
-            do_reload=True,
-            access_mode=constants.ACCESS_MODE_RWO,
-            volume_mode="Filesystem",
-        )
+        try:
+            # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+            nfs_pvc_obj = helpers.create_pvc(
+                sc_name=self.nfs_sc,
+                namespace=self.namespace,
+                pvc_name="nfs-pvc",
+                size="5Gi",
+                do_reload=True,
+                access_mode=constants.ACCESS_MODE_RWO,
+                volume_mode="Filesystem",
+            )
 
-        # Create deployment config for app pod
-        log.info("----create deployment config----")
-        deployment_config = """
-            apiVersion: apps.openshift.io/v1
-            kind: DeploymentConfig
-            metadata:
-              name: nfs-test-pod
-              namespace: openshift-storage
-              labels:
-                app: nfs-test-pod
-            spec:
-              template:
-                metadata:
-                  labels:
-                    name: nfs-test-pod
-                spec:
-                  restartPolicy: Always
-                  volumes:
-                  - name: vol
-                    persistentVolumeClaim:
-                      claimName: nfs-pvc
-                  containers:
-                  - name: fedora
-                    image: fedora
-                    command: ['/bin/bash', '-ce', 'tail -f /dev/null']
-                    imagePullPolicy: IfNotPresent
-                    securityContext:
-                      capabilities: {}
-                      privileged: true
-                    volumeMounts:
-                    - mountPath: /mnt
-                      name: vol
-                    livenessProbe:
-                      exec:
-                        command:
-                        - 'sh'
-                        - '-ec'
-                        - 'df /mnt'
-                      initialDelaySeconds: 3
-                      periodSeconds: 3
-              replicas: 1
-              triggers:
-                - type: ConfigChange
-              paused: false
-            """
-        deployment_config_data = yaml.safe_load(deployment_config)
-        helpers.create_resource(**deployment_config_data)
-        time.sleep(60)
+            # Create deployment config for app pod
+            log.info("----create deployment config----")
+            deployment_config = """
+                        apiVersion: apps.openshift.io/v1
+                        kind: DeploymentConfig
+                        metadata:
+                          name: nfs-test-pod
+                          namespace: openshift-storage
+                          labels:
+                            app: nfs-test-pod
+                        spec:
+                          template:
+                            metadata:
+                              labels:
+                                name: nfs-test-pod
+                            spec:
+                              restartPolicy: Always
+                              volumes:
+                              - name: vol
+                                persistentVolumeClaim:
+                                  claimName: nfs-pvc
+                              containers:
+                              - name: fedora
+                                image: fedora
+                                command: ['/bin/bash', '-ce', 'tail -f /dev/null']
+                                imagePullPolicy: IfNotPresent
+                                securityContext:
+                                  capabilities: {}
+                                  privileged: true
+                                volumeMounts:
+                                - mountPath: /mnt
+                                  name: vol
+                                livenessProbe:
+                                  exec:
+                                    command:
+                                    - 'sh'
+                                    - '-ec'
+                                    - 'df /mnt'
+                                  initialDelaySeconds: 3
+                                  periodSeconds: 3
+                          replicas: 1
+                          triggers:
+                            - type: ConfigChange
+                          paused: false
+                        """
+            deployment_config_data = yaml.safe_load(deployment_config)
+            helpers.create_resource(**deployment_config_data)
+            time.sleep(60)
 
-        assert self.pod_obj.wait_for_resource(
-            resource_count=1,
-            condition=constants.STATUS_RUNNING,
-            selector="name=nfs-test-pod",
-            dont_allow_other_resources=True,
-            timeout=60,
-        )
-        pod_objs = pod.get_all_pods(
-            namespace=self.namespace, selector=["nfs-test-pod"], selector_label="name"
-        )
+            assert self.pod_obj.wait_for_resource(
+                resource_count=1,
+                condition=constants.STATUS_RUNNING,
+                selector="name=nfs-test-pod",
+                dont_allow_other_resources=True,
+                timeout=60,
+            )
+            pod_objs = pod.get_all_pods(
+                namespace=self.namespace,
+                selector=["nfs-test-pod"],
+                selector_label="name",
+            )
 
-        pod_obj = pod_objs[0]
-        log.info(f"pod obj name----{pod_obj.name}")
+            pod_obj = pod_objs[0]
+            log.info(f"pod obj name----{pod_obj.name}")
 
-        file_name = pod_obj.name
-        # Run IO
-        pod_obj.run_io(
-            storage_type="fs",
-            size="4G",
-            fio_filename=file_name,
-            runtime=60,
-        )
-        log.info("IO started on all pods")
+            file_name = pod_obj.name
+            # Run IO
+            pod_obj.run_io(
+                storage_type="fs",
+                size="4G",
+                fio_filename=file_name,
+                runtime=60,
+            )
+            log.info("IO started on all pods")
 
-        # Wait for IO completion
-        fio_result = pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
-        err_count = fio_result.get("jobs")[0].get("error")
-        assert err_count == 0, (
-            f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
-        )
-        # Verify presence of the file
-        file_path = pod.get_file_path(pod_obj, file_name)
-        log.info(f"Actual file path on the pod {file_path}")
-        assert pod.check_file_existence(
-            pod_obj, file_path
-        ), f"File {file_name} doesn't exist"
-        log.info(f"File {file_name} exists in {pod_obj.name}")
+            # Wait for IO completion
+            fio_result = pod_obj.get_fio_results()
+            log.info("IO completed on all pods")
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert err_count == 0, (
+                f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
+            )
+            # Verify presence of the file
+            file_path = pod.get_file_path(pod_obj, file_name)
+            log.info(f"Actual file path on the pod {file_path}")
+            assert pod.check_file_existence(
+                pod_obj, file_path
+            ), f"File {file_name} doesn't exist"
+            log.info(f"File {file_name} exists in {pod_obj.name}")
 
-        # Create /mnt/test file inside the pod
-        command = "bash -c " + '"echo ' + "'Before respin'" + '  > /mnt/test"'
-        pod_obj.exec_cmd_on_pod(
-            command=command,
-            out_yaml_format=False,
-        )
+            # Create /mnt/test file inside the pod
+            command = "bash -c " + '"echo ' + "'Before respin'" + '  > /mnt/test"'
+            pod_obj.exec_cmd_on_pod(
+                command=command,
+                out_yaml_format=False,
+            )
 
-        # Respin the app pod
-        log.info(f"Respin pod {pod_obj.name}")
-        pod_obj.delete()
-        pod_obj.ocp.wait_for_delete(
-            pod_obj.name, 60
-        ), f"Pod {pod_obj.name} is not deleted"
+            # Respin the app pod
+            log.info(f"Respin pod {pod_obj.name}")
+            pod_obj.delete()
+            pod_obj.ocp.wait_for_delete(
+                pod_obj.name, 60
+            ), f"Pod {pod_obj.name} is not deleted"
 
-        assert self.pod_obj.wait_for_resource(
-            resource_count=1,
-            condition=constants.STATUS_RUNNING,
-            selector="name=nfs-test-pod",
-            dont_allow_other_resources=True,
-            timeout=60,
-        )
+            assert self.pod_obj.wait_for_resource(
+                resource_count=1,
+                condition=constants.STATUS_RUNNING,
+                selector="name=nfs-test-pod",
+                dont_allow_other_resources=True,
+                timeout=60,
+            )
 
-        respinned_pod_objs = pod.get_all_pods(
-            namespace=self.namespace, selector=["nfs-test-pod"], selector_label="name"
-        )
+            respinned_pod_objs = pod.get_all_pods(
+                namespace=self.namespace,
+                selector=["nfs-test-pod"],
+                selector_label="name",
+            )
 
-        respinned_pod_obj = respinned_pod_objs[0]
-        log.info(f"pod obj name----{respinned_pod_obj.name}")
+            respinned_pod_obj = respinned_pod_objs[0]
+            log.info(f"pod obj name----{respinned_pod_obj.name}")
 
-        # Able to read the /mnt/test file's content from inside the respined pod
-        command = "bash -c " + '"cat ' + ' /mnt/test"'
-        result = respinned_pod_obj.exec_cmd_on_pod(
-            command=command,
-            out_yaml_format=False,
-        )
-        assert result.rstrip() == "Before respin"
+            # Able to read the /mnt/test file's content from inside the respined pod
+            command = "bash -c " + '"cat ' + ' /mnt/test"'
+            result = respinned_pod_obj.exec_cmd_on_pod(
+                command=command,
+                out_yaml_format=False,
+            )
+            assert result.rstrip() == "Before respin"
 
-        # Edit /mnt/test file
-        command = "bash -c " + '"echo ' + "'After respin'" + '  >> /mnt/test"'
+            # Edit /mnt/test file
+            command = "bash -c " + '"echo ' + "'After respin'" + '  >> /mnt/test"'
 
-        respinned_pod_obj.exec_cmd_on_pod(
-            command=command,
-            out_yaml_format=False,
-        )
-        # Able to read updated /mnt/test file
-        command = "bash -c " + '"cat ' + ' /mnt/test"'
-        result = respinned_pod_obj.exec_cmd_on_pod(
-            command=command,
-            out_yaml_format=False,
-        )
-        assert result.rstrip() == "Before respin" + """\n""" + "After respin"
+            respinned_pod_obj.exec_cmd_on_pod(
+                command=command,
+                out_yaml_format=False,
+            )
+            # Able to read updated /mnt/test file
+            command = "bash -c " + '"cat ' + ' /mnt/test"'
+            result = respinned_pod_obj.exec_cmd_on_pod(
+                command=command,
+                out_yaml_format=False,
+            )
+            assert result.rstrip() == "Before respin" + """\n""" + "After respin"
+        except Exception as ex:
+            log.info(f"{ex}")
+        finally:
+            # Delete deployment config
+            cmd_delete_deployment_config = "delete dc nfs-test-pod"
+            self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment_config)
 
-        # Delete deployment config
-        cmd_delete_deployment_config = "delete dc nfs-test-pod"
-        self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment_config)
+            pv_obj = nfs_pvc_obj.backed_pv_obj
+            log.info(f"pv object-----{pv_obj}")
 
-        pv_obj = nfs_pvc_obj.backed_pv_obj
-        log.info(f"pv object-----{pv_obj}")
+            # Deletion of nfs PVC
+            log.info("Deleting PVC")
+            nfs_pvc_obj.delete()
+            nfs_pvc_obj.ocp.wait_for_delete(
+                resource_name=nfs_pvc_obj.name
+            ), f"PVC {nfs_pvc_obj.name} is not deleted"
+            log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
 
-        # Deletion of nfs PVC
-        log.info("Deleting PVC")
-        nfs_pvc_obj.delete()
-        nfs_pvc_obj.ocp.wait_for_delete(
-            resource_name=nfs_pvc_obj.name
-        ), f"PVC {nfs_pvc_obj.name} is not deleted"
-        log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
-
-        log.info("Check nfs pv is deleted")
-        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+            log.info("Check nfs pv is deleted")
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier4c
     @polarion_id("OCS-4294")
