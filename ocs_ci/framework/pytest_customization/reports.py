@@ -2,11 +2,14 @@ import os
 import pytest
 import logging
 from py.xml import html
-from ocs_ci.utility.utils import email_reports, save_reports, ocsci_log_path
+from ocs_ci.utility.utils import dump_config_to_file, email_reports, save_reports, ocsci_log_path
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
 
 logger = logging.getLogger(__name__)
+
+
+log = logging.getLogger(__name__)
 
 
 @pytest.mark.optionalhook
@@ -108,6 +111,21 @@ def pytest_sessionfinish(session, exitstatus):
         logger.info(f"Test Time report saved to '{time_report_file}'")
     except Exception:
         logger.exception("Failed to save Test Time report to logs directory")
+
+    for i in range(ocsci_config.nclusters):
+        ocsci_config.switch_ctx(i)
+        if not (
+            ocsci_config.RUN["cli_params"].get("--help")
+            or ocsci_config.RUN["cli_params"].get("collectonly")
+        ):
+            config_file = os.path.expanduser(
+                os.path.join(
+                    ocsci_config.RUN["log_dir"],
+                    f"run-{ocsci_config.RUN['run_id']}-cl{i}-config-end.yaml",
+                )
+            )
+            dump_config_to_file(config_file)
+            log.info(f"Dump of the consolidated config is located here: {config_file}")
 
 
 def pytest_report_teststatus(report, config):
