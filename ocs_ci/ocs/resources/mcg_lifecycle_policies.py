@@ -3,9 +3,9 @@ import datetime
 import uuid
 
 
-class LifecycleConfig:
+class LifecyclePolicy:
     """
-    A class for handling MCG lifecycle config parsing
+    A class for handling MCG lifecycle policy config parsing
 
     """
 

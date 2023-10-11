@@ -1918,6 +1918,9 @@ def write_random_test_objects_to_s3_path(
         s3_creds (dict, optional): A dictionary containing S3-compatible credentials
         for writing objects directly to buckets outside of the MCG. Defaults to None.
 
+    Returns:
+        list: A list containing the names of the random files that were written
+
     """
 
     # Omit the s3:// prefix from the path if it exists,
@@ -1925,7 +1928,7 @@ def write_random_test_objects_to_s3_path(
     if s3_path.startswith("s3://"):
         s3_path = s3_path.split("//")[1]
 
-    write_random_test_objects_to_bucket(
+    return write_random_test_objects_to_bucket(
         io_pod,
         s3_path,
         file_dir,
@@ -2365,10 +2368,13 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
 
 
 def change_objects_creation_date_in_noobaa_db(
-    bucket_name, object_keys, new_creation_time
+    bucket_name, object_keys=[], new_creation_time=0
 ):
     """
-    Change the creation date of given objects one year back at the noobaa-db
+    Change the creation date of objects in a given bucket one year back at the noobaa-db.
+
+    Note:
+        If object_keys is empty, all objects in the bucket will be changed.
 
     Args:
         bucket_name (str): The name of the bucket where the objects reside
@@ -2380,9 +2386,6 @@ def change_objects_creation_date_in_noobaa_db(
         change_objects_creation_date("my-bucket", ["obj1", "obj2"], time.time() - 60)
 
     """
-    if not object_keys:
-        return
-
     psql_query = (
         "UPDATE objectmds "
         "SET data = jsonb_set(data, '{create_time}', "
@@ -2390,16 +2393,23 @@ def change_objects_creation_date_in_noobaa_db(
         "WHERE data->>'bucket' IN ( "
         "SELECT _id "
         "FROM buckets "
-        f"WHERE data->>'name' = '{bucket_name}') "
-        f"AND data->>'key' = ANY(ARRAY{object_keys});"
+        f"WHERE data->>'name' = '{bucket_name}')"
     )
+    if object_keys:
+        psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
+
+    psql_query += ";"
 
     exec_nb_db_query(psql_query)
 
 
-def expire_mcg_objects(bucket_name, object_keys, prefix=""):
+def expire_mcg_objects(bucket_name, object_keys=[], prefix=""):
     """
-    Expire given objects in a bucket by changing their creation date to one year back
+    Expire objects in a bucket by changing their creation date to one year back.
+
+    Note:
+        If object_keys is empty, all objects in the bucket will be expired.
+
 
     Note that this is a workaround for the fact that the shortest expiration
     time that expiraiton policies allows is 1 day, which is too long for the tests to wait.

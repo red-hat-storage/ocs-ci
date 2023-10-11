@@ -23,7 +23,7 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_object_count_in_bucket,
 )
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
-    LifecycleConfig,
+    LifecyclePolicy,
     ExpirationRule,
     LifecycleFilter,
 )
@@ -75,16 +75,14 @@ class TestObjectExpiration(MCGTest):
         prefix_not_to_expire = "not_to_expire/"
 
         # 1. Set S3 expiration policy on an MCG bucket
-        logger.info("Creating S3 bucket")
-
         bucket = bucket_factory()[0].name
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
-        lifecycle_config = LifecycleConfig(
+        lifecycle_policy = LifecyclePolicy(
             ExpirationRule(days=1, filter=LifecycleFilter(prefix=prefix_to_expire))
         )
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-            Bucket=bucket, LifecycleConfiguration=lifecycle_config.as_dict()
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
 
         # 2. Upload random objects under a prefix that is set to expire
@@ -138,6 +136,184 @@ class TestObjectExpiration(MCGTest):
             sleep=10,
         ), "Objects were expired when they shouldn't have been!"
 
+    # TODO: determine tier
+    def test_object_expiration_filter(
+        self, mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
+    ):
+        """
+        Test various filtering options for the object expiration policy.
+
+        1. On an MCG bucket, Set an S3 lifecycle policy with the following rules:
+            - An expiration rule with a prefix filter
+            - An expiration rule with a tags filter
+            - An expiration rule with a minBytes filter
+            - An expiration rule with a maxBytes filter
+            - An expiration rule with a filter of all of the above
+        2. Upload objects in the target prefix of the first rule
+        3. Upload objects that match the tags in the second rule
+        4. Upload objects that biger than the minimum size of the third rule
+        5. Upload objects exceept the max size of the fourth rule
+        6. Upload objects that match a combination of the above filters
+        7. Upload objects that don't match any of the above filters
+        8. Set the creation time of all of the objects to be older than the expiration time
+        9. Verify that only the objects that should have been expired were deleted
+
+        """
+        first_prefix_to_expire = "to_expire_a/"
+        second_prefix_to_expire = "to_expire_b/"
+        object_count_per_case = 10
+        tag_a_key, tag_a_value = "tag-a", "value-a"
+        tag_b_key, tag_b_value = "tag-b", "value-b"
+        tag_c_key, tag_c_value = "tag-c", "value-c"
+        objects_to_expire = []
+        objects_not_to_expire = []
+
+        # 1. On an MCG bucket, Set an S3 lifecycle policy with the multiple filter rules
+        bucket = bucket_factory()[0].name
+        expiration_rules = []
+        expiration_rules.append(
+            ExpirationRule(
+                days=1, filter=LifecycleFilter(prefix=first_prefix_to_expire)
+            )
+        )
+        expiration_rules.append(
+            ExpirationRule(
+                days=1,
+                filter=LifecycleFilter(
+                    tags={tag_a_key: tag_a_value, tag_b_key: tag_b_value}
+                ),
+            )
+        )
+        expiration_rules.append(
+            ExpirationRule(days=1, filter=LifecycleFilter(minBytes=100))
+        )
+        expiration_rules.append(
+            ExpirationRule(days=1, filter=LifecycleFilter(maxBytes=200))
+        )
+        expiration_rules.append(
+            ExpirationRule(
+                days=1,
+                filter=LifecycleFilter(
+                    prefix="to_expire_b/",
+                    tags={tag_c_key: tag_c_value},
+                    minBytes=100,
+                    maxBytes=200,
+                ),
+            )
+        )
+        lifecycle_policy = LifecyclePolicy(expiration_rules)
+        logger.info(
+            f"Setting lifecycle policy to bucket {bucket}: \n {lifecycle_policy}"
+        )
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
+        )
+
+        # 2. Upload objects in the target prefix of the first rule
+        logger.info("Uploading objects to match the prefix filter")
+        objects_to_expire += write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/{first_prefix_to_expire}",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case,
+            pattern="prefixed-obj-",
+            mcg_obj=mcg_obj,
+        )
+
+        # 3. Upload objects that match the tags in the second rule
+        tagged_objs_a = write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case // 2,
+            pattern="tag-a-obj-",
+            mcg_obj=mcg_obj,
+        )
+        tagged_objs_b = write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case // 2,
+            pattern="tag-b-obj-",
+            mcg_obj=mcg_obj,
+        )
+        # TODO: tag the objects that start with the pattern above accordingly
+        objects_to_expire += tagged_objs_a + tagged_objs_b
+
+        # 4. Upload objects that biger than the minimum size of the third rule
+        objects_to_expire += write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case,
+            pattern="big-obj-",
+            bs="2M",
+            mcg_obj=mcg_obj,
+        )
+
+        # 5. Upload objects that are smaller than the maximum size of the fourth rule
+        objects_to_expire += write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case,
+            pattern="small-obj-",
+            bs="500K",
+            mcg_obj=mcg_obj,
+        )
+
+        # 6. Upload objects that match a combination of the above filters
+        objects_to_expire += write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/{second_prefix_to_expire}",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case,
+            pattern="mixed-criteria-obj-",
+            bs="1M",
+            mcg_obj=mcg_obj,
+        )
+        # TODO: tag the objects that start with the pattern above accordingly
+
+        # 7. Upload objects that don't match any of the above filters
+        # 7.1 Upload objects without a prefix that don't match any of the above filters
+        objects_not_to_expire += write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case,
+            pattern="not-to-expire-no-prefix-obj-",
+            bs="1M",
+            mcg_obj=mcg_obj,
+        )
+        # 7.2 Upload objects in the second prefix that don't have the target tag
+        objects_not_to_expire += write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/{second_prefix_to_expire}",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case,
+            pattern="not-to-expire-no-tag-obj-",
+            bs="1M",
+            mcg_obj=mcg_obj,
+        )
+        # 7.3 Upload objects to the second prefix and are not in the filter size range
+        objects_not_to_expire += write_random_test_objects_to_s3_path(
+            io_pod=awscli_pod_session,
+            s3_path=f"{bucket}/{second_prefix_to_expire}",
+            file_dir=test_directory_setup.origin_dir,
+            amount=object_count_per_case,
+            pattern="not-to-expire-size-obj-",
+            bs="1M",
+            mcg_obj=mcg_obj,
+        )
+        # TODO: tag the objects that start with the pattern above accordingly
+
+        # 8. Set the creation time of all of the objects to be older than the expiration time
+        logger.info("Setting the creation time of all objects to be older than 1 day")
+        expire_mcg_objects(bucket)
+
+        # 9. Verify that only the objects that should have been expired were deleted
+        # TODO: Use Uday's util function
+
     @pytest.mark.polarion_id("OCS-5167")
     @tier1
     def test_disabled_object_expiration(
@@ -160,16 +336,16 @@ class TestObjectExpiration(MCGTest):
         bucket = bucket_factory()[0].name
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
-        lifecycle_config = LifecycleConfig(ExpirationRule(days=1))
+        lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-            Bucket=bucket, LifecycleConfiguration=lifecycle_config.as_dict()
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
 
         # 2. Edit the expiration policy to disable it
         logger.info("Disabling the expiration policy")
-        lifecycle_config.rules[0].is_enabled = False
+        lifecycle_policy.rules[0].is_enabled = False
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-            Bucket=bucket, LifecycleConfiguration=lifecycle_config.as_dict()
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
 
         # 3. Upload random objects
