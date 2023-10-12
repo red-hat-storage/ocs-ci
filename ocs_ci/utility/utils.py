@@ -36,8 +36,10 @@ from paramiko import SSHClient, AutoAddPolicy
 from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
+from jinja2 import FileSystemLoader, Environment
 
 from ocs_ci.framework import config
+from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -1739,6 +1741,7 @@ def email_reports(session):
     if config.RUN["cli_params"].get("squad_analysis"):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
+    add_time_report_to_email(session, soup)
     part1 = MIMEText(soup, "html")
     add_mem_stats(soup)
     msg.attach(part1)
@@ -4435,3 +4438,24 @@ def archive_ceph_crashes(toolbox_pod):
     """
     log.info("Archiving all ceph crashes")
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
+
+
+def add_time_report_to_email(session, soup):
+    """
+    Takes the time report dictionary and converts it into HTML table
+    """
+    data = GV.TIMEREPORT_DICT
+    sorted_data = dict(
+        sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
+    )
+
+    file_loader = FileSystemLoader(constants.HTML_REPORT_TEMPLATE_DIR)
+    env = Environment(loader=file_loader)
+    table_html_template = env.get_template("test_time_table.html.j2")
+    data = list(sorted_data.items())
+    table_html = table_html_template.render(sorted_data=data[:5])
+    summary_tag = soup.find("h2", string="Summary")
+    time_div = soup.new_tag("div")
+    table = BeautifulSoup(table_html, "html.parser")
+    time_div.append(table)
+    summary_tag.insert_after(time_div)
