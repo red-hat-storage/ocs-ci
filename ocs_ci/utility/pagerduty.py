@@ -120,6 +120,20 @@ def check_incident_list(summary, urgency, incidents, status="triggered"):
     return target_incidents
 
 
+def get_pagerduty_service_id():
+    """
+    Get the pagerduty service id in the current run
+
+    Returns:
+        str: The pagerduty service id in the current run
+
+    """
+    if config.multicluster:
+        return config.default_cluster_ctx.RUN["pagerduty_service_id"]
+    else:
+        return config.RUN["pagerduty_service_id"]
+
+
 class PagerDutyAPI(object):
     """
     This is wrapper class for PagerDuty API:

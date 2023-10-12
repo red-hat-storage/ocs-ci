@@ -22,6 +22,7 @@ from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
+from ocs_ci.utility.pagerduty import get_pagerduty_service_id
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
@@ -81,7 +82,7 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
             stop_mgr,
             test_file,
             minimal_time=60 * 9,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(stop_mgr, test_file)
@@ -181,7 +182,7 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_loc
             stop_mon,
             test_file,
             minimal_time=60 * 20,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
         schedule_nodes(worker_node_names)
     else:
@@ -271,7 +272,7 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
             stop_osd,
             test_file,
             minimal_time=60 * 19,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(stop_osd, test_file)
@@ -376,7 +377,7 @@ def measure_corrupt_pg(request, measurement_dir):
             wait_with_corrupted_pg,
             test_file,
             minimal_time=60 * 17,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(wait_with_corrupted_pg, test_file)
@@ -697,7 +698,7 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     measured_op = measure_operation(
         exceed_bucket_quota,
         test_file,
-        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        pagerduty_service_ids=[get_pagerduty_service_id()],
     )
 
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
@@ -792,7 +793,7 @@ def workload_idle(measurement_dir, threading_lock):
     measured_op = measure_operation(
         do_nothing,
         test_file,
-        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        pagerduty_service_ids=[get_pagerduty_service_id()],
         threading_lock=threading_lock,
     )
     if restart_io_in_bg:
@@ -846,7 +847,7 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
             stop_rgw,
             test_file,
             minimal_time=60 * 8,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(stop_rgw, test_file)
@@ -913,7 +914,7 @@ def measure_noobaa_ns_target_bucket_deleted(
     measured_op = measure_operation(
         delete_target_bucket,
         test_file,
-        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+        pagerduty_service_ids=[get_pagerduty_service_id()],
     )
     logger.info("Delete NS bucket, bucketclass and NS store so that alert is cleared")
     ns_bucket[0].delete()
@@ -977,7 +978,7 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
             stop_nodes,
             test_file,
             minimal_time=60 * 8,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(stop_nodes, test_file)
