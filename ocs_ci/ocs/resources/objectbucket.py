@@ -143,6 +143,7 @@ class ObjectBucket(ABC):
         bucketclass=None,
         replication_policy=None,
         quota=None,
+        versioning=False,
         *args,
         **kwargs,
     ):
@@ -157,6 +158,7 @@ class ObjectBucket(ABC):
         self.replication_policy = self.__parse_replication_policy(replication_policy)
 
         self.quota = quota
+        self.versioning = versioning
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
 
@@ -282,6 +284,17 @@ class ObjectBucket(ABC):
                 f"OBC description:\n{obc_description}"
             )
 
+    def set_versioning(self, status):
+        """
+        Function to set versioning of a bucket to desired state.
+
+        Args:
+            status (str): state to which the versioning should be set
+
+        """
+        logger.info(f"Setting versioning of {self.name} to {status}")
+        self.internal_set_versioning(status)
+
     """
     The following methods are abstract, internal methods.
     The reason for the "internal" naming scheme/design is in order to allow each inheriting class
@@ -322,6 +335,17 @@ class ObjectBucket(ABC):
     def internal_verify_deletion(self):
         """
         Abstract deletion verification method
+
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def internal_set_versioning(self, status):
+        """
+        Abstract set versioning method
+
+        Args:
+            status (str): state to which the versioning should be set
 
         """
         raise NotImplementedError()
@@ -402,6 +426,8 @@ class MCGS3Bucket(ObjectBucket):
             self.s3resource = self.mcg.s3_resource
         self.s3client = self.mcg.s3_client
         self.s3resource.create_bucket(Bucket=self.name)
+        if self.versioning:
+            self.set_versioning("Enabled")
 
     def internal_delete(self):
         """
@@ -439,6 +465,18 @@ class MCGS3Bucket(ObjectBucket):
 
     def internal_verify_deletion(self):
         return self.name not in self.mcg.s3_get_all_bucket_names()
+
+    def internal_set_versioning(self, status):
+        """
+        Set versioning to a value
+
+        Args:
+            status (str): state to which the versioning should be set
+
+        """
+        self.s3client.put_bucket_versioning(
+            Bucket=self.name, VersioningConfiguration={"Status": status}
+        )
 
 
 class OCBucket(ObjectBucket):

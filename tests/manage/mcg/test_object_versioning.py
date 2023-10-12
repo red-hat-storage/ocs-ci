@@ -135,3 +135,73 @@ class TestObjectVersioning:
             query_out
         ), "[Test failed] There are more than one versions considered to be latest version !!"
         logger.info("Test succeeded!!")
+
+    def test_versioning_properties_and_deletion(bucket_factory, mcg_obj_session):
+        """
+        """
+        s3_obj = mcg_obj_session
+        bucket = bucket_factory(interface="S3", versioning=True)
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+        filename = f"file-{uuid4().hex}"
+        with open(filename, "wb") as f:
+            f.write(os.urandom(1000))
+        logger.info(f"Created file {filename}!!")
+        s3_put_object(s3_obj, bucket.name, filename, filename)
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+        s3_put_object(s3_obj, bucket.name, filename, filename)
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+        with open(filename, "wb") as f:
+            f.write(os.urandom(1000))
+        logger.info(f"Created file {filename}!!")
+        s3_put_object(s3_obj, bucket.name, filename, filename)
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+        for i in range(5):
+            s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+        s3_delete_object(s3_obj, bucket.name, filename)
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+        for i in range(5):
+            s3_delete_object(s3_obj, bucket.name, f"{filename}{i}")
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+        os.remove(filename)
+
+    def test_listing(bucket_factory, mcg_obj_session, setup_file_object):
+        """
+        """
+        s3_obj = mcg_obj_session
+        filename = setup_file_object
+        bucket = bucket_factory(interface="S3", versioning=True)
+        for i in range(50):
+            s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
+        for i in range(50):
+            s3_put_object(s3_obj, bucket.name, f"{i}{filename}", filename)
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")

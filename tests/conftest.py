@@ -2756,6 +2756,7 @@ def bucket_factory_fixture(
         verify_health=True,
         bucketclass=None,
         replication_policy=None,
+        versioning=False,
         *args,
         **kwargs,
     ):
@@ -2771,6 +2772,7 @@ def bucket_factory_fixture(
             bucketclass (dict): A dictionary describing a new
                 bucketclass to be created.
                 When None, the default bucketclass is used.
+            versioning (bool): Enable or disable versining for the bucket
 
         Returns:
             list: A list of s3.Bucket objects, containing all the created
@@ -2801,6 +2803,7 @@ def bucket_factory_fixture(
                 rgw=rgw_obj,
                 bucketclass=bucketclass,
                 replication_policy=replication_policy,
+                versioning=versioning,
                 *args,
                 **kwargs,
             )
