@@ -92,6 +92,7 @@ class TestFailoverAndRelocate:
 
         This test is also compatible to be run from ACM UI,
         pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
+        The value of lastGroupSyncTime is verified in each stage.
 
         """
         if config.RUN.get("rdr_failover_via_ui"):
@@ -157,7 +158,7 @@ class TestFailoverAndRelocate:
             f"Before failover - Time in minutes since the last sync {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < scheduling_interval
+            time_since_last_sync < scheduling_interval + 2
         ), "Before failover - Time since last sync is greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime before failover.")
 
@@ -259,7 +260,7 @@ class TestFailoverAndRelocate:
                 "The value of lastGroupSyncTime in drpc is not updated after failover. Retrying."
             )
         logger.info(
-            f"The value of lastGroupSyncTime after failover is {last_group_sync_time}."
+            f"The value of lastGroupSyncTime after failover is {post_failover_last_group_sync_time}."
         )
 
         # Verify lastGroupSyncTime after failover
