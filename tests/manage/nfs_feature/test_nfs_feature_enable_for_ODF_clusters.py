@@ -1284,8 +1284,7 @@ class TestNfsEnable(ManageTest):
                 out_yaml_format=False,
             )
             assert result.rstrip() == "Before respin" + """\n""" + "After respin"
-        except Exception as ex:
-            log.info(f"{ex}")
+
         finally:
             # Delete deployment config
             cmd_delete_deployment_config = "delete dc nfs-test-pod"
