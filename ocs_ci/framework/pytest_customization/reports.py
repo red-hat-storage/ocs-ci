@@ -2,7 +2,12 @@ import os
 import pytest
 import logging
 from py.xml import html
-from ocs_ci.utility.utils import dump_config_to_file, email_reports, save_reports, ocsci_log_path
+from ocs_ci.utility.utils import (
+    dump_config_to_file,
+    email_reports,
+    save_reports,
+    ocsci_log_path,
+)
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
 
