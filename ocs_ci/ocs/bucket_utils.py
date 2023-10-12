@@ -2492,3 +2492,122 @@ def wait_for_object_count_in_bucket(
             f"The expected object count in bucket {bucket_name} was not reached after {timeout} seconds"
         )
     return False
+
+
+def tag_objects(
+    io_pod,
+    mcg_obj,
+    bucket,
+    object_keys,
+    tags,
+    prefix="",
+):
+    """
+    Apply tags to objects in a bucket via the AWS CLI
+
+    Args:
+        io_pod (pod): The pod that will execute the AWS CLI commands
+        mcg_obj (MCG): An MCG class instance
+        bucket (str): The name of the bucket to tag the objects in
+        object_keys (list): A list of object keys to tag
+        tags (list): A list of tag dicts in the form of key-value pairs
+            I.E: [{"key1, "value1"}, {"key2", "value2"}]
+        prefix (str): The prefix of the objects to tag
+
+    """
+    if not tags:
+        logger.warning("No tags were given to apply to the objects")
+        return
+
+    # Convert the tags to the expected aws-cli format
+    tags_str = "'TagSet=["
+    for tag_dict in tags:
+        for key, value in tag_dict.items():
+            # Use double curly braces {{ and }} to include literal curly braces in the output
+            tags_str += f"{{Key={key}, Value={value}}}, "
+    tags_str += "]'"
+
+    logger.info(f"Tagging objects in bucket {bucket} with tags {tags}")
+    for object_key in object_keys:
+        object_key = f"prefix/{object_key}" if prefix else object_key
+        io_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"put-object-tagging --bucket  {bucket} --key {object_key} --tagging {tags_str}",
+                mcg_obj=mcg_obj,
+                api=True,
+            ),
+            out_yaml_format=False,
+        )
+
+
+def get_object_to_tags_dict(
+    io_pod,
+    mcg_obj,
+    bucket,
+    object_keys,
+):
+    """
+    Get tags of objects in a bucket via the AWS CLI
+
+    Args:
+        io_pod (pod): The pod that will execute the AWS CLI commands
+        mcg_obj (MCG): An MCG class instance
+        bucket (str): The name of the bucket to get the tags from
+        object_keys (list): A list of object keys to get the tags from
+
+    Returns:
+        dict: A dictionary from object keys to their list of tag dicts
+        I.E: {"objA": [{"key1": "value1"}, {"key2": "value2"}],
+              "objB": [{"key3": "value3"}, {"key4": "value4"}]}
+
+    """
+
+    obj_to_tag_dict = {obj: [] for obj in object_keys}
+    logger.info(f"Getting tags of objects in bucket {bucket}")
+    for object_key in object_keys:
+        json_str_output = io_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"get-object-tagging --bucket  {bucket} --key {object_key}",
+                mcg_obj=mcg_obj,
+                api=True,
+            ),
+            out_yaml_format=False,
+        )
+        list_of_awscli_tag_dicts = json.loads(json_str_output)["TagSet"]
+        # Convert the tags to the expected format
+        obj_to_tag_dict[object_key] = [
+            {awscli_tag_dict["Key"]: awscli_tag_dict["Value"]}
+            for awscli_tag_dict in list_of_awscli_tag_dicts
+        ]
+    return obj_to_tag_dict
+
+
+def delete_object_tags(
+    io_pod,
+    mcg_obj,
+    bucket,
+    object_keys,
+    prefix="",
+):
+    """
+    Delete tags of objects in a bucket via the AWS CLI
+
+    Args:
+        io_pod (pod): The pod that will execute the AWS CLI commands
+        mcg_obj (MCG): An MCG class instance
+        bucket (str): The name of the bucket to delete the tags from
+        object_keys (list): A list of object keys to delete the tags from
+        prefix (str): The prefix of the objects to delete the tags from
+
+    """
+    logger.info(f"Deleting tags of objects in bucket {bucket}")
+    for object_key in object_keys:
+        object_key = f"prefix/{object_key}" if prefix else object_key
+        io_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"delete-object-tagging --bucket {bucket} --key {object_key}",
+                mcg_obj=mcg_obj,
+                api=True,
+            ),
+            out_yaml_format=False,
+        )
