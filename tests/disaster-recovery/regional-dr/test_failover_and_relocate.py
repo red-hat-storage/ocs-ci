@@ -147,12 +147,14 @@ class TestFailoverAndRelocate:
 
         # Verify lastGroupSyncTime before failover
         time_format = "%Y-%m-%dT%H:%M:%SZ"
-        last_group_sync_time = datetime.strptime(last_group_sync_time, time_format)
+        last_group_sync_time_formatted = datetime.strptime(
+            last_group_sync_time, time_format
+        )
         current_time = datetime.strptime(
             datetime.utcnow().strftime(time_format), time_format
         )
         time_since_last_sync = (
-            current_time - last_group_sync_time
+            current_time - last_group_sync_time_formatted
         ).total_seconds() / 60
         logger.info(
             f"Before failover - Time in minutes since the last sync {time_since_last_sync}"
@@ -265,14 +267,14 @@ class TestFailoverAndRelocate:
 
         # Verify lastGroupSyncTime after failover
         time_format = "%Y-%m-%dT%H:%M:%SZ"
-        post_failover_last_group_sync_time = datetime.strptime(
+        post_failover_last_group_sync_time_formatted = datetime.strptime(
             post_failover_last_group_sync_time, time_format
         )
         current_time = datetime.strptime(
             datetime.utcnow().strftime(time_format), time_format
         )
         time_since_last_sync = (
-            current_time - post_failover_last_group_sync_time
+            current_time - post_failover_last_group_sync_time_formatted
         ).total_seconds() / 60
         logger.info(
             f"After failover - Time in minutes since the last sync is {time_since_last_sync}"
@@ -360,14 +362,14 @@ class TestFailoverAndRelocate:
 
         # Verify lastGroupSyncTime after relocate
         time_format = "%Y-%m-%dT%H:%M:%SZ"
-        post_relocate_last_group_sync_time = datetime.strptime(
+        post_relocate_last_group_sync_time_formatted = datetime.strptime(
             post_relocate_last_group_sync_time, time_format
         )
         current_time = datetime.strptime(
             datetime.utcnow().strftime(time_format), time_format
         )
         time_since_last_sync = (
-            current_time - post_relocate_last_group_sync_time
+            current_time - post_relocate_last_group_sync_time_formatted
         ).total_seconds() / 60
         logger.info(
             f"After relocate - Time in minutes since the last sync is {time_since_last_sync}"
