@@ -85,20 +85,27 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     # get incidents from time when osd deployment was scaled down
     incidents = measure_stop_ceph_osd.get("pagerduty_incidents")
 
-    # check that incident CephOSDDisdUnavailable is correctly raised
-    for target_label in [
-        constants.ALERT_OSDDISKUNAVAILABLE,
-    ]:
-        assert pagerduty.check_incident_list(
-            summary=target_label,
-            incidents=incidents,
-            urgency="high",
-        )
-        api.check_incident_cleared(
-            summary=target_label,
-            measure_end_time=measure_stop_ceph_osd.get("stop"),
-            pagerduty_service_ids=[get_pagerduty_service_id()],
-        )
+    # check that at least one of incidents CephOSDDisdUnavailable or
+    # CephOSDDiskNotResponding is correctly raised
+    assert pagerduty.check_incident_list(
+        summary=constants.ALERT_OSDDISKUNAVAILABLE,
+        incidents=incidents,
+        urgency="high",
+    ) or pagerduty.check_incident_list(
+        summary=constants.ALERT_OSDDISKNOTRESPONDING,
+        incidents=incidents,
+        urgency="high",
+    )
+    api.check_incident_cleared(
+        summary=constants.ALERT_OSDDISKUNAVAILABLE,
+        measure_end_time=measure_stop_ceph_osd.get("stop"),
+        pagerduty_service_ids=[get_pagerduty_service_id()],
+    )
+    api.check_incident_cleared(
+        summary=constants.ALERT_OSDDISKNOTRESPONDING,
+        measure_end_time=measure_stop_ceph_osd.get("stop"),
+        pagerduty_service_ids=[get_pagerduty_service_id()],
+    )
 
 
 @blue_squad
