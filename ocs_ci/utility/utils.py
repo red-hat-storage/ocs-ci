@@ -2799,7 +2799,7 @@ def filter_unrepresentable_values(data_to_filter):
             if isinstance(data_to_filter[i], tuple):
                 data_to_filter[i] = list(data_to_filter[i])
             if isinstance(data_to_filter[i], (dict, list)):
-                data_to_filter = filter_unrepresentable_values(data_to_filter[i])
+                data_to_filter[i] = filter_unrepresentable_values(data_to_filter[i])
             elif not isinstance(
                 data_to_filter[i], (dict, list, tuple, str, int, float)
             ):

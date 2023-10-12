@@ -186,6 +186,12 @@ class B:
         ({"t": tuple([1, 2, B()])}, {"t": [1, 2, "B-object"]}),
         ([1, 2, B()], [1, 2, "B-object"]),
         (tuple([1, 2, B()]), [1, 2, "B-object"]),
+        ([{"a": "b"}, 1, 2, 3], [{"a": "b"}, 1, 2, 3]),
+        ([{"a": "b"}, [B(), B()], 2, 3], [{"a": "b"}, ["B-object", "B-object"], 2, 3]),
+        (
+            [{"a": "b"}, [{"o": B()}, {"p": B()}], 2, 3],
+            [{"a": "b"}, [{"o": "B-object"}, {"p": "B-object"}], 2, 3],
+        ),
     ],
 )
 def test_filter_unrepresentable_values(data_to_filter, expected_output):
