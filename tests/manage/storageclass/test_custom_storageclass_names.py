@@ -16,6 +16,7 @@ from ocs_ci.ocs.constants import (
     OCS_COMPONENTS_MAP,
 )
 from fauxfactory import gen_alpha, gen_special
+from ocs_ci.framework.testlib import on_prem_platform_required
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +25,9 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.14")
 class TestCustomStorageClassNames:
+    def setup(self):
+        self.custom_sc_list = []
+
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
@@ -51,7 +55,22 @@ class TestCustomStorageClassNames:
         request.addfinalizer(restore_custom_storage_class_names)
 
     @pytest.mark.polarion_id("OCS-5148")
-    def test_custom_storageclass_post_deployment(self):
+    @pytest.mark.parametrize(
+        argnames="interface",
+        argvalues=[
+            pytest.param(
+                *[OCS_COMPONENTS_MAP["cephfs"]],
+            ),
+            pytest.param(
+                *[OCS_COMPONENTS_MAP["blockpools"]],
+            ),
+            pytest.param(
+                *[OCS_COMPONENTS_MAP["rgw"]],
+                marks=on_prem_platform_required,
+            ),
+        ],
+    )
+    def test_custom_storageclass_post_deployment(self, interface):
         """
         Test custom storage class creation post deployment.
 
@@ -63,30 +82,19 @@ class TestCustomStorageClassNames:
             5. Delete the storage class mentioned in the storage cluster spec.
 
         """
-        self.custom_sc_list = []
-        self.sc_type_list = [
-            OCS_COMPONENTS_MAP["cephfs"],
-            OCS_COMPONENTS_MAP["rgw"],
-            OCS_COMPONENTS_MAP["blockpools"],
-        ]
-        for sc_type in self.sc_type_list:
-            if (config.ENV_DATA.get("platform").lower() == "aws") and (
-                sc_type == OCS_COMPONENTS_MAP["rgw"]
-            ):
-                continue
 
-            random_sc_name = f"custom-{sc_type}-{gen_alpha()}".lower()
-            log.info(
-                f"Adding custom storageclass '{random_sc_name}' of type '{sc_type}' in storagecluster spec."
-            )
-            assert patch_storage_cluster_for_custom_storage_class(
-                sc_type, storage_class_name=random_sc_name
-            ), f"Failed to add custom storageclass '{random_sc_name}' of type '{sc_type}' in storagecluster spec."
-            self.custom_sc_list.append(random_sc_name)
+        random_sc_name = f"custom-{interface}-{gen_alpha()}".lower()
+        log.info(
+            f"Adding custom storageclass '{random_sc_name}' of type '{interface}' in storagecluster spec."
+        )
+        assert patch_storage_cluster_for_custom_storage_class(
+            interface, storage_class_name=random_sc_name
+        ), f"Failed to add custom storageclass '{random_sc_name}' of type '{interface}' in storagecluster spec."
+        self.custom_sc_list.append(random_sc_name)
 
-            assert (
-                check_custom_storageclass_presence()
-            ), "Error validating the created storage classes."
+        assert (
+            check_custom_storageclass_presence()
+        ), "Error validating the created storage classes."
 
     @pytest.mark.polarion_id("OCS-5149")
     @pytest.mark.parametrize(
