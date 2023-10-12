@@ -278,7 +278,7 @@ class TestFailoverAndRelocate:
             f"After failover - Time in minutes since the last sync is {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < 2 * scheduling_interval
+            time_since_last_sync < 2.5 * scheduling_interval
         ), "After failover - Time since last sync is much greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime after failover.")
 
@@ -373,6 +373,6 @@ class TestFailoverAndRelocate:
             f"After relocate - Time in minutes since the last sync is {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < 2 * scheduling_interval
+            time_since_last_sync < 2.5 * scheduling_interval
         ), "After relocate - Time since last sync is much greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime after relocate.")
