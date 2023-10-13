@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 @rgw
 @magenta_squad
 @tier1
-@bugzilla("2209616")
 @bugzilla("1937187")
 @bugzilla("1958818")
 @on_prem_platform_required
