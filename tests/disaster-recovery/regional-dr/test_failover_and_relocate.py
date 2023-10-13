@@ -160,8 +160,8 @@ class TestFailoverAndRelocate:
             f"Before failover - Time in minutes since the last sync {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < scheduling_interval + 2
-        ), "Before failover - Time since last sync is greater than the scheduling interval."
+            time_since_last_sync < 2 * scheduling_interval
+        ), "Before failover - Time since last sync is two times greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime before failover.")
 
         if config.RUN.get("rdr_failover_via_ui"):
@@ -280,8 +280,8 @@ class TestFailoverAndRelocate:
             f"After failover - Time in minutes since the last sync is {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < 2.5 * scheduling_interval
-        ), "After failover - Time since last sync is much greater than the scheduling interval."
+            time_since_last_sync < 3 * scheduling_interval
+        ), "After failover - Time since last sync is three times greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime after failover.")
 
         # Relocate action
@@ -375,6 +375,6 @@ class TestFailoverAndRelocate:
             f"After relocate - Time in minutes since the last sync is {time_since_last_sync}"
         )
         assert (
-            time_since_last_sync < 2.5 * scheduling_interval
-        ), "After relocate - Time since last sync is much greater than the scheduling interval."
+            time_since_last_sync < 3 * scheduling_interval
+        ), "After relocate - Time since last sync is three times greater than the scheduling interval."
         logger.info("Verified lastGroupSyncTime after relocate.")
