@@ -199,9 +199,29 @@ class TestObjectVersioning:
         s3_obj = mcg_obj_session
         filename = setup_file_object
         bucket = bucket_factory(interface="S3", versioning=True)
-        for i in range(50):
+        for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
-        for i in range(50):
+        for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{i}{filename}", filename)
+        s3_put_object(s3_obj, bucket.name, f"testdir/", None)
+        for i in range(20):
+            s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
+        for i in range(20):
+            s3_put_object(s3_obj, bucket.name, f"testdir/{filename}{i}", filename)
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=35)
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=35, KeyMarker=object_info["NextKeyMarker"], VersionIdMarker=object_info['NextVersionIdMarker'])
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"], VersionIdMarker=object_info['NextVersionIdMarker'])
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"], VersionIdMarker=object_info['NextVersionIdMarker'])
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, Prefix="testdir/", Delimiter="/")
+        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+
+    def test_locking():
+        """
+        """
+        pass
