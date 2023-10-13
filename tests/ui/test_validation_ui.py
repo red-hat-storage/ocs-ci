@@ -16,7 +16,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     skipif_external_mode,
     skipif_mcg_only,
-    skipif_ibm_cloud_managed,
     acceptance,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 
 @black_squad
-@skipif_ibm_cloud_managed
 class TestUserInterfaceValidation(object):
     """
     Test User Interface Validation
