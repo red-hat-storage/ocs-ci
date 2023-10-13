@@ -3042,7 +3042,11 @@ def skipif_ui_not_support(ui_test):
 
     ocp_version = get_running_ocp_version()
     if (
-        config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+        (
+            # Skip for IMB Cloud managed AKA ROKS
+            config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"].lower() == "managed"
+        )
         or config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     ):
