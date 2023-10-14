@@ -196,6 +196,8 @@ class Deployment(object):
     is not needed), or point to a yaml file with custom storage class.
     """
 
+    UPGRADE_MARKERS = []
+
     def __init__(self):
         self.platform = config.ENV_DATA["platform"]
         self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
