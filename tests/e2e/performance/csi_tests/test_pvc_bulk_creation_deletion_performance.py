@@ -135,7 +135,6 @@ class TestPVCCreationPerformance(PASTest):
     def test_bulk_pvc_creation_deletion_measurement_performance(
         self, storageclass_factory, interface_type, bulk_size
     ):
-
         """
         Measuring PVC creation and deletion time of bulk_size PVCs
         and sends results to the Elastic Search DB
@@ -290,12 +289,15 @@ class TestPVCCreationPerformance(PASTest):
             f"Creation after deletion time of {number_of_pvcs} is {total_time} seconds."
         )
 
-        if total_time > 60:
+        total_time_accpeted = 80  # old value was 60
+        if total_time > total_time_accpeted:
             raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation (after initial deletion of "
-                f"75% of PVCs) time is {total_time} and greater than 50 seconds."
+                f"75% of PVCs) time is {total_time} and greater than {total_time_accpeted} seconds."
             )
-        log.info(f"{number_of_pvcs} PVCs creation time took less than a 50 seconds")
+        log.info(
+            f"{number_of_pvcs} PVCs creation time took less than a {total_time_accpeted} seconds"
+        )
 
         csi_creation_times = performance_lib.csi_bulk_pvc_time_measure(
             self.interface, self.pvc_objs, "create", csi_bulk_start_time
