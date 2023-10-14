@@ -4488,7 +4488,6 @@ def archive_ceph_crashes(toolbox_pod):
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
 
 
-<<<<<<< HEAD
 def add_time_report_to_email(session, soup):
     """
     Takes the time report dictionary and converts it into HTML table
@@ -4508,7 +4507,8 @@ def add_time_report_to_email(session, soup):
     table = BeautifulSoup(table_html, "html.parser")
     time_div.append(table)
     summary_tag.insert_after(time_div)
-=======
+
+
 def get_oadp_version():
     """
     Returns:
@@ -4523,18 +4523,7 @@ def get_oadp_version():
     for csv in csv_list:
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
-<<<<<<< HEAD
-<<<<<<< HEAD
-            cmd = f"oc get csv/{csv} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide | awk {{'print $4'}}"
-            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-            out = p.communicate()
-            return out[0].splitlines[1].decode()
->>>>>>> 4c498d43 (Handle OADP versions specific pod names)
-=======
-            cmd = f"oc get csv/{csv} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide "
-=======
             cmd = f"oc get csv/{csv['metadata']['name']} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide "
->>>>>>> 2f8a2b5c (Fix oadp-operator version fetch issue)
             awk_cmd = "awk {{'print $4'}}"
             p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
             outbuf = subprocess.Popen(
@@ -4542,4 +4531,3 @@ def get_oadp_version():
             )
             out = outbuf.communicate()
             return out[0].splitlines()[1].decode()
->>>>>>> b6c07332 (Fix output redirection issues)
