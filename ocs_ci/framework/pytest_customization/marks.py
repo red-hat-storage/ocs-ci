@@ -685,3 +685,11 @@ skipif_kms_deployment = pytest.mark.skipif(
     config.DEPLOYMENT.get("kms_deployment") is True,
     reason="This test is not supported for KMS deployment.",
 )
+
+# Mark the test with marker below to allow re-tries in ceph health fixture
+# for known issues when waiting in re-balance and flip flop from health OK
+# to 1-2 PGs waiting to be Clean
+ceph_health_retry = pytest.mark.ceph_health_retry
+
+# Mark for Multicluster upgrade scenarios
+config_index = pytest.mark.config_index
