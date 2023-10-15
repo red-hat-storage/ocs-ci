@@ -25,12 +25,12 @@ Interface_Info = {
     constants.CEPHFILESYSTEM: {
         "type": "CephFS",
         "sc": constants.CEPHFILESYSTEM_SC,
-        "delete_time": 6,  # old value was 2
+        "delete_time": 10,  # old value was 2
     },
     constants.CEPHBLOCKPOOL: {
         "type": "RBD",
         "sc": constants.CEPHBLOCKPOOL_SC,
-        "delete_time": 1,
+        "delete_time": 10,  # old value was 1
     },
 }
 Operations_Mesurment = ["create", "delete", "csi_create", "csi_delete"]
