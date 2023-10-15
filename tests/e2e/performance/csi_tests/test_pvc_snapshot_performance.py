@@ -250,7 +250,7 @@ class TestPvcSnapshotPerformance(PASTest):
             self.pod_object.fillup_fs(size=file_size, fio_filename=file_name)
 
             # Wait for fio to finish
-            fio_result = self.pod_object.get_fio_results(timeout=1800)
+            fio_result = self.pod_object.get_fio_results(timeout=3600)
             err_count = fio_result.get("jobs")[0].get("error")
             assert (
                 err_count == 0
