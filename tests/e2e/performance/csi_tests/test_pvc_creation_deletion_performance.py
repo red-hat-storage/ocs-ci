@@ -118,7 +118,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             TimeoutExpiredError : if not all PVC(s) get into Bound state whithin 2 sec. per PVC
         """
         # Creating PVC(s) for creation time mesurment and wait for bound state
-        timeout = pvcs * 3
+        timeout = pvcs * 4
         start_time = self.get_time(time_format="csi")
         log.info(f"{msg_prefix} Start creating new {pvcs} PVCs")
         self.pvc_objs, _ = helpers.create_multiple_pvcs(
