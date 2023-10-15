@@ -308,7 +308,7 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             assert consumers_verification_steps_after_provider_node_replacement()
 
         log.info("Checking that the ceph health is ok on the provider")
-        ceph_health_check()
+        ceph_health_check(tries=40)
 
         log.info("Checking that the ceph health is ok on the consumers")
         consumer_indexes = config.get_consumer_indexes_list()
