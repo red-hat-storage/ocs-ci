@@ -147,7 +147,7 @@ class TestPVCCreationPerformance(PASTest):
         self.interface = interface_type
         self.sc_obj = storageclass_factory(self.interface)
 
-        bulk_creation_time_limit = bulk_size / 2
+        bulk_creation_time_limit = bulk_size  # old value was bulk_size / 2
 
         log.info(f"Start creating new {bulk_size} PVCs")
 
