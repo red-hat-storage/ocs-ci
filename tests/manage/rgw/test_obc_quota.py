@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     bugzilla,
     skipif_ocs_version,
+    skipif_mcg_only,
     red_squad,
 )
 
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @bugzilla("1940823")
 @skipif_ocs_version("<4.10")
+@skipif_mcg_only
 class TestOBCQuota:
     """
     Test OBC Quota feature
