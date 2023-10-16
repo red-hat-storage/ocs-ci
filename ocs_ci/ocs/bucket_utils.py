@@ -260,17 +260,21 @@ def list_objects_from_bucket(
     s3_obj=None,
     signed_request_creds=None,
     timeout=600,
+    recursive=False,
     **kwargs,
 ):
     """
     Lists objects in a bucket using s3 ls command
 
     Args:
-        podobj: Pod object that is used to perform copy operation
-        src_obj: full path to object
-        target: target bucket
-        prefix: prefix
-        s3_obj: obc/mcg object
+        pod_obj (Pod): Pod object that is used to perform copy operation
+        target (str): target bucket
+        prefix (str, optional): Prefix to perform the list operation on
+        s3_obj (MCG, optional): The MCG object to use in case the target or source
+        signed_request_creds (dictionary, optional): the access_key, secret_key,
+            endpoint and region to use when willing to send signed aws s3 requests
+        timeout (int): timeout for the exec_oc_cmd
+        recurive (bool): If true, list objects recursively using the --recursive option
 
     Returns:
         List of objects in a bucket
@@ -280,6 +284,8 @@ def list_objects_from_bucket(
         retrieve_cmd = f"ls {target}/{prefix}"
     else:
         retrieve_cmd = f"ls {target}"
+    if recursive:
+        retrieve_cmd += " --recursive"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -2510,14 +2516,24 @@ def tag_objects(
         mcg_obj (MCG): An MCG class instance
         bucket (str): The name of the bucket to tag the objects in
         object_keys (list): A list of object keys to tag
-        tags (list): A list of tag dicts in the form of key-value pairs
-            I.E: [{"key1, "value1"}, {"key2", "value2"}]
+        tags (dict or list of dicts):
+            - A dictionary of key-value pairs
+            - or a list of tag dicts in the form of key-value pairs (closer to the AWS CLI format)
+            I.E: - {"key1": "value1", "key2": "value2"}
+                 - {"key:  "value1"}
+                 - [{"key:  "value1"}, {"key2": "value2"}]
         prefix (str): The prefix of the objects to tag
 
     """
     if not tags:
         logger.warning("No tags were given to apply to the objects")
         return
+
+    if isinstance(tags, dict):
+        tags_list = []
+        for key, val in tags.items():
+            tags_list.append({key: val})
+        tags = tags_list
 
     # Convert the tags to the expected aws-cli format
     tags_str = "'TagSet=["
@@ -2527,9 +2543,12 @@ def tag_objects(
             tags_str += f"{{Key={key}, Value={value}}}, "
     tags_str += "]'"
 
+    # If there prefix ends with a slash, remove it
+    prefix = prefix[:-1] if prefix.endswith("/") else prefix
+
     logger.info(f"Tagging objects in bucket {bucket} with tags {tags}")
     for object_key in object_keys:
-        object_key = f"prefix/{object_key}" if prefix else object_key
+        object_key = f"{prefix}/{object_key}" if prefix else object_key
         io_pod.exec_cmd_on_pod(
             craft_s3_command(
                 f"put-object-tagging --bucket  {bucket} --key {object_key} --tagging {tags_str}",
