@@ -1784,6 +1784,11 @@ class Deployment(object):
         Args:
             log_level (str): log level for installer (default: DEBUG)
         """
+        if config.DEPLOYMENT.get("skip_ocp_installer_destroy"):
+            logger.info(
+                "OCP Destroy is skipped because skip_ocp_installer_destroy was enabled!"
+            )
+            return
         if self.platform == constants.IBM_POWER_PLATFORM:
             if not config.ENV_DATA["skip_ocs_deployment"]:
                 self.destroy_ocs()
