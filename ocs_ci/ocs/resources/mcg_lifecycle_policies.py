@@ -52,28 +52,47 @@ class LifecycleFilter:
             minBytes (int): Minimum size of the objects
             maxBytes (int): Maximum size of the objects
 
+        NOTE: Setting minBytes and maxBytes will fail when applying the lifecycle config
+              because the current boto3 version and awscli version on the pod are not compatible
+              with the newer AWS API.
         """
         self.prefix = prefix
-        self.tag = tags
+        self.tags = tags
         self.minBytes = minBytes
         self.maxBytes = maxBytes
 
     def as_dict(self):
+        list_of_tag_dicts = []
+
+        # Initially add any criteria under the "And" key
         filter_dict = {"And": {}}
         if self.prefix:
             filter_dict["And"]["Prefix"] = self.prefix
-        if self.tag:
-            filter_dict["And"]["Tag"] = self.tag
         if self.minBytes:
-            filter_dict["And"]["MinBytes"] = self.minBytes
+            filter_dict["And"]["ObjectSizeGreaterThan"] = self.minBytes
         if self.maxBytes:
-            filter_dict["And"]["MaxBytes"] = self.maxBytes
+            filter_dict["And"]["ObjectSizeLessThan"] = self.maxBytes
+        if self.tags:
+            # Convert tags from a dictionary to a list of dictionaries in expected format
+            for key, val in self.tags.items():
+                list_of_tag_dicts.append({"Key": key, "Value": val})
+            filter_dict["And"]["Tags"] = list_of_tag_dicts
 
+        # If there is no filter criteria, set an empty dict
         if len(filter_dict["And"]) == 0:
             filter_dict = {}
-        elif len(filter_dict["And"]) == 1:
+
+        # If there's only one criteria and it's not tags, remove the "And" key
+        elif len(filter_dict["And"]) == 1 and len(list_of_tag_dicts) == 0:
             key, val = next(iter(filter_dict["And"].items()))
             filter_dict = {key: val}
+
+        # If there's only one tag, remove the "And" key and place
+        # the one tag as a dict under "Tag" instead of inside a list under "Tags"
+        elif len(filter_dict["And"]) == 1 and len(list_of_tag_dicts) == 1:
+            filter_dict["And"]["Tag"] = list_of_tag_dicts[0]
+            del filter_dict["And"]["Tags"]
+            filter_dict = filter_dict["And"]
 
         return filter_dict
 
@@ -152,6 +171,10 @@ class ExpirationRule(LifecycleRule):
                                                without any other versions will be deleted
                                                along with its delete marker.
 
+        NOTE: - due to https://github.com/aws/aws-cli/issues/8239 setting expire_solo_delete_markers=True
+        while also using a filter that includes a file size criteria will result in an error
+        while attempting to set the lifecycle policy.
+
         """
         super().__init__(filter=filter, is_enabled=is_enabled)
         self.days = days
@@ -169,8 +192,9 @@ class ExpirationRule(LifecycleRule):
             expiration_time_key = "Days"
             expiration_time_value = self.days
 
-        rule_dict["Expiration"] = {
-            expiration_time_key: expiration_time_value,
-            "ExpiredObjectDeleteMarker": self.expire_solo_delete_markers,
-        }
+        rule_dict["Expiration"] = {expiration_time_key: expiration_time_value}
+        if self.expire_solo_delete_markers:
+            rule_dict["Expiration"][
+                "ExpiredObjectDeleteMarker"
+            ] = self.expire_solo_delete_markers
         return rule_dict
