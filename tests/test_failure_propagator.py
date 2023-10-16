@@ -78,7 +78,7 @@ class TestFailurePropagator:
                     config.RUN.get("skipped_tests_ceph_health")
                     / number_of_eligible_tests
                 ),
-                1,
+                3,
             )
             log.info(
                 f"skipped_on_ceph_health_ratio: {config.RUN.get('skipped_on_ceph_health_ratio')}"
