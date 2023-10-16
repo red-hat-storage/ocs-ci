@@ -4507,3 +4507,20 @@ def add_time_report_to_email(session, soup):
     table = BeautifulSoup(table_html, "html.parser")
     time_div.append(table)
     summary_tag.insert_after(time_div)
+
+
+def get_oadp_version():
+    """
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "oadp-operator", namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    for csv in csv_list:
+        if "oadp-operator" in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
