@@ -180,6 +180,10 @@ class IBMCloudIPI(CloudDeploymentBase):
         self.export_api_key()
         resource_group = self.get_resource_group()
         if resource_group:
+            # Based on docs:
+            # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
+            # The volumes should be removed before running openshift-installer for destroy.
+            self.delete_volumes(resource_group)
             logger.info("Destroying the IBM Cloud cluster")
             super(IBMCloudIPI, self).destroy_cluster(log_level)
         else:
@@ -187,7 +191,6 @@ class IBMCloudIPI(CloudDeploymentBase):
                 "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
             )
         self.delete_service_id()
-        self.delete_volumes(resource_group)
         self.delete_leftover_resources(resource_group)
         self.delete_resource_group(resource_group)
 
