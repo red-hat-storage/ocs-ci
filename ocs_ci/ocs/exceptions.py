@@ -600,6 +600,10 @@ class VolumesExistError(Exception):
     pass
 
 
+class LeftoversExistError(Exception):
+    pass
+
+
 class ExternalClusterNodeRoleNotFound(Exception):
     pass
 
