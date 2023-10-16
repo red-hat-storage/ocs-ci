@@ -1018,6 +1018,10 @@ block_pool = {
     ),
     "save_pool_edit": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
+    "pool_cannot_be_deleted_warning": (
+        "//p[@data-test='pool-bound-message']",
+        By.XPATH,
+    ),
 }
 
 storageclass = {
@@ -1173,6 +1177,41 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "blockpool_status": ("//span[@data-test='status-text']", By.XPATH),
+    "capacity_breakdown_cards": (
+        "//*[@class='capacity-breakdown-card__legend-link']",
+        By.XPATH,
+    ),
+    "capacity_breakdown_card": (
+        "(//*[@class='capacity-breakdown-card__legend-link'])[{}]",
+        By.XPATH,
+    ),
+    # get size in such format: 'ocs-stora...2.06 GiB'
+    "capacity_breakdown_card_size": (
+        "((//*[@class='capacity-breakdown-card__legend-link'])[{}]/child::*)[1]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_selected": (
+        "//div[@id='breakdown-card-title']/following-sibling::*//*[@class = 'pf-c-select__toggle-text']",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_btn_one": (
+        "//div[@class='pf-c-select ceph-capacity-breakdown-card-header__dropdown']",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_btn_two": (
+        "(//span[@class='pf-c-select__toggle-arrow'])[2]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_list_option": (
+        "//*[@class='pf-c-select__menu-item' and contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_namespace": (
+        "//button[@data-test='odf-capacity-breakdown-card-pvc-namespace-dropdown']",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_namespace_input": ("search-bar", By.ID),
+    "req_capacity_dropdown_namespace_input_select": ("//li[@id='{}-link']", By.XPATH),
 }
 
 validation_4_7 = {
@@ -1612,6 +1651,44 @@ topology = {
 }
 
 locators = {
+    "4.15": {
+        "login": {**login, **login_4_11, **login_4_14},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "generic": generic_locators,
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+        },
+        "obc": obc,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+    },
     "4.14": {
         "login": {**login, **login_4_11, **login_4_14},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
