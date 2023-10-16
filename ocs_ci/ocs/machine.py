@@ -11,6 +11,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnexpectedBehaviour,
     ResourceWrongStatusException,
+    CommandFailed,
 )
 
 log = logging.getLogger(__name__)
@@ -1117,3 +1118,105 @@ def wait_for_current_replica_count_to_reach_expected_value(
         res = False
 
     return res
+
+
+def delete_machines(machine_names):
+    """
+    Delete the machines
+
+    Args:
+        machine_names (list): List of the machine names you want to delete
+
+    Raises:
+        CommandFailed: In case yaml_file and resource_name wasn't provided
+
+    """
+    machine_obj = OCP(
+        kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+    for machine_name in machine_names:
+        log.info(f"Deleting machine {machine_name}")
+        machine_obj.delete(resource_name=machine_name)
+
+
+def get_machines_in_statuses(
+    statuses, machine_objs=None, machine_type=constants.WORKER_MACHINE
+):
+    """
+    Get all machines in specific statuses
+
+    Args:
+        statuses (list): List of the statuses to search for the machines
+        machine_objs (list): The machine objects to check their statues. If not specified,
+            it gets all the machines.
+        machine_type (str): The machine type (e.g. worker, master)
+
+    Returns:
+        list: OCP objects representing the machines in the specific statuses
+
+    """
+    machines = machine_objs or get_machines(machine_type)
+    machine_obj = OCP(
+        kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+
+    machines_in_statuses = []
+    for m in machines:
+        try:
+            machine_status = machine_obj.get_resource(
+                resource_name=m.name, column="PHASE"
+            )
+        except CommandFailed as e:
+            log.warning(f"Failed to get the machine status due to the error: {str(e)}")
+            continue
+
+        if machine_status in statuses:
+            machines_in_statuses.append(m)
+
+    return machines_in_statuses
+
+
+def wait_for_machines_count_to_reach_status(
+    machine_count,
+    machine_type=constants.WORKER_MACHINE,
+    expected_status=constants.STATUS_RUNNING,
+    timeout=600,
+    sleep=20,
+):
+    """
+    Wait for a machine count to reach the expected status
+
+    Args:
+        machine_count (int): The machine count
+        machine_type (str): The machine type (e.g. worker, master)
+        expected_status (str): The expected status. Default value is "Running".
+        timeout (int): Time to wait for the machine count to reach the expected status.
+        sleep (int): Time in seconds to wait between attempts.
+
+    Raise:
+        TimeoutExpiredError: In case the machine count didn't reach the expected status in the given timeout.
+
+    """
+    log.info(
+        f"Wait for {machine_count} of the machines to reach the expected status {expected_status}"
+    )
+
+    for machine_objs in TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=get_machines, machine_type=machine_type
+    ):
+        machines_in_expected_statuses = get_machines_in_statuses(
+            [expected_status], machine_objs
+        )
+        machines_names_in_expected_status = [
+            n.name for n in machines_in_expected_statuses
+        ]
+        if len(machines_names_in_expected_status) == machine_count:
+            log.info(
+                f"{machine_count} of the machines reached the expected status: {expected_status}"
+            )
+            break
+        else:
+            log.info(
+                f"The machines {machines_names_in_expected_status} reached the expected status {expected_status}, "
+                f"but we were waiting for {machine_count} of them to reach status {expected_status}"
+            )
