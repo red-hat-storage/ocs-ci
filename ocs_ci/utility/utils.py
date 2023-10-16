@@ -4523,11 +4523,4 @@ def get_oadp_version():
     for csv in csv_list:
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
-            cmd = f"oc get csv/{csv['metadata']['name']} -n {constants.ACM_HUB_BACKUP_NAMESPACE} -o wide "
-            awk_cmd = "awk {{'print $4'}}"
-            p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
-            outbuf = subprocess.Popen(
-                shlex.split(awk_cmd), stdin=p.stdout, stdout=subprocess.PIPE
-            )
-            out = outbuf.communicate()
-            return out[0].splitlines()[1].decode()
+            return csv["spec"]["version"]
