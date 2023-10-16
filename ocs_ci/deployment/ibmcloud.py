@@ -307,12 +307,16 @@ class IBMCloudIPI(CloudDeploymentBase):
 
             _verify_volumes_deleted(resource_group)
 
+    @retry((LeftoversExistError, CommandFailed), tries=3, delay=30, backoff=1)
     def delete_leftover_resources(self, resource_group):
         """
         Delete leftovers from IBM Cloud.
 
         Args:
             resource_group (str): Resource group in IBM Cloud that contains the cluster resources.
+
+        Raises:
+            LeftoversExistError: In case the leftovers after attempt to clean them out.
 
         """
 
