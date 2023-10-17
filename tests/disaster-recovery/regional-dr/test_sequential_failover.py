@@ -6,7 +6,7 @@ import pytest
 
 from ocs_ci.framework import config
 
-# from ocs_ci.framework.testlib import tier1, tier4a
+from ocs_ci.framework.testlib import tier1, polarion_id
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 
 polarion_id_primary_up = "OCS-4771"
 polarion_id_primary_down = "OCS-4770"
-# tier_name = tier1
+tier_name = tier1
 if config.RUN.get("rdr_failover_via_ui"):
     polarion_id_primary_up = "OCS-5032"
     polarion_id_primary_down = "OCS-5033"
-    # tier_name = tier4a
+    tier_name = pytest.mark.tier4a
 
 
 class TestSequentialFailover:
@@ -43,12 +43,12 @@ class TestSequentialFailover:
         argvalues=[
             pytest.param(
                 False,
-                # marks=[polarion_id(polarion_id_primary_up), tier_name],
+                marks=[polarion_id(polarion_id_primary_up), tier_name],
                 id="primary_up",
             ),
             pytest.param(
                 True,
-                # marks=[polarion_id(polarion_id_primary_down), tier_name],
+                marks=[polarion_id(polarion_id_primary_down), tier_name],
                 id="primary_down",
             ),
         ],
