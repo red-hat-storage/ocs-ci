@@ -151,7 +151,10 @@ from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.multicluster import get_multicluster_upgrade_parametrizer, MutliClusterUpgradeParametrize
+from ocs_ci.utility.multicluster import (
+    get_multicluster_upgrade_parametrizer,
+    MutliClusterUpgradeParametrize,
+)
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -344,7 +347,7 @@ def export_squad_marker_to_csv(items, filename=None):
 
 def pytest_generate_tests(metafunc):
     """
-    This hook handles pytest dynamic pytest parametrization of tests related to 
+    This hook handles pytest dynamic pytest parametrization of tests related to
     Multicluster scenarios
 
     Args:
@@ -363,7 +366,6 @@ def pytest_generate_tests(metafunc):
             for marker in metafunc.definition.iter_markers():
                 if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
                     metafunc.parametrize("zone_rank, role_rank, config_index", params)
-
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -472,23 +474,32 @@ def pytest_collection_modifyitems(session, config, items):
                 )
                 items.remove(item)
     # If multicluster upgrade scenario
-    if ocsci_config.multicluster and ocsci_config['UPGRADE'].get('upgrade', ''):
+    if ocsci_config.multicluster and ocsci_config["UPGRADE"].get("upgrade", ""):
         for item in items:
-            if list(set([i.name for i in item.iter_markers()]).intersection((MutliClusterUpgradeParametrize.MULTICLUSTER_UPGRADE_MARKERS))) and ocsci_config.multicluster_scenario:
-                if getattr(item, 'callspec', ''):
-                    zone_rank = item.callspec.params['zone_rank']  
-                    role_rank = item.callspec.params['role_rank']
+            if (
+                list(
+                    set([i.name for i in item.iter_markers()]).intersection(
+                        (MutliClusterUpgradeParametrize.MULTICLUSTER_UPGRADE_MARKERS)
+                    )
+                )
+                and ocsci_config.multicluster_scenario
+            ):
+                if getattr(item, "callspec", ""):
+                    zone_rank = item.callspec.params["zone_rank"]
+                    role_rank = item.callspec.params["role_rank"]
                 else:
                     continue
-                markers_update=[]
+                markers_update = []
                 for m in item.iter_markers():
                     # fetch already marked 'order' value
-                    if m.name == 'run':
-                        val = m.kwargs.get('order')
+                    if m.name == "run":
+                        val = m.kwargs.get("order")
                         newval = val + zone_rank + role_rank
                         markers_update.append((pytest.mark.order, newval))
                         break
-                markers_update.append((config_index, item.callspec.params['config_index']))
+                markers_update.append(
+                    (config_index, item.callspec.params["config_index"])
+                )
                 # Apply all the markers now
                 for mark, param in markers_update:
                     item.add_marker(mark(param))
@@ -514,10 +525,10 @@ def pytest_fixture_setup(fixturedef, request):
     """
     # If this is the first fixture getting loaded then its the right time
     # to switch context
-    if ocsci_config.multicluster and ocsci_config['UPGRADE'].get('upgrade', ''):
+    if ocsci_config.multicluster and ocsci_config["UPGRADE"].get("upgrade", ""):
         if request.fixturenames.index(fixturedef.argname) == 0:
             for mark in request.node.iter_markers():
-                if mark.name == 'config_index':
+                if mark.name == "config_index":
                     ocsci_config.switch_ctx(mark.args[0])
 
 
