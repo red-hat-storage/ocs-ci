@@ -1758,6 +1758,14 @@ def cluster_config_reindex():
     ocsci_config.switch_acm_ctx()
 
 
+def get_primary_cluster_index():
+    """
+    Get the index of primary cluster in case of multicluster scenario
+    """
+    pcluster = get_primary_cluster_config()
+    return pcluster.MULTICLUSTER["multicluster_index"]
+
+
 def thread_init_class(class_init_operations, shutdown):
     if len(class_init_operations) > 0:
         executor = ThreadPoolExecutor(max_workers=len(class_init_operations))
