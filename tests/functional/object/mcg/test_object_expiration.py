@@ -1,4 +1,5 @@
 import logging
+import json
 import uuid
 from time import sleep
 
@@ -6,6 +7,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
+    tier2,
     bugzilla,
     red_squad,
     runs_on_provider,
@@ -16,17 +18,21 @@ from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     expire_mcg_objects,
+    list_objects_from_bucket,
     s3_put_object,
     s3_get_object,
+    tag_objects,
     write_random_test_objects_to_bucket,
     write_random_test_objects_to_s3_path,
     wait_for_object_count_in_bucket,
 )
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
     LifecyclePolicy,
     ExpirationRule,
     LifecycleFilter,
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -136,27 +142,24 @@ class TestObjectExpiration(MCGTest):
             sleep=10,
         ), "Objects were expired when they shouldn't have been!"
 
-    # TODO: determine tier
-    def test_object_expiration_filter(
+    @tier2
+    @pytest.mark.polarion_id("OCS-5185")
+    def test_expiration_policy_filter(
         self, mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
     ):
         """
         Test various filtering options for the object expiration policy.
 
         1. On an MCG bucket, Set an S3 lifecycle policy with the following rules:
-            - An expiration rule with a prefix filter
-            - An expiration rule with a tags filter
-            - An expiration rule with a minBytes filter
-            - An expiration rule with a maxBytes filter
-            - An expiration rule with a filter of all of the above
-        2. Upload objects in the target prefix of the first rule
-        3. Upload objects that match the tags in the second rule
-        4. Upload objects that biger than the minimum size of the third rule
-        5. Upload objects exceept the max size of the fourth rule
-        6. Upload objects that match a combination of the above filters
-        7. Upload objects that don't match any of the above filters
-        8. Set the creation time of all of the objects to be older than the expiration time
-        9. Verify that only the objects that should have been expired were deleted
+            1.1 An expiration rule with a prefix filter
+            1.2 Multiple expiration rules with tags filters
+            1.3 An expiration rule with a combination of prefix and tags filters
+        2. Upload objects to the target prefix of the first rule
+        3. Upload objects and tag them to match the tag filters rules
+        4. Upload objects to the target prefix of the mixed criteria rule and tag them to match the tags filter
+        5. Upload objects that don't match any of the above filters
+        6. Set the creation time of all of the objects to be older than the expiration time
+        7. Verify that only the objects that should have been expired were deleted
 
         """
         first_prefix_to_expire = "to_expire_a/"
@@ -165,66 +168,77 @@ class TestObjectExpiration(MCGTest):
         tag_a_key, tag_a_value = "tag-a", "value-a"
         tag_b_key, tag_b_value = "tag-b", "value-b"
         tag_c_key, tag_c_value = "tag-c", "value-c"
-        objects_to_expire = []
-        objects_not_to_expire = []
 
         # 1. On an MCG bucket, Set an S3 lifecycle policy with the multiple filter rules
         bucket = bucket_factory()[0].name
         expiration_rules = []
+        # 1.1 An expiration rule with a prefix filter
         expiration_rules.append(
             ExpirationRule(
-                days=1, filter=LifecycleFilter(prefix=first_prefix_to_expire)
+                days=1,
+                use_date=True,
+                filter=LifecycleFilter(prefix=first_prefix_to_expire),
+            )
+        )
+        # 1.2 Multiple expiration rules with tags filters
+        expiration_rules.append(
+            ExpirationRule(
+                days=1,
+                use_date=True,
+                filter=LifecycleFilter(tags={tag_a_key: tag_a_value}),
             )
         )
         expiration_rules.append(
             ExpirationRule(
                 days=1,
+                use_date=True,
+                filter=LifecycleFilter(tags={tag_b_key: tag_b_value}),
+            )
+        )
+        expiration_rules.append(
+            ExpirationRule(
+                days=1,
+                use_date=True,
                 filter=LifecycleFilter(
                     tags={tag_a_key: tag_a_value, tag_b_key: tag_b_value}
                 ),
             )
         )
-        expiration_rules.append(
-            ExpirationRule(days=1, filter=LifecycleFilter(minBytes=100))
-        )
-        expiration_rules.append(
-            ExpirationRule(days=1, filter=LifecycleFilter(maxBytes=200))
-        )
+        # 1.3 An expiration rule with a combination of prefix and tags filters
         expiration_rules.append(
             ExpirationRule(
                 days=1,
+                use_date=True,
                 filter=LifecycleFilter(
                     prefix="to_expire_b/",
                     tags={tag_c_key: tag_c_value},
-                    minBytes=100,
-                    maxBytes=200,
                 ),
             )
         )
-        lifecycle_policy = LifecyclePolicy(expiration_rules)
+        lifecycle_policy_dict = LifecyclePolicy(expiration_rules).as_dict()
         logger.info(
-            f"Setting lifecycle policy to bucket {bucket}: \n {lifecycle_policy}"
+            f"Setting lifecycle policy to bucket {bucket}: \n {json.dumps(lifecycle_policy_dict, indent=4)}"
         )
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy_dict
         )
 
         # 2. Upload objects in the target prefix of the first rule
         logger.info("Uploading objects to match the prefix filter")
-        objects_to_expire += write_random_test_objects_to_s3_path(
+        write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
             s3_path=f"{bucket}/{first_prefix_to_expire}",
-            file_dir=test_directory_setup.origin_dir,
+            file_dir=f"{test_directory_setup.origin_dir}/{first_prefix_to_expire}",
             amount=object_count_per_case,
             pattern="prefixed-obj-",
             mcg_obj=mcg_obj,
         )
 
-        # 3. Upload objects that match the tags in the second rule
+        # 3. Upload objects and tag them to match the tags filters
         tagged_objs_a = write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
             s3_path=f"{bucket}/",
-            file_dir=test_directory_setup.origin_dir,
+            file_dir=f"{test_directory_setup.origin_dir}/tagged_objs_a",
             amount=object_count_per_case // 2,
             pattern="tag-a-obj-",
             mcg_obj=mcg_obj,
@@ -232,87 +246,114 @@ class TestObjectExpiration(MCGTest):
         tagged_objs_b = write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
             s3_path=f"{bucket}/",
-            file_dir=test_directory_setup.origin_dir,
+            file_dir=f"{test_directory_setup.origin_dir}/tagged_objs_b",
             amount=object_count_per_case // 2,
             pattern="tag-b-obj-",
             mcg_obj=mcg_obj,
         )
-        # TODO: tag the objects that start with the pattern above accordingly
-        objects_to_expire += tagged_objs_a + tagged_objs_b
-
-        # 4. Upload objects that biger than the minimum size of the third rule
-        objects_to_expire += write_random_test_objects_to_s3_path(
+        tagged_objs_a_b = write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
             s3_path=f"{bucket}/",
-            file_dir=test_directory_setup.origin_dir,
-            amount=object_count_per_case,
-            pattern="big-obj-",
-            bs="2M",
+            file_dir=f"{test_directory_setup.origin_dir}/tagged_objs_a_b",
+            amount=object_count_per_case // 2,
+            pattern="tag-ab-obj-",
             mcg_obj=mcg_obj,
         )
-
-        # 5. Upload objects that are smaller than the maximum size of the fourth rule
-        objects_to_expire += write_random_test_objects_to_s3_path(
-            io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/",
-            file_dir=test_directory_setup.origin_dir,
-            amount=object_count_per_case,
-            pattern="small-obj-",
-            bs="500K",
-            mcg_obj=mcg_obj,
+        tag_objects(
+            awscli_pod_session, mcg_obj, bucket, tagged_objs_a, {tag_a_key: tag_a_value}
+        )
+        tag_objects(
+            awscli_pod_session, mcg_obj, bucket, tagged_objs_b, {tag_b_key: tag_b_value}
+        )
+        tag_objects(
+            awscli_pod_session,
+            mcg_obj,
+            bucket,
+            tagged_objs_a_b,
+            {tag_a_key: tag_a_value, tag_b_key: tag_b_value},
         )
 
-        # 6. Upload objects that match a combination of the above filters
-        objects_to_expire += write_random_test_objects_to_s3_path(
+        # 4. Upload objects that match a combination of the above filters
+        mixed_criteria_objects = write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
             s3_path=f"{bucket}/{second_prefix_to_expire}",
-            file_dir=test_directory_setup.origin_dir,
+            file_dir=f"{test_directory_setup.origin_dir}/{second_prefix_to_expire}",
             amount=object_count_per_case,
             pattern="mixed-criteria-obj-",
-            bs="1M",
             mcg_obj=mcg_obj,
         )
-        # TODO: tag the objects that start with the pattern above accordingly
+        tag_objects(
+            awscli_pod_session,
+            mcg_obj,
+            bucket,
+            mixed_criteria_objects,
+            {tag_c_key: tag_c_value},
+            prefix=second_prefix_to_expire,
+        )
 
-        # 7. Upload objects that don't match any of the above filters
-        # 7.1 Upload objects without a prefix that don't match any of the above filters
-        objects_not_to_expire += write_random_test_objects_to_s3_path(
+        # 5.1 Upload objects that don't match any of the above filters
+        objs_expected_not_to_expire = write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
             s3_path=f"{bucket}/",
-            file_dir=test_directory_setup.origin_dir,
+            file_dir=f"{test_directory_setup.origin_dir}/no_filter_rules_match",
             amount=object_count_per_case,
-            pattern="not-to-expire-no-prefix-obj-",
-            bs="1M",
+            pattern="no-filter-rules-match-obj-",
             mcg_obj=mcg_obj,
         )
-        # 7.2 Upload objects in the second prefix that don't have the target tag
-        objects_not_to_expire += write_random_test_objects_to_s3_path(
+        # 5.2 Upload objects to the prefix in the mixed criteria rule but don't match the tags
+        prefixed_objs_expected_not_to_expire = write_random_test_objects_to_s3_path(
             io_pod=awscli_pod_session,
             s3_path=f"{bucket}/{second_prefix_to_expire}",
-            file_dir=test_directory_setup.origin_dir,
+            file_dir=f"{test_directory_setup.origin_dir}/{second_prefix_to_expire}/no_tags_match",
             amount=object_count_per_case,
-            pattern="not-to-expire-no-tag-obj-",
-            bs="1M",
+            pattern="mix-criteria-but-no-tags-obj-",
             mcg_obj=mcg_obj,
         )
-        # 7.3 Upload objects to the second prefix and are not in the filter size range
-        objects_not_to_expire += write_random_test_objects_to_s3_path(
-            io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/{second_prefix_to_expire}",
-            file_dir=test_directory_setup.origin_dir,
-            amount=object_count_per_case,
-            pattern="not-to-expire-size-obj-",
-            bs="1M",
-            mcg_obj=mcg_obj,
-        )
-        # TODO: tag the objects that start with the pattern above accordingly
+        # Add the prefix to the name of the prefixed objects so they'll match the listing results later
+        prefixed_objs_expected_not_to_expire = [
+            second_prefix_to_expire + obj
+            for obj in prefixed_objs_expected_not_to_expire
+        ]
+        objs_expected_not_to_expire += prefixed_objs_expected_not_to_expire
 
-        # 8. Set the creation time of all of the objects to be older than the expiration time
-        logger.info("Setting the creation time of all objects to be older than 1 day")
+        # 6. Set the creation time of all of the objects to be older than the expiration time
+        logger.info(f"Setting back the creation time of all the objects in {bucket}:")
         expire_mcg_objects(bucket)
 
-        # 9. Verify that only the objects that should have been expired were deleted
-        # TODO: Use Uday's util function
+        # 7. Verify that only the objects that should have been expired were deleted
+        logger.info("Waiting for the expiration of the objects that should expire:")
+
+        timeout = 600
+        sleep = 30
+
+        try:
+            last_objs_seen_in_bucket = []
+            list_objs_timeout_sampler_generator = TimeoutSampler(
+                timeout,
+                sleep,
+                lambda: list_objects_from_bucket(
+                    pod_obj=awscli_pod_session,
+                    target=bucket,
+                    s3_obj=mcg_obj,
+                    recursive=True,
+                ),
+            )
+
+            for objs_in_bucket in list_objs_timeout_sampler_generator:
+                last_objs_seen_in_bucket = objs_in_bucket
+                if objs_in_bucket == objs_expected_not_to_expire:
+                    logger.info("Expiration complete as expected!")
+                    break
+
+        except TimeoutExpiredError as e:
+            logger.error(
+                (
+                    "Mismatch between expected and actual objects in the bucket!\n",
+                    f"Expected: {objs_expected_not_to_expire}\n",
+                    f"Actual: {last_objs_seen_in_bucket}\n",
+                )
+            )
+            raise e
 
     @pytest.mark.polarion_id("OCS-5167")
     @tier1

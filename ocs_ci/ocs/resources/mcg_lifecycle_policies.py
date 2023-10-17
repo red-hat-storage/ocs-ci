@@ -185,8 +185,8 @@ class ExpirationRule(LifecycleRule):
         rule_dict = super().as_dict()
         if self.use_date:
             expiration_time_key = "Date"
-            expiration_time_value = datetime.datetime.now() + datetime.timedelta(
-                days=self.days
+            expiration_time_value = (
+                datetime.datetime.now() + datetime.timedelta(days=self.days)
             ).strftime("%Y-%m-%d")
         else:
             expiration_time_key = "Days"
