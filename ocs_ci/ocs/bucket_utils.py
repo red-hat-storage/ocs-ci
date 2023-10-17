@@ -2590,8 +2590,9 @@ def get_object_to_tags_dict(
 
     Returns:
         dict: A dictionary from object keys to their list of tag dicts
-        I.E: {"objA": [{"key1": "value1"}, {"key2": "value2"}],
-              "objB": [{"key3": "value3"}, {"key4": "value4"}]}
+            For example:
+                {"objA": [{"key1": "value1"}, {"key2": "value2"}],
+                "objB": [{"key3": "value3"}, {"key4": "value4"}]}
 
     """
 
