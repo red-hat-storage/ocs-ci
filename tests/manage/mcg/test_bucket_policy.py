@@ -982,6 +982,7 @@ class TestS3BucketPolicy(MCGTest):
 
     @tier1
     @pytest.mark.bugzilla("2210289")
+    @pytest.mark.polarion_id("OCS-5183")
     def test_supported_bucket_policy_operations(self, mcg_obj, bucket_factory):
         """
         Test supported s3 bucket policies.
@@ -1009,14 +1010,12 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(f"Creating bucket policy on bucket: {obc_obj.bucket_name}")
         put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
 
-        if put_policy is not None:
-            response = HttpResponseParser(put_policy)
-            if response.status_code == 200:
-                logger.info("Bucket policy has been created successfully")
-            else:
-                raise InvalidStatusCode(f"Invalid Status code: {response.status_code}")
-        else:
-            raise NoBucketPolicyResponse("Put policy response is none")
+        assert put_policy is not None, "Put policy response is None"
+        response = HttpResponseParser(put_policy)
+        assert (
+            response.status_code == 200
+        ), f"Invalid Status code: {response.status_code}"
+        logger.info("Bucket policy has been created successfully")
 
         # Get bucket policy
         logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
