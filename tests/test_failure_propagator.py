@@ -64,7 +64,7 @@ class TestFailurePropagator:
                     config.RUN.get("skipped_tests_ceph_health")
                     / number_of_eligible_tests
                 ),
-                1,
+                3,
             )
             message = (
                 f"This run had {config.RUN['skipped_on_ceph_health_ratio'] * 100}% of the "
