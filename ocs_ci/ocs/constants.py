@@ -2501,3 +2501,5 @@ OPERATION_STOP = "stop"
 OPERATION_START = "start"
 OPERATION_RESTART = "restart"
 OPERATION_TERMINATE = "terminate"
+# MDR multicluster roles
+mdr_roles = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
