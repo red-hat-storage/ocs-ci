@@ -2533,9 +2533,11 @@ def tag_objects(
         tags (dict or list of dicts):
             - A dictionary of key-value pairs
             - or a list of tag dicts in the form of key-value pairs (closer to the AWS CLI format)
+
             I.E: - {"key1": "value1", "key2": "value2"}
                  - {"key:  "value1"}
                  - [{"key:  "value1"}, {"key2": "value2"}]
+
         prefix (str): The prefix of the objects to tag
 
     """
