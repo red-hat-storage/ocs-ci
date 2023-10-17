@@ -1,3 +1,4 @@
+from ocs_ci.framework.pytest_customization.marks import libtest
 from ocs_ci.ocs.bucket_utils import (
     delete_object_tags,
     get_object_to_tags_dict,
@@ -6,6 +7,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 
 
+@libtest
 def test_s3_tags_util_funcs(
     mcg_obj, bucket_factory, awscli_pod_session, test_directory_setup
 ):
