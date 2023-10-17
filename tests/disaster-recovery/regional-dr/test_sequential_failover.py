@@ -31,7 +31,6 @@ if config.RUN.get("rdr_failover_via_ui"):
     tier_name = tier4a
 
 
-@tier1
 class TestSequentialFailover:
     """
     Test Sequential Failover actions
