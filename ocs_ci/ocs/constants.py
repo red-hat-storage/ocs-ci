@@ -3035,3 +3035,5 @@ FILE_CREATOR_IO = os.path.join(
 MC_WORKAROUND_SSD = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
 )
+# MDR multicluster roles
+mdr_roles = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
