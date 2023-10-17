@@ -3050,3 +3050,5 @@ FDF_IMAGE_DIGEST_MIRROR_SET = os.path.join(
 FDF_SERVICE_CR = os.path.join(FDF_TEMPLATE_DIR, "data-foundation-instance.yaml")
 FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
+# MDR multicluster roles
+mdr_roles = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
