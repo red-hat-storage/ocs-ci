@@ -141,7 +141,7 @@ class TestObjectVersioning:
         """
         """
         s3_obj = mcg_obj_session
-        bucket = bucket_factory(interface="S3", versioning=True)
+        bucket = bucket_factory(interface="S3", versioning=True)[0]
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
@@ -200,7 +200,7 @@ class TestObjectVersioning:
         """
         s3_obj = mcg_obj_session
         filename = setup_file_object
-        bucket = bucket_factory(interface="S3", versioning=True)
+        bucket = bucket_factory(interface="S3", versioning=True)[0]
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
         for i in range(20):
