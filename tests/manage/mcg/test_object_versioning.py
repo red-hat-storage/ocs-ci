@@ -136,7 +136,8 @@ class TestObjectVersioning:
         ), "[Test failed] There are more than one versions considered to be latest version !!"
         logger.info("Test succeeded!!")
 
-    def test_versioning_properties_and_deletion(bucket_factory, mcg_obj_session):
+    @tier2
+    def test_versioning_properties_and_deletion(self, bucket_factory, mcg_obj_session):
         """
         """
         s3_obj = mcg_obj_session
@@ -193,7 +194,8 @@ class TestObjectVersioning:
 
         os.remove(filename)
 
-    def test_listing(bucket_factory, mcg_obj_session, setup_file_object):
+    @tier2
+    def test_listing(self, bucket_factory, mcg_obj_session, setup_file_object):
         """
         """
         s3_obj = mcg_obj_session
@@ -221,7 +223,7 @@ class TestObjectVersioning:
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, Prefix="testdir/", Delimiter="/")
         logger.info(f"object info of bucket {bucket.name}: (object_info)")
 
-    def test_locking():
+    def test_locking(self):
         """
         """
         pass
