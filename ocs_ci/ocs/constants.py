@@ -2820,3 +2820,6 @@ CCOCTL_LOG_FILE = "ccoctl-service-id.log"
 # Noobaa Secrets
 NOOBAA_BACKEND_SECRET = "noobaa-root-master-key-backend"
 NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
+
+# MDR multicluster roles
+mdr_roles = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
