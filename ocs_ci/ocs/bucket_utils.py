@@ -2,6 +2,7 @@
 Helper functions file for working with object buckets
 """
 
+import datetime
 import json
 import logging
 import os
@@ -2176,29 +2177,44 @@ def create_aws_bs_using_cli(
     )
 
 
-def expire_objects_in_bucket_from_noobaa_db(bucket_name):
+def get_objects_creation_time_from_noobaa_db(bucket_name, object_keys=[]):
     """
-    Manually expire the objects in a bucket
+    Get the creation time of a given object by querying the noobaa-db
 
     Args:
-        bucket_name (str): Name of the bucket
+        bucket_name (str): The name of the bucket where the object resides
+        object_keys (list, optional): A list of object keys to get the creation time of
+            Note:
+                If object_keys is empty, return the creation time of all objects in the bucket
+
+    Returns:
+        dict: A dictionary containing the object keys as keys and their creation time
 
     """
-
-    from ocs_ci.ocs.resources.pod import (
-        get_noobaa_db_pod,
+    psql_query = (
+        "SELECT data ->>'key', data ->>'create_time' "
+        "FROM objectmds "
+        "WHERE data ->> 'bucket' IN ( "
+        "SELECT _id "
+        "FROM buckets "
+        f"WHERE data ->>'name' = '{bucket_name}')"
     )
+    if object_keys:
+        psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
+    psql_query += ";"
+    output = exec_nb_db_query(psql_query)
 
-    creation_time = f"{date.today().year-1}-06-25T14:18:28.712Z"
-    nb_db_pod = get_noobaa_db_pod()
-    query = (
-        'UPDATE objectmds SET "data"=jsonb_set("data", \'{create_time}\','
-        f"'\\\"{creation_time}\\\"') WHERE data ->> 'bucket' IN "
-        f"( SELECT _id FROM buckets WHERE data ->> 'name' = '{bucket_name}' );"
-    )
-    command = f'psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "{query}"'
+    # Parse the output to create a dictionary of object keys to datetime objects
+    objs_to_dtime = {}
+    dtime_format = "%Y-%m-%dT%H:%M:%S.%fZ"
+    for row in output:
+        output_obj_key = row.split("|")[0].strip()
+        output_time_str = row.split("|")[1].strip()
+        # Convert the raw time string to a datetime object
+        output_dtime = datetime.datetime.strptime(output_time_str, dtime_format)
+        objs_to_dtime[output_obj_key] = output_dtime
 
-    nb_db_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
+    return objs_to_dtime
 
 
 def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
@@ -2377,14 +2393,12 @@ def change_objects_creation_date_in_noobaa_db(
     bucket_name, object_keys=[], new_creation_time=0
 ):
     """
-    Change the creation date of objects in a given bucket one year back at the noobaa-db.
-
-    Note:
-        If object_keys is empty, all objects in the bucket will be changed.
+    Change the creation date of objects at the noobaa-db.
 
     Args:
         bucket_name (str): The name of the bucket where the objects reside
-        object_keys (list): A list of object keys to change their creation date
+        object_keys (list, optional): A list of object keys to change their creation date
+            Note: If object_keys is empty, all objects in the bucket will be changed.
         new_creation_time (int): The new creation time in unix timestamp in seconds
 
     Example usage:
@@ -2403,7 +2417,6 @@ def change_objects_creation_date_in_noobaa_db(
     )
     if object_keys:
         psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
-
     psql_query += ";"
 
     exec_nb_db_query(psql_query)
@@ -2413,16 +2426,14 @@ def expire_mcg_objects(bucket_name, object_keys=[], prefix=""):
     """
     Expire objects in a bucket by changing their creation date to one year back.
 
-    Note:
-        If object_keys is empty, all objects in the bucket will be expired.
-
-
     Note that this is a workaround for the fact that the shortest expiration
     time that expiraiton policies allows is 1 day, which is too long for the tests to wait.
 
     Args:
         bucket_name (str): The name of the bucket where the objects reside
         object_keys (list): A list of object keys to expire
+            Note:
+                If object_keys is empty, all objects in the bucket will be expired.
         prefix (str): The prefix of the objects to expire
 
     """
@@ -2445,6 +2456,9 @@ def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):
         bucket_name (str): The name of the bucket to count the objects in
         prefix (str): The prefix to start the count from
         s3_obj (MCG or OBJ): An MCG or OBC class instance
+
+    Returns:
+        int: The total number of objects in the bucket
 
     """
     output = io_pod.exec_cmd_on_pod(
