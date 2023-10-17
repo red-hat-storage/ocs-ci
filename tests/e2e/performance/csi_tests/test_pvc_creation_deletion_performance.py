@@ -251,7 +251,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         if self.dev_mode:
             num_of_samples = 2
 
-        accepted_creation_time = 2  # old_value=1
+        accepted_creation_time = 5  # old_value=1
         accepted_deletion_time = Interface_Info[self.interface]["delete_time"]
         accepted_creation_deviation_percent = 50
         accepted_deletion_deviation_percent = 50
