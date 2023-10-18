@@ -2589,14 +2589,15 @@ def consumer_verification_steps_after_provider_node_replacement():
             wait_for_addon_to_be_ready()
         except TimeoutExpiredError:
             log.warning("The consumer addon is not in a ready state")
-            log.info("Try to restart the ocs-operator pod")
-            pod.delete_pods([pod.get_ocs_operator_pod()])
-            log.info("Wait again for the consumer addon to be in ready state")
-            try:
-                wait_for_addon_to_be_ready()
-            except TimeoutExpiredError:
-                log.warning("The consumer addon is not in a ready state")
-                return False
+
+        log.info("Try to restart the ocs-operator pod")
+        pod.delete_pods([pod.get_ocs_operator_pod()])
+        log.info("Wait again for the consumer addon to be in ready state")
+        try:
+            wait_for_addon_to_be_ready()
+        except TimeoutExpiredError:
+            log.warning("The consumer addon is not in a ready state")
+            return False
 
         if not wait_for_consumer_storage_provider_endpoint_in_provider_wnodes():
             log.warning(
