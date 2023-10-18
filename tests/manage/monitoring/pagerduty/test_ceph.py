@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     managed_service_required,
@@ -46,5 +45,5 @@ def test_corrupt_pg_pd(measure_corrupt_pg):
     api.check_incident_cleared(
         summary=target_label,
         measure_end_time=measure_corrupt_pg.get("stop"),
-        pagerduty_service_ids=[config.RUN["pagerduty_service_id"]],
+        pagerduty_service_ids=[pagerduty.get_pagerduty_service_id()],
     )
