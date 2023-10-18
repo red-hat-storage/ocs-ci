@@ -1,6 +1,5 @@
 import logging
 import pytest
-import re
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1, skipif_no_kms
@@ -36,16 +35,15 @@ class TestNoobaaKMS(MCGTest):
 
         logger.info("Looking for evidence of KMS integration in the logs of the pod")
 
-        target_re = r"Exists:.*ocs-kms-token"
-        target_found = False
+        target_log = "setKMSConditionType " + config.ENV_DATA["KMS_PROVIDER"]
         operator_logs = pod.get_pod_logs(pod_name=operator_pod_name)
-        target_found = re.search(target_re, operator_logs) is not None
+        target_log_found = target_log in operator_logs
 
-        if not target_found and restart_count > 0:
+        if not target_log_found and restart_count > 0:
             logger.info("Checking the logs before the last pod restart")
             operator_logs = pod.get_pod_logs(pod_name=operator_pod_name, previous=True)
-            target_found = re.search(target_re, operator_logs) is not None
+            target_log_found = target_log in operator_logs
 
         assert (
-            target_found
+            target_log_found
         ), "No records were found of the integration of NooBaa and KMS"
