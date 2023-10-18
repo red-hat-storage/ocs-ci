@@ -18,6 +18,9 @@ from ocs_ci.ocs.exceptions import (
     LeftoversExistError,
     VolumesExistError,
 )
+from ocs_ci.ocs.resources.pvc import (
+    scale_down_pods_and_remove_pvcs,
+)
 from ocs_ci.utility import ibmcloud, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -180,6 +183,12 @@ class IBMCloudIPI(CloudDeploymentBase):
         self.export_api_key()
         resource_group = self.get_resource_group()
         if resource_group:
+            try:
+                scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
+            except Exception as err:
+                logger.warning(
+                    f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
+                )
             logger.info("Destroying the IBM Cloud cluster")
             super(IBMCloudIPI, self).destroy_cluster(log_level)
 

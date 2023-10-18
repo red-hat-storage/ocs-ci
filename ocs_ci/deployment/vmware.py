@@ -45,17 +45,9 @@ from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.ocs.resources.pod import (
-    get_mon_pods,
-    get_deployment_name,
-    get_osd_pods,
-    get_osd_prepare_pods,
-    delete_pods,
-)
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import (
-    delete_pvcs,
-    get_all_pvc_objs,
+    scale_down_pods_and_remove_pvcs,
 )
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.bootstrap import gather_bootstrap
@@ -1214,7 +1206,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # removing mon and osd pods and also removing PVC's to avoid stale CNS volumes
         try:
-            self.scale_down_pods_and_remove_pvcs()
+            scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
         except Exception as err:
             logger.warning(
                 f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
@@ -1402,53 +1394,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
         # post destroy checks
         self.post_destroy_checks()
-
-    def scale_down_pods_and_remove_pvcs(self):
-        """
-        Removes the mon and osd pods and also removes PVC's
-        """
-        # scale down mon pods
-        namespace = config.ENV_DATA["cluster_namespace"]
-        mon_pod_obj_list = get_mon_pods()
-        for mon_pod_obj in mon_pod_obj_list:
-            mon_deployment_name = get_deployment_name(mon_pod_obj.name)
-            run_cmd(
-                f"oc scale deployment {mon_deployment_name} --replicas=0 -n {namespace}"
-            )
-
-        # scale down osd pods
-        osd_pod_obj_list = get_osd_pods()
-        for osd_pod_obj in osd_pod_obj_list:
-            osd_deployment_name = get_deployment_name(osd_pod_obj.name)
-            run_cmd(
-                f"oc scale deployment {osd_deployment_name} --replicas=0 -n {namespace}"
-            )
-
-        # delete osd-prepare pods
-        osd_prepare_pod_obj_list = get_osd_prepare_pods()
-        delete_pods(osd_prepare_pod_obj_list)
-
-        # delete PVC's
-        pvcs_objs = get_all_pvc_objs(namespace=namespace)
-        for pvc_obj in pvcs_objs:
-            if pvc_obj.backed_sc == "thin-csi" or pvc_obj.backed_sc == "thin-csi-odf":
-                pvc_name = pvc_obj.name
-                pv_name = pvc_obj.backed_pv
-
-                # set finalizers to null for both pvc and pv
-                pvc_patch_cmd = (
-                    f"oc patch pvc {pvc_name} -n {namespace} -p "
-                    '\'{"metadata":{"finalizers":null}}\''
-                )
-                run_cmd(pvc_patch_cmd)
-                pv_patch_cmd = (
-                    f"oc patch pv {pv_name} -n {namespace} -p "
-                    '\'{"metadata":{"finalizers":null}}\''
-                )
-                run_cmd(pv_patch_cmd)
-
-                time.sleep(10)
-                delete_pvcs([pvc_obj])
 
     def destroy_scaleup_nodes(
         self, scale_up_terraform_data_dir, scale_up_terraform_var
