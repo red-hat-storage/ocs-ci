@@ -53,7 +53,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources import pvc, pod
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
@@ -6885,3 +6885,36 @@ def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_fact
     )
 
     return logwriter_sts
+
+
+@pytest.fixture(scope="session")
+def enable_rbd_metrics(self, request):
+    self.ct_pod = pod.get_ceph_tools_pod()
+    self.pools_enabled = self.ct_pod.exec_ceph_cmd(
+        "ceph config get mgr mgr/prometheus/rbd_stats_pools", out_yaml_format=False
+    )
+
+    def restore_ceph_rbd_metrics_settings():
+        self.ct_pod.exec_ceph_cmd(
+            'ceph config set mgr mgr/prometheus/rbd_stats_pools ""',
+            out_yaml_format=False,
+        )
+        pools_enabled = ",".join(self.pools_enabled)
+        self.ct_pod.exec_ceph_cmd(
+            f'ceph config set mgr mgr/prometheus/rbd_stats_pools "{pools_enabled}"',
+            out_yaml_format=False,
+        )
+
+    default_pool = (
+        constants.DEFAULT_CEPHBLOCKPOOL_EXTERNAL
+        if ocsci_config.DEPLOYMENT["external_mode"]
+        else constants.DEFAULT_CEPHBLOCKPOOL
+    )
+
+    # set all pools to be monitored by prometheus
+    if not (default_pool in self.pools_enabled or "*" in self.pools_enabled):
+        self.ct_pod.exec_ceph_cmd(
+            'ceph config set mgr mgr/prometheus/rbd_stats_pools "*"',
+            out_yaml_format=False,
+        )
+        request.addfinalizer(restore_ceph_rbd_metrics_settings)

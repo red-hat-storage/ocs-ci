@@ -277,6 +277,7 @@ OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 
 # Default pools
 DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
+DEFAULT_CEPHBLOCKPOOL_EXTERNAL = "ocs-external-storagecluster-ceph-rgw"
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
