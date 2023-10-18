@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_power,
     skipif_no_lso,
     skipif_lso,
+    skipif_managed_service,
     brown_squad,
 )
 from ocs_ci.framework.testlib import (
@@ -25,15 +26,21 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_osd_pods
+from ocs_ci.ocs.resources.pod import get_osd_pods, get_ceph_tools_pod
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import (
     check_ceph_health_after_add_capacity,
     is_flexible_scaling_enabled,
 )
-from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_device_class,
+    osd_encryption_verification,
+    verify_storage_device_class,
+    verify_device_class_in_osd_tree,
+)
 from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
+from ocs_ci.utility.utils import is_cluster_y_version_upgraded
+from ocs_ci.utility import version
 
 
 logger = logging.getLogger(__name__)
@@ -92,6 +99,14 @@ def add_capacity_test(ui_flag=False):
     # Verify OSDs are encrypted.
     if config.ENV_DATA.get("encryption_at_rest"):
         osd_encryption_verification()
+
+    # verify device classes
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_14 and not is_cluster_y_version_upgraded():
+        device_class = get_device_class()
+        ct_pod = get_ceph_tools_pod()
+        verify_storage_device_class(device_class)
+        verify_device_class_in_osd_tree(ct_pod, device_class)
 
     check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
 

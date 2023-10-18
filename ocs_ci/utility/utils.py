@@ -4524,3 +4524,32 @@ def get_oadp_version():
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
             return csv["spec"]["version"]
+
+
+def is_cluster_y_version_upgraded():
+    """
+    Checks whether cluster is upgraded or not
+
+    Returns:
+        bool: True if cluster is upgraded from previous versions
+
+    """
+    # importing here to avoid circular import
+    from ocs_ci.ocs.resources.ocs import get_ocs_csv
+
+    is_upgraded = False
+    ocs_csv = get_ocs_csv()
+    csv_info = ocs_csv.get()
+    prev_version = csv_info.get("spec").get("replaces", "")
+    csv_version = csv_info.get("spec").get("version", "")
+    log.debug(f"Replaces version: {prev_version}")
+    log.debug(f"csv_version: {csv_version}")
+    if not prev_version:
+        log.info("No previous version detected in cluster")
+        return is_upgraded
+    prev_version_num = prev_version.split("ocs-operator.")[1].lstrip("v")
+    if version_module.get_semantic_version(
+        csv_version, only_major_minor=True
+    ) > version_module.get_semantic_version(prev_version_num, only_major_minor=True):
+        is_upgraded = True
+    return is_upgraded
