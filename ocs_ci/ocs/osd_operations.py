@@ -41,6 +41,8 @@ def osd_device_replacement(nodes):
     # Get the backing volume name
     logger.info(f"Getting the backing volume name for PV {osd_pv_name}")
     backing_volume = nodes.get_data_volumes(pvs=[osd_pv])[0]
+    logger.info(f"backing volume for PV {osd_pv_name} is {backing_volume}")
+    volume_path = nodes.get_volume_path(backing_volume)
 
     # Get the corresponding PVC
     logger.info(f"Getting the corresponding PVC of PV {osd_pv_name}")
@@ -101,8 +103,8 @@ def osd_device_replacement(nodes):
     osd_deployment_name = osd_deployment.name
 
     # Delete the volume from the platform side
-    logger.info(f"Deleting {backing_volume} from the platform side")
-    nodes.detach_volume(backing_volume, osd_node)
+    logger.info(f"Deleting {volume_path} from the platform side")
+    nodes.detach_volume(volume_path, osd_node)
 
     # Scale down OSD deployment
     logger.info(f"Scaling down OSD deployment {osd_deployment_name} to 0")
