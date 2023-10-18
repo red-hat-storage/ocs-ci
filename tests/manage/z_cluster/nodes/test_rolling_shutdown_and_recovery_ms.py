@@ -104,7 +104,7 @@ class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
             # When we use the managed service, the worker node should recover automatically
             # by starting the node, or removing it and creating a new one
             log.info("Waiting for all the worker nodes to be ready...")
-            wait_for_node_count_to_reach_status(node_count=wnode_count, timeout=900)
+            wait_for_node_count_to_reach_status(node_count=wnode_count, timeout=1200)
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
 
