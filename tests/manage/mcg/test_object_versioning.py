@@ -205,7 +205,10 @@ class TestObjectVersioning:
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{i}{filename}", filename)
-        s3_put_object(s3_obj, bucket.name, f"testdir/", None)
+        #add directory
+        s3_obj.s3_client.put_object(Bucket=bucket.name, Key=("testdir/"))
+        #add empty directory
+        s3_obj.s3_client.put_object(Bucket=bucket.name, Key=("testdir_empty/"))
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
         for i in range(20):
