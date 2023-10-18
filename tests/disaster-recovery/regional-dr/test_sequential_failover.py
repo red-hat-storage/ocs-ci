@@ -56,6 +56,7 @@ class TestSequentialFailover:
     def test_sequential_failover_to_secondary(
         self,
         primary_cluster_down,
+        setup_acm_ui,
         dr_workload,
         nodes_multicluster,
         node_restart_teardown,
