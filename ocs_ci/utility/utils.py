@@ -4494,7 +4494,7 @@ def add_time_report_to_email(session, soup):
     """
     data = GV.TIMEREPORT_DICT
     sorted_data = dict(
-        sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
+        sorted(data.items(), key=lambda item: item[1].get("total", 0), reverse=True)
     )
 
     file_loader = FileSystemLoader(constants.HTML_REPORT_TEMPLATE_DIR)
