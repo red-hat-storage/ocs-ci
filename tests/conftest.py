@@ -4121,6 +4121,7 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
+            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS
         ):
             storageclass = (
                 storageclass
@@ -4132,8 +4133,7 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            or ocsci_config.ENV_DATA.get("cluster_type", "").lower()
-            == constants.MS_CONSUMER_TYPE
+            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS
         ):
             storageclass = (
                 storageclass
