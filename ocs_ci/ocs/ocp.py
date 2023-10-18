@@ -481,9 +481,15 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        command = f"oc new-project {project_name}"
-        if f'Now using project "{project_name}"' in run_cmd(
-            f"{command}", threading_lock=self.threading_lock
+        exec_output = run_cmd(
+            f"oc new-project {project_name}", threading_lock=self.threading_lock
+        )
+        if any(
+            pattern in exec_output
+            for pattern in [
+                f'Now using project "{project_name}"',
+                f'Already on project "{project_name}"',
+            ]
         ):
             if version.get_semantic_ocp_running_version() >= version.VERSION_4_12:
                 label = (
