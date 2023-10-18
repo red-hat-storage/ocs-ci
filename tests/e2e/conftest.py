@@ -777,6 +777,7 @@ def setup_mcg_replication_feature_buckets(request, bucket_factory):
 
         if len(all_buckets) % 2 != 0:
             all_buckets[len(all_buckets) - 1].delete()
+            all_buckets.remove(all_buckets[len(all_buckets) - 1])
 
         source_target_map = dict()
         index = 0
@@ -795,6 +796,9 @@ def setup_mcg_replication_feature_buckets(request, bucket_factory):
 
             index += 2
 
+        logger.info(
+            f"Buckets created under replication setup: {[bucket.name for bucket in all_buckets]}"
+        )
         return all_buckets, source_target_map
 
     return factory
@@ -887,6 +891,9 @@ def setup_mcg_expiration_feature_buckets(
                 Bucket=bucket.name, LifecycleConfiguration=expiration_rule
             )
 
+        logger.info(
+            f"Buckets created under expiration setup: {[bucket.name for bucket in all_buckets]}"
+        )
         return all_buckets
 
     return factory
