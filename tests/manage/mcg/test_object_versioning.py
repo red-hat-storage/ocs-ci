@@ -143,9 +143,9 @@ class TestObjectVersioning:
         s3_obj = mcg_obj_session
         bucket = bucket_factory(interface="S3", versioning=True)[0]
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
-        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         filename = f"file-{uuid4().hex}"
         with open(filename, "wb") as f:
@@ -153,44 +153,44 @@ class TestObjectVersioning:
         logger.info(f"Created file {filename}!!")
         s3_put_object(s3_obj, bucket.name, filename, filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
-        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         s3_put_object(s3_obj, bucket.name, filename, filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
-        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         with open(filename, "wb") as f:
             f.write(os.urandom(1000))
         logger.info(f"Created file {filename}!!")
         s3_put_object(s3_obj, bucket.name, filename, filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
-        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         for i in range(5):
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
-        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         s3_delete_object(s3_obj, bucket.name, filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
-        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         for i in range(5):
             s3_delete_object(s3_obj, bucket.name, f"{filename}{i}")
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
-        logger.info(f"Versioning info of bucket {bucket.name}: (versioning_info)")
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         os.remove(filename)
 
@@ -214,17 +214,17 @@ class TestObjectVersioning:
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"testdir/{filename}{i}", filename)
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=35)
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=35, KeyMarker=object_info["NextKeyMarker"], VersionIdMarker=object_info['NextVersionIdMarker'])
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"], VersionIdMarker=object_info['NextVersionIdMarker'])
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"], VersionIdMarker=object_info['NextVersionIdMarker'])
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=35, KeyMarker=object_info["NextKeyMarker"])
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"])
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"])
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, Prefix="testdir/", Delimiter="/")
-        logger.info(f"object info of bucket {bucket.name}: (object_info)")
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
     def test_locking(self):
         """
