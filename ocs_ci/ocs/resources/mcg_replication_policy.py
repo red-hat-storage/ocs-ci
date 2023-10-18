@@ -6,19 +6,6 @@ class McgReplicationPolicy:
     """
     A class to handle the MCG bucket replication policy JSON structure.
 
-    Example MCG bucket replication policy JSON structure:
-        {
-            "rules": [
-                {
-                    "rule_id": "basic-replication-rule",
-                    "destination_bucket": "first.bucket",
-                    "filter": {
-                        "prefix": ""
-                    }
-                }
-            ]
-        }
-
     """
 
     def __init__(self, destination_bucket, prefix=""):
@@ -69,23 +56,6 @@ class AwsLogBasedReplicationPolicy(LogBasedReplicationPolicy):
     """
     A class to handle the AWS log-based bucket replication policy JSON structure.
 
-    Example AWS log-based replication policy JSON structure:
-        {
-            "rules": [
-                {
-                    "rule_id": "example_rule_id",
-                    "destination_bucket": "first.bucket",
-                    "sync_deletions": true
-                }
-            ],
-            "log_replication_info": {
-                "logs_location": {
-                    "logs_bucket": "aws-logs-bucket",
-                    "prefix": "prefix/to/logs"
-                }
-            }
-        }
-
     """
 
     def __init__(
@@ -113,20 +83,6 @@ class AwsLogBasedReplicationPolicy(LogBasedReplicationPolicy):
 class AzureLogBasedReplicationPolicy(LogBasedReplicationPolicy):
     """
     A class to handle the Azure log-based bucket replication policy JSON structure.
-
-    Example Azure log-based replication policy JSON structure:
-        {
-          "rules": [
-            {
-              "rule_id": "example_rule_id",
-              "destination_bucket": "first.bucket",
-              "sync_deletions": true
-            }
-          ],
-          "log_replication_info": {
-            "endpoint_type": "AZURE"
-          }
-        }
 
     """
 
