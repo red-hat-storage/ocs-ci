@@ -95,7 +95,7 @@ def pytest_sessionfinish(session, exitstatus):
     # creating report of test cases with total time in ascending order
     data = GV.TIMEREPORT_DICT
     sorted_data = dict(
-        sorted(data.items(), key=lambda item: item[1]["total"], reverse=True)
+        sorted(data.items(), key=lambda item: item[1].get("total"), reverse=True)
     )
     try:
         time_report_file = os.path.join(
@@ -150,6 +150,9 @@ def pytest_report_teststatus(report, config):
         )
         GV.TIMEREPORT_DICT[report.nodeid]["setup"] = round(report.duration, 2)
         GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(report.duration, 2)
+
+    if "total" not in GV.TIMEREPORT_DICT[report.nodeid]:
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = 0
 
     if report.when == "call":
         logger.info(
