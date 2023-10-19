@@ -114,8 +114,10 @@ def pytest_sessionfinish(session, exitstatus):
                 ]
                 c.writerow(row)
         logger.info(f"Test Time report saved to '{time_report_file}'")
-    except Exception:
-        logger.exception("Failed to save Test Time report to logs directory")
+    except (Exception, FileNotFoundError) as e:
+        logger.exception(
+            f"Failed to save Test Time report to logs directory with exception. {e}"
+        )
 
     for i in range(ocsci_config.nclusters):
         ocsci_config.switch_ctx(i)
