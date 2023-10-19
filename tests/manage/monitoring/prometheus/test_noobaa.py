@@ -22,11 +22,11 @@ log = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
-def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
+def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock):
     """
     Test that there are appropriate alerts when NooBaa Bucket Quota is reached.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     alerts = measure_noobaa_exceed_bucket_quota.get("prometheus_alerts")
 
@@ -119,12 +119,12 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
-def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted):
+def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted, threading_lock):
     """
     Test that there are appropriate alerts when target bucket used of
     namespace store used in namespace bucket is deleted.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     alerts = measure_noobaa_ns_target_bucket_deleted.get("prometheus_alerts")
 

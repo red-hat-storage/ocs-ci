@@ -43,9 +43,12 @@ log = logging.getLogger(__name__)
 
 
 @retry(AssertionError, tries=30, delay=3, backoff=1)
-def wait_to_update_mgrpod_info_prometheus_pod():
+def wait_to_update_mgrpod_info_prometheus_pod(threading_lock):
     """
     Validates the ceph health metrics is updated on prometheus pod
+
+    Args:
+        threading_lock (threading.RLock): A lock to ensure only one thread is making the 'oc' calls
 
     """
 
@@ -60,15 +63,21 @@ def wait_to_update_mgrpod_info_prometheus_pod():
         .get("name")
     )
     assert check_ceph_health_status_metrics_on_prometheus(
-        mgr_pod=mgr_pod
+        mgr_pod=mgr_pod, threading_lock=threading_lock
     ), "Ceph health status metrics are not updated after the rebooting node where the mgr running"
     log.info("Ceph health status metrics is updated")
 
 
 @retry(AssertionError, tries=30, delay=5, backoff=2)
-def check_ceph_metrics_available_within_time():
-    assert (
-        check_ceph_metrics_available()
+def check_ceph_metrics_available_within_time(threading_lock):
+    """
+    Validates the ceph metrics are available on prometheus pod
+    Args:
+        threading_lock (threading.RLock): A lock to ensure only one thread is accessing the 'oc' command
+
+    """
+    assert check_ceph_metrics_available(
+        threading_lock=threading_lock
     ), "failed to get results for some metrics after Downscaling and Upscaling deployment mgr"
 
 
@@ -78,10 +87,14 @@ def check_ceph_metrics_available_within_time():
     delay=15,
     backoff=1,
 )
-def wait_for_nodes_status_and_prometheus_health_check(pods):
+def wait_for_nodes_status_and_prometheus_health_check(pods, threading_lock):
     """
     Waits for the all the nodes to be in running state
     and also check prometheus health
+
+    Args:
+        pods (list): List of pods
+        threading_lock (threading.RLock): A lock to ensure only one thread is accessing the 'oc' command
 
     """
 
@@ -92,7 +105,7 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
     # Check for the created pvc metrics after rebooting the master nodes
     for pod_obj in pods:
         assert check_pvcdata_collected_on_prometheus(
-            pod_obj.pvc.name
+            pod_obj.pvc.name, threading_lock
         ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
     assert prometheus_health_check(), "Prometheus health is degraded"
@@ -159,7 +172,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.fixture()
-    def pods(self, multi_pvc_factory, dc_pod_factory):
+    def pods(self, multi_pvc_factory, dc_pod_factory, threading_lock):
         """
         Prepare multiple dc pods for the test
 
@@ -183,12 +196,12 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check for the created pvc metrics on prometheus pod
         for pod_obj in pod_objs:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
         return pod_objs
 
     @pytest.mark.polarion_id("OCS-576")
-    def test_monitoring_after_restarting_prometheus_pod(self, pods):
+    def test_monitoring_after_restarting_prometheus_pod(self, pods, threading_lock):
         """
         Test case to validate prometheus pod restart
         should not have any functional impact
@@ -225,11 +238,13 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
     @pytest.mark.polarion_id("OCS-579")
-    def test_monitoring_after_draining_node_where_prometheus_hosted(self, pods):
+    def test_monitoring_after_draining_node_where_prometheus_hosted(
+        self, pods, threading_lock
+    ):
         """
         Test case to validate when node is drained where prometheus
         is hosted, prometheus pod should re-spin on new healthy node
@@ -306,11 +321,11 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check for the created pvc metrics after rebooting the master nodes
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
     @pytest.mark.polarion_id("OCS-580")
-    def test_monitoring_after_respinning_ceph_pods(self, pods):
+    def test_monitoring_after_respinning_ceph_pods(self, pods, threading_lock):
         """
         Test case to validate respinning the ceph pods and
         its interaction with prometheus pod
@@ -327,14 +342,14 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check for the created pvc metrics on prometheus pod
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
         # Validate osd is up and ceph health is ok
         self.sanity_helpers.health_check(tries=40)
 
     @pytest.mark.polarion_id("OCS-605")
-    def test_monitoring_when_osd_down(self, pods):
+    def test_monitoring_when_osd_down(self, pods, threading_lock):
         """
         Test case to validate monitoring when osd is down
 
@@ -358,7 +373,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check for the created pvc metrics when osd is down
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
         # Make osd up which was down
@@ -368,7 +383,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check(tries=40)
 
     @pytest.mark.polarion_id("OCS-606")
-    def test_monitoring_when_one_of_the_prometheus_node_down(self, nodes, pods):
+    def test_monitoring_when_one_of_the_prometheus_node_down(
+        self, nodes, pods, threading_lock
+    ):
         """
         Test case to validate when the prometheus pod is down and its
         interaction with prometheus
@@ -404,14 +421,14 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check for the created pvc metrics after restarting node where prometheus pod is hosted
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             log.info(
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is collected"
             )
 
     @pytest.mark.polarion_id("OCS-709")
-    def test_monitoring_after_rebooting_master_node(self, nodes, pods):
+    def test_monitoring_after_rebooting_master_node(self, nodes, pods, threading_lock):
         """
         Test case to validate rebooting master node shouldn't delete
         the data collected on prometheus pod
@@ -430,13 +447,15 @@ class TestMonitoringBackedByOCS(E2ETest):
             log.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
 
-            wait_for_nodes_status_and_prometheus_health_check(pods)
+            wait_for_nodes_status_and_prometheus_health_check(pods, threading_lock)
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check(tries=40)
 
     @pytest.mark.polarion_id("OCS-710")
-    def test_monitoring_after_rebooting_node_where_mgr_is_running(self, nodes, pods):
+    def test_monitoring_after_rebooting_node_where_mgr_is_running(
+        self, nodes, pods, threading_lock
+    ):
         """
         Test case to validate rebooting a node where mgr is running
         should not delete the data collected on prometheus pod
@@ -481,18 +500,20 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check(tries=40)
 
         # Check for ceph health check metrics is updated with new mgr pod
-        wait_to_update_mgrpod_info_prometheus_pod()
+        wait_to_update_mgrpod_info_prometheus_pod(threading_lock)
 
         # Check for the created pvc metrics after rebooting the node where mgr pod was running
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
     @pytest.mark.polarion_id("OCS-711")
     @skipif_aws_i3
     @skipif_ibm_cloud
-    def test_monitoring_shutdown_and_recovery_prometheus_node(self, nodes, pods):
+    def test_monitoring_shutdown_and_recovery_prometheus_node(
+        self, nodes, pods, threading_lock
+    ):
         """
         Test case to validate whether shutdown and recovery of a
         node where monitoring pods running has no functional impact
@@ -533,7 +554,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check for the created pvc metrics after shutdown and recovery of prometheus nodes
         for pod_obj in pods:
             assert check_pvcdata_collected_on_prometheus(
-                pod_obj.pvc.name
+                pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
 
     @pytest.mark.polarion_id("OCS-638")
@@ -599,7 +620,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         assert prometheus_health_check(), "Prometheus cluster health is not OK"
 
     @pytest.mark.polarion_id("OCS-1535")
-    def test_monitoring_shutdown_mgr_pod(self, pods):
+    def test_monitoring_shutdown_mgr_pod(self, pods, threading_lock):
         """
         Montoring backed by OCS, bring mgr down(replica: 0) for some time
         and check ceph related metrics
@@ -637,4 +658,4 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
         # Check ceph metrics available
-        check_ceph_metrics_available_within_time()
+        check_ceph_metrics_available_within_time(threading_lock)

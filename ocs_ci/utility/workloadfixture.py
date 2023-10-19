@@ -65,7 +65,7 @@ def measure_operation(
             and utilized data are measured after the utilization is completed
         pagerduty_service_ids (list): Service IDs from PagerDuty system used
             incidents query
-        threading_lock (threading.Lock): Lock used for synchronization of the threads in Prometheus calls
+        threading_lock (threading.RLock): Lock used for synchronization of the threads in Prometheus calls
 
     Returns:
         dict: contains information about `start` and `stop` time of given

@@ -47,7 +47,7 @@ class TestCloneWhenFull(ManageTest):
             access_modes_cephfs=[constants.ACCESS_MODE_RWO],
         )
 
-    def test_clone_when_full(self, pvc_clone_factory, pod_factory):
+    def test_clone_when_full(self, pvc_clone_factory, pod_factory, threading_lock):
         """
         Create a clone from an existing PVC when the PVC is 100% utilized.
         Verify data integrity.
@@ -57,7 +57,7 @@ class TestCloneWhenFull(ManageTest):
         """
         pvc_size_expanded = 6
         file_name = "fio_full"
-        prometheus_api = PrometheusAPI()
+        prometheus_api = PrometheusAPI(threading_lock=threading_lock)
 
         # Run IO to utilize 100% of volume
         log.info("Run IO on all pods to utilise 100% of PVCs")

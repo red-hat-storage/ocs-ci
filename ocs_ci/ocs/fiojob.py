@@ -346,6 +346,7 @@ def workload_fio_storageutilization(
     keep_fio_data=False,
     minimal_time=480,
     throw_skip=True,
+    threading_lock=None,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -392,6 +393,7 @@ def workload_fio_storageutilization(
             (See more details in the function 'measure_operation')
         throw_skip (bool): if True function will raise pytest.skip.Exception and test will be skipped,
             otherwise return None
+        threading_lock (threading.RLock): lock to be used for thread synchronization when calling 'oc' cmd
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -537,6 +539,7 @@ def workload_fio_storageutilization(
         test_file,
         measure_after=True,
         minimal_time=minimal_time,
+        threading_lock=threading_lock,
     )
 
     # we don't need to delete anything if this fixture has been already

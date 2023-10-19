@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 @retry(ReturnedEmptyResponseException, tries=30, delay=10, backoff=1)
-def get_bucket_used_bytes_metric(bucket_name):
+def get_bucket_used_bytes_metric(bucket_name, threading_lock):
     response = json.loads(
-        PrometheusAPI()
+        PrometheusAPI(threading_lock=threading_lock)
         .get(f'query?query=NooBaa_bucket_used_bytes{{bucket_name="{bucket_name}"}}')
         .content.decode("utf-8")
     )

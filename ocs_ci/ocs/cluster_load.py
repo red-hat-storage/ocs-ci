@@ -52,6 +52,7 @@ class ClusterLoad:
         sa_factory=None,
         pod_factory=None,
         target_percentage=None,
+        threading_lock=None,
     ):
         """
         Initializer for ClusterLoad
@@ -63,9 +64,9 @@ class ClusterLoad:
             pod_factory (function): A call to pod_factory function
             target_percentage (float): The percentage of cluster load that is
                 required. The value should be greater than 0.1 and smaller than 0.95
-
+            threading_lock (threading.RLock): A threading.RLock object to be used for threading lock
         """
-        self.prometheus_api = PrometheusAPI()
+        self.prometheus_api = PrometheusAPI(threading_lock=threading_lock)
         self.pvc_factory = pvc_factory
         self.sa_factory = sa_factory
         self.pod_factory = pod_factory

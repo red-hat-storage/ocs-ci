@@ -430,9 +430,10 @@ def threading_lock():
     threading.Lock object that can be used in threads across multiple tests.
 
     Returns:
-        threading.Lock: lock object
+        threading.Rlock: Reentrant Lock object. A reentrant lock (or RLock) is a type of lock that allows the same
+        thread to acquire the lock multiple times without causing a deadlock
     """
-    return threading.Lock()
+    return threading.RLock()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -1772,6 +1773,7 @@ def cluster_load(
     pvc_factory_session,
     service_account_factory_session,
     pod_factory_session,
+    threading_lock,
 ):
     """
     Run IO during the test execution
@@ -1805,6 +1807,7 @@ def cluster_load(
                 pvc_factory=pvc_factory_session,
                 pod_factory=pod_factory_session,
                 target_percentage=io_load,
+                threading_lock=threading_lock,
             )
             cl_load_obj.reach_cluster_load_percentage()
         except Exception as ex:
@@ -1814,7 +1817,7 @@ def cluster_load(
     if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
             try:
-                cl_load_obj = ClusterLoad()
+                cl_load_obj = ClusterLoad(threading_lock=threading_lock)
             except Exception as ex:
                 log.error(cluster_load_error_msg, ex)
                 cluster_load_error = ex
