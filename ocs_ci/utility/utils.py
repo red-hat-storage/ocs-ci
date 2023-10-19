@@ -2275,6 +2275,9 @@ def ceph_health_check_base(namespace=None):
         boolean: True if HEALTH_OK
 
     """
+    if config.ENV_DATA["mcg_only_deployment"]:
+        log.info("Running in MCG only mode, skip Ceph health check")
+        return True
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     health = run_ceph_health_cmd(namespace)
 
