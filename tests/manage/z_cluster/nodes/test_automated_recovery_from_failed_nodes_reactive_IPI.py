@@ -228,11 +228,9 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             if self.extra_node:
                 nodes.terminate_nodes([self.osd_worker_node], wait=True)
                 log.info(
-                    f"Triggered termination of node instance: "
-                    f"{self.osd_worker_node.name}"
+                    f"Successfully terminated node : "
+                    f"{self.osd_worker_node.name} instance"
                 )
-                nodes.wait_for_nodes_to_terminate(self.osd_worker_node)
-                log.info(f"Node {self.osd_worker_node.name} terminated successfully")
             else:
                 is_recovered = recover_node_to_ready_state(self.osd_worker_node)
                 if not is_recovered:
@@ -242,7 +240,9 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     )
                     add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
 
+            log.info("Wait for node count to be equal to original count")
             wait_for_node_count_to_reach_status(node_count=initial_node_count)
+            log.info("Node count matched")
             ceph_health_check()
 
             machine.wait_for_ready_replica_count_to_reach_expected_value(
@@ -303,6 +303,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
         global initial_node_count
         initial_node_count = len(get_worker_nodes())
+        log.info(f"Initial node count is {initial_node_count}")
 
         if additional_node:
             new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
