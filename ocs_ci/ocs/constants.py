@@ -849,6 +849,7 @@ MDR_BACKUP_SCHEDULE_YAML = os.path.join(
 )
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 
+
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
@@ -2069,6 +2070,15 @@ SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"
 SUBMARINER_GATEWAY_ACTIVE_LABEL = "gateway.submariner.io/status=active"
 SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
 GLOBALNET_STATUS = "True"
+SUBMARINER_DOWNSTREAM_UNRELEASED = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "submariner_downstream_unreleased_catsrc.yaml"
+)
+# We need to append version string at the end of this url
+SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
+    "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
+    "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+    "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
+)
 
 # Multicluster related
 
@@ -2101,6 +2111,9 @@ ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
 ACM_HUB_UNRELEASED_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
 ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
+)
+ACM_DOWNSTREAM_BREW_ICSP = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "acm_downstream_brew_icsp.yaml"
 )
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"

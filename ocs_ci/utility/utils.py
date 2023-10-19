@@ -4553,3 +4553,30 @@ def is_cluster_y_version_upgraded():
     ) > version_module.get_semantic_version(prev_version_num, only_major_minor=True):
         is_upgraded = True
     return is_upgraded
+
+
+def chained_subprocess_pipes(cmd_list):
+    """
+    We can use this function wherever we have chain of commands which
+    need to be piped. Direct shell piping has some parsing issues hence implementing
+    this using subprocess output redirections which mimics shell pipes.
+    Commands will be run as per the command ordering inside the list and output of
+    each command will be fed as input to the next command in the list
+
+
+    Args:
+        cmd_list (list): list of commands to be run whose output need to be piped
+
+    Returns:
+        Popen object of the last command executed
+
+    """
+    pipe_buf = None
+    for cmd in cmd_list:
+        if not pipe_buf:
+            pipe_buf = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
+        else:
+            pipe_buf = subprocess.Popen(
+                shlex.split(cmd), stdin=pipe_buf.stdout, stdout=subprocess.PIPE
+            )
+    return pipe_buf

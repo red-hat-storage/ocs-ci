@@ -1,0 +1,4 @@
+ENV_DATA:
+  submariner_source: "downstream"
+  submariner_release_type: "unreleased"
+  submariner_version: "0.16.0"
