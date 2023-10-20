@@ -139,56 +139,143 @@ class TestObjectVersioning:
     @tier2
     def test_versioning_properties_and_deletion(self, bucket_factory, mcg_obj_session):
         """
+        Test basic properties and deletion of objects in versioned bucket.
         """
         s3_obj = mcg_obj_session
         bucket = bucket_factory(interface="S3", versioning=True)[0]
+        logger.info(f"Bucket {bucket.name} created")
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        assert versioning_info["Status"] == "Enabled"
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
         filename = f"file-{uuid4().hex}"
         with open(filename, "wb") as f:
             f.write(os.urandom(1000))
-        logger.info(f"Created file {filename}!!")
+        logger.info(f"Created file {filename}")
+        logger.info(f"Putting file {filename} into bucket {bucket.name}")
         s3_put_object(s3_obj, bucket.name, filename, filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        assert versioning_info["Status"] == "Enabled"
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+
+        logger.info("Checking that there is only one object with IsLatest set to True")
+        assert len(object_info["Versions"]) == 1
+        assert object_info["Versions"][0]["IsLatest"] == True
+        version_ids = []
+        version_ids.append(object_info["Versions"][0]["VersionId"])
 
         s3_put_object(s3_obj, bucket.name, filename, filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        assert versioning_info["Status"] == "Enabled"
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+
+        logger.info("Checking 2 versions of the same file in a bucket")
+        assert len(object_info["Versions"]) == 2
+        assert object_info["Versions"][0]["IsLatest"] == True
+        assert object_info["Versions"][0]["VersionId"] != version_ids[0]
+        assert object_info["Versions"][1]["IsLatest"] == False
+        version_ids.append(object_info["Versions"][1]["VersionId"])
+        assert object_info["Versions"][1]["VersionId"] == version_ids[0]
+        assert version_ids[0] != version_ids[1]
+        assert object_info["Versions"][0]["Key"] == object_info["Versions"][1]["Key"]
+        assert object_info["Versions"][0]["Size"] == object_info["Versions"][1]["Size"]
 
         with open(filename, "wb") as f:
-            f.write(os.urandom(1000))
+            f.write(os.urandom(100))
         logger.info(f"Created file {filename}!!")
         s3_put_object(s3_obj, bucket.name, filename, filename)
+
+        logger.info(f"Putting smaller file {filename} into bucket {bucket.name}")
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        assert versioning_info["Status"] == "Enabled"
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        assert len(object_info["Versions"]) == 3
+        assert object_info["Versions"][0]["IsLatest"] == True
+        assert object_info["Versions"][0]["VersionId"] != version_ids[0]
+        assert object_info["Versions"][1]["IsLatest"] == False
+        assert object_info["Versions"][2]["IsLatest"] == False
+        version_ids.append(object_info["versions"][1]["versionid"])
+        assert object_info["Versions"][2]["VersionId"] == version_ids[0]
+        assert len(set(version_ids)) == 3
+        assert object_info["Versions"][0]["Key"] == object_info["Versions"][1]["Key"]
+        assert object_info["Versions"][0]["Size"] < object_info["Versions"][1]["Size"]
 
+        logger.info(f"Creating 5 more files in bucket {bucket.name}")
         for i in range(5):
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        assert versioning_info["Status"] == "Enabled"
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        assert len(object_info["Versions"]) == 8
+        assert object_info["Versions"][0]["IsLatest"] == True
+        assert object_info["Versions"][1]["IsLatest"] == False
+        assert object_info["Versions"][2]["IsLatest"] == False
+        for i in range(3, 8):
+            assert object_info["Versions"][i]["IsLatest"] == True
+            version_ids.append(object_info["versions"][i]["versionid"])
+        assert len(set(version_ids)) == 8
 
+        logger.info(
+            f"Getting object {filename} from bucket {bucket.name} and checking version"
+        )
+        bucket_object = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
+        logger.info(
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+        )
+        assert bucket_object["VersionId"] == object_info["Versions"][0]["VersionId"]
+
+        logger.info(f"Deleting object {filename} from bucket {bucket.name}")
         s3_delete_object(s3_obj, bucket.name, filename)
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        assert versioning_info["Status"] == "Enabled"
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        assert object_info["Versions"][0]["IsLatest"] == False
+        assert len(object_info["DeleteMarkers"]) == 1
+        assert len(object_info["Versions"]) == 8
 
+        bucket_object = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
+        logger.info(
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+        )
+
+        logger.info(f"Deleting other objects from bucket {bucket.name}")
         for i in range(5):
             s3_delete_object(s3_obj, bucket.name, f"{filename}{i}")
         versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        assert versioning_info["Status"] == "Enabled"
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        for version in object_info["Versions"]:
+            assert version["IsLatest"] == False
+        assert len(object_info["DeleteMarkers"]) == 6
+
+        logger.info(f"Deleting all object versions and delete markers")
+        versions = object_info.get("Versions", [])
+        versions.extend(object_info.get("DeleteMarkers", []))
+        for version_id in [
+            x["VersionId"]
+            for x in versions
+            if x["Key"] == filename and x["VersionId"] != "null"
+        ]:
+            client.delete_object(Bucket=bucket.name, Key=filename, VersionId=version_id)
+
+        bucket_object = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
+        logger.info(
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+        )
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
@@ -196,8 +283,7 @@ class TestObjectVersioning:
 
     @tier2
     def test_listing(self, bucket_factory, mcg_obj_session, setup_file_object):
-        """
-        """
+        """ """
         s3_obj = mcg_obj_session
         filename = setup_file_object
         bucket = bucket_factory(interface="S3", versioning=True)[0]
@@ -205,9 +291,9 @@ class TestObjectVersioning:
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{i}{filename}", filename)
-        #add directory
+        # add directory
         s3_obj.s3_client.put_object(Bucket=bucket.name, Key=("testdir/"))
-        #add empty directory
+        # add empty directory
         s3_obj.s3_client.put_object(Bucket=bucket.name, Key=("testdir_empty/"))
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
@@ -215,18 +301,31 @@ class TestObjectVersioning:
             s3_put_object(s3_obj, bucket.name, f"testdir/{filename}{i}", filename)
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=35)
+        object_info = bucket.s3client.list_object_versions(
+            Bucket=bucket.name, MaxKeys=35
+        )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=35, KeyMarker=object_info["NextKeyMarker"])
+        object_info = bucket.s3client.list_object_versions(
+            Bucket=bucket.name, MaxKeys=35, KeyMarker=object_info["NextKeyMarker"]
+        )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"])
+        object_info = bucket.s3client.list_object_versions(
+            Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"]
+        )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"])
+        object_info = bucket.s3client.list_object_versions(
+            Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"]
+        )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name, Prefix="testdir/", Delimiter="/")
+        object_info = bucket.s3client.list_object_versions(
+            Bucket=bucket.name, Prefix="testdir/", Delimiter="/"
+        )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
     def test_locking(self):
-        """
-        """
+        """ """
+        pass
+
+    def test_version_restore(self):
+        """ """
         pass
