@@ -101,6 +101,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         cld_mgr,
         awscli_pod,
         bucket_factory,
+        namespace_store_factory,
         test_directory_setup,
         bucketclass_dict,
     ):
@@ -257,13 +258,18 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             signed_request_creds=s3_creds,
         )
 
+        alternative_namespacestore = namespace_store_factory(
+            bucketclass_dict["interface"],
+            bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"],
+        )[0].name
+
         # Edit namespace bucket
         logger.info(f"Editing the namespace resource bucket: {ns_bucket.name}")
         namespace_bucket_update(
             mcg_obj,
             bucket_name=ns_bucket.name,
-            read_resource=[aws_target_bucket],
-            write_resource=aws_target_bucket,
+            read_resource=[alternative_namespacestore],
+            write_resource=alternative_namespacestore,
         )
 
         # Verify Download after editing bucket
@@ -283,9 +289,19 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
         )
         rm_object_recursive(awscli_pod, ns_bucket.name, mcg_obj)
 
+        # Edit namespace bucket to use the previous namespace resource
+        original_namespacestore = ns_bucket.bucketclass.namespacestores[0].name
+        logger.info(f"Editing the namespace resource bucket: {ns_bucket.name}")
+        namespace_bucket_update(
+            mcg_obj,
+            bucket_name=ns_bucket.name,
+            read_resource=[original_namespacestore],
+            write_resource=original_namespacestore,
+        )
+
         # Namespace resource delete
-        logger.info(f"Deleting the resource: {aws_target_bucket}")
-        mcg_obj.delete_ns_resource(ns_resource_name=aws_target_bucket)
+        logger.info(f"Deleting the resource: {alternative_namespacestore}")
+        mcg_obj.delete_ns_resource(ns_resource_name=alternative_namespacestore)
 
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
