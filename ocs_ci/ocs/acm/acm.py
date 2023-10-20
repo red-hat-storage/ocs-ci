@@ -265,6 +265,8 @@ class AcmAddClusters(AcmPageNavigator):
         )
         self.do_click(self.page_nav["gateway-count-btn"])
         self.do_click(self.page_nav["gateway-count-btn"])
+        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+            self.submariner_unreleased_downstream_info()
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it [2]")
@@ -274,6 +276,8 @@ class AcmAddClusters(AcmPageNavigator):
         )
         self.do_click(self.page_nav["gateway-count-btn"])
         self.do_click(self.page_nav["gateway-count-btn"])
+        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+            self.submariner_unreleased_downstream_info()
         log.info("Click on Next button [2]")
         self.do_click(self.page_nav["next-btn"])
         if ocs_version >= version.VERSION_4_13 and globalnet:
@@ -282,11 +286,20 @@ class AcmAddClusters(AcmPageNavigator):
                 check_globalnet == constants.GLOBALNET_STATUS
             ), "Globalnet was not enabled"
             log.info("Globalnet is enabled")
-        # TODO: Use custom submariner sucscription from UI in case of downstream unreleased submariner
-
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+
+    def submariner_unreleased_downstream_info(self):
+        self.do_click(self.page_nav["submariner-custom-subscription"])
+        self.do_clear(self.page_nav["submariner-custom-source"])
+        self.do_send_keys(
+            self.page_nav["submariner-custom-source"], "submariner-catalogsource"
+        )
+        self.do_send_keys(
+            self.page_nav["submariner-custom-channel"],
+            config.ENV_DATA["submariner_unreleased_channel"],
+        )
 
     def submariner_validation_ui(self):
         """
