@@ -6888,3 +6888,25 @@ def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_fact
     )
 
     return logwriter_sts
+
+
+@pytest.fixture()
+def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
+    """
+    Reduce the interval in which the lifecycle
+    background worker is running
+
+    """
+
+    def factory(interval):
+        """
+        Args:
+            interval (int): new interval in minutes
+
+        """
+        new_intervals_in_miliseconds = 60 * interval * 1000
+        add_env_vars_to_noobaa_core_class(
+            [(constants.LIFECYCLE_INTERVAL_PARAM, new_intervals_in_miliseconds)]
+        )
+
+    return factory
