@@ -33,7 +33,12 @@ import logging
 import time
 import pytest
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad, tier3
+from ocs_ci.framework.pytest_customization.marks import (
+    blue_squad,
+    tier3,
+    skipif_external_mode,
+    skipif_disconnected_cluster,
+)
 from ocs_ci.framework.testlib import (
     tier2,
     pre_upgrade,
@@ -186,6 +191,9 @@ def test_workload_with_checksum_verify(
     logger.info("sha1sum output: %s", sha1sum_output)
 
 
+@skipif_managed_service
+@skipif_external_mode
+@skipif_disconnected_cluster
 class TestCephOSDSlowOps(object):
     @pytest.fixture(scope="function")
     def setup(self, request, pod_factory, multi_pvc_factory):
