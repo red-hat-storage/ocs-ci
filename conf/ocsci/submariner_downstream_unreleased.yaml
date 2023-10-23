@@ -3,3 +3,4 @@ ENV_DATA:
   submariner_release_type: "unreleased"
   submariner_version: "0.16.0"
   submariner_unreleased_channel: "stable-0.16"
+  enable_globalnet: true
