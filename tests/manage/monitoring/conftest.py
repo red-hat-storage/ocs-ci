@@ -289,7 +289,7 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
 
 
 @pytest.fixture
-def measure_corrupt_pg(request, measurement_dir):
+def measure_corrupt_pg(request, measurement_dir, threading_lock):
     """
     Create Ceph pool and corrupt Placement Group on one of OSDs, measures the
     time when it was corrupted and records alerts that were triggered during
@@ -378,9 +378,12 @@ def measure_corrupt_pg(request, measurement_dir):
             test_file,
             minimal_time=60 * 17,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(wait_with_corrupted_pg, test_file)
+        measured_op = measure_operation(
+            wait_with_corrupted_pg, test_file, threading_lock=threading_lock
+        )
 
     teardown()
 
@@ -684,7 +687,9 @@ def workload_storageutilization_10g_cephfs(
 
 
 @pytest.fixture
-def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli_pod):
+def measure_noobaa_exceed_bucket_quota(
+    measurement_dir, request, mcg_obj, awscli_pod, threading_lock
+):
     """
     Create NooBaa bucket, set its capacity quota to 2GB and fill it with data.
 
@@ -742,11 +747,17 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     test_file = os.path.join(
         measurement_dir, "measure_noobaa_exceed__bucket_quota.json"
     )
-    measured_op = measure_operation(
-        exceed_bucket_quota,
-        test_file,
-        pagerduty_service_ids=[get_pagerduty_service_id()],
-    )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        measured_op = measure_operation(
+            exceed_bucket_quota,
+            test_file,
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
+        )
+    else:
+        measured_op = measure_operation(
+            exceed_bucket_quota, test_file, threading_lock=threading_lock
+        )
 
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
@@ -837,12 +848,17 @@ def workload_idle(measurement_dir, threading_lock):
     else:
         logger.debug("io_in_bg not detected, good")
 
-    measured_op = measure_operation(
-        do_nothing,
-        test_file,
-        pagerduty_service_ids=[get_pagerduty_service_id()],
-        threading_lock=threading_lock,
-    )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        measured_op = measure_operation(
+            do_nothing,
+            test_file,
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
+        )
+    else:
+        measured_op = measure_operation(
+            do_nothing, test_file, threading_lock=threading_lock
+        )
     if restart_io_in_bg:
         logger.info("reverting load_status to resume io_in_bg")
         config.RUN["load_status"] = "to_be_resumed"
@@ -910,7 +926,12 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
 
 @pytest.fixture
 def measure_noobaa_ns_target_bucket_deleted(
-    measurement_dir, request, bucket_factory, namespace_store_factory, cld_mgr
+    measurement_dir,
+    request,
+    bucket_factory,
+    namespace_store_factory,
+    cld_mgr,
+    threading_lock,
 ):
     """
     Create Namespace bucket from 2 namespace resources. Delete target bucket
@@ -958,11 +979,17 @@ def measure_noobaa_ns_target_bucket_deleted(
         return ns_stores[0].uls_name
 
     test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
-    measured_op = measure_operation(
-        delete_target_bucket,
-        test_file,
-        pagerduty_service_ids=[get_pagerduty_service_id()],
-    )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        measured_op = measure_operation(
+            delete_target_bucket,
+            test_file,
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
+        )
+    else:
+        measured_op = measure_operation(
+            delete_target_bucket, test_file, threading_lock=threading_lock
+        )
     logger.info("Delete NS bucket, bucketclass and NS store so that alert is cleared")
     ns_bucket[0].delete()
     ns_bucket[0].bucketclass.delete()
@@ -971,7 +998,7 @@ def measure_noobaa_ns_target_bucket_deleted(
 
 
 @pytest.fixture
-def measure_stop_worker_nodes(request, measurement_dir, nodes):
+def measure_stop_worker_nodes(request, measurement_dir, nodes, threading_lock):
     """
     Stop worker nodes that doesn't contain RGW (so that alerts are triggered
     correctly), measure the time when it was stopped and monitors alerts that
@@ -1026,9 +1053,12 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
             test_file,
             minimal_time=60 * 8,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(stop_nodes, test_file)
+        measured_op = measure_operation(
+            stop_nodes, test_file, threading_lock=threading_lock
+        )
     logger.info("Turning on nodes")
     try:
         nodes.start_nodes(nodes=test_nodes)
@@ -1084,7 +1114,9 @@ def measure_rewrite_kms_endpoint(request, measurement_dir, threading_lock):
     request.addfinalizer(teardown)
 
     test_file = os.path.join(measurement_dir, "measure_rewrite_kms_endpoint.json")
-    measured_op = measure_operation(change_kms_endpoint, test_file)
+    measured_op = measure_operation(
+        change_kms_endpoint, test_file, threading_lock=threading_lock
+    )
 
     teardown()
 
