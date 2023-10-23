@@ -2979,3 +2979,17 @@ def get_lvm_full_version():
     image = getattr(redhat_operators_catalogesource_ocs, "data")["spec"]["image"]
     full_version = image.split(":")[1]
     return full_version
+
+
+def is_vsphere_ipi_cluster():
+    """
+    Check if the cluster is a vSphere IPI cluster
+
+    Returns:
+        bool: True, if the cluster is a vSphere IPI cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "ipi"
+    )
