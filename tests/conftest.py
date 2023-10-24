@@ -344,7 +344,7 @@ def pytest_generate_tests(metafunc):
 
     Args:
         metafunc (pytest fixture): metafunc pytest object to access info about
-                                    test function and its parameters
+            test function and its parameters
 
     """
     # For now we are only dealing with multicluster scenarios in this hook
