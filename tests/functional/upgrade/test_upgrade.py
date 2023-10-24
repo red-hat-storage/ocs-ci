@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import purple_squad
+from ocs_ci.framework.pytest_customization.marks import purple_squad, multicluster_roles
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
     polarion_id,
@@ -68,6 +68,7 @@ def test_osd_reboot(teardown, upgrade_stats):
 @purple_squad
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
+@multicluster_roles(["odf"])
 def test_upgrade(upgrade_stats):
     """
     Tests upgrade procedure of OCS cluster
