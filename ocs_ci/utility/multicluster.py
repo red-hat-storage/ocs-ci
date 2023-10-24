@@ -3,7 +3,6 @@ All multicluster specific utility functions and classes can be here
 
 """
 
-from ocs_ci.ocs.constants import mdr_roles
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.utils import (
     get_primary_cluster_index,
@@ -100,7 +99,7 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
         self.zone_role_map = dict()
 
         self.zones = self.get_zone_info()
-        self.mdr_roles = self.get_mdr_roles()
+        self.mdr_roles = self.get_roles()
         self.generate_zone_ranks()
         self.generate_role_ranks()
         self.generate_role_to_param_tuple_map()
@@ -127,13 +126,6 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
             else:
                 # Only option left is secondary odf
                 self.roles_to_config_index_map["Secondary_odf"] = cluster_index
-
-    def get_mdr_roles(self):
-        """
-        All MDR applicable roles
-
-        """
-        return mdr_roles
 
     def generate_role_ranks(self):
         """
@@ -190,7 +182,7 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
     def get_roles(self, metafunc):
         # Return a list of roles applicable to the current test
         for marker in metafunc.definition.iter_markers():
-            if marker.name == "mdr_roles":
+            if marker.name == "multicluster_roles":
                 return marker.args[0]
 
     def generate_pytest_parameters(self, metafunc, roles):
@@ -209,4 +201,6 @@ multicluster_upgrade_parametrizer = {"metro-dr": MDRClusterUpgradeParametrize}
 
 
 def get_multicluster_upgrade_parametrizer():
-    return multicluster_upgrade_parametrizer["metro-dr"]()
+    return multicluster_upgrade_parametrizer[
+        ocsci_config.MULTICLUSTER["multicluster_mode"]
+    ]()

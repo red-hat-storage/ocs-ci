@@ -31,6 +31,7 @@ from ocs_ci.utility.version import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
+    multicluster_roles,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @ocp_upgrade
 @purple_squad
+@multicluster_roles(["ocp"])
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health
