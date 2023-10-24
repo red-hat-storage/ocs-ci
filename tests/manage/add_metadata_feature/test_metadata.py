@@ -4,6 +4,7 @@ import logging
 from ocs_ci.utility import metadata_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
@@ -61,7 +62,10 @@ class TestMetadataUnavailable(ManageTest):
         and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
-        sc_name = storageclass_name(sc_interface)
+        external_mode = config.DEPLOYMENT["external_mode"]
+        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
+            sc_name, fs, external_mode=external_mode
+        )
         config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
         toolbox = pod.get_ceph_tools_pod()
@@ -120,7 +124,6 @@ class TestMetadataUnavailable(ManageTest):
         and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
-        # create a pvc with cephfs sc
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM, status=constants.STATUS_BOUND
         )
@@ -171,7 +174,10 @@ class TestDefaultMetadataDisabled(ManageTest):
             2. PVC clone
 
         """
-        sc_name = storageclass_name(sc_interface)
+        external_mode = config.DEPLOYMENT["external_mode"]
+        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
+            sc_name, fs, external_mode=external_mode
+        )
         config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
         toolbox = pod.get_ceph_tools_pod()
@@ -254,6 +260,7 @@ class TestMetadata(ManageTest):
         self.pod_obj = ocp.OCP(kind="Pod", namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.toolbox = pod.get_ceph_tools_pod()
+        self.external_mode = config.DEPLOYMENT["external_mode"]
 
         # Enable metadata feature
         log.info("----Enable metadata----")
@@ -437,7 +444,9 @@ class TestMetadata(ManageTest):
             5. Validate the metadata created for the new PVC
                is different than previous metadata
         """
-        sc_name = storageclass_name(sc_interface)
+        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
+            sc_name, fs, external_mode=self.external_mode
+        )
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -548,7 +557,9 @@ class TestMetadata(ManageTest):
         no metadata details available for the volume clone and snapshot created
 
         """
-        sc_name = storageclass_name(sc_interface)
+        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
+            sc_name, fs, external_mode=self.external_mode
+        )
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -693,7 +704,9 @@ class TestMetadata(ManageTest):
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
 
         """
-        sc_name = storageclass_name(sc_interface)
+        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
+            sc_name, fs, external_mode=self.external_mode
+        )
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -814,7 +827,9 @@ class TestMetadata(ManageTest):
             16. validate metadata for new PVC created
 
         """
-        sc_name = storageclass_name(sc_interface)
+        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
+            sc_name, fs, external_mode=self.external_mode
+        )
         # Enable CSI_ENABLE_OMAP_GENERATOR flag
         enable_omap_generator = '{"data":{"CSI_ENABLE_OMAP_GENERATOR": "true"}}'
 

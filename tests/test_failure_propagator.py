@@ -1,3 +1,4 @@
+import logging
 import pytest
 
 from ocs_ci.framework import config
@@ -20,6 +21,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     performance,
     scale,
 )
+
+log = logging.getLogger(__name__)
 
 
 @ignore_owner
@@ -54,27 +57,58 @@ class TestFailurePropagator:
         """
         number_of_eligible_tests = config.RUN.get("number_of_tests") - 2
 
-        skipped_on_ceph_health_percent = (
-            config.RUN.get("skipped_tests_ceph_health") / number_of_eligible_tests
-        )
-        message = (
-            f"This run had {skipped_on_ceph_health_percent * 100}% of the "
-            f"tests skipped due to Ceph health not OK."
-        )
-        if skipped_on_ceph_health_percent > 0.25:
-            if config.RUN.get("skip_reason_test_found"):
-                test_name = config.RUN.get("skip_reason_test_found").get("test_name")
-                message = (
-                    message + f" The test that is likely to cause this is {test_name}"
-                )
-                squad = config.RUN.get("skip_reason_test_found").get("squad")
-                if squad:
-                    message = message + f" which is under {squad}'s responsibility"
-                    request.node.add_marker(squad)
+        # for acceptance suite, the value of config.RUN["skipped_on_ceph_health_threshold"] would be set to 0
+        # so any skip on Ceph health during an acceptance suite execution would cause
+        # test_report_skip_triggering_test to fail
+        if "acceptance" in config.RUN.get("cli_params").get("-m", ""):
+            config.RUN["skipped_on_ceph_health_threshold"] = 0
 
-            else:
-                message = message + " Couldn't identify the test case that caused this"
-            pytest.fail(message)
+        log.info(f"number_of_eligible_tests: {number_of_eligible_tests}")
+        log.info(
+            f"skipped_on_ceph_health_threshold: {config.RUN.get('skipped_on_ceph_health_threshold')}"
+        )
+        log.info(f"skip_reason_test_found: {config.RUN.get('skip_reason_test_found')}")
+        log.info(
+            f"skipped_tests_ceph_health: {config.RUN.get('skipped_tests_ceph_health')}"
+        )
+
+        if number_of_eligible_tests > 0:
+            config.RUN["skipped_on_ceph_health_ratio"] = round(
+                (
+                    config.RUN.get("skipped_tests_ceph_health")
+                    / number_of_eligible_tests
+                ),
+                3,
+            )
+            log.info(
+                f"skipped_on_ceph_health_ratio: {config.RUN.get('skipped_on_ceph_health_ratio')}"
+            )
+            message = (
+                f"This run had {config.RUN['skipped_on_ceph_health_ratio'] * 100}% of the "
+                f"tests skipped due to Ceph health not OK."
+            )
+            if (
+                config.RUN["skipped_on_ceph_health_ratio"]
+                > config.RUN["skipped_on_ceph_health_threshold"]
+            ):
+                if config.RUN.get("skip_reason_test_found"):
+                    test_name = config.RUN.get("skip_reason_test_found").get(
+                        "test_name"
+                    )
+                    message = (
+                        message
+                        + f" The test that is likely to cause this is {test_name}"
+                    )
+                    squad = config.RUN.get("skip_reason_test_found").get("squad")
+                    if squad:
+                        message = message + f" which is under {squad}'s responsibility"
+                        request.node.add_marker(squad)
+
+                else:
+                    message = (
+                        message + " Couldn't identify the test case that caused this"
+                    )
+                pytest.fail(message)
 
     @pytest.mark.last
     def test_failure_propagator(self):

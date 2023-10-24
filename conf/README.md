@@ -57,6 +57,15 @@ run it belongs here.
 * `log_utilization` - Enable logging of cluster utilization metrics every 10 seconds. Set via --log-cluster-utilization
 * `use_ocs_worker_for_scale` - Use OCS workers for scale testing (Default: false)
 * `load_status` - Current status of IO load
+* `skip_reason_test_found` - In the case the cluster left unhealthy, this param is used to determine the
+  test case that is likely to cause that
+* `skipped_tests_ceph_health` - The number of tests that got skipped due to Ceph being unhealthy
+* `number_of_tests` - The number of tests being collected for the test execution
+* `skipped_on_ceph_health_ratio` - The ratio of tests skipped due to Ceph unhealthy against the
+  number of tests being collected for the test execution
+* `skipped_on_ceph_health_threshold` - The allowed threshold for the ratio of tests skipped due to Ceph unhealthy against the
+  number of tests being collected for the test execution. The default value is set to 0.
+  For acceptance suite, the value would be always overwritten to 0.
 
 #### DEPLOYMENT
 
@@ -131,6 +140,8 @@ anywhere else.
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
 * `in_transit_encryption` - Enable in-transit encryption.
+* `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
+  useful for enforcing force deploy steps only.
 
 #### REPORTING
 

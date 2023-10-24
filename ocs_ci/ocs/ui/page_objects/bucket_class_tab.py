@@ -9,14 +9,12 @@ from ocs_ci.ocs.ui.base_ui import logger
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
-from ocs_ci.ocs.ui.page_objects.object_service import ObjectService
-from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
+from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 
 
-class BucketClassTab(ObjectService, CreateResourceForm, ResourceList):
+class BucketClassTab(ObjectStorage, CreateResourceForm):
     def __init__(self):
-        ObjectService.__init__(self)
-        CreateResourceForm.__init__(self)
+        ObjectStorage.__init__(self)
         self.rules = {
             constants.UI_INPUT_RULES_BUCKET_CLASS["rule1"]: self._check_3_63_char_rule,
             constants.UI_INPUT_RULES_BUCKET_CLASS[

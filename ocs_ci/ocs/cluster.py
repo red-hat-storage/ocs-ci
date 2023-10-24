@@ -2387,7 +2387,9 @@ class LVM(object):
 
     """
 
-    def __init__(self, fstrim=False, fail_on_thin_pool_not_empty=False):
+    def __init__(
+        self, fstrim=False, fail_on_thin_pool_not_empty=False, threading_lock=None
+    ):
         """
         Initiate the class, gets 2 parameters.
         Args:
@@ -2405,6 +2407,7 @@ class LVM(object):
         self.vg_data = None
         self.node_ssh = None
         self.new_prom = None
+        self.threading_lock = threading_lock
         func_list = [
             self.cluster_ip(),
             self.get_lvmcluster(),
@@ -2461,7 +2464,7 @@ class LVM(object):
         thread_init_class(func_list, shutdown=0)
 
     def init_prom(self):
-        self.new_prom = PrometheusAPI()
+        self.new_prom = PrometheusAPI(threading_lock=self.threading_lock)
 
     def get_lvmcluster(self):
         """

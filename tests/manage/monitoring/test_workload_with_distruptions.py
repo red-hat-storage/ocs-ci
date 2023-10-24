@@ -263,7 +263,7 @@ class TestCephOSDSlowOps(object):
     @tier3
     @pytest.mark.polarion_id("OCS-5158")
     @blue_squad
-    def test_ceph_osd_slow_ops_alert(self, setup):
+    def test_ceph_osd_slow_ops_alert(self, setup, threading_lock):
         """
         Test to verify bz #1966139, more info about Prometheus alert - #1885441
 
@@ -279,7 +279,7 @@ class TestCephOSDSlowOps(object):
         storage ends - fail the test
         """
 
-        api = PrometheusAPI()
+        api = PrometheusAPI(threading_lock=threading_lock)
 
         while get_percent_used_capacity() < self.full_osd_threshold:
             time_passed_sec = time.perf_counter() - self.start_workload_time

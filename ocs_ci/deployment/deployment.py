@@ -82,6 +82,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
+    get_osd_count,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -129,6 +130,7 @@ from ocs_ci.utility.utils import (
     load_auth_config,
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
+    get_oadp_version,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -1335,6 +1337,18 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"] = {
                     "storageClassName": storageclassnames["encryption"]
                 }
+        # Bluestore for RDR greenfield deployments: 4.14 onwards
+        if (
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
+            and config.multicluster
+            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+        ):
+            rdr_bluestore_annotation = {
+                "ocs.openshift.io/clusterIsDisasterRecoveryTarget": "true"
+            }
+            merge_dict(
+                cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
+            )
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -1521,6 +1535,7 @@ class Deployment(object):
         """
         set_registry_to_managed_state()
         image = None
+        ceph_cluster = None
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
@@ -1635,6 +1650,34 @@ class Deployment(object):
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
+        # In case of RDR, check for bluestore on osds: 4.14 onwards
+        if (
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
+            and config.multicluster
+            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+        ):
+            if not ceph_cluster:
+                ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
+            store_type = ceph_cluster.get().get("items")[0]["status"]["storage"]["osd"][
+                "storeType"
+            ]
+            if "bluestore-rdr" in store_type.keys():
+                logger.info("OSDs with bluestore found ")
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    f"OSDs were not brought up with Regional DR bluestore! instead we have {store_type} "
+                )
+
+            if store_type["bluestore-rdr"] == get_osd_count():
+                logger.info(
+                    f"OSDs found matching with bluestore-rdr count {store_type['bluestore-rdr']}"
+                )
+            else:
+                raise UnexpectedDeploymentConfiguration(
+                    f"OSDs count mismatch! bluestore-rdr count = {store_type['bluestore-rdr']} "
+                    f"actual osd count = {get_osd_count()}"
+                )
+
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
 
@@ -1742,6 +1785,11 @@ class Deployment(object):
         Args:
             log_level (str): log level for installer (default: DEBUG)
         """
+        if config.DEPLOYMENT.get("skip_ocp_installer_destroy"):
+            logger.info(
+                "OCP Destroy is skipped because skip_ocp_installer_destroy was enabled!"
+            )
+            return
         if self.platform == constants.IBM_POWER_PLATFORM:
             if not config.ENV_DATA["skip_ocs_deployment"]:
                 self.destroy_ocs()
@@ -2790,9 +2838,16 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         3. backupstoragelocation resource in "Available" phase
 
         """
-        # Check restic pods
+        # Check restic pods.
+        # Restic pods have been renamed to node-agent after oadp 1.2
+        oadp_version = get_oadp_version()
+
+        if version.compare_versions(f"{oadp_version} >= 1.2"):
+            restic_pod_prefix = "node-agent"
+        else:
+            restic_pod_prefix = "restic"
         restic_list = get_pods_having_label(
-            "name=restic", constants.ACM_HUB_BACKUP_NAMESPACE
+            f"name={restic_pod_prefix}", constants.ACM_HUB_BACKUP_NAMESPACE
         )
         if len(restic_list) != constants.MDR_RESTIC_POD_COUNT:
             raise MDRDeploymentException("restic pod count mismatch")

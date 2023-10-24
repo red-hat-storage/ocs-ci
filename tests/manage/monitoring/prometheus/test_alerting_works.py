@@ -12,11 +12,11 @@ log = logging.getLogger(__name__)
 
 
 @blue_squad
-def test_alerting_works():
+def test_alerting_works(threading_lock):
     """
     If alerting works then there is at least one alert.
     """
-    prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(threading_lock=threading_lock)
     alerts_response = prometheus.get(
         "alerts", payload={"silenced": False, "inhibited": False}
     )
@@ -30,11 +30,11 @@ def test_alerting_works():
 @pytest.mark.polarion_id("OCS-2503")
 @bugzilla("1897674")
 @tier1
-def test_prometheus_rule_failures():
+def test_prometheus_rule_failures(threading_lock):
     """
     There should be no PrometheusRuleFailures alert when OCS is configured.
     """
-    prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(threading_lock=threading_lock)
     alerts_response = prometheus.get(
         "alerts", payload={"silenced": False, "inhibited": False}
     )

@@ -50,6 +50,7 @@ class TestClusterFullAndRecovery(E2ETest):
         pvc_factory,
         pod_factory,
         project_factory,
+        threading_lock,
     ):
         """
         1.Create PVC1 [FS + RBD]
@@ -159,6 +160,7 @@ class TestClusterFullAndRecovery(E2ETest):
             sleep=50,
             func=self.verify_alerts_via_prometheus,
             expected_alerts=expected_alerts,
+            threading_lock=threading_lock,
         )
         if not sample.wait_for_func_status(result=True):
             log.error(f"The alerts {expected_alerts} do not exist after 600 sec")
@@ -317,18 +319,19 @@ class TestClusterFullAndRecovery(E2ETest):
                 return True
         return False
 
-    def verify_alerts_via_prometheus(self, expected_alerts):
+    def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
         """
         Verify Alerts on prometheus
 
         Args:
             expected_alerts (list): list of alert names
+            threading_lock (threading.Rlock): Lock object to prevent simultaneous calls to 'oc'
 
         Returns:
             bool: True if expected_alerts exist, False otherwise
 
         """
-        prometheus = PrometheusAPI()
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
         log.info("Logging of all prometheus alerts started")
         alerts_response = prometheus.get(
             "alerts", payload={"silenced": False, "inhibited": False}

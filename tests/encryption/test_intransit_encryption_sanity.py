@@ -57,7 +57,9 @@ class TestInTransitEncryptionSanity:
         # Verify that encryption is actually disabled by checking that a ValueError is raised.
         log.info("Verifying the in-transit encryption is disabled.")
         with pytest.raises(ValueError):
-            assert not in_transit_encryption_verification()
+            assert (
+                not in_transit_encryption_verification()
+            ), "In-transit Encryption was expected to be disabled, but it's enabled in the setup."
 
         if config.ENV_DATA.get("in_transit_encryption"):
             log.info("Re-enabling in-transit encryption.")

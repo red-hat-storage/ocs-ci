@@ -17,11 +17,11 @@ logger = logging.getLogger(__name__)
 @marks.polarion_id("OCS-2375")
 @marks.bugzilla("1836299")
 @skipif_managed_service
-def test_hpa_maxreplica_alert():
+def test_hpa_maxreplica_alert(threading_lock):
     """
     Test to verify that no HPA max replica alert is triggered
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     logger.info(
         f"Verifying whether {constants.ALERT_KUBEHPAREPLICASMISMATCH} "

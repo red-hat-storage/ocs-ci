@@ -60,6 +60,7 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
         snapshot_restore_factory,
         pvc_factory,
         pod_factory,
+        threading_lock,
     ):
         """
         test create delete snapshot
@@ -77,7 +78,9 @@ class TestLvmSnapshotBiggerThanDisk(ManageTest):
 
         access_mode = constants.ACCESS_MODE_RWO
 
-        lvm = LVM(fstrim=True, fail_on_thin_pool_not_empty=True)
+        lvm = LVM(
+            fstrim=True, fail_on_thin_pool_not_empty=True, threading_lock=threading_lock
+        )
         disk1 = lvm.pv_data["pv_list"][0]
         disk_size = lvm.pv_data[disk1]["pv_size"]
         pvc_size = int(float(disk_size)) * 2

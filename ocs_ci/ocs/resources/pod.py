@@ -739,7 +739,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
         )
         cluster_kubeconfig = provider_kubeconfig
     else:
-        cluster_kubeconfig = ""
+        cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_pod_obj = OCP(
@@ -891,6 +891,20 @@ def get_noobaa_operator_pod(
     noobaa_operator = get_pods_having_label(ocs_label, namespace)
     noobaa_operator_pod = Pod(**noobaa_operator[0])
     return noobaa_operator_pod
+
+
+def get_noobaa_db_pod():
+    """
+    Get noobaa db pod obj
+    Returns:
+        Pod object: Noobaa db pod object
+    """
+    nb_db = get_pods_having_label(
+        label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    nb_db_pod = Pod(**nb_db[0])
+    return nb_db_pod
 
 
 def get_noobaa_core_pod():
@@ -2306,6 +2320,45 @@ def wait_for_pods_to_be_running(
         return False
 
 
+def wait_for_pods_by_label_count(
+    label,
+    exptected_count,
+    namespace=config.ENV_DATA["cluster_namespace"],
+    timeout=200,
+    sleep=10,
+):
+    """
+
+    Wait for the expected number of pods with the given selector.
+
+    Args:
+        selector (str): The resource selector to search with
+        exptected_count (int): The expected number of pods with the given selector
+        namespace (str): the namespace ot the pods
+        timeout (int): time to wait for pods to be running
+        sleep (int): Time in seconds to sleep between attempts
+
+    """
+
+    try:
+        for pods_count in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_pod_count,
+            label=label,
+            namespace=namespace,
+        ):
+            # Check if the expected number of pods with the given selector is met
+            if pods_count == exptected_count:
+                logger.info(f"Found {exptected_count} pods with selector {label}")
+                return True
+    except TimeoutExpiredError:
+        logger.warning(
+            f"The expected number of pods was not met" f"after {timeout} seconds"
+        )
+        return False
+
+
 def list_of_nodes_running_pods(
     selector, namespace=config.ENV_DATA["cluster_namespace"]
 ):
@@ -3115,7 +3168,6 @@ def get_mon_label(mon_pod_obj):
 
 
 def set_osd_maintenance_mode(osd_deployment):
-
     """
     Set osd in maintenance mode for running ceph-objectstore commands
 

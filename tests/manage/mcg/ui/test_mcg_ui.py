@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     on_prem_platform_required,
@@ -18,19 +19,20 @@ from ocs_ci.framework.testlib import (
     skipif_ui_not_support,
     ui,
 )
+from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
-from ocs_ci.ocs.ui.mcg_ui import BucketClassUI, MCGStoreUI
+from ocs_ci.ocs.ui.mcg_ui import BucketClassUI
 from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
     ObjectBucketClaimsTab,
 )
 from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
 from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
 
 
 @black_squad
-@skipif_ui_not_support("mcg_stores")
 class TestStoreUserInterface(object):
     """
     Test the MCG store UI
@@ -51,53 +53,78 @@ class TestStoreUserInterface(object):
 
     @ui
     @tier1
-    @skipif_ocs_version("!=4.8")
     @skipif_disconnected_cluster
     @pytest.mark.parametrize(
-        argnames=["kind"],
+        argnames=["kind", "provider", "region"],
         argvalues=[
             pytest.param(
-                "backingstore",
+                *["backingstore", "aws", "us-east-2"],
                 marks=pytest.mark.polarion_id("OCS-2549"),
             ),
             pytest.param(
-                "namespacestore",
+                *["namespacestore", "aws", "us-east-2"],
                 marks=pytest.mark.polarion_id("OCS-2547"),
             ),
         ],
     )
     def test_store_creation_and_deletion(
-        self, setup_ui_class, cld_mgr, cloud_uls_factory, kind
+        self, setup_ui_class, cld_mgr, cloud_uls_factory, kind, provider, region
     ):
         """
         Test creation and deletion of MCG stores via the UI
 
-        """
-        uls_name = list(cloud_uls_factory({"aws": [(1, "us-east-2")]})["aws"])[0]
+        Steps:
+        1. Navigate to Data Foundation / Object Storage / (Backing Store | Namespace Store)
+        2. Create store with given parameters
+        3. Verify via UI that status of the store is ready
+        4. Delete resource via UI
+        5. Verify store has been deleted via 'oc' cmd
 
+        """
+        log_step(
+            "Navigate to Data Foundation / Object Storage / (Backing Store | Namespace Store)"
+        )
+        object_storage = PageNavigator().nav_object_storage()
+
+        if kind == "backingstore":
+            store_tab = object_storage.nav_backing_store_tab()
+        elif kind == "namespacestore":
+            store_tab = object_storage.nav_namespace_store_tab()
+        else:
+            raise IncorrectUiOptionRequested(f"Unknown store kind {kind}")
+
+        log_step("Create store with given parameters")
+        uls_name = list(cloud_uls_factory({provider: [(1, region)]})[provider])[0]
         store_name = create_unique_resource_name(
             resource_description="ui", resource_type=kind
         )
 
-        store_ui_obj = MCGStoreUI()
-        store_ui_obj.create_store_ui(
-            kind, store_name, cld_mgr.aws_client.secret.name, uls_name
+        resource_page = store_tab.create_store(
+            store_name=store_name,
+            provider=provider,
+            region=region,
+            secret=cld_mgr.aws_client.secret.name,
+            uls_name=uls_name,
         )
 
-        assert store_ui_obj.verify_current_page_resource_status(
+        log_step("Verify via UI that status of the store is ready")
+        assert resource_page.verify_current_page_resource_status(
             constants.STATUS_READY
         ), f"Created {kind} was not ready in time"
 
-        logger.info(f"Delete {store_name}")
-        store_ui_obj.delete_store_ui(kind, store_name)
+        log_step("Delete resource via UI")
+        store_tab = resource_page.nav_resource_list_via_breadcrumbs()
+        store_tab.delete_resource(delete_via="three_dots", resource=store_name)
 
+        log_step("Verify store has been deleted via 'oc' cmd")
         test_store = OCP(
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=kind,
             resource_name=store_name,
         )
-
-        assert test_store.check_resource_existence(should_exist=False)
+        assert test_store.check_resource_existence(
+            should_exist=False
+        ), f"resource kind='{kind}' name='{store_name}' preserved on cluster after deletion"
 
 
 @black_squad
@@ -157,6 +184,7 @@ class TestBucketclassUserInterface(object):
             bc_name, policy, [bs.name for bs in test_stores]
         )
 
+        # TODO: replace with ResourcePage().verify_current_page_resource_status(...)
         assert bc_ui_obj.verify_current_page_resource_status(
             constants.STATUS_READY
         ), "Created bucketclass was not ready in time"
@@ -220,6 +248,7 @@ class TestBucketclassUserInterface(object):
         bc_ui_obj = BucketClassUI()
         bc_ui_obj.create_namespace_bucketclass_ui(bc_name, policy, nss_names, bs_names)
 
+        # TODO: replace with ResourcePage().verify_current_page_resource_status(...)
         assert bc_ui_obj.verify_current_page_resource_status(
             constants.STATUS_READY
         ), "Created bucketclass was not ready in time"
@@ -236,6 +265,7 @@ class TestBucketclassUserInterface(object):
         assert test_bc.check_resource_existence(should_exist=False)
 
 
+@skipif_disconnected_cluster
 @black_squad
 @skipif_ui_not_support("obc")
 class TestObcUserInterface(object):
@@ -307,7 +337,7 @@ class TestObcUserInterface(object):
 
         obc_ui_obj.create_obc_ui(obc_name, storageclass, bucketclass)
 
-        assert obc_ui_obj.verify_current_page_resource_status(
+        assert obc_page.verify_current_page_resource_status(
             constants.STATUS_BOUND
         ), "Created OBC was not ready in time"
 

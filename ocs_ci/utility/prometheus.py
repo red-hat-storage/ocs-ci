@@ -10,7 +10,7 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.exceptions import AlertingError, AuthError
+from ocs_ci.ocs.exceptions import AlertingError, AuthError, NoThreadingLockUsedError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutIterator
@@ -330,6 +330,11 @@ class PrometheusAPI(object):
         Args:
             user (str): OpenShift username used to connect to API
         """
+        if threading_lock is None:
+            raise NoThreadingLockUsedError(
+                "using threading.Lock object is mandatory for PrometheusAPI class"
+            )
+
         if (
             config.ENV_DATA["platform"].lower() == "ibm_cloud"
             and config.ENV_DATA["deployment_type"] == "managed"

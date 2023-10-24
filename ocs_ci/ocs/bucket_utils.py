@@ -6,6 +6,7 @@ import logging
 import os
 import shlex
 from uuid import uuid4
+from datetime import date
 
 import boto3
 from botocore.handlers import disable_signing
@@ -1332,6 +1333,7 @@ def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=No
 
     Returns:
         bool: True if all the objects exist in the cache as expected, False otherwise
+
     """
     res = mcg_obj.send_rpc_query(
         "object_api",
@@ -1343,18 +1345,20 @@ def check_cached_objects_by_name(mcg_obj, bucket_name, expected_objects_names=No
     list_objects_res = [name["key"] for name in res.get("reply").get("objects")]
     if not expected_objects_names:
         expected_objects_names = []
-    if set(expected_objects_names) == set(list_objects_res):
-        logger.info("Files cached as expected")
-        return True
-    logger.warning(
-        "Objects did not cache properly, \n"
-        f"Expected: [{expected_objects_names}]\n"
-        f"Cached: [{list_objects_res}]"
-    )
-    return False
+
+    for obj in expected_objects_names:
+        if obj not in list_objects_res:
+            logger.warning(
+                "Objects did not cache properly, \n"
+                f"Expected: [{expected_objects_names}]\n"
+                f"Cached: [{list_objects_res}]"
+            )
+            return False
+    logger.info("Files cached as expected")
+    return True
 
 
-def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
+def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None, timeout=60):
     """
     wait for existing cache bucket to cache all required objects
 
@@ -1365,7 +1369,7 @@ def wait_for_cache(mcg_obj, bucket_name, expected_objects_names=None):
 
     """
     sample = TimeoutSampler(
-        timeout=60,
+        timeout=timeout,
         sleep=10,
         func=check_cached_objects_by_name,
         mcg_obj=mcg_obj,
@@ -1771,6 +1775,7 @@ def random_object_round_trip_verification(
     cleanup=False,
     result_pod=None,
     result_pod_path=None,
+    **kwargs,
 ):
     """
     Writes random objects in a pod, uploads them to a bucket,
@@ -1814,7 +1819,7 @@ def random_object_round_trip_verification(
     )
     written_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {upload_dir}").split(" ")
     if wait_for_replication:
-        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name)
+        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name, **kwargs)
         bucket_name = second_bucket_name
     # Download the random objects that were uploaded to the bucket
     sync_object_directory(
@@ -1912,3 +1917,74 @@ def create_aws_bs_using_cli(
         f"--target-bucket {uls_name} --region {region}",
         use_yes=True,
     )
+
+
+def expire_objects_in_bucket(bucket_name):
+    """
+    Manually expire the objects in a bucket
+
+    Args:
+        bucket_name (str): Name of the bucket
+
+    """
+
+    from ocs_ci.ocs.resources.pod import (
+        get_noobaa_db_pod,
+    )
+
+    creation_time = f"{date.today().year-1}-06-25T14:18:28.712Z"
+    nb_db_pod = get_noobaa_db_pod()
+    query = (
+        'UPDATE objectmds SET "data"=jsonb_set("data", \'{create_time}\','
+        f"'\\\"{creation_time}\\\"') WHERE data ->> 'bucket' IN "
+        f"( SELECT _id FROM buckets WHERE data ->> 'name' = '{bucket_name}' );"
+    )
+    command = f'psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "{query}"'
+
+    nb_db_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
+
+
+def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
+    """
+    Checks if objects in the bucket is expired
+
+    Args:
+        mcg_obj(MCG): MCG object
+        bucket_name(str): Name of the bucket
+        prefix(str): Objects prefix
+
+    Returns:
+        Bool: True if objects are expired, else False
+
+    """
+
+    response = s3_list_objects_v2(
+        mcg_obj, bucketname=bucket_name, prefix=prefix, delimiter="/"
+    )
+    if response["KeyCount"] != 0:
+        return False
+    return True
+
+
+def sample_if_objects_expired(mcg_obj, bucket_name, prefix="", timeout=600, sleep=30):
+    """
+    Sample if the objects in a bucket expired using
+    TimeoutSampler
+
+    """
+    message = (
+        f"Objects in bucket with prefix {prefix} "
+        if prefix != ""
+        else "Objects in the bucket "
+    )
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=check_if_objects_expired,
+        mcg_obj=mcg_obj,
+        bucket_name=bucket_name,
+        prefix=prefix,
+    )
+
+    assert sampler.wait_for_func_status(result=True), f"{message} are not expired"
+    logger.info(f"{message} are expired")

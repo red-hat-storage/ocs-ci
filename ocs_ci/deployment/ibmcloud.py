@@ -15,7 +15,11 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnsupportedPlatformVersionError,
+    LeftoversExistError,
     VolumesExistError,
+)
+from ocs_ci.ocs.resources.pvc import (
+    scale_down_pods_and_remove_pvcs,
 )
 from ocs_ci.utility import ibmcloud, version
 from ocs_ci.utility.retry import retry
@@ -177,11 +181,30 @@ class IBMCloudIPI(CloudDeploymentBase):
 
         """
         self.export_api_key()
-        logger.info("Destroying the IBM Cloud cluster")
-        super(IBMCloudIPI, self).destroy_cluster(log_level)
-        self.delete_service_id()
         resource_group = self.get_resource_group()
+        if resource_group:
+            try:
+                scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
+            except Exception as err:
+                logger.warning(
+                    f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
+                )
+            logger.info("Destroying the IBM Cloud cluster")
+            super(IBMCloudIPI, self).destroy_cluster(log_level)
+
+        else:
+            logger.warning(
+                "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
+            )
+        self.delete_service_id()
+        if resource_group:
+            resource_group = self.get_resource_group()
+        # Based on docs:
+        # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
+        # The volumes should be removed before running openshift-installer for destroy, but it's not
+        # working and failing, hence moving this step back after openshift-installer.
         self.delete_volumes(resource_group)
+        self.delete_leftover_resources(resource_group)
         self.delete_resource_group(resource_group)
 
     def manually_create_iam_for_vpc(self):
@@ -219,19 +242,29 @@ class IBMCloudIPI(CloudDeploymentBase):
             if "release image" in line:
                 return line.split(" ")[2].strip()
 
-    def get_resource_group(self):
+    def get_resource_group(self, return_id=False):
         """
         Retrieve and set the resource group being utilized for the cluster assets.
+
+        Args:
+            return_id (bool): If True, it will return ID instead of name.
+
+        Returns:
+            str: name or ID of resource group if found.
+            None: in case no RG found.
+
         """
         cmd = "ibmcloud resource groups --output json"
         proc = exec_cmd(cmd)
         logger.info("Retrieving cluster resource group")
         resource_data = json.loads(proc.stdout)
         for group in resource_data:
-            if group["name"].startswith(self.cluster_name):
-                # TODO: error prone if cluster_name is a substring of another cluster
+            if group["name"][:-6] == self.cluster_name:
                 logger.info(f"Found resource group: {group['name']}")
-                return group["name"]
+                if not return_id:
+                    return group["name"]
+                else:
+                    return group["id"]
         logger.info(f"No resource group found with cluster name: {self.cluster_name}")
 
     def delete_service_id(self):
@@ -250,7 +283,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         Delete the pvc volumes created in IBM Cloud that the openshift installer doesn't remove.
 
         Args:
-            resource_group: Resource group in IBM Cloud that contains the cluster resources.
+            resource_group (str): Resource group in IBM Cloud that contains the cluster resources.
 
         """
 
@@ -287,12 +320,112 @@ class IBMCloudIPI(CloudDeploymentBase):
 
             _verify_volumes_deleted(resource_group)
 
+    @retry((LeftoversExistError, CommandFailed), tries=3, delay=30, backoff=1)
+    def delete_leftover_resources(self, resource_group):
+        """
+        Delete leftovers from IBM Cloud.
+
+        Args:
+            resource_group (str): Resource group in IBM Cloud that contains the cluster resources.
+
+        Raises:
+            LeftoversExistError: In case the leftovers after attempt to clean them out.
+
+        """
+
+        def _get_resources(resource_group):
+            """
+            Return a list leftover resources for the specified Resource Group
+            """
+            cmd = f"ibmcloud resource service-instances --type all -g {resource_group} --output json"
+            proc = exec_cmd(cmd)
+
+            return json.loads(proc.stdout)
+
+        def _get_reclamations(resource_group):
+            """
+            Get reclamations for resource group.
+
+            Args:
+                rsource_group (str): Resource group name
+
+            Returns:
+                list: Reclamations for resource group if found.
+            """
+            rg_id = self.get_resource_group(return_id=True)
+            cmd = "ibmcloud resource reclamations --output json"
+            proc = exec_cmd(cmd)
+            reclamations = json.loads(proc.stdout)
+            rg_reclamations = []
+            for reclamation in reclamations:
+                if reclamation["resource_group_id"] == rg_id:
+                    rg_reclamations.append(reclamation)
+            return rg_reclamations
+
+        def _delete_reclamations(reclamations):
+            """
+            Delete reclamations
+
+            Args:
+                reclamations (list): Reclamations to delete
+
+            """
+            for reclamation in reclamations:
+                logger.info(f"Deleting reclamation: {reclamation}")
+                cmd = (
+                    f"ibmcloud resource reclamation-delete {reclamation['id']} "
+                    "--comment 'Force deleting leftovers' -f"
+                )
+                exec_cmd(cmd)
+
+        def _delete_resources(resources, ignore_errors=False):
+            """
+            Deleting leftover resources.
+
+            Args:
+                resources (list): Resource leftover names.
+                ignore_errors (bool): If True, it will be ignoring errors from ibmcloud cmd.
+
+            """
+            for resource in resources:
+                logger.info(f"Deleting leftover {resource}")
+                delete_cmd = f"ibmcloud resource service-instance-delete -g {resource_group} -f --recursive {resource}"
+                if ignore_errors:
+                    try:
+                        exec_cmd(delete_cmd)
+                    except CommandFailed as ex:
+                        logger.debug(
+                            f"Exception will be ignored because ignore_error is set to true! Exception: {ex}"
+                        )
+                else:
+                    exec_cmd(delete_cmd)
+
+        if resource_group:
+            leftovers = _get_resources(resource_group)
+            if not leftovers:
+                logger.info("No leftovers found")
+            else:
+                resource_names = set([r["name"] for r in leftovers])
+                logger.info(f"Deleting leftovers {resource_names}")
+                _delete_resources(resource_names, ignore_errors=True)
+            reclamations = _get_reclamations(resource_group)
+            if reclamations:
+                _delete_reclamations(reclamations)
+            # Additional check if all resources got really deleted:
+            if leftovers:
+                leftovers = _get_resources(resource_group)
+                if leftovers:
+                    raise LeftoversExistError(
+                        "Leftovers detected, you can use the details below to report support case in IBM Cloud:\n"
+                        f"{leftovers}"
+                    )
+
     def delete_resource_group(self, resource_group):
         """
         Delete the resource group that contained the cluster assets.
 
         Args:
-            resource_group: Resource group in IBM Cloud that contains the cluster resources.
+            resource_group (str): Resource group in IBM Cloud that contains the cluster resources.
 
         """
 

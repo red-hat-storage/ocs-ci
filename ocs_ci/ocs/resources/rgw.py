@@ -62,7 +62,7 @@ class RGW(object):
                 kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
             )
             endpoint = route_ocp_obj.get(
-                resource_name=constants.RGW_SERVICE_INTERNAL_MODE
+                resource_name=constants.RGW_ROUTE_INTERNAL_MODE
             )
             endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
 

@@ -296,9 +296,11 @@ class PvcUI(PageNavigator):
             self.ocp_version_full == version.VERSION_4_6
             and ocs_version == version.VERSION_4_6
         ):
-            self.do_clear(format_locator(self.pvc_loc["clone_name_input"], clone_name))
+            self.clear_with_ctrl_a_del(
+                format_locator(self.pvc_loc["clone_name_input"], clone_name)
+            )
         else:
-            self.do_clear(self.pvc_loc["clone_name_input"])
+            self.clear_with_ctrl_a_del(self.pvc_loc["clone_name_input"])
 
         logger.info("Enter the name of clone PVC")
         if (

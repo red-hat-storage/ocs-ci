@@ -67,7 +67,7 @@ class OCP(object):
             field_selector (str): Selector (field query) to filter on, supports
                 '=', '==', and '!='. (e.g. status.phase=Running)
             cluster_kubeconfig (str): Path to the cluster kubeconfig file. Useful in a multicluster configuration
-            threading_lock (threading.Lock): threading.Lock object that is used
+            threading_lock (threading.RLock): threading.RLock object that is used
                 for handling concurrent oc commands
             silent (bool): If True will silent errors from the server, default false
             skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command for

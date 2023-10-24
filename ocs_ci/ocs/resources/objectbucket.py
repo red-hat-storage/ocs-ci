@@ -592,7 +592,17 @@ class MCGNamespaceBucket(ObjectBucket):
         ns_properties = match_buckets[0].get("namespace")
         actual_read_resources = ns_properties.get("read_resources")
         actual_write_resource = ns_properties.get("write_resource")
-        return set(actual_read_resources) == set(self.read_ns_resources) and set(
+
+        expected_read_resources = self.read_ns_resources
+        if isinstance(self.read_ns_resources[0], dict):
+            actual_read_resources = [
+                (r["resource"], r["path"]) for r in actual_read_resources
+            ]
+            expected_read_resources = [
+                (r["resource"], r["path"]) for r in self.read_ns_resources
+            ]
+
+        return set(actual_read_resources) == set(expected_read_resources) and set(
             actual_write_resource
         ) == set(self.write_ns_resource)
 

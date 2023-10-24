@@ -116,6 +116,7 @@ HEALTHY_PV_BS = ["`OPTIMAL`", "`LOW_CAPACITY`"]
 CONFIG_JS_PREFIX = "CONFIG_JS_"
 BUCKET_REPLICATOR_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_REPLICATOR_DELAY"
 BUCKET_LOG_REPLICATOR_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_LOG_REPLICATOR_DELAY"
+LIFECYCLE_INTERVAL_PARAM = "CONFIG_JS_LIFECYCLE_INTERVAL"
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -209,6 +210,7 @@ ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
 MANAGED_FUSION_NAMESPACE = "managed-fusion"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
+OPENSHIFT_API_CLUSTER_OPERATOR = "kube-apiserver"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
@@ -934,6 +936,7 @@ ALERT_NODEDOWN = "CephNodeDown"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
 ALERT_CLUSTEROBJECTSTORESTATE = "ClusterObjectStoreState"
+ALERT_KMSSERVERCONNECTIONALERT = "KMSServerConnectionAlert"
 ALERT_KUBEHPAREPLICASMISMATCH = "KubeHpaReplicasMismatch"
 ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP = "KubePersistentVolumeInodesFillingUp"
 ALERT_CEPHOSDSLOWOPS = "CephOSDSlowOps"
@@ -1472,11 +1475,12 @@ NOOBAA_DB_SERVICE_ACCOUNT = NB_SERVICE_ACCOUNT_BASE.format(
 
 
 # Services
-RGW_SERVICE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_SERVICE_INTERNAL_MODE = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 RGW_SERVICE_EXTERNAL_MODE = "rook-ceph-rgw-ocs-external-storagecluster-cephobjectstore"
 
 # Routes
 RGW_ROUTE_INTERNAL_MODE = "ocs-storagecluster-cephobjectstore"
+RGW_ROUTE_INTERNAL_MODE_SECURE = "ocs-storagecluster-cephobjectstore-secure"
 RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
 
 # Miscellaneous
@@ -1753,6 +1757,7 @@ PLACEMENT_BUCKETCLASS = "placement-bucketclass"
 AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
 NAMESPACE_FILESYSTEM = "nsfs"
 
+
 # Cosbench constants
 COSBENCH = "cosbench"
 COSBENCH_PROJECT = "cosbench-project"
@@ -1966,7 +1971,7 @@ bluestore_prefer_deferred_size_hdd = 0
 
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
-debug_mon = 20
+debug_mon = 30
 debug_ms = 1
 debug_paxos = 20
 debug_crush = 20
@@ -2304,3 +2309,12 @@ PODS_BY_USED = (
     "on (storageclass)  group_left(provisioner) "
     "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))"
 )
+
+# NOOBAA MISC
+NOOBAA_REGIONS_CODE_URL = (
+    "https://github.com/noobaa/noobaa-operator/blob/master/pkg/util/util.go#L1108"
+)
+AWS_REGIONS_DOC_URL = "https://docs.aws.amazon.com/general/latest/gr/rande.html"
+
+# dir of template for html reports
+HTML_REPORT_TEMPLATE_DIR = "ocs_ci/templates/html_reports/"

@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
+    skipif_mcg_only,
     skipif_managed_service,
 )
 from ocs_ci.ocs.bucket_utils import get_bucket_available_size
@@ -63,6 +64,7 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
 @pytest.mark.polarion_id("OCS-2476")
 @bugzilla("1880747")
 @bugzilla("1880748")
+@skipif_mcg_only
 @tier1
 def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     """
