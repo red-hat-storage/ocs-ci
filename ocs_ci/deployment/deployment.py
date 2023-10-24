@@ -83,6 +83,8 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
     get_osd_count,
+    StorageCluster,
+    verify_storage_cluster,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -351,6 +353,41 @@ class Deployment(object):
                             "ocs_registry_image", None
                         )
                         ocs_install_verification(ocs_registry_image=ocs_registry_image)
+                # if we have Globalnet enabled in case of submariner with RDR
+                # we need to add a flag to storagecluster
+                if config.ENV_DATA.get("enable_globalnet", None):
+                    for cluster in get_non_acm_cluster_config():
+                        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                        storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+                        logger.info(
+                            "Updating the StorageCluster resource for globalnet"
+                        )
+                        storage_cluster = StorageCluster(
+                            resource_name=storage_cluster_name,
+                            namespace=config.ENV_DATA["cluster_namespace"],
+                        )
+                        storage_cluster.reload_data()
+                        storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
+                        multicluster_service = {
+                            "network": {
+                                "multiClusterService": {
+                                    "clusterID": config.ENV_DATA["cluster_name"],
+                                    "enabled": "true",
+                                }
+                            }
+                        }
+                        storage_cluster.data.get("spec").merge_dict(
+                            multicluster_service
+                        )
+                        # todo: oc apply updated resource
+                        storage_cluster_yaml = tempfile.NamedTemporaryFile(
+                            mode="w+", prefix="storageclusterupdate", delete=False
+                        )
+                        templating.dump_data_to_temp_yaml(
+                            storage_cluster.data, storage_cluster_yaml.name
+                        )
+                        run_cmd(f"oc apply -f {storage_cluster.name}", timeout=300)
+                        verify_storage_cluster()
                 config.reset_ctx()
         else:
             logger.warning("OCS deployment will be skipped")
