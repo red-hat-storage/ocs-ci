@@ -684,3 +684,4 @@ ceph_health_retry = pytest.mark.ceph_health_retry
 
 # Mark for Multicluster upgrade scenarios
 config_index = pytest.mark.config_index
+multicluster_roles = pytest.mark.multicluster_roles
