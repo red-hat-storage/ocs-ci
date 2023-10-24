@@ -140,6 +140,17 @@ class TestObjectVersioning:
     def test_versioning_properties_and_deletion(self, bucket_factory, mcg_obj_session):
         """
         Test basic properties and deletion of objects in versioned bucket.
+
+        Steps:
+            1. Check an empty versioned bucked properties.
+            2. Check properties of the bucket with 1 file.
+            3. Check 2 versions of the same file in the bucket.
+            4. Check 3 version of the same file in the bucket that contain different data.
+            5. Create 5 more files in bucket and check properties of the bucket and objects.
+            6. Make a generic delete request to versioned object and check properties.
+            7. Delete objects with 1 version from the bucket.
+            8. Deleting all object versions and delete markers.
+
         """
         s3_obj = mcg_obj_session
         bucket = bucket_factory(interface="S3", versioning=True)[0]
