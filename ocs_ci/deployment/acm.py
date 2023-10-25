@@ -18,7 +18,11 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
+from ocs_ci.utility.utils import (
+    run_cmd,
+    run_cmd_interactive,
+    wait_for_machineconfigpool_status,
+)
 from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
 
 logger = logging.getLogger(__name__)
@@ -117,6 +121,7 @@ class Submariner(object):
         )
         templating.dump_data_to_temp_yaml(icsp_data, icsp_data_yaml.name)
         run_cmd(f"oc create -f {icsp_data_yaml.name}", timeout=300)
+        wait_for_machineconfigpool_status(node_type="all")
 
     def download_binary(self):
         if self.source == "upstream":

@@ -2,6 +2,7 @@ import logging
 import time
 import os
 import tempfile
+import requests
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -23,9 +24,9 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
+    get_ocp_version,
     get_running_acm_version,
     string_chunkify,
-    chained_subprocess_pipes,
     run_cmd,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
@@ -167,28 +168,20 @@ class AcmAddClusters(AcmPageNavigator):
                     config.ENV_DATA["submariner_version"],
                 ]
             )
-            curl_cmd = f"curl --retry 3 --retry-delay 5 -Ls {submariner_full_url}"
-            jq_cmd1 = (
-                'jq -r \'[.raw_messages[].msg | select(.pipeline.status=="complete") |'
-                "{{nvr: .artifact.nvr, index_image: .pipeline.index_image}}] | .[0]'"
-            )
 
-            jq_cmd2 = "jq -r '.index_image.\"v4.14\"'"
-            cut_cmd1 = "cut -d'/' -f3-"
-            cut_cmd2 = "cut -d':' -f2-"
-            cmd_exec = chained_subprocess_pipes(
-                [curl_cmd, jq_cmd1, jq_cmd2, cut_cmd1, cut_cmd2]
+            resp = requests.get(submariner_full_url, verify=False)
+            raw_msg = resp.json()["raw_messages"]
+            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
+                f"v{get_ocp_version()}"
+            ].split(":")[1]
+            submariner_downstream_unreleased["spec"]["image"] = ":".join(
+                [constants.SUBMARINER_BREW_REPO, version_tag]
             )
-            version_tag = cmd_exec.communicate()[0].decode()
-
-            image_url = submariner_downstream_unreleased["spec"]["image"]
-            image_url = image_url.replace("PLACE_HOLDER", version_tag)
-            submariner_downstream_unreleased["spec"]["image"] = image_url
             submariner_data_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="submariner_downstream_unreleased", delete=False
             )
             templating.dump_data_to_temp_yaml(
-                submariner_downstream_unreleased, submariner_data_yaml
+                submariner_downstream_unreleased, submariner_data_yaml.name
             )
             old_ctx = config.cur_index
             for cluster in get_non_acm_cluster_config():

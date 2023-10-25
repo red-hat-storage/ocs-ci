@@ -376,10 +376,9 @@ class Deployment(object):
                                 }
                             }
                         }
-                        storage_cluster.data.get("spec").merge_dict(
-                            multicluster_service
+                        merge_dict(
+                            storage_cluster.data.get("spec"), multicluster_service
                         )
-                        # todo: oc apply updated resource
                         storage_cluster_yaml = tempfile.NamedTemporaryFile(
                             mode="w+", prefix="storageclusterupdate", delete=False
                         )

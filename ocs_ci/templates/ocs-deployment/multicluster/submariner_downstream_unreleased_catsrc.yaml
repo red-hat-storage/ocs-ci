@@ -7,7 +7,7 @@ spec:
   icon:
     base64data: ""
     mediatype: ""
-  image: brew.registry.redhat.io/rh-osbs/iib:PLACE_HOLDER
+  image: PLACE_HOLDER
   publisher: Red Hat
   sourceType: grpc
   priority: 100
