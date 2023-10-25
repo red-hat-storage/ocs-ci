@@ -1240,9 +1240,26 @@ def validate_pdb_creation():
     item_list = pdb_obj.get().get("items")
     pdb_count = constants.PDB_COUNT
     pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
+
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_15:
+        pdb_count = constants.PDB_COUNT_2_MGR
+        pdb_required = [
+            constants.MDS_PDB,
+            constants.MON_PDB,
+            constants.OSD_PDB,
+            constants.MGR_PDB,
+        ]
+
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
-        pdb_required.extend((constants.MGR_PDB, constants.RGW_PDB))
+        pdb_required = [
+            constants.MDS_PDB,
+            constants.MON_PDB,
+            constants.OSD_PDB,
+            constants.MGR_PDB,
+            constants.RGW_PDB,
+        ]
+
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
             f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
