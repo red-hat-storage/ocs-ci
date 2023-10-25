@@ -36,7 +36,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_i3,
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
-    blue_squad,
+    magenta_squad,
 )
 
 log = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ def wait_for_nodes_status_and_prometheus_health_check(pods, threading_lock):
     assert prometheus_health_check(), "Prometheus health is degraded"
 
 
-@blue_squad
+@magenta_squad
 @ignore_leftovers
 @workloads
 @skipif_vsphere_ipi
