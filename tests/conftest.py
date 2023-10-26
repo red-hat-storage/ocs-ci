@@ -56,7 +56,7 @@ from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
-from ocs_ci.ocs.resources.mcg_replication_policy import LogBasedReplicationPolicy
+from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
@@ -7502,7 +7502,7 @@ def log_based_replication_setup(
             platform=constants.AWS_PLATFORM,
             region=constants.DEFAULT_AWS_REGION,
         )
-        replication_policy = LogBasedReplicationPolicy(
+        replication_policy = AwsLogBasedReplicationPolicy(
             destination_bucket=target_bucket.name,
             sync_deletions=True,
             logs_bucket=mockup_logger.logs_bucket_uls_name,

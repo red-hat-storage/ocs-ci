@@ -990,16 +990,6 @@ def get_noobaa_endpoint_pods():
     return noobaa_endpoint_pods
 
 
-def get_noobaa_db_pod():
-
-    noobaa_db = get_pods_having_label(
-        label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    nb_db_pods = [Pod(**pod) for pod in noobaa_db]
-    return nb_db_pods[0]
-
-
 def get_odf_operator_controller_manager(
     ocs_label=constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL, namespace=None
 ):

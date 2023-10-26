@@ -242,6 +242,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 
 
 @system_test
+@magenta_squad
 @skipif_vsphere_ipi
 class TestLogBasedReplicationWithDisruptions:
     def test_log_based_replication_with_disruptions(
@@ -250,6 +251,8 @@ class TestLogBasedReplicationWithDisruptions:
         log_based_replication_setup,
         noobaa_db_backup,
         noobaa_db_recovery_from_backup,
+        setup_mcg_bg_features,
+        validate_mcg_bg_features,
     ):
         """
         This is a system test flow to test log based bucket replication
@@ -272,6 +275,14 @@ class TestLogBasedReplicationWithDisruptions:
            make sure no replication - no deletion sync works
 
         """
+
+        # entry criteria setup
+        feature_setup_map = setup_mcg_bg_features(
+            num_of_buckets=5,
+            object_amount=5,
+            is_disruptive=True,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+        )
 
         mockup_logger, source_bucket, target_bucket = log_based_replication_setup()
 
@@ -366,3 +377,11 @@ class TestLogBasedReplicationWithDisruptions:
             target_bucket.name,
             timeout=600,
         ), f"Standard replication completed even though replication policy is removed"
+
+        validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=False,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+            object_amount=5,
+        )
+        logger.info("No issues seen with the MCG bg feature validation")
