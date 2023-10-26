@@ -335,33 +335,3 @@ def validate_metadata(
         assert (
             namespace == metadata["csi.storage.k8s.io/volumesnapshot/namespace"]
         ), "Error: namespace is not as expected"
-
-
-def update_testdata_for_external_modes(
-    sc_name,
-    fs,
-    external_mode=False,
-):
-    """
-    Update the file sytem and storage class names for external mode clusters
-
-    Args:
-        sc_name (str): storage class
-        fs (str): file system
-        external_mode(bool): External mode or not
-
-    Returns:
-        sc_name (str): storage class
-        fs (str): file system
-
-    """
-    if external_mode:
-        if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
-            fs = "fsvol001"
-            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
-        elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
-            fs = ""
-            sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
-        else:
-            log.exception("Metadata feature is not supported for this storage class")
-    return fs, sc_name

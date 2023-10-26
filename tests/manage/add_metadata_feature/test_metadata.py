@@ -63,9 +63,10 @@ class TestMetadataUnavailable(ManageTest):
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
         sc_name = storageclass_name(sc_interface)
-        external_mode = config.DEPLOYMENT["external_mode"]
-        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
-            sc_name, fs, external_mode=external_mode
+        fs = (
+            ""
+            if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
+            else "fsvol001"
         )
         config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
@@ -176,9 +177,10 @@ class TestDefaultMetadataDisabled(ManageTest):
 
         """
         sc_name = storageclass_name(sc_interface)
-        external_mode = config.DEPLOYMENT["external_mode"]
-        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
-            sc_name, fs, external_mode=external_mode
+        fs = (
+            ""
+            if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
+            else "fsvol001"
         )
         config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
@@ -317,6 +319,11 @@ class TestMetadata(ManageTest):
 
         """
         sc_name = storageclass_name(sc_interface)
+        fs = (
+            ""
+            if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
+            else "fsvol001"
+        )
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -447,8 +454,10 @@ class TestMetadata(ManageTest):
                is different than previous metadata
         """
         sc_name = storageclass_name(sc_interface)
-        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
-            sc_name, fs, external_mode=self.external_mode
+        fs = (
+            ""
+            if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
+            else "fsvol001"
         )
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
@@ -561,8 +570,10 @@ class TestMetadata(ManageTest):
 
         """
         sc_name = storageclass_name(sc_interface)
-        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
-            sc_name, fs, external_mode=self.external_mode
+        fs = (
+            ""
+            if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
+            else "fsvol001"
         )
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
@@ -709,8 +720,10 @@ class TestMetadata(ManageTest):
 
         """
         sc_name = storageclass_name(sc_interface)
-        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
-            sc_name, fs, external_mode=self.external_mode
+        fs = (
+            ""
+            if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
+            else "fsvol001"
         )
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
@@ -833,8 +846,10 @@ class TestMetadata(ManageTest):
 
         """
         sc_name = storageclass_name(sc_interface)
-        fs, sc_name = metadata_utils.update_testdata_for_external_modes(
-            sc_name, fs, external_mode=self.external_mode
+        fs = (
+            ""
+            if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
+            else "fsvol001"
         )
         # Enable CSI_ENABLE_OMAP_GENERATOR flag
         enable_omap_generator = '{"data":{"CSI_ENABLE_OMAP_GENERATOR": "true"}}'
