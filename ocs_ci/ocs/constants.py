@@ -2847,4 +2847,4 @@ NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
 # ascii characters
 ENTER_KEY = chr(13)
 # MDR multicluster roles
-mdr_roles = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
+MDR_ROLES = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
