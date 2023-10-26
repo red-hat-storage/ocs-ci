@@ -64,7 +64,7 @@ def test_osd_reboot(teardown):
 @purple_squad
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
-@multicluster_roles(["odf"])
+@multicluster_roles(["mdr_all_ocs"])
 def test_upgrade():
     """
     Tests upgrade procedure of OCS cluster

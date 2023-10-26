@@ -9,6 +9,7 @@ from ocs_ci.ocs.utils import (
     get_active_acm_index,
     get_all_acm_indexes,
 )
+from ocs_ci.ocs.constants import MDR_ROLES
 
 
 class MutliClusterUpgradeParametrize(object):
@@ -31,7 +32,7 @@ class MutliClusterUpgradeParametrize(object):
     def __init__(self):
         self.roles = []
         # List of zones which are participating in this multicluster setup
-        self.zones = []
+        self.zones = self.get_zone_info()
         self.zone_base_rank = 100
         # Each zone will be assigned with a rank
         # This rank comes handy when we have to order the tests
@@ -97,23 +98,20 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
         self.roles_to_param_tuples = dict()
         self.roles_to_config_index_map = dict()
         self.zone_role_map = dict()
+        self.all_mdr_roles = MDR_ROLES
 
-        self.zones = self.get_zone_info()
-        self.mdr_roles = self.get_roles()
         self.generate_zone_ranks()
         self.generate_role_ranks()
-        self.generate_role_to_param_tuple_map()
         self.generate_config_index_map()
+        self.generate_role_to_param_tuple_map()
         self.generate_zone_role_map()
 
-    # In ocs-ci we need to build this based on the config provided
-    def get_config_index_map(self):
-        # TO BE built before pytest_generate_test
-        if not self.roles_to_config_index_map:
-            self.generate_config_index_map()
-        return self.roles_to_config_index_map
-
     def generate_config_index_map(self):
+        """
+        Generate config indexes for all the MDRs cluster roles
+        ex: {"ActiveACM": 0, "PassiceACM": 2, "PrimaryODF": 1, "SecondaryODF": 3}
+
+        """
         for cluster in ocsci_config:
             cluster_index = cluster.MULTICLUSTER["multicluster_index"]
             if cluster_index == get_active_acm_index():
@@ -143,7 +141,7 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
     def generate_zone_role_map(self):
         """
         Generate a map of Cluster's role vs zone in which clusters are located
-
+        ex: {"ActiveACM": 'a', "PassiveACM": 'b', "PrimaryODF": 'a'}
         """
         for crole, cindex in self.roles_to_config_index_map.items():
             czone = ocsci_config.clusters[cindex].ENV_DATA.get("zone")
@@ -153,22 +151,24 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
     def generate_role_to_param_tuple_map(self):
         """
         For each of the MDRs applicable roles store a tuple (zone_rank, role_rank, config_index)
+        ex: {"ActiveACM": (1, 1, 0), "PassiceACM": (2, 1, 2), "PrimaryODF": (1, 2, 1), "SecondarODF": (2, 2, 3)}
 
         """
-        for role in self.mdr_roles:
+        for role in self.all_mdr_roles:
             self.roles_to_param_tuples[role] = (
                 self.zone_ranks[self.zone_role_map[role]],
                 self.role_ranks[role],
-                self.get_config_index_map()[role],
+                self.roles_to_config_index_map[role],
             )
 
     def get_pytest_params_tuple(self, role):
         """
-        Generate a tuple of parameters applicable to the given role
-        For ex: if role is 'ActiveACM', then generate a tuple which is applicable to
-        that role. If the role is 'all' then we will generate tuple of parameter
-        for each of the role applicable from MDRs perspective.
-        Parmeter tuples looks like (zone_rank, role_rank, config_index)
+        Get a tuple of parameters applicable to the given role
+        For ex: if role is 'ActiveACM', then get a tuple which is applicable to
+        that role. If the role is 'all' then we will get tuples of parameter
+        for all the roles applicable
+        Parmeter tuples looks like (zone_rank, role_rank, config_index) for a given role
+
         """
         param_list = list()
         if role == "all":
