@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @ocp_upgrade
 @purple_squad
-@multicluster_roles(["ocp"])
+@multicluster_roles(["mdr_all_ocp"])
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health
@@ -90,7 +90,6 @@ class TestUpgradeOCP(ManageTest):
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
-
             ocp_channel = config.UPGRADE.get(
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
