@@ -36,7 +36,6 @@ from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
-    change_expiration_query_interval,
 )
 from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
 from ocs_ci.ocs.exceptions import (
@@ -95,7 +94,7 @@ from ocs_ci.ocs.resources.pod import (
     verify_data_integrity_for_multi_pvc_objs,
     get_noobaa_pods,
     get_pod_count,
-    get_noobaa_core_pod, wait_for_pods_by_label_count,
+    wait_for_pods_by_label_count, get_noobaa_core_pod,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -7040,7 +7039,6 @@ def logreader_workload_factory(request, teardown_factory):
 
     return factory
 
-
 @pytest.fixture()
 def setup_logwriter_cephfs_workload_factory(
     request,
@@ -7297,24 +7295,48 @@ def override_default_backingstore_fixture(
     request.addfinalizer(finalizer)
     return _override_nb_default_backingstore_implementation
 
-def change_noobaa_lifecycle_interval(request):
-    nb_core_pod = get_noobaa_core_pod()
-    env_var = "CONFIG_JS_LIFECYCLE_INTERVAL"
+@pytest.fixture(scope="session")
+def scale_noobaa_resources_session():
+    """
+    Session scoped fixture to scale noobaa resources
 
-    def factory(interval):
-        change_expiration_query_interval(new_interval=interval)
+    """
+    scale_noobaa_resources()
 
-    def finalizer():
-        params = f'[{{"op": "remove", "path": "/spec/template/spec/containers/0/env/name:{env_var}"}}]'
-        OCP(kind="statefulset", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).patch(
-            resource_name=constants.NOOBAA_CORE_STATEFULSET,
-            params=params,
-            format_type="json",
-        )
-        nb_core_pod.delete()
-        wait_for_pods_to_be_running(pod_names=[nb_core_pod.name], timeout=300)
-        log.info("Switched back to default lifecycle interval")
 
-    request.addfinalizer(finalizer)
-    return factory
+@pytest.fixture()
+def scale_noobaa_resources_fixture():
+    """
+    Fixture to scale noobaa resources
 
+    """
+    scale_noobaa_resources()
+
+
+def scale_noobaa_resources():
+
+    """
+    Scale the noobaa pod resources and scale endpoint count
+
+    """
+
+    storagecluster_obj = OCP(
+        kind="storagecluster",
+        resource_name="ocs-storagecluster",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    scale_endpoint_pods_param = (
+        '{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 3,"maxCount": 10}}}}'
+    )
+    scale_noobaa_resources_param = (
+        '{"spec": {"resources": {"noobaa-core": {"limits": {"cpu": "3","memory": "4Gi"},'
+        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-db": {"limits": {"cpu": "3","memory": "4Gi"},'
+        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-endpoint": {"limits": {"cpu": "3","memory": "4Gi"},'
+        '"requests": {"cpu": "3","memory": "4Gi"}}}}}'
+    )
+    storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
+    log.info("Scaled noobaa endpoint counts")
+    storagecluster_obj.patch(params=scale_noobaa_resources_param, format_type="merge")
+    log.info("Scaled noobaa pod resources")
+    time.sleep(60)

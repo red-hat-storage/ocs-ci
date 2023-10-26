@@ -945,8 +945,10 @@ def get_noobaa_operator_pod(
 def get_noobaa_db_pod():
     """
     Get noobaa db pod obj
+
     Returns:
         Pod object: Noobaa db pod object
+
     """
     nb_db = get_pods_having_label(
         label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
@@ -970,28 +972,6 @@ def get_noobaa_core_pod():
     )
     noobaa_core_pod = Pod(**noobaa_core[0])
     return noobaa_core_pod
-
-
-def get_noobaa_db_pod():
-    """
-    Get noobaa db pod obj
-
-    Returns:
-        Pod object: Noobaa db pod object
-
-    """
-    if version.get_semantic_ocs_version_from_config() > version.VERSION_4_6:
-        nb_db = get_pods_having_label(
-            label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-    else:
-        nb_db = get_pods_having_label(
-            label=constants.NOOBAA_DB_LABEL_46_AND_UNDER,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-    nb_db_pod = Pod(**nb_db[0])
-    return nb_db_pod
 
 
 def get_noobaa_endpoint_pods():
@@ -2099,6 +2079,23 @@ def wait_for_storage_pods(timeout=200):
         if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare"]):
             state = constants.STATUS_COMPLETED
         helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
+
+
+def wait_for_noobaa_pods(timeout=300):
+    """
+    Wait until all the noobaa pods have reached status RUNNING
+
+    Args:
+        timeout (int): Timeout in seconds
+
+    """
+
+    all_pod_objs = get_noobaa_pods()
+
+    for pod in all_pod_objs:
+        helpers.wait_for_resource_state(
+            resource=pod, state=constants.STATUS_RUNNING, timeout=timeout
+        )
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):

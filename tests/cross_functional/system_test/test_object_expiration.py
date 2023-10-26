@@ -1,31 +1,31 @@
 import logging
 import uuid
-from time import sleep
 from copy import deepcopy
 
 import pytest
 
+from ocs_ci.helpers.e2e_helpers import create_muliple_types_provider_obcs
+from botocore.exceptions import ClientError
+from ocs_ci.utility.retry import retry
+from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     system_test,
     magenta_squad,
 )
-
-from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import bugzilla, system_test
 from ocs_ci.framework.testlib import version, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
     s3_put_object,
-    s3_get_object,
     upload_bulk_buckets,
     expire_objects_in_bucket,
     s3_list_objects_v2,
+    bulk_s3_put_bucket_lifecycle_config,
 )
 from ocs_ci.ocs.resources.pod import (
     get_noobaa_core_pod,
     get_noobaa_db_pod,
-    wait_for_storage_pods,
+    wait_for_noobaa_pods,
 )
 from ocs_ci.ocs.node import (
     drain_nodes,
@@ -47,21 +47,31 @@ class TestObjectExpiration:
         """
         self.sanity_helpers = Sanity()
 
+    def check_if_objects_expired(self, mcg_obj, bucket_name, prefix=""):
+        response = s3_list_objects_v2(
+            mcg_obj, bucketname=bucket_name, prefix=prefix, delimiter="/"
+        )
+        return response["KeyCount"] == 0
+
     @system_test
     @bugzilla("2039309")
     @skipif_ocs_version("<4.11")
     @pytest.mark.polarion_id("OCS-4852")
-    def test_object_expiration(self, mcg_obj, bucket_factory):
+    @magenta_squad
+    def test_object_expiration(
+        self, mcg_obj, bucket_factory, reduce_expiration_interval
+    ):
         """
         Test object expiration, see if the object is deleted within the expiration + 8 hours buffer time
 
         """
+        reduce_expiration_interval(interval=2)
+
         # Creating S3 bucket
         bucket = bucket_factory()[0].name
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         obj_data = "Random data" + str(uuid.uuid4().hex)
         expiration_days = 1
-        buffer_time_in_hours = 8
 
         expire_rule_4_10 = {
             "Rules": [
@@ -110,34 +120,69 @@ class TestObjectExpiration:
             s3_obj=mcg_obj, bucketname=bucket, object_key=object_key, data=obj_data
         ), "Failed: Put Object"
 
-        logger.info("Waiting for 1 day + 8 hours buffer time")
-        sleep(((expiration_days * 24) + buffer_time_in_hours) * 60 * 60)
+        expire_objects_in_bucket(bucket)
 
         logger.info(f"Getting {object_key} from bucket: {bucket} after 1 day + 8 hours")
-        try:
-            s3_get_object(s3_obj=mcg_obj, bucketname=bucket, object_key=object_key)
-        except Exception:
-            logger.info(
-                f"Test passed, object {object_key} got deleted after expiration + buffer time"
-            )
-        else:
-            assert (
-                False
-            ), f"Test failed, object {object_key} didn't get deleted after expiration + buffer time"
+
+        sampler = TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=self.check_if_objects_expired,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket,
+        )
+        assert sampler.wait_for_func_status(
+            result=True
+        ), f"Objects in the bucket {bucket} are not expired"
+        logger.info("Objects in the bucket are expired as expected")
+
+    def create_obcs_apply_expire_rule(
+        self,
+        number_of_buckets,
+        cloud_providers,
+        bucket_types,
+        expiration_rule,
+        mcg_obj,
+        bucket_factory,
+    ):
+        """
+        This method will create the obcs and then apply the expire rule
+        for each obcs created
+
+        Args:
+            number_of_buckets (int): Number of buckets
+            cloud_providers (Dict): Dict representing cloudprovider config
+            bucket_types (Dict): Dict representing bucket type and respective
+                                config
+            expiration_rule (Dict): Lifecycle expiry rule
+            mcg_obj (MCG): MCG object
+            bucket_factory (Fixture): Bucket factory fixture object
+
+        Returns:
+            List: of buckets
+
+        """
+        all_buckets = create_muliple_types_provider_obcs(
+            number_of_buckets, bucket_types, cloud_providers, bucket_factory
+        )
+
+        bulk_s3_put_bucket_lifecycle_config(mcg_obj, all_buckets, expiration_rule)
+
+        return all_buckets
 
     @system_test
+    @magenta_squad
     def test_object_expiration_with_disruptions(
         self,
         mcg_obj,
-        multi_obc_setup_factory,
+        scale_noobaa_resources_session,
+        setup_mcg_bg_features,
+        validate_mcg_bg_features,
         awscli_pod_session,
         nodes,
         snapshot_factory,
-        setup_mcg_bg_features,
-        validate_mcg_bg_feature,
+        bucket_factory,
         noobaa_db_backup_and_recovery,
-        noobaa_db_backup_and_recovery_locally,
-        change_noobaa_lifecycle_interval,
         node_drain_teardown,
     ):
 
@@ -146,7 +191,13 @@ class TestObjectExpiration:
         like node drain, node restart, nb db recovery etc
 
         """
-        change_noobaa_lifecycle_interval(interval=2)
+        feature_setup_map = setup_mcg_bg_features(
+            num_of_buckets=5,
+            object_amount=5,
+            is_disruptive=True,
+            skip_any_features=["nsfs", "rgw kafka", "caching", "replication"],
+        )
+
         expiration_days = 1
         expire_rule = {
             "Rules": [
@@ -162,20 +213,38 @@ class TestObjectExpiration:
             ]
         }
 
+        cloud_providers = {
+            "aws": (1, "eu-central-1"),
+            "azure": (1, None),
+            "pv": (
+                1,
+                constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                "ocs-storagecluster-ceph-rbd",
+            ),
+        }
+
+        bucket_types = {
+            "data": {
+                "interface": "OC",
+                "backingstore_dict": {},
+            }
+        }
+
         expire_rule_prefix = deepcopy(expire_rule)
         number_of_buckets = 50
-
-        # Entry criteria
-        mcg_sys_dict, kafka_rgw_dict = setup_mcg_bg_features()
 
         # Create bulk buckets with expiry rule and no prefix set
         logger.info(
             f"Creating first set of {number_of_buckets} buckets with no-prefix expiry rule"
         )
-        buckets_without_prefix = multi_obc_setup_factory(
-            num_obcs=number_of_buckets,
+
+        buckets_without_prefix = self.create_obcs_apply_expire_rule(
+            number_of_buckets=number_of_buckets,
+            cloud_providers=cloud_providers,
+            bucket_types=bucket_types,
             expiration_rule=expire_rule,
-            type_of_bucket=["data"],
+            mcg_obj=mcg_obj,
+            bucket_factory=bucket_factory,
         )
 
         # Create another set of bulk buckets with expiry rule and prefix set
@@ -183,14 +252,14 @@ class TestObjectExpiration:
             f"Create second set of {number_of_buckets} buckets with prefix 'others' expiry rule"
         )
         expire_rule_prefix["Rules"][0]["Filter"]["Prefix"] = "others"
-        buckets_with_prefix = multi_obc_setup_factory(
-            num_obcs=number_of_buckets,
+        buckets_with_prefix = self.create_obcs_apply_expire_rule(
+            number_of_buckets=number_of_buckets,
+            cloud_providers=cloud_providers,
+            bucket_types=bucket_types,
             expiration_rule=expire_rule_prefix,
-            type_of_bucket=["data"],
+            mcg_obj=mcg_obj,
+            bucket_factory=bucket_factory,
         )
-
-        from botocore.exceptions import ClientError
-        from ocs_ci.utility.retry import retry
 
         @retry(ClientError, tries=5, delay=5)
         def upload_objects_and_expire():
@@ -206,7 +275,7 @@ class TestObjectExpiration:
             )
 
             # Manually expire objects in bucket
-            logger.info("For each buckets, change the creation time of the objects")
+            logger.info("For each bucket, change the creation time of the objects")
             for bucket in buckets_without_prefix:
                 expire_objects_in_bucket(bucket_name=bucket.name)
 
@@ -232,7 +301,7 @@ class TestObjectExpiration:
 
             # Manually expire objects in bucket
             logger.info(
-                "For each second set of buckets, change the creation time of the objects"
+                "For each of the prefixed buckets in the second set, change the creation time of the objects"
             )
             for bucket in buckets_with_prefix:
                 expire_objects_in_bucket(bucket_name=bucket.name)
@@ -242,16 +311,14 @@ class TestObjectExpiration:
                 response = s3_list_objects_v2(
                     mcg_obj, bucketname=bucket_name, prefix=prefix, delimiter="/"
                 )
-                if response["KeyCount"] != 0:
-                    return False
-                return True
+                return response["KeyCount"] == 0
 
             logger.info(
                 "All the objects in the first set of buckets should be deleted irrespective of the prefix"
             )
             for bucket in buckets_without_prefix:
                 sampler = TimeoutSampler(
-                    timeout=600,
+                    timeout=900,
                     sleep=10,
                     func=check_if_objects_expired,
                     mcg_obj=mcg_obj,
@@ -334,28 +401,25 @@ class TestObjectExpiration:
             status=constants.NODE_READY,
             timeout=300,
         )
-        wait_for_storage_pods()
+        wait_for_noobaa_pods(timeout=1200)
 
         # check if the objects are expired
         sample_if_objects_expired()
 
-        # upload obejcts again
+        # upload objects again and expire
         upload_objects_and_expire()
 
         # Perform noobaa db backup and recovery
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
-        wait_for_storage_pods()
-        self.sanity_helpers.health_check(tries=120)
-
-        sample_if_objects_expired()
-
-        upload_objects_and_expire()
-
-        # Perform noobaa db recovery locally
-        noobaa_db_backup_and_recovery_locally()
-        wait_for_storage_pods()
+        wait_for_noobaa_pods(timeout=1200)
 
         sample_if_objects_expired()
 
         # validate mcg entry criteria post test
-        validate_mcg_bg_feature(mcg_sys_dict, kafka_rgw_dict)
+        validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=False,
+            skip_any_features=["nsfs", "rgw kafka", "caching", "replication"],
+            object_amount=5,
+        )
+        logger.info("No issues seen with the MCG bg feature validation")

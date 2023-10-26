@@ -1016,6 +1016,7 @@ class MCG:
         """
 
         self.core_pod.delete(wait=True)
+        sleep(60)
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )

@@ -2076,7 +2076,9 @@ def random_object_round_trip_verification(
     )
     written_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {upload_dir}").split(" ")
     if wait_for_replication:
-        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name, **kwargs)
+        assert compare_bucket_object_list(
+            mcg_obj, bucket_name, second_bucket_name, **kwargs
+        ), f"Objects in the buckets {bucket_name} and {second_bucket_name} are not same"
         bucket_name = second_bucket_name
     # Download the random objects that were uploaded to the bucket
     sync_object_directory(
@@ -2178,42 +2180,21 @@ def create_aws_bs_using_cli(
 
 def upload_bulk_buckets(s3_obj, buckets, amount=1, object_key="obj-key-0", prefix=None):
     """
-    Upload object to the buckets
-    """
-    for bucket in buckets:
-        for i in range(amount):
-            s3_put_object(s3_obj, bucket.name, f"{prefix}/{object_key}-{i}", object_key)
-
-
-def change_expiration_query_interval(new_interval):
-    """
-    Change how often noobaa should check for object expiration
-    By default it will be 8 hours
+    Upload given amount of objects with sequential keys to multiple buckets
 
     Args:
-        new_interval (int): New interval in minutes
+        s3_obj: obc/mcg object
+        buckets (list): list of bucket names to upload to
+        amount (int, optional): number of objects to upload per bucket
+        object_key (str, optional): base object key
+        prefix (str, optional): prefix for the upload path
 
     """
-
-    from ocs_ci.ocs.resources.pod import (
-        get_noobaa_core_pod,
-        wait_for_pods_to_be_running,
-    )
-
-    nb_core_pod = get_noobaa_core_pod()
-    new_interval = new_interval * 60 * 1000
-    params = (
-        '[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", '
-        f'"value": {{ "name": "CONFIG_JS_LIFECYCLE_INTERVAL", "value": "{new_interval}" }}}}]'
-    )
-    OCP(kind="statefulset", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).patch(
-        resource_name=constants.NOOBAA_CORE_STATEFULSET,
-        params=params,
-        format_type="json",
-    )
-    logger.info(f"Updated the expiration query interval to {new_interval} ms")
-    nb_core_pod.delete()
-    wait_for_pods_to_be_running(pod_names=[nb_core_pod.name], timeout=300)
+    for bucket in buckets:
+        for index in range(amount):
+            s3_put_object(
+                s3_obj, bucket.name, f"{prefix}/{object_key}-{index}", object_key
+            )
 
 
 def change_objects_creation_date_in_noobaa_db(
@@ -2582,4 +2563,21 @@ def delete_object_tags(
             ),
             out_yaml_format=False,
         )
+
+
+def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
+    """
+    This method applies a lifecycle configuration to multiple buckets
+
+     Args:
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        buckets (list): list of bucket names to apply the lifecycle rule to
+        lifecycle_config (dict): a dict following the expected AWS json structure of a config file
+
+    """
+    for bucket in buckets:
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket.name, LifecycleConfiguration=lifecycle_config
+        )
+    logger.info("Applied lifecyle rule on all the buckets")
 
