@@ -368,25 +368,23 @@ class Deployment(object):
                         )
                         storage_cluster.reload_data()
                         storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
-                        multicluster_service = {
-                            "network": {
-                                "multiClusterService": {
-                                    "clusterID": config.ENV_DATA["cluster_name"],
-                                    "enabled": "true",
-                                }
-                            }
-                        }
-                        merge_dict(
-                            storage_cluster.data.get("spec"), multicluster_service
+                        ptch = (
+                            f'\'{{"spec": {{"network": {{"multiClusterService": '
+                            f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
                         )
-                        storage_cluster_yaml = tempfile.NamedTemporaryFile(
-                            mode="w+", prefix="storageclusterupdate", delete=False
+                        ptch_cmd = (
+                            f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+                            f"-n openshift-storage  --type merge --patch {ptch}"
                         )
-                        templating.dump_data_to_temp_yaml(
-                            storage_cluster.data, storage_cluster_yaml.name
-                        )
-                        run_cmd(f"oc apply -f {storage_cluster.name}", timeout=300)
+                        run_cmd(ptch_cmd)
                         verify_storage_cluster()
+                        storage_cluster.reload_data()
+                        assert (
+                            storage_cluster.data.get("spec")
+                            .get("network")
+                            .get("multiClusterService")
+                            .get("enabled")
+                        ), "Failed to update StorageCluster globalnet"
                 config.reset_ctx()
         else:
             logger.warning("OCS deployment will be skipped")
