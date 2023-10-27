@@ -5,6 +5,7 @@ All multicluster specific utility functions and classes can be here
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_indexes,
     get_primary_cluster_index,
     get_active_acm_index,
     get_all_acm_indexes,
@@ -12,7 +13,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.ocs.constants import MDR_ROLES
 
 
-class MutliClusterUpgradeParametrize(object):
+class MultiClusterUpgradeParametrize(object):
     """
     This base class abstracts upgrade parametrization for multicluster scenarios: MDR, RDR and Managed service
 
@@ -87,7 +88,7 @@ class MutliClusterUpgradeParametrize(object):
         return list(zones)
 
 
-class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
+class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
     """
     This child class handles MDR upgrade scenario specific pytest parametrization
 
@@ -103,6 +104,10 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
         self.generate_zone_ranks()
         self.generate_role_ranks()
         self.generate_config_index_map()
+        # Reverse mapping of cluster's index to its role
+        self.index_to_role = {
+            index: role for role, index in self.roles_to_config_index_map.items()
+        }
         self.generate_role_to_param_tuple_map()
         self.generate_zone_role_map()
 
@@ -117,25 +122,25 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
             if cluster_index == get_active_acm_index():
                 self.roles_to_config_index_map["ActiveACM"] = cluster_index
             elif cluster_index == get_primary_cluster_index():
-                self.roles_to_config_index_map["Primary_odf"] = cluster_index
+                self.roles_to_config_index_map["PrimaryODF"] = cluster_index
             elif cluster_index in get_all_acm_indexes():
                 # We would have already ruled out the ActiveACM in the first 'if'
                 self.roles_to_config_index_map["PassiveACM"] = cluster_index
             else:
                 # Only option left is secondary odf
-                self.roles_to_config_index_map["Secondary_odf"] = cluster_index
+                self.roles_to_config_index_map["SecondaryODF"] = cluster_index
 
     def generate_role_ranks(self):
         """
-        Based on current roles for MDR : ActiveACM:1, PassiceACM:1, Primary:2, Secondary: 2
+        Based on current roles for MDR : ActiveACM:1, PassiceACM:1, PrimaryODF:2, SecondaryODF: 2
 
         """
         # For now we will stick to this convention
         self.role_ranks = {
             "ActiveACM": 1,
             "PassiveACM": 1,
-            "Primary_odf": 2,
-            "Secondary_odf": 2,
+            "PrimaryODF": 2,
+            "SecondaryODF": 2,
         }
 
     def generate_zone_role_map(self):
@@ -170,13 +175,37 @@ class MDRClusterUpgradeParametrize(MutliClusterUpgradeParametrize):
         Parmeter tuples looks like (zone_rank, role_rank, config_index) for a given role
 
         """
-        param_list = list()
-        if role == "all":
-            for t in self.roles_to_param_tuples.values():
-                param_list.append(t)
-            param_list
+        param_list = None
+        if role.startswith("mdr-all"):
+            param_list = self.get_mdr_all_param_tuples(role)
         else:
-            param_list.append(self.roles_to_param_tuples[role])
+            param_list = [self.roles_to_param_tuples[role]]
+        return param_list
+
+    def get_mdr_all_param_tuples(self, role):
+        if "mdr-all-ocp" in role:
+            return self.get_all_roles_to_param_tuples()
+        elif "mdr-all-odf" in role:
+            return self.get_all_odf_roles_to_param_tuple()
+        elif "mdr-all-acm" in role:
+            return self.get_all_acm_roles_to_param_tuple()
+
+    def get_all_acm_roles_to_param_tuple(self):
+        params_list = list()
+        for i in get_all_acm_indexes():
+            params_list.append(self.roles_to_param_tuples[self.index_to_role[i]])
+        return params_list
+
+    def get_all_odf_roles_to_param_tuple(self):
+        params_list = list()
+        for i in get_non_acm_cluster_indexes():
+            params_list.append(self.roles_to_param_tuples[self.index_to_role[i]])
+        return params_list
+
+    def get_all_roles_to_param_tuples(self):
+        param_list = list()
+        for t in self.roles_to_param_tuples.values():
+            param_list.append(t)
         return param_list
 
     def get_roles(self, metafunc):
