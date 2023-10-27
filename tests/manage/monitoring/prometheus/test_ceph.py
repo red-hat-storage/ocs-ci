@@ -14,14 +14,14 @@ log = logging.getLogger(__name__)
 @tier4a
 @pytest.mark.polarion_id("OCS-903")
 @skipif_managed_service
-def test_corrupt_pg_alerts(measure_corrupt_pg):
+def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
     """
     Test that there are appropriate alerts when Placement group
     on one OSD is corrupted.ceph manager
     is unavailable and that this alert is cleared when the manager
     is back online.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     alerts = measure_corrupt_pg.get("prometheus_alerts")
     for target_label, target_msg, target_states, target_severity in [
@@ -60,14 +60,14 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
 @tier4a
 @pytest.mark.polarion_id("OCS-898")
 @skipif_managed_service
-def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg):
+def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
     """
     Test that there are appropriate alerts for Ceph health triggered.
     For this check of Ceph Warning state is used measure_stop_ceph_osd
     utilization monitor and for Ceph Error state is used measure_corrupt_pg
     utilization.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     alerts = measure_stop_ceph_osd.get("prometheus_alerts")
     target_label = constants.ALERT_CLUSTERWARNINGSTATE

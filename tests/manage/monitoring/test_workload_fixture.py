@@ -43,7 +43,7 @@ from datetime import datetime
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, skipif_mcg_only
 from ocs_ci.framework.testlib import tier1, skipif_managed_service
 from ocs_ci.utility.prometheus import PrometheusAPI
 
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 @blue_squad
 @pytest.mark.libtest
 @skipif_managed_service
-def test_workload_rbd(workload_storageutilization_50p_rbd):
+def test_workload_rbd(workload_storageutilization_50p_rbd, threading_lock):
     """
     Purpose of this test is to make the workload fixture executed, and
     show how to query prometheus.
@@ -62,7 +62,7 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
     Note that this test is valid only on 3 osd cluster with all pools using
     3 way replication.
     """
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
     # Asking for values of `ceph_osd_stat_bytes_used` for every 15s in
     # when the workload fixture was utilizing 50% of the OCS storage.
     result_used = prometheus.query_range(
@@ -182,6 +182,7 @@ def test_workload_rbd_cephfs_minimal(
 
 
 @blue_squad
+@skipif_mcg_only
 @tier1
 @pytest.mark.polarion_id("OCS-2125")
 @skipif_managed_service

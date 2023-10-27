@@ -13,11 +13,13 @@ from selenium.common.exceptions import (
     WebDriverException,
     NoSuchElementException,
     StaleElementReferenceException,
+    ElementClickInterceptedException,
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 from urllib.parse import urlparse
@@ -217,6 +219,12 @@ class BaseUI:
                 _do_click(locator, timeout, enable_screenshot, copy_dom)
             else:
                 raise
+        except ElementClickInterceptedException:
+            # appears due to JS graphics on the page: one element overlapping another, or dynamic graphics in progress
+            logger.info("ElementClickInterceptedException, try click again")
+            take_screenshot("ElementClickInterceptedException")
+            time.sleep(5)
+            _do_click(locator, timeout, enable_screenshot, copy_dom)
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -507,33 +515,21 @@ class BaseUI:
         element = self.driver.find_element(locator[1], locator[0])
         actions.move_to_element(element).perform()
 
-    def take_screenshot(self):
+    def take_screenshot(self, name_suffix: str = ""):
         """
         Take screenshot using python code
 
         """
-        time.sleep(1)
-        filename = os.path.join(
-            self.screenshots_folder,
-            f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.png",
+        take_screenshot(
+            screenshots_folder=self.screenshots_folder, name_suffix=name_suffix
         )
-        logger.debug(f"Creating screenshot: {filename}")
-        self.driver.save_screenshot(filename)
-        time.sleep(0.5)
 
-    def copy_dom(self):
+    def copy_dom(self, name_suffix: str = ""):
         """
         Get page source of the webpage
 
         """
-        filename = os.path.join(
-            self.dom_folder,
-            f"{datetime.datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_DOM.txt",
-        )
-        logger.info(f"Copy DOM file: {filename}")
-        html = self.driver.page_source
-        with open(filename, "w") as f:
-            f.write(html)
+        copy_dom(dom_folder=self.dom_folder, name_suffix=name_suffix)
 
     def do_clear(self, locator, timeout=30):
         """
@@ -547,6 +543,17 @@ class BaseUI:
         wait = WebDriverWait(self.driver, timeout)
         element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
         element.clear()
+
+    def clear_with_ctrl_a_del(self, locator, timeout=30):
+        """
+        Clear the existing text using CTRL + a and then Del keys,
+        as on some elements .clear() function doesn't always work correctly.
+
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        element.send_keys(Keys.CONTROL, "a")
+        element.send_keys(Keys.DELETE)
 
     def wait_until_expected_text_is_found(self, locator, expected_text, timeout=60):
         """
@@ -656,14 +663,16 @@ def screenshot_dom_location(type_loc="screenshot"):
         )
 
 
-def copy_dom(name_suffix: str = ""):
+def copy_dom(name_suffix: str = "", dom_folder=None):
     """
     Copy DOM using python code
 
     Args:
         name_suffix (str): name suffix, will be added before extension. Optional argument
+        dom_folder (str): path to folder where dom text file will be saved
     """
-    dom_folder = screenshot_dom_location(type_loc="dom")
+    if dom_folder is None:
+        dom_folder = screenshot_dom_location(type_loc="dom")
     if not os.path.isdir(dom_folder):
         Path(dom_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)
@@ -680,14 +689,16 @@ def copy_dom(name_suffix: str = ""):
     time.sleep(0.5)
 
 
-def take_screenshot(name_suffix: str = ""):
+def take_screenshot(name_suffix: str = "", screenshots_folder=None):
     """
     Take screenshot using python code
 
     Args:
         name_suffix (str): name suffix, will be added before extension. Optional argument
+        screenshots_folder (str): path to folder where screenshot will be saved
     """
-    screenshots_folder = screenshot_dom_location(type_loc="screenshot")
+    if screenshots_folder is None:
+        screenshots_folder = screenshot_dom_location(type_loc="screenshot")
     if not os.path.isdir(screenshots_folder):
         Path(screenshots_folder).mkdir(parents=True, exist_ok=True)
     time.sleep(1)

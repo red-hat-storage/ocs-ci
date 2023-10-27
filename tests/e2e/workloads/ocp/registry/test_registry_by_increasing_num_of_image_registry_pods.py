@@ -61,13 +61,13 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-1900")
-    def test_registry_by_increasing_num_of_registry_pods(self, count=3):
+    def test_registry_by_increasing_num_of_registry_pods(self, threading_lock, count=3):
         """
         Test registry by increasing number of registry pods and
         validate all the image-registry pod should have the same PVC backend.
 
         """
-        api = prometheus.PrometheusAPI()
+        api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
         # Increase the replica count to 3
         assert modify_registry_pod_count(

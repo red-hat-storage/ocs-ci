@@ -21,6 +21,8 @@ from ocs_ci.ocs import rados_utils
 from ocs_ci.ocs.resources import deployment, pod
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
+from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
+from ocs_ci.utility.pagerduty import get_pagerduty_service_id
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
@@ -80,7 +82,7 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
             stop_mgr,
             test_file,
             minimal_time=60 * 9,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(stop_mgr, test_file)
@@ -180,7 +182,7 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_loc
             stop_mon,
             test_file,
             minimal_time=60 * 20,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
         schedule_nodes(worker_node_names)
     else:
@@ -270,7 +272,7 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
             stop_osd,
             test_file,
             minimal_time=60 * 19,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(stop_osd, test_file)
@@ -287,7 +289,7 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
 
 
 @pytest.fixture
-def measure_corrupt_pg(request, measurement_dir):
+def measure_corrupt_pg(request, measurement_dir, threading_lock):
     """
     Create Ceph pool and corrupt Placement Group on one of OSDs, measures the
     time when it was corrupted and records alerts that were triggered during
@@ -375,10 +377,13 @@ def measure_corrupt_pg(request, measurement_dir):
             wait_with_corrupted_pg,
             test_file,
             minimal_time=60 * 17,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(wait_with_corrupted_pg, test_file)
+        measured_op = measure_operation(
+            wait_with_corrupted_pg, test_file, threading_lock=threading_lock
+        )
 
     teardown()
 
@@ -398,7 +403,13 @@ def measure_corrupt_pg(request, measurement_dir):
 
 @pytest.fixture
 def workload_storageutilization_05p_rbd(
-    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_05p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -410,6 +421,7 @@ def workload_storageutilization_05p_rbd(
         measurement_dir,
         tmp_path,
         target_percentage=0.05,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -423,6 +435,7 @@ def workload_storageutilization_50p_rbd(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_50p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -434,13 +447,20 @@ def workload_storageutilization_50p_rbd(
         measurement_dir,
         tmp_path,
         target_percentage=0.5,
+        threading_lock=threading_lock,
     )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_checksum_rbd(
-    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_checksum_rbd"
     measured_op = workload_fio_storageutilization(
@@ -453,6 +473,7 @@ def workload_storageutilization_checksum_rbd(
         tmp_path,
         target_size=10,
         with_checksum=True,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -466,6 +487,7 @@ def workload_storageutilization_85p_rbd(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_85p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -477,6 +499,7 @@ def workload_storageutilization_85p_rbd(
         measurement_dir,
         tmp_path,
         target_percentage=0.85,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -490,6 +513,7 @@ def workload_storageutilization_97p_rbd(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_97p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -501,13 +525,20 @@ def workload_storageutilization_97p_rbd(
         measurement_dir,
         tmp_path,
         target_percentage=0.97,
+        threading_lock=threading_lock,
     )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_05p_cephfs(
-    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_05p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -519,6 +550,7 @@ def workload_storageutilization_05p_cephfs(
         measurement_dir,
         tmp_path,
         target_percentage=0.05,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -532,6 +564,7 @@ def workload_storageutilization_50p_cephfs(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_50p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -543,6 +576,7 @@ def workload_storageutilization_50p_cephfs(
         measurement_dir,
         tmp_path,
         target_percentage=0.5,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -556,6 +590,7 @@ def workload_storageutilization_85p_cephfs(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_85p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -567,6 +602,7 @@ def workload_storageutilization_85p_cephfs(
         measurement_dir,
         tmp_path,
         target_percentage=0.85,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -580,6 +616,7 @@ def workload_storageutilization_97p_cephfs(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_97p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -591,6 +628,7 @@ def workload_storageutilization_97p_cephfs(
         measurement_dir,
         tmp_path,
         target_percentage=0.97,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -600,7 +638,13 @@ def workload_storageutilization_97p_cephfs(
 
 @pytest.fixture
 def workload_storageutilization_10g_rbd(
-    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_10G_rbd"
     measured_op = workload_fio_storageutilization(
@@ -612,13 +656,20 @@ def workload_storageutilization_10g_rbd(
         measurement_dir,
         tmp_path,
         target_size=10,
+        threading_lock=threading_lock,
     )
     return measured_op
 
 
 @pytest.fixture
 def workload_storageutilization_10g_cephfs(
-    project, fio_pvc_dict, fio_job_dict, fio_configmap_dict, measurement_dir, tmp_path
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    threading_lock,
 ):
     fixture_name = "workload_storageutilization_10G_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -630,12 +681,15 @@ def workload_storageutilization_10g_cephfs(
         measurement_dir,
         tmp_path,
         target_size=10,
+        threading_lock=threading_lock,
     )
     return measured_op
 
 
 @pytest.fixture
-def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli_pod):
+def measure_noobaa_exceed_bucket_quota(
+    measurement_dir, request, mcg_obj, awscli_pod, threading_lock
+):
     """
     Create NooBaa bucket, set its capacity quota to 2GB and fill it with data.
 
@@ -693,11 +747,17 @@ def measure_noobaa_exceed_bucket_quota(measurement_dir, request, mcg_obj, awscli
     test_file = os.path.join(
         measurement_dir, "measure_noobaa_exceed__bucket_quota.json"
     )
-    measured_op = measure_operation(
-        exceed_bucket_quota,
-        test_file,
-        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
-    )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        measured_op = measure_operation(
+            exceed_bucket_quota,
+            test_file,
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
+        )
+    else:
+        measured_op = measure_operation(
+            exceed_bucket_quota, test_file, threading_lock=threading_lock
+        )
 
     bucket_info = mcg_obj.get_bucket_info(bucket.name)
     logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
@@ -788,12 +848,17 @@ def workload_idle(measurement_dir, threading_lock):
     else:
         logger.debug("io_in_bg not detected, good")
 
-    measured_op = measure_operation(
-        do_nothing,
-        test_file,
-        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
-        threading_lock=threading_lock,
-    )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        measured_op = measure_operation(
+            do_nothing,
+            test_file,
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
+        )
+    else:
+        measured_op = measure_operation(
+            do_nothing, test_file, threading_lock=threading_lock
+        )
     if restart_io_in_bg:
         logger.info("reverting load_status to resume io_in_bg")
         config.RUN["load_status"] = "to_be_resumed"
@@ -845,7 +910,7 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
             stop_rgw,
             test_file,
             minimal_time=60 * 8,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
         )
     else:
         measured_op = measure_operation(stop_rgw, test_file)
@@ -861,7 +926,12 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
 
 @pytest.fixture
 def measure_noobaa_ns_target_bucket_deleted(
-    measurement_dir, request, bucket_factory, namespace_store_factory, cld_mgr
+    measurement_dir,
+    request,
+    bucket_factory,
+    namespace_store_factory,
+    cld_mgr,
+    threading_lock,
 ):
     """
     Create Namespace bucket from 2 namespace resources. Delete target bucket
@@ -909,11 +979,17 @@ def measure_noobaa_ns_target_bucket_deleted(
         return ns_stores[0].uls_name
 
     test_file = os.path.join(measurement_dir, "measure_delete_target_bucket.json")
-    measured_op = measure_operation(
-        delete_target_bucket,
-        test_file,
-        pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
-    )
+    if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        measured_op = measure_operation(
+            delete_target_bucket,
+            test_file,
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
+        )
+    else:
+        measured_op = measure_operation(
+            delete_target_bucket, test_file, threading_lock=threading_lock
+        )
     logger.info("Delete NS bucket, bucketclass and NS store so that alert is cleared")
     ns_bucket[0].delete()
     ns_bucket[0].bucketclass.delete()
@@ -922,7 +998,7 @@ def measure_noobaa_ns_target_bucket_deleted(
 
 
 @pytest.fixture
-def measure_stop_worker_nodes(request, measurement_dir, nodes):
+def measure_stop_worker_nodes(request, measurement_dir, nodes, threading_lock):
     """
     Stop worker nodes that doesn't contain RGW (so that alerts are triggered
     correctly), measure the time when it was stopped and monitors alerts that
@@ -976,10 +1052,13 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
             stop_nodes,
             test_file,
             minimal_time=60 * 8,
-            pagerduty_service_ids=[config.RUN.get("pagerduty_service_id")],
+            pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(stop_nodes, test_file)
+        measured_op = measure_operation(
+            stop_nodes, test_file, threading_lock=threading_lock
+        )
     logger.info("Turning on nodes")
     try:
         nodes.start_nodes(nodes=test_nodes)
@@ -995,5 +1074,50 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes):
     # wait for ceph to return into HEALTH_OK state after mgr deployment
     # is returned back to normal
     ceph_health_check(tries=20, delay=15)
+
+    return measured_op
+
+
+@pytest.fixture
+def measure_rewrite_kms_endpoint(request, measurement_dir, threading_lock):
+    """
+    Change kms endpoint address to invalid value, measure the time when it was
+    rewritten and alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for rewritting
+            the endpont
+    """
+    original_endpoint = get_kms_endpoint()
+    logger.debug(f"Original kms endpoint is {original_endpoint}")
+
+    def change_kms_endpoint():
+        """
+        Change value of KMS configuration for 3 minutes.
+        """
+        # run_time of operation
+        run_time = 60 * 3
+        invalid_endpoint = original_endpoint[0:-1]
+        logger.info(
+            f"Changing value of kms endpoint in cluster configuration to {invalid_endpoint}"
+        )
+        set_kms_endpoint(invalid_endpoint)
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return
+
+    def teardown():
+        logger.info(f"Restoring KMS endpoint to {original_endpoint}")
+        set_kms_endpoint(original_endpoint)
+        logger.info("KMS endpoint restored")
+
+    request.addfinalizer(teardown)
+
+    test_file = os.path.join(measurement_dir, "measure_rewrite_kms_endpoint.json")
+    measured_op = measure_operation(
+        change_kms_endpoint, test_file, threading_lock=threading_lock
+    )
+
+    teardown()
 
     return measured_op

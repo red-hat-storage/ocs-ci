@@ -130,6 +130,7 @@ from ocs_ci.utility.utils import (
     load_auth_config,
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
+    get_oadp_version,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -1784,6 +1785,11 @@ class Deployment(object):
         Args:
             log_level (str): log level for installer (default: DEBUG)
         """
+        if config.DEPLOYMENT.get("skip_ocp_installer_destroy"):
+            logger.info(
+                "OCP Destroy is skipped because skip_ocp_installer_destroy was enabled!"
+            )
+            return
         if self.platform == constants.IBM_POWER_PLATFORM:
             if not config.ENV_DATA["skip_ocs_deployment"]:
                 self.destroy_ocs()
@@ -2832,9 +2838,16 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         3. backupstoragelocation resource in "Available" phase
 
         """
-        # Check restic pods
+        # Check restic pods.
+        # Restic pods have been renamed to node-agent after oadp 1.2
+        oadp_version = get_oadp_version()
+
+        if version.compare_versions(f"{oadp_version} >= 1.2"):
+            restic_pod_prefix = "node-agent"
+        else:
+            restic_pod_prefix = "restic"
         restic_list = get_pods_having_label(
-            "name=restic", constants.ACM_HUB_BACKUP_NAMESPACE
+            f"name={restic_pod_prefix}", constants.ACM_HUB_BACKUP_NAMESPACE
         )
         if len(restic_list) != constants.MDR_RESTIC_POD_COUNT:
             raise MDRDeploymentException("restic pod count mismatch")

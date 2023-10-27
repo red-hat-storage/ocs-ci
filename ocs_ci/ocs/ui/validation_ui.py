@@ -285,23 +285,23 @@ class ValidationUI(PageNavigator):
         4. Verify if Storage System popup works
         5. Ensure that Block and File status, on Storage System popup is Ready
         6. Navigate to Storage System details via Storage System popup
-        7. Verify only one Block Pool present on Storage System details page
+        7. Verify only one Block Pool present on Storage System details page - optional. No BlockPools in External mode
         8. Navigate Storage System via breadcrumb
         9. Verify if Overview tab is active
         10. Verify if System Capacity Card is present
-        11. Navigate to Storage System details via System Capacity Card
-        12. Verify if Storage System details breadcrumb is present
-        13. Navigate to ODF Overview tab via tab bar
+        11. Navigate to Storage System details via System Capacity Card - optional. Card not presented in External mode
+        12. Verify if Storage System details breadcrumb is present - optional. If step 11 was performed
+        13. Navigate to ODF Overview tab via tab bar - optional. If step 11 was performed
         14. Verify if Performance Card is present and link works
         15. Navigate to Storage System details via Performance Card
         16. Verify if Storage System details breadcrumb is present and link works
         17. Navigate ODF Backing store tab via Object Storage tab or PageNavigator
         18. Verify if Backing Store is present and link to Backing Store resource works
-        19. Navigate to Storage System details via breadcrumb
-        20. Navigate to Storage Systems tab via breadcrumb
+        19. Navigate to Backing Store tab via breadcrumb
+        20. Navigate to Bucket class tab
         21. Navigate to the default Bucket Class details via Bucket Class tab
         22. Verify the status of a default Bucket Class
-        23. Navigate to Storage System details via breadcrumb
+        23. Navigate to Bucket class via breadcrumb
         24. Navigate to Namespace Store tab via Bucket Class tab
         25. Navigate to ODF Overview tab via tab bar
         """
@@ -336,10 +336,13 @@ class ValidationUI(PageNavigator):
             odf_overview_tab.nav_storage_system_details_from_storage_status_popup()
         )
 
-        log_step("Verify only one Block Pool present on Storage System details page")
-        res_dict[
-            "blockpools_tabs_bz_2096513"
-        ] = storage_system_details_page.check_only_one_block_pools_tab()
+        if not config.DEPLOYMENT["external_mode"]:
+            log_step(
+                "Verify only one Block Pool present on Storage System details page"
+            )
+            res_dict[
+                "blockpools_tabs_bz_2096513"
+            ] = storage_system_details_page.check_only_one_block_pools_tab()
 
         log_step("Navigate Storage System via breadcrumb")
         storage_systems_tab = (
@@ -354,24 +357,27 @@ class ValidationUI(PageNavigator):
             "system_capacity_card_present"
         ] = odf_overview_tab.validate_system_capacity_card_present()
 
-        log_step("Navigate to Storage System details via System Capacity Card")
-        storage_system_details_page = (
-            odf_overview_tab.nav_storage_system_details_via_system_capacity_card()
-        )
+        if not config.DEPLOYMENT["external_mode"]:
+            log_step("Navigate to Storage System details via System Capacity Card")
+            storage_system_details_page = (
+                odf_overview_tab.nav_storage_system_details_via_system_capacity_card()
+            )
 
-        log_step(
-            "Verify if Storage System details breadcrumb is present and link works"
-        )
-        res_dict[
-            "storagesystem-details-via-system-capacity-card-link-works"
-        ] = storage_system_details_page.is_storage_system_details_breadcrumb_present()
+            log_step(
+                "Verify if Storage System details breadcrumb is present and link works"
+            )
+            res_dict[
+                "storagesystem-details-via-system-capacity-card-link-works"
+            ] = (
+                storage_system_details_page.is_storage_system_details_breadcrumb_present()
+            )
 
-        storage_systems_tab = (
-            storage_system_details_page.nav_storage_systems_via_breadcrumb()
-        )
+            storage_systems_tab = (
+                storage_system_details_page.nav_storage_systems_via_breadcrumb()
+            )
 
-        log_step("Navigate to ODF Overview tab via tab bar")
-        odf_overview_tab = storage_systems_tab.nav_overview_tab()
+            log_step("Navigate to ODF Overview tab via tab bar")
+            odf_overview_tab = storage_systems_tab.nav_overview_tab()
 
         log_step("Verify if Performance Card is present and link works")
         res_dict[
@@ -418,10 +424,10 @@ class ValidationUI(PageNavigator):
             "backing_store_status_ready"
         ] = backing_store_tab.validate_backing_store_ready()
 
-        log_step("Navigate to Storage System details via breadcrumb")
-        backing_store_tab.nav_backing_store_breadcrumb()
+        log_step("Navigate to Backing Store tab via breadcrumb")
+        backing_store_tab.nav_backing_store_list_breadcrumb()
 
-        log_step("Navigate to Storage Systems tab via breadcrumb")
+        log_step("Navigate to Bucket class tab")
         bucket_class_tab = backing_store_tab.nav_bucket_class_tab()
 
         log_step("Navigate to the default Bucket Class details via Bucket Class tab")
@@ -432,7 +438,7 @@ class ValidationUI(PageNavigator):
         )
         res_dict["bucket_class_status"] = bucket_class_tab.validate_bucket_class_ready()
 
-        log_step("Navigate to Storage System details via breadcrumb")
+        log_step("Navigate to Bucket class via breadcrumb")
         bucket_class_tab.nav_bucket_class_breadcrumb()
 
         log_step(
@@ -473,7 +479,11 @@ class ValidationUI(PageNavigator):
 
         if not all(res_dict.values()):
             failed_checks = [check for check, res in res_dict.items() if not res]
-            pytest.fail("Following checks failed: {}".format(failed_checks))
+            pytest.fail(
+                "Following checks failed. 1 - Pass, 0 - Fail. \n{}".format(
+                    failed_checks
+                )
+            )
 
     def odf_storagesystems_ui(self):
         """

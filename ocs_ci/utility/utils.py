@@ -36,8 +36,10 @@ from paramiko import SSHClient, AutoAddPolicy
 from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
+from jinja2 import FileSystemLoader, Environment
 
 from ocs_ci.framework import config
+from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -469,7 +471,7 @@ def run_cmd(
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
-        threading_lock (threading.Lock): threading.Lock object that is used
+        threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
 
@@ -599,7 +601,7 @@ def exec_cmd(
         timeout (int): Timeout for the command, defaults to 600 seconds.
         ignore_error (bool): True if ignore non zero return code and do not
             raise the exception.
-        threading_lock (threading.Lock): threading.Lock object that is used
+        threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
         use_shell (bool): If True will pass the cmd without splitting
@@ -1739,6 +1741,7 @@ def email_reports(session):
     if config.RUN["cli_params"].get("squad_analysis"):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
+    add_time_report_to_email(session, soup)
     part1 = MIMEText(soup, "html")
     add_mem_stats(soup)
     msg.attach(part1)
@@ -2761,6 +2764,49 @@ def censor_values(data_to_censor):
     return data_to_censor
 
 
+def filter_unrepresentable_values(data_to_filter):
+    """
+    This function filter values in dictionary or list which are not possible convert
+    to yaml (e.g. objects), to prevent following error raised from yaml.safe_dump
+    yaml.representer.RepresenterError("cannot represent an object",...)
+    It is performed recursively for nested dictionaries or lists.
+
+    Args:
+        data_to_filter (dict|list|tuple): Data to censor.
+
+    Returns:
+        dict: filtered data
+
+    """
+    if isinstance(data_to_filter, tuple):
+        data_to_filter = list(data_to_filter)
+    if isinstance(data_to_filter, dict):
+        for key in data_to_filter:
+            if data_to_filter[key] is None:
+                continue
+            if isinstance(data_to_filter[key], tuple):
+                data_to_filter[key] = list(data_to_filter[key])
+            if isinstance(data_to_filter[key], (dict, list)):
+                filter_unrepresentable_values(data_to_filter[key])
+            elif not isinstance(
+                data_to_filter[key], (dict, list, tuple, str, int, float)
+            ):
+                data_to_filter[key] = str(data_to_filter[key])
+    if isinstance(data_to_filter, (list, tuple)):
+        for i in range(len(data_to_filter)):
+            if data_to_filter[i] is None:
+                continue
+            if isinstance(data_to_filter[i], tuple):
+                data_to_filter[i] = list(data_to_filter[i])
+            if isinstance(data_to_filter[i], (dict, list)):
+                data_to_filter[i] = filter_unrepresentable_values(data_to_filter[i])
+            elif not isinstance(
+                data_to_filter[i], (dict, list, tuple, str, int, float)
+            ):
+                data_to_filter[i] = str(data_to_filter[i])
+    return data_to_filter
+
+
 def dump_config_to_file(file_path):
     """
     Dump the config to the yaml file with censored secret values.
@@ -2771,6 +2817,7 @@ def dump_config_to_file(file_path):
     """
     config_copy = deepcopy(config.to_dict())
     censor_values(config_copy)
+    filter_unrepresentable_values(config_copy)
     with open(file_path, "w+") as fs:
         yaml.safe_dump(config_copy, fs)
 
@@ -2995,7 +3042,11 @@ def skipif_ui_not_support(ui_test):
 
     ocp_version = get_running_ocp_version()
     if (
-        config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+        (
+            # Skip for IMB Cloud managed AKA ROKS
+            config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"].lower() == "managed"
+        )
         or config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
         or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     ):
@@ -3765,7 +3816,7 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=900, skip_tls_verify=False):
+def wait_for_machineconfigpool_status(node_type, timeout=1200, skip_tls_verify=False):
     """
     Check for Machineconfigpool status
 
@@ -4435,3 +4486,70 @@ def archive_ceph_crashes(toolbox_pod):
     """
     log.info("Archiving all ceph crashes")
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
+
+
+def add_time_report_to_email(session, soup):
+    """
+    Takes the time report dictionary and converts it into HTML table
+    """
+    data = GV.TIMEREPORT_DICT
+    sorted_data = dict(
+        sorted(data.items(), key=lambda item: item[1].get("total", 0), reverse=True)
+    )
+
+    file_loader = FileSystemLoader(constants.HTML_REPORT_TEMPLATE_DIR)
+    env = Environment(loader=file_loader)
+    table_html_template = env.get_template("test_time_table.html.j2")
+    data = list(sorted_data.items())
+    table_html = table_html_template.render(sorted_data=data[:5])
+    summary_tag = soup.find("h2", string="Summary")
+    time_div = soup.new_tag("div")
+    table = BeautifulSoup(table_html, "html.parser")
+    time_div.append(table)
+    summary_tag.insert_after(time_div)
+
+
+def get_oadp_version():
+    """
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "oadp-operator", namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    for csv in csv_list:
+        if "oadp-operator" in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
+
+
+def is_cluster_y_version_upgraded():
+    """
+    Checks whether cluster is upgraded or not
+
+    Returns:
+        bool: True if cluster is upgraded from previous versions
+
+    """
+    # importing here to avoid circular import
+    from ocs_ci.ocs.resources.ocs import get_ocs_csv
+
+    is_upgraded = False
+    ocs_csv = get_ocs_csv()
+    csv_info = ocs_csv.get()
+    prev_version = csv_info.get("spec").get("replaces", "")
+    csv_version = csv_info.get("spec").get("version", "")
+    log.debug(f"Replaces version: {prev_version}")
+    log.debug(f"csv_version: {csv_version}")
+    if not prev_version:
+        log.info("No previous version detected in cluster")
+        return is_upgraded
+    prev_version_num = prev_version.split("ocs-operator.")[1].lstrip("v")
+    if version_module.get_semantic_version(
+        csv_version, only_major_minor=True
+    ) > version_module.get_semantic_version(prev_version_num, only_major_minor=True):
+        is_upgraded = True
+    return is_upgraded

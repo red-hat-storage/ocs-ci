@@ -111,7 +111,7 @@ def check_automated_recovery_from_stopped_node(nodes):
         osd_node_name = new_wnode.name
 
     # Wait for correct OSD distribution. This will also wait for the necessary number of OSD pods to be Running
-    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)
+    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)()
 
     # Verify that OSD pods are running on the node
     osd_ids_on_node = get_node_osd_ids(osd_node_name)
@@ -162,7 +162,7 @@ def check_automated_recovery_from_terminated_node(nodes):
     new_wnode = wait_for_new_worker_node_ipi(machineset, old_wnodes)
 
     # Wait for correct OSD distribution. This will also wait for the necessary number of OSD pods to be Running
-    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)
+    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)()
 
     # Verify that OSD pods are running on the new node
     osd_ids_on_node = get_node_osd_ids(new_wnode.name)
@@ -201,7 +201,7 @@ def check_automated_recovery_from_drain_node(nodes):
     log.info(f"Successfully scheduled the node {osd_node_name}")
 
     # Wait for correct OSD distribution. This will also wait for the necessary number of OSD pods to be Running
-    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)
+    retry((AssertionError), tries=10, delay=60)(verify_osd_distribution_on_provider)()
 
     # Verify that OSD pods are running on the node
     osd_ids_on_node = get_node_osd_ids(osd_node_name)
@@ -308,7 +308,7 @@ class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
             assert consumers_verification_steps_after_provider_node_replacement()
 
         log.info("Checking that the ceph health is ok on the provider")
-        ceph_health_check()
+        ceph_health_check(tries=40)
 
         log.info("Checking that the ceph health is ok on the consumers")
         consumer_indexes = config.get_consumer_indexes_list()

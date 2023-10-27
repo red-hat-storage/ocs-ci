@@ -266,6 +266,7 @@ generic_locators = {
         "//td[@id='name']//a[contains(text(), '{}')]",
         By.XPATH,
     ),
+    "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
         "//td[@id='name']//a[contains(text(), '{}')]"
         "/../../..//button[@aria-label='Actions']",
@@ -276,6 +277,16 @@ generic_locators = {
         By.CSS_SELECTOR,
     ),
     "close_modal_btn": ("//button[@id='modal-close-action']", By.XPATH),
+    # project name in the dropdown header
+    "project_selected": (
+        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project: {}')]",
+        By.XPATH,
+    ),
+    # project name in the dropdown list
+    "test-project-link": (
+        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
 }
 
 ocs_operator_locators = {
@@ -294,17 +305,33 @@ ocs_operator_locators = {
 }
 
 mcg_stores = {
-    "store_name": ('input[data-test*="store-name"]', By.CSS_SELECTOR),
-    "provider_dropdown": ('button[data-test*="store-provider"]', By.CSS_SELECTOR),
-    "aws_provider": ("AWS S3-link", By.ID),
-    "aws_region_dropdown": ("region", By.ID),
-    "us_east_2_region": ("us-east-2-link", By.ID),
-    "aws_secret_dropdown": ("secret-dropdown", By.ID),
     "aws_secret_search_field": (
         'input[data-test-id="dropdown-text-filter"]',
         By.CSS_SELECTOR,
     ),
     "target_bucket": ("target-bucket", By.ID),
+    "store_provider_dropdown": (
+        "//label[@for='provider-name']/../following-sibling::*",
+        By.XPATH,
+    ),
+    "store_dropdown_option": (
+        "//ul[@ class='pf-c-dropdown__menu']//a[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "store_secret_option": ("//*[contains(text(), '{}')]", By.XPATH),
+    "store_region_dropdown": (
+        "//label[@for='region']/../following-sibling::*",
+        By.XPATH,
+    ),
+    "store_secret_dropdown": (
+        "//label[@for='secret-dropdown']/../following-sibling::*",
+        By.XPATH,
+    ),
+    "store_target_bucket_input": ("//input[@id='target-bucket']", By.XPATH),
+    "create_store_btn": (
+        "//button[@type='submit']",
+        By.XPATH,
+    ),
 }
 
 bucketclass = {
@@ -514,7 +541,11 @@ pvc_4_9 = {
 }
 
 pvc_4_10 = {
-    "test-project-link": ("(//*[contains(text(),'{}')])[1]", By.XPATH),
+    # similar to generic["test-project-link"]
+    "test-project-link": (
+        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
 }
 
 pvc_4_12 = {
@@ -1289,7 +1320,7 @@ validation_4_9 = {
         By.XPATH,
     ),
     "storage-system-external-status-card-hyperlink": (
-        "(//a[contains(text(),'ocs-external-storagecluster-storagesystem')])[3]",
+        "//div[@role='dialog']//a[contains(text(),'ocs-external-storagecluster-storagesystem')]",
         By.XPATH,
     ),
     "storagesystem-details": (
@@ -1620,6 +1651,44 @@ topology = {
 }
 
 locators = {
+    "4.15": {
+        "login": {**login, **login_4_11, **login_4_14},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "generic": generic_locators,
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+        },
+        "obc": obc,
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+    },
     "4.14": {
         "login": {**login, **login_4_11, **login_4_14},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
@@ -1656,6 +1725,7 @@ locators = {
         "storageclass": {**storageclass, **storageclass_4_9},
         "bucketclass": bucketclass,
         "topology": topology,
+        "mcg_stores": mcg_stores,
     },
     "4.13": {
         "login": {**login, **login_4_11},
@@ -1812,3 +1882,9 @@ locators = {
         "validation": validation,
     },
 }
+
+
+locate_aws_regions = {
+    "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
+}
+locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}

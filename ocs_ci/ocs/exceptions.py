@@ -600,6 +600,10 @@ class VolumesExistError(Exception):
     pass
 
 
+class LeftoversExistError(Exception):
+    pass
+
+
 class ExternalClusterNodeRoleNotFound(Exception):
     pass
 
@@ -640,4 +644,12 @@ class PDBNotCreatedException(Exception):
 
 
 class UnableUpgradeConnectionException(Exception):
+    pass
+
+
+class NoThreadingLockUsedError(Exception):
+    pass
+
+
+class VSLMNotFoundException(Exception):
     pass

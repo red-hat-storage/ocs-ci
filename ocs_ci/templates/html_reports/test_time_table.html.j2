@@ -1,0 +1,42 @@
+<table style="border-collapse: collapse; width: 100%; border: 1px solid #ddd;font-size:small">
+    <caption style="font-size:medium; text-align:left; font-weight:bold">
+        Most Time-Consuming Test Cases in seconds
+    </caption>
+    <thead>
+        <tr>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Test Name
+            </th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Setup Time</th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Call Time</th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Teardown Time</th>
+            <th scope="col"
+            style="border: 1px solid #ddd;padding: 8px;text-align: left;background-color: #f2f2f2;white-space:nowrap">
+            Total Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for test, values in sorted_data %}
+            <tr>
+                <td scope="row"
+                style="border: 1px solid #ddd;padding: 8px;text-align: left">
+                {{test}}</td>
+                <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+                {{values.get("setup", 'NA')}}</td>
+                <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+                {{values.get("call", 'NA')}}</td>
+                <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+                {{values.get("teardown", 'NA')}}</td>
+                <td style="border: 1px solid #ddd;padding: 8px;text-align: left">
+                {{values.get("total", 'NA')}}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>

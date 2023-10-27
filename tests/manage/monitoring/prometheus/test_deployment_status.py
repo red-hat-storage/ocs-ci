@@ -20,13 +20,13 @@ log = logging.getLogger(__name__)
 @tier4c
 @pytest.mark.polarion_id("OCS-1052")
 @skipif_managed_service
-def test_ceph_manager_stopped(measure_stop_ceph_mgr):
+def test_ceph_manager_stopped(measure_stop_ceph_mgr, threading_lock):
     """
     Test that there is appropriate alert when ceph manager
     is unavailable and that this alert is cleared when the manager
     is back online.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_mgr.get("prometheus_alerts")
@@ -50,13 +50,13 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr):
 @tier4c
 @pytest.mark.polarion_id("OCS-904")
 @skipif_managed_service
-def test_ceph_monitor_stopped(measure_stop_ceph_mon):
+def test_ceph_monitor_stopped(measure_stop_ceph_mon, threading_lock):
     """
     Test that there is appropriate alert related to ceph monitor quorum
     when there is even number of ceph monitors and that this alert
     is cleared when monitors are back online.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_mon.get("prometheus_alerts")
@@ -93,12 +93,12 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon):
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
 @skipif_managed_service
 @skipif_ocs_version("<4.9")
-def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
+def test_ceph_mons_quorum_lost(measure_stop_ceph_mon, threading_lock):
     """
     Test to verify that CephMonQuorumLost alert is seen and
     that this alert is cleared when monitors are back online.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_mon.get("prometheus_alerts")
@@ -122,12 +122,12 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon):
 @tier4c
 @pytest.mark.polarion_id("OCS-900")
 @skipif_managed_service
-def test_ceph_osd_stopped(measure_stop_ceph_osd):
+def test_ceph_osd_stopped(measure_stop_ceph_osd, threading_lock):
     """
     Test that there is appropriate alert related to situation when ceph osd
     is down. Alert is cleared when osd disk is back online.
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_osd.get("prometheus_alerts")

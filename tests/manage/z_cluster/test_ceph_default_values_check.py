@@ -24,6 +24,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import get_mds_cache_memory_limit
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 
 log = logging.getLogger(__name__)
@@ -155,12 +156,12 @@ class TestCephDefaultValuesCheck(ManageTest):
         Testcase to check mds cache memory limit post ocs upgrade
 
         """
-        mds_cache_memory_limit = get_mds_cache_memory_limit()
         mds_cache_memory_limit = retry(
-            (IOError),
+            (IOError, CommandFailed),
             tries=6,
             delay=20,
             backoff=1,
+            text_in_exception="ENOENT",
         )(get_mds_cache_memory_limit)()
         expected_mds_value = 4294967296
         expected_mds_value_in_GB = int(expected_mds_value / 1073741274)

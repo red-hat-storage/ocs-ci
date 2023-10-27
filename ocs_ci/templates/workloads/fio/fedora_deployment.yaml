@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: fio
-          image: datawiseio/fio:latest
+          image: quay.io/ocsci/ocsci-fio:latest
           volumeDevices:
             - devicePath: /dev/rbdblock
               name: my-volume

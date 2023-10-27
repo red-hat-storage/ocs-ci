@@ -64,8 +64,8 @@ run it belongs here.
 * `skipped_on_ceph_health_ratio` - The ratio of tests skipped due to Ceph unhealthy against the
   number of tests being collected for the test execution
 * `skipped_on_ceph_health_threshold` - The allowed threshold for the ratio of tests skipped due to Ceph unhealthy against the
-  number of tests being collected for the test execution. The default value is set to 0.1 (10%).
-  For acceptance suite, the value would be set to 0
+  number of tests being collected for the test execution. The default value is set to 0.
+  For acceptance suite, the value would be always overwritten to 0.
 
 #### DEPLOYMENT
 
@@ -140,6 +140,8 @@ anywhere else.
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
 * `in_transit_encryption` - Enable in-transit encryption.
+* `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
+  useful for enforcing force deploy steps only.
 
 #### REPORTING
 

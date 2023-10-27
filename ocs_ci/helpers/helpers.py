@@ -924,7 +924,7 @@ def delete_bulk_pvcs(pvc_yaml_dir, pv_names_list, namespace):
     cmd = f"delete -f {pvc_yaml_dir}/"
     oc.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
-    time.sleep(len(pv_names_list) / 2)
+    time.sleep(len(pv_names_list) * 5)  # previously was len(pv_names_list) / 2
 
     for pv_name in pv_names_list:
         validate_pv_delete(pv_name)
@@ -1673,13 +1673,22 @@ def measure_pv_deletion_time_bulk(
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
     logs = logs.split("\n")
 
+    delete_suffix_to_search = (
+        "succeeded"
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_13
+        else "persistentvolume deleted succeeded"
+    )
     loop_counter = 0
     while True:
         no_data_list = list()
         for pv in pv_name_list:
             # check if PV data present in CSI logs
             start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
-            end = [i for i in logs if re.search(f'delete "{pv}": succeeded', i)]
+            end = [
+                i
+                for i in logs
+                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+            ]
             if not start or not end:
                 no_data_list.append(pv)
 
@@ -1710,7 +1719,11 @@ def measure_pv_deletion_time_bulk(
         start_tm = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
         # Extract the deletion end time for the PV
-        end = [i for i in logs if re.search(f'delete "{pv_name}": succeeded', i)]
+        end = [
+            i
+            for i in logs
+            if re.search(f'delete "{pv_name}": {delete_suffix_to_search}', i)
+        ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)

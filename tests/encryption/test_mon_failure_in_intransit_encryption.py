@@ -26,6 +26,9 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-4919")
 @green_squad
+@pytest.mark.skip(
+    reason="Skipping due to the issue https://github.com/red-hat-storage/ocs-ci/issues/8464"
+)
 class TestMonFailuresWithIntransitEncryption:
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):

@@ -61,8 +61,10 @@ class TestLvmCapacityAlerts(ManageTest):
     block = False
 
     @pytest.fixture()
-    def init_lvm(self):
-        self.lvm = LVM(fstrim=True, fail_on_thin_pool_not_empty=True)
+    def init_lvm(self, threading_lock):
+        self.lvm = LVM(
+            fstrim=True, fail_on_thin_pool_not_empty=True, threading_lock=threading_lock
+        )
         disk1 = self.lvm.pv_data["pv_list"][0]
         log.info(f"PV List: {self.lvm.pv_data['pv_list']}")
         self.disk_size = self.lvm.pv_data[disk1]["pv_size"]
@@ -91,6 +93,7 @@ class TestLvmCapacityAlerts(ManageTest):
         pvc_factory,
         pod_factory,
         volume_binding_mode,
+        threading_lock,
     ):
         """
 

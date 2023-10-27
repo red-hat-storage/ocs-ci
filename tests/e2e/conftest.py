@@ -1,10 +1,24 @@
 import os
 import time
 import logging
+
+import boto3
 import pytest
 
+
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from ocs_ci.framework import config
+from ocs_ci.helpers.e2e_helpers import (
+    create_muliple_types_provider_obcs,
+    validate_mcg_bucket_replicaton,
+    validate_mcg_caching,
+    validate_mcg_object_expiration,
+    validate_rgw_kafka_notification,
+    validate_mcg_nsfs_feature,
+)
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
     compare_directory,
@@ -14,21 +28,28 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_cache,
     write_random_test_objects_to_bucket,
     s3_list_objects_v1,
+    retrieve_verification_mode,
 )
 
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
+from ocs_ci.ocs.resources.pod import (
+    Pod,
+    get_pods_having_label,
+)
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     modify_statefulset_replica_count,
     validate_pv_delete,
+    default_storage_class,
 )
 from ocs_ci.utility.kms import is_kms_enabled
+from ocs_ci.utility.utils import clone_notify
 
 logger = logging.getLogger(__name__)
 
@@ -730,3 +751,549 @@ def pytest_collection_modifyitems(items):
                     f" since it requires Managed service platform"
                 )
                 items.remove(item)
+
+
+@pytest.fixture()
+def setup_mcg_replication_feature_buckets(request, bucket_factory):
+    """
+    This fixture does the setup for validating MCG replication
+    feature
+
+    """
+
+    def factory(number_of_buckets, bucket_types, cloud_providers):
+        """
+        factory function implementing the fixture
+
+        Args:
+            number_of_buckets (int): number of buckets
+            bucket_types (dict): dictionary mapping bucket types and
+                configuration
+            cloud_providers (dict): dictionary mapping cloud provider
+                and configuration
+
+        Returns:
+            Dict: source bucket to target bucket map
+
+        """
+        all_buckets = create_muliple_types_provider_obcs(
+            number_of_buckets, bucket_types, cloud_providers, bucket_factory
+        )
+
+        if len(all_buckets) % 2 != 0:
+            all_buckets[len(all_buckets) - 1].delete()
+            all_buckets.remove(all_buckets[len(all_buckets) - 1])
+
+        source_target_map = dict()
+        index = 0
+        for i in range(len(all_buckets) // 2):
+            source_target_map[all_buckets[index]] = all_buckets[index + 1]
+            patch_replication_policy_to_bucket(
+                all_buckets[index].name,
+                "basic-replication-rule-1",
+                all_buckets[index + 1].name,
+            )
+            patch_replication_policy_to_bucket(
+                all_buckets[index + 1].name,
+                "basic-replication-rule-2",
+                all_buckets[index].name,
+            )
+
+            index += 2
+
+        logger.info(
+            f"Buckets created under replication setup: {[bucket.name for bucket in all_buckets]}"
+        )
+        return all_buckets, source_target_map
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_caching_feature_buckets(request, bucket_factory):
+    """
+    This fixture does the setup for Noobaa cache buckets validation
+
+    """
+
+    def factory(number_of_buckets, bucket_types, cloud_providers):
+        """
+        factory function implementing fixture
+
+        Args:
+            number_of_buckets (int): number of buckets
+            bucket_types (dict): dictionary mapping bucket types and
+                configuration
+            cloud_providers (dict): dictionary mapping cloud provider
+                and configuration
+
+        Returns:
+            List: List of cache buckets
+
+        """
+        cache_type = dict()
+        cache_type["cache"] = bucket_types["cache"]
+        all_buckets = create_muliple_types_provider_obcs(
+            number_of_buckets, cache_type, cloud_providers, bucket_factory
+        )
+        logger.info(
+            f"These are the cache buckets created: {[bucket.name for bucket in all_buckets]}"
+        )
+        return all_buckets
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_expiration_feature_buckets(
+    request, bucket_factory, mcg_obj, reduce_expiration_interval
+):
+    """
+    This fixture does the setup for validating MCG replication
+    feature
+
+    """
+
+    def factory(number_of_buckets, bucket_types, cloud_providers):
+        """
+        Factory function implementing the fixture
+
+        Args:
+            number_of_buckets (int): number of buckets
+            bucket_types (dict): dictionary mapping bucket types and
+                configuration
+            cloud_providers (dict): dictionary mapping cloud provider
+                and configuration
+
+        Returns:
+            List: list of buckets
+
+        """
+        type = dict()
+        type["data"] = bucket_types["data"]
+        reduce_expiration_interval(interval=2)
+        logger.info("Changed noobaa lifecycle interval to 2 minutes")
+
+        expiration_rule = {
+            "Rules": [
+                {
+                    "Expiration": {
+                        "Days": 1,
+                        "ExpiredObjectDeleteMarker": False,
+                    },
+                    "Filter": {"Prefix": ""},
+                    "ID": "data-expire",
+                    "Status": "Enabled",
+                }
+            ]
+        }
+
+        all_buckets = create_muliple_types_provider_obcs(
+            number_of_buckets, type, cloud_providers, bucket_factory
+        )
+        for bucket in all_buckets:
+            mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+                Bucket=bucket.name, LifecycleConfiguration=expiration_rule
+            )
+
+        logger.info(
+            f"Buckets created under expiration setup: {[bucket.name for bucket in all_buckets]}"
+        )
+        return all_buckets
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_nsfs_feature_buckets(request):
+    def factory():
+        pass
+
+
+@pytest.fixture()
+def setup_rgw_kafka_notification(request, rgw_bucket_factory, rgw_obj):
+    """
+    This fixture does the setup for validating RGW kafka
+    notification feature
+
+    """
+    # setup AMQ
+    amq = AMQ()
+
+    kafka_topic = kafkadrop_pod = kafkadrop_svc = kafkadrop_route = None
+
+    # get storageclass
+    storage_class = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
+
+    # setup AMQ cluster
+    amq.setup_amq_cluster(storage_class.name)
+
+    # create kafka topic
+    kafka_topic = amq.create_kafka_topic()
+
+    # create kafkadrop pod
+    (
+        kafkadrop_pod,
+        kafkadrop_svc,
+        kafkadrop_route,
+    ) = amq.create_kafkadrop()
+
+    def factory():
+        """
+        Factory function implementing the fixture
+
+        Returns:
+            Dict: This consists of mapping of rgw buckets,
+                kafka_topic, kafkadrop_host objects etc
+
+        """
+        # get the kafkadrop route
+        kafkadrop_host = kafkadrop_route.get().get("spec").get("host")
+
+        # create the bucket
+        bucketname = rgw_bucket_factory(amount=1, interface="RGW-OC")[0].name
+
+        # get RGW credentials
+        rgw_endpoint, access_key, secret_key = rgw_obj.get_credentials()
+
+        # clone notify repo
+        notify_path = clone_notify()
+
+        # initilize to upload data
+        data = "A random string data to write on created rgw bucket"
+        obc_obj = OBC(bucketname)
+        s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=rgw_endpoint,
+            aws_access_key_id=obc_obj.access_key_id,
+            aws_secret_access_key=obc_obj.access_key,
+        )
+        s3_client = s3_resource.meta.client
+
+        # Initialize notify command to run
+        notify_cmd = (
+            f"python {notify_path} -e {rgw_endpoint} -a {obc_obj.access_key_id} "
+            f"-s {obc_obj.access_key} -b {bucketname} "
+            f"-ke {constants.KAFKA_ENDPOINT} -t {kafka_topic.name}"
+        )
+
+        kafka_rgw_dict = {
+            "s3client": s3_client,
+            "kafka_rgw_bucket": bucketname,
+            "notify_cmd": notify_cmd,
+            "data": data,
+            "kafkadrop_host": kafkadrop_host,
+            "kafka_topic": kafka_topic,
+        }
+
+        return kafka_rgw_dict
+
+    def finalizer():
+        if kafka_topic:
+            kafka_topic.delete()
+        if kafkadrop_pod:
+            kafkadrop_pod.delete()
+        if kafkadrop_svc:
+            kafkadrop_svc.delete()
+        if kafkadrop_route:
+            kafkadrop_route.delete()
+
+        amq.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def validate_mcg_bg_features(
+    request, awscli_pod_session, mcg_obj_session, test_directory_setup, cld_mgr
+):
+    """
+    This fixture validates specified features provided neccesary
+    feature setup map. It has option to run the validation to run
+    in the background while not blocking the execution of rest of
+    the code
+
+    """
+
+    def factory(
+        feature_setup_map, run_in_bg=False, skip_any_features=None, object_amount=5
+    ):
+        """
+        factory functon implementing the fixture
+
+        Args:
+            feature_setup_map (Dict): This has feature to setup of buckets map
+                consists of buckets, executor, event objects
+            run_in_bg (Bool): True if want to run the validation in background
+            skip_any_features (List): List consisting of features that dont need
+                to be validated
+            object_amount (int): Number of objects that you wanna use while doing
+                the validation
+
+        Returns:
+            Event(): this is a threading.Event() object used to send signals to the
+                threads to stop
+            List: List consisting of all the futures objects, ie. threads
+
+        """
+        uploaded_objects_dir = test_directory_setup.origin_dir
+        downloaded_obejcts_dir = test_directory_setup.result_dir
+        futures_obj = list()
+
+        # if any already running background validation threads
+        # then stop those threads
+        if feature_setup_map["executor"]["event"] is not None:
+            feature_setup_map["executor"]["event"].set()
+            for t in feature_setup_map["executor"]["threads"]:
+                t.result()
+
+        event = Event()
+        executor = ThreadPoolExecutor(
+            max_workers=5 - len(skip_any_features)
+            if skip_any_features is not None
+            else 5
+        )
+        skip_any_features = list() if skip_any_features is None else skip_any_features
+
+        if "replication" not in skip_any_features:
+            validate_replication = executor.submit(
+                validate_mcg_bucket_replicaton,
+                awscli_pod_session,
+                mcg_obj_session,
+                feature_setup_map["replication"],
+                uploaded_objects_dir,
+                downloaded_obejcts_dir,
+                event,
+                run_in_bg=run_in_bg,
+                object_amount=object_amount,
+            )
+            futures_obj.append(validate_replication)
+
+        if "caching" not in skip_any_features:
+            validate_caching = executor.submit(
+                validate_mcg_caching,
+                awscli_pod_session,
+                mcg_obj_session,
+                cld_mgr,
+                feature_setup_map["caching"],
+                uploaded_objects_dir,
+                downloaded_obejcts_dir,
+                event,
+                run_in_bg=run_in_bg,
+            )
+            futures_obj.append(validate_caching)
+
+        if "expiration" not in skip_any_features:
+            validate_expiration = executor.submit(
+                validate_mcg_object_expiration,
+                mcg_obj_session,
+                feature_setup_map["expiration"],
+                event,
+                run_in_bg=run_in_bg,
+                object_amount=object_amount,
+                prefix="",
+            )
+            futures_obj.append(validate_expiration)
+
+        if "rgw kafka" not in skip_any_features:
+            validate_rgw_kafka = executor.submit(
+                validate_rgw_kafka_notification,
+                feature_setup_map["rgw kafka"],
+                event,
+                run_in_bg=run_in_bg,
+            )
+            futures_obj.append(validate_rgw_kafka)
+
+        if "nsfs" not in skip_any_features:
+            validate_nsfs = executor.submit(
+                validate_mcg_nsfs_feature,
+            )
+            futures_obj.append(validate_nsfs)
+
+        # if not run in background we wait until the
+        # threads are finsihed executing, ie. single iteration
+        if not run_in_bg:
+            for t in futures_obj:
+                t.result()
+            event = None
+
+        return event, futures_obj
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_bg_features(
+    request,
+    test_directory_setup,
+    awscli_pod_session,
+    mcg_obj_session,
+    setup_mcg_replication_feature_buckets,
+    setup_mcg_caching_feature_buckets,
+    setup_mcg_nsfs_feature_buckets,
+    setup_mcg_expiration_feature_buckets,
+    # setup_rgw_kafka_notification,
+    validate_mcg_bg_features,
+):
+    """
+    Fixture to setup MCG features buckets, run IOs, validate IOs
+
+    1. Bucket replication
+    2. Noobaa caching
+    3. Object expiration
+    4. MCG NSFS
+    5. RGW kafka notification
+
+    """
+
+    def factory(
+        num_of_buckets=10,
+        object_amount=5,
+        is_disruptive=True,
+        skip_any_type=None,
+        skip_any_provider=None,
+        skip_any_features=None,
+    ):
+        """
+        Args:
+            num_of_buckets(int): Number of buckets for each MCG features
+            is_disruptive(bool): Is the test calling this has disruptive flow?
+            skip_any_type(list): If you want to skip any types of OBCs
+            skip_any_provider(list): If you want to skip any cloud provider
+            skip_any_features(list): If you want to skip any MCG features
+
+        Returns:
+            Dict: Representing all the buckets created for the respective features,
+            executor and event objects
+
+        """
+
+        bucket_types = {
+            "data": {
+                "interface": "OC",
+                "backingstore_dict": {},
+            },
+            "namespace": {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Single",
+                    "namespacestore_dict": {},
+                },
+            },
+            "cache": {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Cache",
+                    "ttl": 300000,
+                    "namespacestore_dict": {},
+                },
+                "placement_policy": {
+                    "tiers": [
+                        {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                    ]
+                },
+            },
+        }
+
+        # skip if any bucket types one wants to skip
+        if skip_any_type is not None:
+            for type in skip_any_type:
+                if type not in bucket_types.keys():
+                    logger.error(
+                        f"Bucket type {type} you asked to skip is not valid type "
+                        f"and valid are {list(bucket_types.keys())}"
+                    )
+                else:
+                    bucket_types.pop(type)
+
+        cloud_providers = {
+            "aws": (1, "eu-central-1"),
+            "azure": (1, None),
+            "pv": (
+                1,
+                constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                "ocs-storagecluster-ceph-rbd",
+            ),
+        }
+
+        # skip any cloud providers if one wants to skip
+        if skip_any_provider is not None:
+            for provider in skip_any_provider:
+                if provider not in cloud_providers.keys():
+                    logger.error(
+                        f"Bucket type {provider} you asked to skip is not valid type "
+                        f"and valid are {list(cloud_providers.keys())}"
+                    )
+                else:
+                    bucket_types.pop(provider)
+
+        all_buckets = list()
+        feature_setup_map = dict()
+        feature_setup_map["executor"] = dict()
+        feature_setup_map["executor"]["event"] = None
+
+        # skip any features if one wants to skip
+        features = ["replication", "caching", "expiration", "nsfs", "rgw kafka"]
+        assert isinstance(skip_any_features, list) and set(skip_any_features).issubset(
+            set(features)
+        ), f"Features asked to skip either not present or you havent provided through a list, valid: {features}"
+
+        if "replication" not in skip_any_features:
+            buckets, source_target_map = setup_mcg_replication_feature_buckets(
+                num_of_buckets, bucket_types, cloud_providers
+            )
+            all_buckets.extend(buckets)
+            feature_setup_map["replication"] = source_target_map
+
+        if "caching" not in skip_any_features:
+            cache_buckets = setup_mcg_caching_feature_buckets(
+                num_of_buckets, bucket_types, cloud_providers
+            )
+            all_buckets.extend(cache_buckets)
+            feature_setup_map["caching"] = cache_buckets
+
+        if "expiration" not in skip_any_features:
+            buckets_with_expiration_policy = setup_mcg_expiration_feature_buckets(
+                num_of_buckets, bucket_types, cloud_providers
+            )
+            all_buckets.extend(buckets_with_expiration_policy)
+            feature_setup_map["expiration"] = buckets_with_expiration_policy
+
+        if "nsfs" not in skip_any_features:
+            setup_mcg_nsfs_feature_buckets()
+            feature_setup_map["nsfs"] = None
+
+        # if "rgw kafka" not in skip_any_features:
+        #     kafka_rgw_dict = setup_rgw_kafka_notification()
+        #     all_buckets.extend([OBC(kafka_rgw_dict["kafka_rgw_bucket"])])
+        #     feature_setup_map["rgw kafka"] = kafka_rgw_dict
+
+        uploaded_objects_dir = test_directory_setup.origin_dir
+        downloaded_obejcts_dir = test_directory_setup.result_dir
+
+        for count, bucket in enumerate(all_buckets):
+            assert random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=bucket.name,
+                upload_dir=uploaded_objects_dir + f"Bucket{count}",
+                download_dir=downloaded_obejcts_dir + f"Bucket{count}",
+                amount=object_amount,
+                pattern="Random_object",
+                mcg_obj=mcg_obj_session,
+                cleanup=True,
+            ), "Some or all written objects were not found in the list of downloaded objects"
+        logger.info("Successful object round trip verification")
+
+        event, threads = validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=not is_disruptive,
+            skip_any_features=skip_any_features,
+            object_amount=object_amount,
+        )
+        feature_setup_map["executor"]["event"] = event
+        feature_setup_map["executor"]["threads"] = threads
+        return feature_setup_map
+
+    return factory

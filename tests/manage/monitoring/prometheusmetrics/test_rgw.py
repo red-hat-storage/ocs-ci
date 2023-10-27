@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 @tier4c
 @pytest.mark.polarion_id("OCS-2385")
 @skipif_managed_service
-def test_ceph_rgw_metrics_after_metrics_exporter_respin(rgw_deployments):
+def test_ceph_rgw_metrics_after_metrics_exporter_respin(
+    rgw_deployments, threading_lock
+):
     """
     RGW metrics should be provided via OCP Prometheus even after
     ocs-metrics-exporter pod is respinned.
@@ -52,7 +54,7 @@ def test_ceph_rgw_metrics_after_metrics_exporter_respin(rgw_deployments):
     )
 
     logger.info("Collect RGW metrics")
-    prometheus = PrometheusAPI()
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
     list_of_metrics_without_results = metrics.get_missing_metrics(
         prometheus, metrics.ceph_rgw_metrics
     )

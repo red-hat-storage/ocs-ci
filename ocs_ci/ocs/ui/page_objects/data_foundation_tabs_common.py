@@ -8,6 +8,8 @@ import pandas as pd
 
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.keys import Keys
+from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.ocs.ui.page_objects.resource_page import ResourcePage
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ui.base_ui import logger, wait_for_element_to_be_visible
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -433,6 +435,59 @@ class CreateResourceForm(PageNavigator):
             (rule_exp, name_does_not_exist, self.status_success),
         ]
         return all(self._check_rule_case(*params) for params in params_list)
+
+    def create_store(
+        self,
+        store_name: str,
+        provider: str,
+        region: str,
+        secret: str,
+        uls_name: str,
+    ):
+        """
+        Create backing store via UI.
+
+        ! Backing Store with PVC option is not supported yet !
+        ! Namespace Store with FS option is supported with NamespaceStoreUI().create_namespace_store() !
+
+        Args:
+            store_name (str): backing store name
+            provider (str): backing store provider
+            region (str): backing store region
+            secret (str): backing store secret
+            uls_name (str): uls name
+
+        Returns:
+            ResourcePage: The page object of the newly created Store (Namespace store or Backing Store)
+        """
+        logger.info("Click on create store button")
+        self.do_click(self.generic_locators["create_resource_button"])
+
+        logger.info("Fill backing store name")
+        self._send_input_and_update_popup(store_name)
+
+        logger.info("Select provider")
+        provider = "AWS S3" if provider.lower() == "aws" else provider
+        self.do_click(self.mcg_stores["store_provider_dropdown"])
+        self.do_click(
+            format_locator(self.mcg_stores["store_dropdown_option"], provider)
+        )
+
+        logger.info("Select region")
+        self.do_click(self.mcg_stores["store_region_dropdown"])
+        self.do_click(format_locator(self.mcg_stores["store_dropdown_option"], region))
+
+        logger.info("Select secret")
+        self.do_click(self.mcg_stores["store_secret_dropdown"])
+        self.do_click(format_locator(self.mcg_stores["store_secret_option"], secret))
+
+        logger.info("Fill target bucket")
+        self.do_send_keys(self.mcg_stores["store_target_bucket_input"], uls_name)
+
+        logger.info("Click on create button")
+        self.do_click(self.mcg_stores["create_store_btn"])
+
+        return ResourcePage()
 
 
 class DataFoundationTabBar(PageNavigator):

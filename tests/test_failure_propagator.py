@@ -1,3 +1,4 @@
+import logging
 import pytest
 
 from ocs_ci.framework import config
@@ -20,6 +21,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     performance,
     scale,
 )
+
+log = logging.getLogger(__name__)
 
 
 @ignore_owner
@@ -60,13 +63,25 @@ class TestFailurePropagator:
         if "acceptance" in config.RUN.get("cli_params").get("-m", ""):
             config.RUN["skipped_on_ceph_health_threshold"] = 0
 
+        log.info(f"number_of_eligible_tests: {number_of_eligible_tests}")
+        log.info(
+            f"skipped_on_ceph_health_threshold: {config.RUN.get('skipped_on_ceph_health_threshold')}"
+        )
+        log.info(f"skip_reason_test_found: {config.RUN.get('skip_reason_test_found')}")
+        log.info(
+            f"skipped_tests_ceph_health: {config.RUN.get('skipped_tests_ceph_health')}"
+        )
+
         if number_of_eligible_tests > 0:
             config.RUN["skipped_on_ceph_health_ratio"] = round(
                 (
                     config.RUN.get("skipped_tests_ceph_health")
                     / number_of_eligible_tests
                 ),
-                1,
+                3,
+            )
+            log.info(
+                f"skipped_on_ceph_health_ratio: {config.RUN.get('skipped_on_ceph_health_ratio')}"
             )
             message = (
                 f"This run had {config.RUN['skipped_on_ceph_health_ratio'] * 100}% of the "

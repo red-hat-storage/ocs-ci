@@ -80,6 +80,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from time import sleep
+from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 log = logging.getLogger(__name__)
 
@@ -1208,11 +1209,30 @@ def in_transit_encryption_verification():
 
     """
     log.info("in-transit encryption is about to be validated.")
-    ceph_dump_data = ceph_config_dump()
     keys_to_match = ["ms_client_mode", "ms_cluster_mode", "ms_service_mode"]
-    keys_found = [
-        record["name"] for record in ceph_dump_data if record["name"] in keys_to_match
-    ]
+    intransit_config_state = get_in_transit_encryption_config_state()
+
+    def search_secure_keys():
+        ceph_dump_data = ceph_config_dump()
+        keys_found = [
+            record["name"]
+            for record in ceph_dump_data
+            if record["name"] in keys_to_match
+        ]
+
+        if (intransit_config_state) and (len(keys_found) != len(keys_to_match)):
+            raise ValueError("Not all secure keys are present in the config")
+
+        if (not intransit_config_state) and (len(keys_found) > 0):
+            raise ValueError("Some secure keys are Still in the config")
+
+        return keys_found
+
+    keys_found = retry(
+        (ValueError),
+        tries=5,
+        delay=60,
+    )(search_secure_keys)()
 
     if len(keys_to_match) != len(keys_found):
         log.error("in-transit encryption is not configured.")
@@ -1254,8 +1274,14 @@ def get_in_transit_encryption_config_state():
         bool: True if in-transit encryption is enabled, False if it is disabled, or None if an error occurred.
 
     """
+    cluster_name = (
+        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+        if storagecluster_independent_check()
+        else constants.DEFAULT_CLUSTERNAME
+    )
+
     ocp_obj = StorageCluster(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=cluster_name,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
@@ -1285,8 +1311,14 @@ def set_in_transit_encryption(enabled=True):
         log.info("Existing in-transit encryption state is same as desire state.")
         return True
 
+    cluster_name = (
+        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+        if storagecluster_independent_check()
+        else constants.DEFAULT_CLUSTERNAME
+    )
+
     ocp_obj = StorageCluster(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=cluster_name,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 

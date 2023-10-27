@@ -1240,9 +1240,26 @@ def validate_pdb_creation():
     item_list = pdb_obj.get().get("items")
     pdb_count = constants.PDB_COUNT
     pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
+
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_15:
+        pdb_count = constants.PDB_COUNT_2_MGR
+        pdb_required = [
+            constants.MDS_PDB,
+            constants.MON_PDB,
+            constants.OSD_PDB,
+            constants.MGR_PDB,
+        ]
+
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
-        pdb_required.extend((constants.MGR_PDB, constants.RGW_PDB))
+        pdb_required = [
+            constants.MDS_PDB,
+            constants.MON_PDB,
+            constants.OSD_PDB,
+            constants.MGR_PDB,
+            constants.RGW_PDB,
+        ]
+
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
             f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
@@ -2027,14 +2044,10 @@ def get_mds_cache_memory_limit():
 
     """
     pod_obj = pod.get_ceph_tools_pod()
-    try:
-        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
-        mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-        ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
-        mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
-    except IOError as ioe:
-        if "ENOENT" not in ioe:
-            raise ioe
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-a mds_cache_memory_limit"
+    mds_a_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    ceph_cmd = "ceph config show mds.ocs-storagecluster-cephfilesystem-b mds_cache_memory_limit"
+    mds_b_cache_memory_limit = pod_obj.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
     if mds_a_cache_memory_limit != mds_b_cache_memory_limit:
         raise UnexpectedBehaviour(
@@ -2387,7 +2400,9 @@ class LVM(object):
 
     """
 
-    def __init__(self, fstrim=False, fail_on_thin_pool_not_empty=False):
+    def __init__(
+        self, fstrim=False, fail_on_thin_pool_not_empty=False, threading_lock=None
+    ):
         """
         Initiate the class, gets 2 parameters.
         Args:
@@ -2405,6 +2420,7 @@ class LVM(object):
         self.vg_data = None
         self.node_ssh = None
         self.new_prom = None
+        self.threading_lock = threading_lock
         func_list = [
             self.cluster_ip(),
             self.get_lvmcluster(),
@@ -2461,7 +2477,7 @@ class LVM(object):
         thread_init_class(func_list, shutdown=0)
 
     def init_prom(self):
-        self.new_prom = PrometheusAPI()
+        self.new_prom = PrometheusAPI(threading_lock=self.threading_lock)
 
     def get_lvmcluster(self):
         """
