@@ -377,7 +377,9 @@ class Deployment(object):
                             f"-n openshift-storage  --type merge --patch {ptch}"
                         )
                         run_cmd(ptch_cmd)
-                        verify_storage_cluster()
+                        ocs_registry_image = config.DEPLOYMENT.get(
+                            "ocs_registry_image", None
+                        )
                         storage_cluster.reload_data()
                         assert (
                             storage_cluster.data.get("spec")
@@ -385,6 +387,9 @@ class Deployment(object):
                             .get("multiClusterService")
                             .get("enabled")
                         ), "Failed to update StorageCluster globalnet"
+                        ocs_install_verification(
+                            timeout=2000, ocs_registry_image=ocs_registry_image
+                        )
                 config.reset_ctx()
         else:
             logger.warning("OCS deployment will be skipped")
