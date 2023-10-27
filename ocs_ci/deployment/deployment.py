@@ -84,7 +84,6 @@ from ocs_ci.ocs.resources.storage_cluster import (
     setup_ceph_debug,
     get_osd_count,
     StorageCluster,
-    verify_storage_cluster,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
