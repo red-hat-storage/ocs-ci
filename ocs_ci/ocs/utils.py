@@ -1609,6 +1609,20 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_non_acm_cluster_indexes():
+    """
+    Get config index of all non-acm clusters
+
+    Returns:
+        list: of integer indexes of non-acm clusters
+
+    """
+    non_acm_indexes = list()
+    for cluster in get_non_acm_cluster_config():
+        non_acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return non_acm_indexes
+
+
 def get_all_acm_indexes():
     """
     Get indexes fro all ACM clusters

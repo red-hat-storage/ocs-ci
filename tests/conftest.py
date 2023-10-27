@@ -153,7 +153,7 @@ from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.multicluster import (
     get_multicluster_upgrade_parametrizer,
-    MutliClusterUpgradeParametrize,
+    MultiClusterUpgradeParametrize,
 )
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
@@ -479,7 +479,7 @@ def pytest_collection_modifyitems(session, config, items):
             if (
                 list(
                     set([i.name for i in item.iter_markers()]).intersection(
-                        (MutliClusterUpgradeParametrize.MULTICLUSTER_UPGRADE_MARKERS)
+                        (MultiClusterUpgradeParametrize.MULTICLUSTER_UPGRADE_MARKERS)
                     )
                 )
                 and ocsci_config.multicluster_scenario
@@ -494,6 +494,11 @@ def pytest_collection_modifyitems(session, config, items):
                     # fetch already marked 'order' value
                     if m.name == "run":
                         val = m.kwargs.get("order")
+                        # Sum of the base order value along with
+                        # zone in which the cluster is and the cluster's role rank
+                        # determines the order in which tests need to be executed
+                        # Lower the sum, higher the rank hence it gets prioritized early
+                        # in the test execution sequence
                         newval = val + zone_rank + role_rank
                         markers_update.append((pytest.mark.order, newval))
                         break
