@@ -1216,6 +1216,7 @@ MON_PDB = "rook-ceph-mon-pdb"
 MGR_PDB = "rook-ceph-mgr-pdb"
 RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 PDB_COUNT = 3
+PDB_COUNT_2_MGR = 4
 PDB_COUNT_ARBITER = 5
 
 # Root Disk size
