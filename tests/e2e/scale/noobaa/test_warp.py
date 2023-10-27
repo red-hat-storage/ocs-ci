@@ -40,6 +40,7 @@ class TestWarp(E2ETest):
     """
 
     GCP_ACCOUNT_SKIP = "GCP Account Credentials Issue"
+
     @bugzilla("2089630")
     @pytest.mark.polarion_id("OCS-4001")
     @pytest.mark.parametrize(
