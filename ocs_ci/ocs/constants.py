@@ -3036,4 +3036,4 @@ MC_WORKAROUND_SSD = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
 )
 # MDR multicluster roles
-MDR_ROLES = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
+MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
