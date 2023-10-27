@@ -3042,4 +3042,4 @@ FDF_SERVICE_CR = os.path.join(FDF_TEMPLATE_DIR, "data-foundation-instance.yaml")
 FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
 # MDR multicluster roles
-MDR_ROLES = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
+MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
