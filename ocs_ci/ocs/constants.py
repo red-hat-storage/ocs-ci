@@ -2502,4 +2502,4 @@ OPERATION_START = "start"
 OPERATION_RESTART = "restart"
 OPERATION_TERMINATE = "terminate"
 # MDR multicluster roles
-MDR_ROLES = ["ActiveACM", "PassiveACM", "Primary_odf", "Secondary_odf"]
+MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
