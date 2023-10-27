@@ -256,6 +256,10 @@ higher priority).
 * `nb_nfs_mount` - NFS mount point used specifically for testing noobaa db NFS mount test
 * `custom_default_storageclass_names` - Set to true if custom storageclass names use instead of default one.
 * `storageclassnames` - Under this key, custom storage class names for `cephFilesystems`, `cephObjectStores`, `cephBlockPools`, `cephNonResilientPools`, `nfs` and for `encryption` are defined.
+* `submariner_source` - Source from which we take submariner build, ex: upstream, downstream, downstream_unreleased
+* `submariner_release_type` - Released OR Unreleased submariner build
+* `enable_globalnet` - enable or disable globalnet for submariner
+* `submariner_unreleased_channel` - submariner channel for unreleased downstream build
 
 #### UPGRADE
 
