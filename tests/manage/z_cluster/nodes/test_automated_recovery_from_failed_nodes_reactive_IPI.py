@@ -32,6 +32,7 @@ from ocs_ci.ocs.node import (
     get_node_pods,
     wait_for_nodes_racks_or_zones,
     wait_for_nodes_status,
+    wait_for_node_count_to_reach_status,
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -239,10 +240,15 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     )
                     add_new_nodes_and_label_after_node_failure_ipi(self.machineset_name)
 
+            log.info("Wait for node count to be equal to original count")
+            wait_for_node_count_to_reach_status(node_count=initial_node_count)
+            log.info("Node count matched")
             ceph_health_check()
 
             machine.wait_for_ready_replica_count_to_reach_expected_value(
-                self.machineset_name, expected_value=self.start_ready_replica_count
+                self.machineset_name,
+                expected_value=self.start_ready_replica_count,
+                timeout=420,
             )
             log.info(
                 "Verify that the current replica count is equal to the ready replica count"
@@ -294,6 +300,10 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         self.start_ready_replica_count = machine.get_ready_replica_count(
             self.machineset_name
         )
+
+        global initial_node_count
+        initial_node_count = len(get_worker_nodes())
+        log.info(f"Initial node count is {initial_node_count}")
 
         if additional_node:
             new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
