@@ -140,6 +140,41 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
     return downloaded_objects
 
 
+def check_objects_in_bucket(bucket_name, objects_list, mcg_obj, s3pod, timeout=60):
+    """
+    Checks object list present in bucket and compare it with uploaded object Lists
+    """
+
+    def _check_objects_in_bucket(bucket_name, objects_list, mcg_obj, s3pod):
+        obj_list = list_objects_from_bucket(
+            s3pod,
+            f"s3://{bucket_name}",
+            s3_obj=mcg_obj,
+        )
+        if set(objects_list).issubset(obj_list):
+            logger.info(f"Object list {obj_list}")
+            return True
+        else:
+            return False
+
+    try:
+        return any(
+            result
+            for result in TimeoutSampler(
+                timeout,
+                10,
+                _check_objects_in_bucket,
+                bucket_name,
+                objects_list,
+                mcg_obj,
+                s3pod,
+            )
+        )
+    except TimeoutExpiredError:
+        logger.error("Objects are not synced within the time limit.")
+        return False
+
+
 def retrieve_anon_s3_resource():
     """
     Returns an anonymous boto3 S3 resource by creating one and disabling signing
