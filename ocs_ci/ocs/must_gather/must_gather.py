@@ -106,7 +106,9 @@ class MustGather(object):
 
         """
         self.search_file_path()
-        self.verify_ceph_file_content()
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2125204
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2049204
+        # self.verify_ceph_file_content()
         for file, file_path in self.files_path.items():
             if not Path(file_path).is_file():
                 self.files_not_exist.append(file)
