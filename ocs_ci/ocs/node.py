@@ -24,7 +24,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
@@ -2667,3 +2667,119 @@ def generate_nodes_for_provider_worker_node_tests():
     generated_nodes = get_node_objs(node_choice_names)
     log.info(f"Generated nodes for provider node tests: {node_choice_names}")
     return generated_nodes
+
+
+def gracefully_reboot_nodes():
+    """
+
+    Gracefully reboot OpenShift Container Platform nodes
+
+    """
+    from ocs_ci.ocs import platform_nodes
+
+    node_objs = get_node_objs()
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    waiting_time = 30
+    for node in node_objs:
+        node_name = node.name
+        unschedule_nodes([node_name])
+        drain_nodes([node_name])
+        nodes.restart_nodes([node], wait=False)
+        log.info(f"Waiting for {waiting_time} seconds")
+        time.sleep(waiting_time)
+        schedule_nodes([node_name])
+    wait_for_nodes_status(status=constants.NODE_READY, timeout=180)
+
+
+def get_num_of_racks():
+    """
+    Get the number of racks in the cluster
+
+    Returns:
+        int: The number of racks in the cluster
+
+    """
+    node_racks = get_node_rack_dict().values()
+    node_racks = [rack for rack in node_racks if rack]
+    return len(set(node_racks))
+
+
+def generate_new_nodes_and_osd_running_nodes_ipi(
+    osd_running_worker_nodes=None, num_of_nodes=2
+):
+    """
+    Create new nodes and generate osd running worker nodes in the same machinesets as the new nodes,
+    or if it's a 1AZ cluster, it generates osd running worker nodes in the same rack or zone as the new nodes.
+    This function is only for an IPI deployment
+
+    Args:
+        osd_running_worker_nodes: The list to use in the function for generate osd running worker nodes.
+            If not provided, it generates all the osd running worker nodes.
+        num_of_nodes (int): The number of the new nodes to create and generate. The default value is 2.
+
+    Returns:
+        list: The list of the generated osd running worker nodes
+
+    """
+    osd_running_worker_nodes = osd_running_worker_nodes or get_osd_running_nodes()
+
+    # Get the machine name using the node name
+    machine_names = [
+        machine.get_machine_from_node_name(osd_running_worker_node)
+        for osd_running_worker_node in osd_running_worker_nodes[:num_of_nodes]
+    ]
+    log.info(f"{osd_running_worker_nodes} associated " f"machine are {machine_names}")
+
+    # Get the machineset name using machine name
+    machineset_names = [
+        machine.get_machineset_from_machine_name(machine_name)
+        for machine_name in machine_names
+    ]
+    log.info(
+        f"{osd_running_worker_nodes[:num_of_nodes]} associated machineset is {machineset_names}"
+    )
+
+    # Add a new nodes and label it
+    new_node_names = []
+    machineset_names = machineset_names[:num_of_nodes]
+    for mset in machineset_names:
+        new_node_names.extend(add_new_node_and_label_it(mset))
+    log.info(f"New added nodes: {new_node_names}")
+
+    num_of_racks = get_num_of_racks()
+    num_of_zones = get_az_count()
+
+    if num_of_zones == 1 and num_of_racks >= 3:
+        log.info(
+            f"We have 1 AZ and {num_of_racks} racks in the cluster. "
+            f"Get the osd worker nodes in the same racks as the newly added nodes"
+        )
+        new_nodes = get_node_objs(new_node_names)
+        failure_domain = "rack"
+        osd_running_worker_nodes = []
+        for n in new_nodes:
+            osd_node = get_another_osd_node_in_same_rack_or_zone(
+                failure_domain, node_obj=n
+            )
+            osd_running_worker_nodes.append(osd_node.name)
+
+        log.info(f"osd running worker nodes: {osd_running_worker_nodes}")
+
+    return osd_running_worker_nodes[:num_of_nodes]
+
+
+def is_node_rack_or_zone_exist(failure_domain, node_name):
+    """
+    Check if the node rack/zone exist
+
+    Args:
+        failure_domain (str): The failure domain
+        node_name (str): The node name
+
+    Returns:
+        bool: True if the node rack/zone exist. False otherwise
+
+    """
+    node_obj = get_node_objs([node_name])[0]
+    return get_node_rack_or_zone(failure_domain, node_obj) is not None
