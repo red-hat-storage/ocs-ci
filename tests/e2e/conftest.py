@@ -48,6 +48,7 @@ from ocs_ci.helpers.helpers import (
     validate_pv_delete,
     default_storage_class,
 )
+from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.utility.utils import clone_notify
 
 logger = logging.getLogger(__name__)
@@ -147,6 +148,10 @@ def noobaa_db_backup_and_recovery_locally(
             "noobaa-server",
             "noobaa-endpoints",
         ]
+        if is_kms_enabled():
+            secrets = [
+                secret for secret in secrets if secret != "noobaa-root-master-key"
+            ]
         secrets_yaml = [
             ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
         ]
