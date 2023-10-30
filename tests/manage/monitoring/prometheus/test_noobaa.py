@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.framework.testlib import (
     polarion_id,
@@ -16,6 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@pytest.mark.skip(reason="This test scenario is not fixed in 4.12 (BZ 2154250)")
 @tier2
 @polarion_id("OCS-1254")
 @bugzilla("2154250")
