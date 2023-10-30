@@ -14,7 +14,7 @@ controlPlane:
   hyperthreading: Enabled
   name: master
   platform:
-    ibmcloud: {}
+    ibmcloud: {{ master_instance_type | default('bx2-4x16') }}
   replicas: {{ master_replicas | default(3) }}
 metadata:
   creationTimestamp: null
