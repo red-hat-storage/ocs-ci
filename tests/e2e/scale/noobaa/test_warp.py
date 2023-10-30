@@ -50,35 +50,50 @@ class TestWarp(E2ETest):
                 *[1, "OC", None],
             ),
             pytest.param(
-                *[1, "OC",
-                  {
-                      "interface": "OC",
-                      "backingstore_dict": {"pv": [(1, 100, DEFAULT_STORAGECLASS_RBD)]}}],
+                *[
+                    1,
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {
+                            "pv": [(1, 100, DEFAULT_STORAGECLASS_RBD)]
+                        },
+                    },
+                ],
             ),
             pytest.param(
-                *[1, "OC",
-                  {
-                      "interface": "OC",
-                      "backingstore_dict": {"aws": [(1, "eu-central-1")]}}],
+                *[
+                    1,
+                    "OC",
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                ],
             ),
             pytest.param(
-                *[1, "OC",
-                  {
-                      "interface": "OC",
-                      "backingstore_dict": {"azure": [(1, None)]}}],
+                *[
+                    1,
+                    "OC",
+                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                ],
             ),
             pytest.param(
-                *[1, "OC",
-                  {
-                      "interface": "OC",
-                      "backingstore_dict": {"gcp": [(1, None)]}}],
-                marks=[pytest.mark.skip(GCP_ACCOUNT_SKIP),],
+                *[
+                    1,
+                    "OC",
+                    {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
+                ],
+                marks=[
+                    pytest.mark.skip(GCP_ACCOUNT_SKIP),
+                ],
             ),
             pytest.param(
-                *[1, "OC",
-                  {
-                      "interface": "OC",
-                      "backingstore_dict": {"ibmcos": [(1, None)]}}],
+                *[
+                    1,
+                    "OC",
+                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                ],
             ),
         ],
         ids=[
@@ -88,12 +103,18 @@ class TestWarp(E2ETest):
             "OC-AZURE",
             "OC-GCP",
             "OC-IBMCOS",
-        ]
+        ],
     )
     def test_s3_benchmark_warp(
-        self, warps3, mcg_obj, backingstore_factory,
-        bucket_class_factory, bucket_factory, amount,
-        interface, bucketclass_dict,
+        self,
+        warps3,
+        mcg_obj,
+        backingstore_factory,
+        bucket_class_factory,
+        bucket_factory,
+        amount,
+        interface,
+        bucketclass_dict,
     ):
         """
         Test flow:
@@ -104,9 +125,9 @@ class TestWarp(E2ETest):
         """
 
         # Create an Object bucket
-        object_bucket = bucket_factory(amount, interface,
-                                       bucketclass=bucketclass_dict,
-                                       verify_health=False)[0]
+        object_bucket = bucket_factory(
+            amount, interface, bucketclass=bucketclass_dict, verify_health=False
+        )[0]
         object_bucket.verify_health(timeout=180)
 
         # Check noobaa pods status before running Warp benchmark
