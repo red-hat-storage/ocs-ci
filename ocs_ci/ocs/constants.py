@@ -2358,3 +2358,12 @@ AWS_REGIONS_DOC_URL = "https://docs.aws.amazon.com/general/latest/gr/rande.html"
 
 # dir of template for html reports
 HTML_REPORT_TEMPLATE_DIR = "ocs_ci/templates/html_reports/"
+
+
+# Google Cloud platform
+GCP_PROJECT_ODF_QE = "odf-qe"
+# Operation names
+OPERATION_STOP = "stop"
+OPERATION_START = "start"
+OPERATION_RESTART = "restart"
+OPERATION_TERMINATE = "terminate"
