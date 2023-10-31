@@ -190,7 +190,12 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             count=3,
             timeout=820,
         )
-        verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
+        mgr_count = constants.MGR_COUNT_415
+        if upgrade_version < parse_version("4.15"):
+            mgr_count = constants.MGR_COUNT
+        verify_pods_upgraded(
+            old_images, selector=constants.MGR_APP_LABEL, count=mgr_count
+        )
         osd_timeout = 600 if upgrade_version >= parse_version("4.5") else 750
         osd_count = get_osd_count()
         # In the debugging issue:
