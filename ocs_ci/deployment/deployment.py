@@ -1559,6 +1559,12 @@ class Deployment(object):
                 mcg_only_post_deployment_checks()
                 return
 
+            # get ODF version and set MGR count based on ODF version
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            mgr_count = constants.MGR_COUNT_415
+            if ocs_version < version.VERSION_4_15:
+                mgr_count = constants.MGR_COUNT
+
             pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
             cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
             # Check for Ceph pods
@@ -1570,7 +1576,10 @@ class Deployment(object):
                 timeout=mon_pod_timeout,
             )
             assert pod.wait_for_resource(
-                condition="Running", selector="app=rook-ceph-mgr", timeout=600
+                condition="Running",
+                selector="app=rook-ceph-mgr",
+                resource_count=mgr_count,
+                timeout=600,
             )
             assert pod.wait_for_resource(
                 condition="Running",
@@ -1583,7 +1592,6 @@ class Deployment(object):
             validate_cluster_on_pvc()
 
             # check for odf-console
-            ocs_version = version.get_semantic_ocs_version_from_config()
             if ocs_version >= version.VERSION_4_9:
                 assert pod.wait_for_resource(
                     condition="Running", selector="app=odf-console", timeout=600
