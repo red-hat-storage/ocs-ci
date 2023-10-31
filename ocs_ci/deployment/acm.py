@@ -115,7 +115,7 @@ class Submariner(object):
         This is a prereq for downstream unreleased submariner
 
         """
-        icsp_data = templating.load_yaml(constants.ACM_DOWNSTREAM_BREW_ICSP)
+        icsp_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_ICSP)
         icsp_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_icsp", delete=False
         )

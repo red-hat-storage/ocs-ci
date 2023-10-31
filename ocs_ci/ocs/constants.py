@@ -2113,8 +2113,8 @@ ACM_HUB_UNRELEASED_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
 ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
 )
-ACM_DOWNSTREAM_BREW_ICSP = os.path.join(
-    TEMPLATE_DIR, "acm-deployment", "acm_downstream_brew_icsp.yaml"
+SUBMARINER_DOWNSTREAM_BREW_ICSP = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_icsp.yaml"
 )
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"

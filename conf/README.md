@@ -258,7 +258,7 @@ higher priority).
 * `storageclassnames` - Under this key, custom storage class names for `cephFilesystems`, `cephObjectStores`, `cephBlockPools`, `cephNonResilientPools`, `nfs` and for `encryption` are defined.
 * `submariner_source` - Source from which we take submariner build, ex: upstream, downstream, downstream_unreleased
 * `submariner_release_type` - Released OR Unreleased submariner build
-* `enable_globalnet` - enable or disable globalnet for submariner
+* `enable_globalnet` - enable or disable globalnet for submariner, default: true
 * `submariner_unreleased_channel` - submariner channel for unreleased downstream build
 
 #### UPGRADE
