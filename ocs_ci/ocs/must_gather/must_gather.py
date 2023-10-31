@@ -202,6 +202,7 @@ class MustGather(object):
             r"^vmware-*",
             "^must-gather",
             r"-debug$",
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2245246
             r"^csi-addons-controller-manager*",
         ]
         for regular_ex in regular_ex_list:
