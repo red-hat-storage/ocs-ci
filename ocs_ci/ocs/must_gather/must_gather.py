@@ -202,6 +202,7 @@ class MustGather(object):
             r"^vmware-*",
             "^must-gather",
             r"-debug$",
+            r"^csi-addons-controller-manager*",
         ]
         for regular_ex in regular_ex_list:
             if re.search(regular_ex, pod_name) is not None:
