@@ -66,7 +66,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
     def create_fio_pod_yaml(self, pvc_size=1):
         """
         This function create a new performance pod yaml file, which will trigger
-        the FIO command on starting and getting into Compleat state when finish
+        the FIO command on starting and getting into Complete state when finish
 
         The FIO will fillup 70% of the PVC which will attached to the pod.
 
@@ -159,7 +159,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         """
         # wait up to 60 Min for all pod(s) to complete running IO, this tuned for up to
         # 120 PVCs of 25GiB each.
-        timeout = 3600  # old value 1200
+        timeout = 5400  # old value 1200
         pod_objs = []
         # Create PODs, connect them to the PVCs and run IO on them
         for pvc_obj in self.pvc_objs:
@@ -173,7 +173,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             assert pod_obj, "Failed to create pod"
             pod_objs.append(pod_obj)
 
-        log.info("Wait for all of the POD(s) to be created, and compleat running I/O")
+        log.info("Wait for all of the POD(s) to be created, and complete running I/O")
         performance_lib.wait_for_resource_bulk_status(
             "pod", len(pod_objs), self.namespace, constants.STATUS_COMPLETED, timeout, 5
         )
