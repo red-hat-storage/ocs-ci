@@ -321,7 +321,7 @@ class TestFIOBenchmark(PASTest):
         else:
             sleeptime = 300
 
-        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=4200)
+        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=5400)
 
         try:
             if "Fio failed to execute" not in self.test_logs:
