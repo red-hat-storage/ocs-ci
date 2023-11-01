@@ -427,11 +427,14 @@ class PASTest(BaseTest):
                 namespace=benchmark_operator.BMO_NAME,
             )
             (fname, status) = ["", ""]
+            log.info(f'total_time{total_time}')
             for name in results:
                 # looking for the pod which run the benchmark (not the IO)
                 # this pod contain the `client` in his name, and there is only one
                 # pod like this, other pods have the `server` in the name.
                 (fname, status) = name.split()
+                log.info(f'finame{fname}')
+                log.info(f'totaall_time{total_time}')
                 if re.search("client", fname):
                     break
                 else:

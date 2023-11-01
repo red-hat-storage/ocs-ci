@@ -172,7 +172,7 @@ class TestFIOBenchmark(PASTest):
         ceph_cluster = CephCluster()
         ceph_capacity = ceph_cluster.get_ceph_capacity()
         log.info(f"Total storage capacity is {ceph_capacity} GiB")
-        self.total_data_set = int(ceph_capacity * 0.4)
+        self.total_data_set = int(ceph_capacity * 0.04)
         self.filesize = int(
             self.crd_data["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
         )
@@ -321,7 +321,7 @@ class TestFIOBenchmark(PASTest):
         else:
             sleeptime = 300
 
-        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=36000)
+        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=4200)
 
         try:
             if "Fio failed to execute" not in self.test_logs:
