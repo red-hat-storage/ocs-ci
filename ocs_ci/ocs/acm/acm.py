@@ -289,9 +289,15 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_send_keys(
             self.page_nav["submariner-custom-source"], "submariner-catalogsource"
         )
+        submariner_unreleased_channel = (
+            config.ENV_DATA["submariner_unreleased_channel"]
+            if config.ENV_DATA["submariner_unreleased_channel"]
+            else config.ENV_DATA["submariner_version"].rpartition(".")[0]
+        )
+        channel_name = "stable-" + submariner_unreleased_channel
         self.do_send_keys(
             self.page_nav["submariner-custom-channel"],
-            config.ENV_DATA["submariner_unreleased_channel"],
+            channel_name,
         )
 
     def submariner_validation_ui(self):
