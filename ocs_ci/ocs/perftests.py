@@ -420,7 +420,7 @@ class PASTest(BaseTest):
 
         Finished = 0
         restarts = 0
-        timeout = 6000
+        timeout = 9000
         total_time = timeout
         while not Finished and total_time > 0:
             results = run_oc_command(
