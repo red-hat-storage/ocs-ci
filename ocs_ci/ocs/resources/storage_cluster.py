@@ -1731,8 +1731,8 @@ def verify_multus_network():
         ]
         if public_net_created:
             assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+                public_net_name in pod_networks
+            ), f"{public_net_name} not in {pod_networks}"
 
         osd_id = get_osd_pod_id(_pod)
         log.info(
@@ -1785,8 +1785,8 @@ def verify_multus_network():
                 "k8s.v1.cni.cncf.io/networks"
             ]
             assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+                public_net_name in pod_networks
+            ), f"{public_net_name} not in {pod_networks}"
 
         log.info("Verifying multus public network exists on CSI pods")
         csi_pods = []
@@ -1806,8 +1806,8 @@ def verify_multus_network():
                 "k8s.v1.cni.cncf.io/networks"
             ]
             assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+                public_net_name in pod_networks
+            ), f"{public_net_name} not in {pod_networks}"
 
         log.info("Verifying MDS Map IPs are in the multus public network range")
         ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
