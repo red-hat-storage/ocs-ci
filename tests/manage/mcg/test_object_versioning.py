@@ -191,7 +191,7 @@ class TestObjectVersioning:
         assert object_info["Versions"][0]["IsLatest"] == True
         assert object_info["Versions"][0]["VersionId"] != version_ids[0]
         assert object_info["Versions"][1]["IsLatest"] == False
-        version_ids.append(object_info["Versions"][1]["VersionId"])
+        version_ids.append(object_info["Versions"][0]["VersionId"])
         assert object_info["Versions"][1]["VersionId"] == version_ids[0]
         assert version_ids[0] != version_ids[1]
         assert object_info["Versions"][0]["Key"] == object_info["Versions"][1]["Key"]
@@ -213,7 +213,7 @@ class TestObjectVersioning:
         assert object_info["Versions"][0]["VersionId"] != version_ids[0]
         assert object_info["Versions"][1]["IsLatest"] == False
         assert object_info["Versions"][2]["IsLatest"] == False
-        version_ids.append(object_info["versions"][1]["versionid"])
+        version_ids.append(object_info["versions"][0]["versionid"])
         assert object_info["Versions"][2]["VersionId"] == version_ids[0]
         assert len(set(version_ids)) == 3
         assert object_info["Versions"][0]["Key"] == object_info["Versions"][1]["Key"]
@@ -294,9 +294,21 @@ class TestObjectVersioning:
 
     @tier2
     def test_listing(self, bucket_factory, mcg_obj_session, setup_file_object):
-        """ """
+        """
+        Test listing of objects in versioned bucket.
+
+        Steps:
+            1. Create a bucket with 80 files, 20 new versions and 2 directories
+            2. Check that there is 102 objects in the bucket
+            3. Check listing with Key markers
+            4. Check listing with prefix and delimiter
+
+        """
         s3_obj = mcg_obj_session
         filename = setup_file_object
+        logger.info(
+            "Creating a bucket with 80 files, 20 new versions and 2 directories"
+        )
         bucket = bucket_factory(interface="S3", versioning=True)[0]
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
@@ -310,24 +322,59 @@ class TestObjectVersioning:
             s3_put_object(s3_obj, bucket.name, f"{filename}{i}", filename)
         for i in range(20):
             s3_put_object(s3_obj, bucket.name, f"testdir/{filename}{i}", filename)
+        # add new versions of files in directory testdir
+        for i in range(20):
+            s3_put_object(s3_obj, bucket.name, f"testdir/{filename}{i}", filename)
+
+        logger.info("Check that there is 102 objects in the bucket")
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        assert len(object_info["Versions"]) == 102
+
+        logger.info("Check listing of 35 files")
         object_info = bucket.s3client.list_object_versions(
             Bucket=bucket.name, MaxKeys=35
         )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        version_ids = [x["VersionId"] for x in object_info["Versions"]]
+        assert len(set(version_ids)) == 35
+        assert object_info["NextVersionIdMarker"]
+        assert object_info["NextKeyMarker"]
+
+        logger.info(
+            "Check listing of 35 files following NextKeyMarker from previous listing"
+        )
         object_info = bucket.s3client.list_object_versions(
             Bucket=bucket.name, MaxKeys=35, KeyMarker=object_info["NextKeyMarker"]
         )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        version_ids2 = [x["VersionId"] for x in object_info["Versions"]]
+        assert len(set(version_ids2)) == 35
+        assert not set(version_ids).intersection(version_ids2)
+        assert object_info["NextVersionIdMarker"]
+        assert object_info["NextKeyMarker"]
+
+        logger.info("Check listing of following 32 files")
+        object_info = bucket.s3client.list_object_versions(
+            Bucket=bucket.name, MaxKeys=32, KeyMarker=object_info["NextKeyMarker"]
+        )
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        version_ids3 = [x["VersionId"] for x in object_info["Versions"]]
+        assert len(set(version_ids3)) == 30
+        assert not set(version_ids2).intersection(version_ids3)
+        assert object_info["NextVersionIdMarker"]
+        assert object_info["NextKeyMarker"]
+
+        logger.info("Check listing of following 30 files, the list should be smaller")
         object_info = bucket.s3client.list_object_versions(
             Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"]
         )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        object_info = bucket.s3client.list_object_versions(
-            Bucket=bucket.name, MaxKeys=30, KeyMarker=object_info["NextKeyMarker"]
-        )
-        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        version_ids4 = [x["VersionId"] for x in object_info["Versions"]]
+        assert len(set(version_ids4)) == 11
+        assert not set(version_ids3).intersection(version_ids4)
+
+        logger.info(f"Check listing with a prefix and delimiter")
         object_info = bucket.s3client.list_object_versions(
             Bucket=bucket.name, Prefix="testdir/", Delimiter="/"
         )
