@@ -147,25 +147,32 @@ def pytest_report_teststatus(report, config):
     GV.TIMEREPORT_DICT[report.nodeid] = GV.TIMEREPORT_DICT.get(report.nodeid, {})
 
     if report.when == "setup":
+        setup_duration = round(report.duration, 2)
         logger.info(
-            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+            f"duration reported by {report.nodeid} immediately after test execution: {setup_duration}"
         )
-        GV.TIMEREPORT_DICT[report.nodeid]["setup"] = round(report.duration, 2)
-        GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["setup"] = setup_duration
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = setup_duration
 
     if "total" not in GV.TIMEREPORT_DICT[report.nodeid]:
         GV.TIMEREPORT_DICT[report.nodeid]["total"] = 0
 
     if report.when == "call":
+        call_duration = round(report.duration, 2)
         logger.info(
-            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+            f"duration reported by {report.nodeid} immediately after test execution: {call_duration}"
         )
-        GV.TIMEREPORT_DICT[report.nodeid]["call"] = round(report.duration, 2)
-        GV.TIMEREPORT_DICT[report.nodeid]["total"] += round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["call"] = call_duration
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(
+            GV.TIMEREPORT_DICT[report.nodeid]["total"] + call_duration, 2
+        )
 
     if report.when == "teardown":
+        teardown_duration = round(report.duration, 2)
         logger.info(
-            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+            f"duration reported by {report.nodeid} immediately after test execution: {teardown_duration}"
         )
-        GV.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(report.duration, 2)
-        GV.TIMEREPORT_DICT[report.nodeid]["total"] += round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["teardown"] = teardown_duration
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(
+            GV.TIMEREPORT_DICT[report.nodeid]["total"] + teardown_duration, 2
+        )

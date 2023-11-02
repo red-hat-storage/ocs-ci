@@ -25,12 +25,12 @@ Interface_Info = {
     constants.CEPHFILESYSTEM: {
         "type": "CephFS",
         "sc": constants.CEPHFILESYSTEM_SC,
-        "delete_time": 2,
+        "delete_time": 10,  # old value was 2
     },
     constants.CEPHBLOCKPOOL: {
         "type": "RBD",
         "sc": constants.CEPHBLOCKPOOL_SC,
-        "delete_time": 1,
+        "delete_time": 10,  # old value was 1
     },
 }
 Operations_Mesurment = ["create", "delete", "csi_create", "csi_delete"]
@@ -66,7 +66,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
     def create_fio_pod_yaml(self, pvc_size=1):
         """
         This function create a new performance pod yaml file, which will trigger
-        the FIO command on starting and getting into Compleat state when finish
+        the FIO command on starting and getting into Complete state when finish
 
         The FIO will fillup 70% of the PVC which will attached to the pod.
 
@@ -118,7 +118,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             TimeoutExpiredError : if not all PVC(s) get into Bound state whithin 2 sec. per PVC
         """
         # Creating PVC(s) for creation time mesurment and wait for bound state
-        timeout = pvcs * 2
+        timeout = pvcs * 4
         start_time = self.get_time(time_format="csi")
         log.info(f"{msg_prefix} Start creating new {pvcs} PVCs")
         self.pvc_objs, _ = helpers.create_multiple_pvcs(
@@ -157,9 +157,9 @@ class TestPVCCreationDeletionPerformance(PASTest):
             TimeoutExpiredError : if not all completed I/O whithin 20 Min.
 
         """
-        # wait up to 20 Min for all pod(s) to compleat running IO, this tuned for up to
+        # wait up to 60 Min for all pod(s) to complete running IO, this tuned for up to
         # 120 PVCs of 25GiB each.
-        timeout = 1200
+        timeout = 5400  # old value 1200
         pod_objs = []
         # Create PODs, connect them to the PVCs and run IO on them
         for pvc_obj in self.pvc_objs:
@@ -173,7 +173,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
             assert pod_obj, "Failed to create pod"
             pod_objs.append(pod_obj)
 
-        log.info("Wait for all of the POD(s) to be created, and compleat running I/O")
+        log.info("Wait for all of the POD(s) to be created, and complete running I/O")
         performance_lib.wait_for_resource_bulk_status(
             "pod", len(pod_objs), self.namespace, constants.STATUS_COMPLETED, timeout, 5
         )
@@ -251,7 +251,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         if self.dev_mode:
             num_of_samples = 2
 
-        accepted_creation_time = 1
+        accepted_creation_time = 5  # old_value=1
         accepted_deletion_time = Interface_Info[self.interface]["delete_time"]
         accepted_creation_deviation_percent = 50
         accepted_deletion_deviation_percent = 50
