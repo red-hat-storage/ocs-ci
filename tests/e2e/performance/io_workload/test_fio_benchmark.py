@@ -186,7 +186,7 @@ class TestFIOBenchmark(PASTest):
             # make sure that the storage size is larger then the file size
             self.crd_data["spec"]["workload"]["args"][
                 "storagesize"
-            ] = f"{int(self.filesize * 1.4)}Gi"
+            ] = f"{int(self.filesize * 1.5)}Gi"
         self.crd_data["spec"]["workload"]["args"]["servers"] = int(
             self.total_data_set / self.filesize
         )
