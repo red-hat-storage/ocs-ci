@@ -1844,7 +1844,8 @@ def verify_networks_in_ceph_pod(pod_networks, net_name, net_namespace):
         net_name (str): the network-attachment-definitions name
         net_namespace (str): the network-attachment-definitions namespace
 
-    bool: return True if net_name and net_namespce exist in pod_networks otherwise False
+    Returns:
+        bool: return True if net_name and net_namespce exist in pod_networks otherwise False
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
