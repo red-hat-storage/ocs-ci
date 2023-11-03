@@ -3816,7 +3816,7 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=1200, skip_tls_verify=False):
+def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=False):
     """
     Check for Machineconfigpool status
 
