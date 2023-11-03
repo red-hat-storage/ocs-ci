@@ -13,11 +13,7 @@ from ocs_ci.ocs.node import (
     unschedule_nodes,
     drain_nodes,
 )
-from ocs_ci.ocs.resources.pod import (
-    wait_for_pods_to_be_running,
-    get_pods_having_label,
-    get_pod_node,
-)
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running, get_pods_having_label
 from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
@@ -92,24 +88,28 @@ class TestNodeDrainDuringFailoverRelocate:
         # Select node on secondary cluster(failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
         if pod_to_select_node == "ramen_dr_cluster_operator":
-            node_obj = get_pod_node(
+            node_name = (
                 get_pods_having_label(
                     label=constants.RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL,
                     namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
                 )[0]
+                .get("spec")
+                .get("nodeName")
             )
         else:
-            node_obj = get_pod_node(
+            node_name = (
                 get_pods_having_label(
                     label=constants.RBD_MIRROR_APP_LABEL,
                     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                 )[0]
+                .get("spec")
+                .get("nodeName")
             )
 
         # Unschedule and start drain node
-        unschedule_nodes([node_obj.resource_name])
+        unschedule_nodes([node_name])
         executor = ThreadPoolExecutor(max_workers=1)
-        node_drain_operaton = executor.submit(drain_nodes, [node_obj.resource_name])
+        node_drain_operaton = executor.submit(drain_nodes, [node_name])
 
         # Failover operation
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -162,24 +162,28 @@ class TestNodeDrainDuringFailoverRelocate:
 
         # Select node on primary cluster(preferredCluster)
         if pod_to_select_node == "ramen_dr_cluster_operator":
-            node_obj = get_pod_node(
+            node_name = (
                 get_pods_having_label(
                     label=constants.RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL,
                     namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
                 )[0]
+                .get("spec")
+                .get("nodeName")
             )
         else:
-            node_obj = get_pod_node(
+            node_name = (
                 get_pods_having_label(
                     label=constants.RBD_MIRROR_APP_LABEL,
                     namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                 )[0]
+                .get("spec")
+                .get("nodeName")
             )
 
         # Unschedule and start drain node
-        unschedule_nodes([node_obj.resource_name])
+        unschedule_nodes([node_name])
         executor = ThreadPoolExecutor(max_workers=1)
-        node_drain_operaton = executor.submit(drain_nodes, [node_obj.resource_name])
+        node_drain_operaton = executor.submit(drain_nodes, [node_name])
 
         # Perform relocate
         dr_helpers.relocate(
