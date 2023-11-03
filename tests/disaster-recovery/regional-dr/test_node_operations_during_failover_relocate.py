@@ -28,26 +28,25 @@ class TestNodeDrainDuringFailoverRelocate:
         argnames=["workload_type", "pod_to_select_node"],
         argvalues=[
             pytest.param(
-                *[constants.SUBSCRIPTION, "rbd-mirror"],
+                *[constants.SUBSCRIPTION, "rbd_mirror"],
                 marks=pytest.mark.polarion_id("OCS-4441"),
             ),
             pytest.param(
-                *[constants.SUBSCRIPTION, "odr-operator"],
+                *[constants.SUBSCRIPTION, "odr_operator"],
                 marks=pytest.mark.polarion_id("OCS-4443"),
             ),
             pytest.param(
-                *[constants.APPLICATION_SET, "rbd-mirror"],
+                *[constants.APPLICATION_SET, "rbd_mirror"],
                 marks=pytest.mark.polarion_id("OCS-4441"),
             ),
             pytest.param(
-                *[constants.APPLICATION_SET, "odr-operator"],
+                *[constants.APPLICATION_SET, "odr_operator"],
                 marks=pytest.mark.polarion_id("OCS-4443"),
             ),
         ],
     )
-    def test_failover_and_relocate(
+    def test_node_drain_during_failover_and_relocate(
         self,
-        setup_acm_ui,
         dr_workload,
         workload_type,
         pod_to_select_node,
