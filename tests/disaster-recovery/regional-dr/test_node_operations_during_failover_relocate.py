@@ -12,6 +12,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     unschedule_nodes,
     drain_nodes,
+    schedule_nodes,
 )
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running, get_pods_having_label
 from ocs_ci.utility.utils import ceph_health_check
@@ -53,6 +54,7 @@ class TestNodeDrainDuringFailoverRelocate:
         workload_type,
         pod_to_select_node,
         nodes_multicluster,
+        node_drain_teardown,
         node_restart_teardown,
     ):
         """
@@ -106,7 +108,7 @@ class TestNodeDrainDuringFailoverRelocate:
                 .get("nodeName")
             )
 
-        # Unschedule and start drain node
+        # Unschedule and start drain node operation
         unschedule_nodes([node_name])
         executor = ThreadPoolExecutor(max_workers=1)
         node_drain_operaton = executor.submit(drain_nodes, [node_name])
@@ -135,6 +137,9 @@ class TestNodeDrainDuringFailoverRelocate:
 
         # Verify the result of node drain operation
         node_drain_operaton.result()
+
+        # Make the node in the secondary cluster schedule-able
+        schedule_nodes([node_name])
 
         # Start node on primary cluster
         logger.info(
@@ -180,7 +185,7 @@ class TestNodeDrainDuringFailoverRelocate:
                 .get("nodeName")
             )
 
-        # Unschedule and start drain node
+        # Unschedule and start drain node operation
         unschedule_nodes([node_name])
         executor = ThreadPoolExecutor(max_workers=1)
         node_drain_operaton = executor.submit(drain_nodes, [node_name])
@@ -213,3 +218,6 @@ class TestNodeDrainDuringFailoverRelocate:
 
         # Verify the result of node drain operation
         node_drain_operaton.result()
+
+        # Make the node in the primary cluster schedule-able
+        schedule_nodes([node_name])
