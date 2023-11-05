@@ -2544,6 +2544,7 @@ def patch_storage_cluster_for_custom_storage_class(
         return False
 
 
+@retry(AssertionError, 50, 10, 1)
 def validate_serviceexport():
     """
     validate the serviceexport resource
