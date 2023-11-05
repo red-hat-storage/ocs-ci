@@ -16,19 +16,12 @@ from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.utils import ocsci_log_path
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
 Interfaces_info = {
-    constants.CEPHBLOCKPOOL: {
-        "name": "RBD",
-        "sc_interface": constants.OCS_COMPONENTS_MAP["blockpools"],
-    },
-    constants.CEPHFILESYSTEM: {
-        "name": "CephFS",
-        "sc_interface": constants.OCS_COMPONENTS_MAP["cephfs"],
-    },
+    constants.CEPHBLOCKPOOL: {"name": "RBD", "sc": constants.CEPHBLOCKPOOL_SC},
+    constants.CEPHFILESYSTEM: {"name": "CephFS", "sc": constants.CEPHFILESYSTEM_SC},
 }
 
 
@@ -143,7 +136,7 @@ class TestBulkPodAttachPerformance(PASTest):
 
         log.info(f"Start creating bulk of new {bulk_size} PVCs")
         self.pvc_objs, _ = helpers.create_multiple_pvcs(
-            sc_name=storageclass_name(Interfaces_info[self.interface]["sc_interface"]),
+            sc_name=Interfaces_info[self.interface]["sc"],
             namespace=self.namespace,
             number_of_pvc=bulk_size,
             size=self.pvc_size,

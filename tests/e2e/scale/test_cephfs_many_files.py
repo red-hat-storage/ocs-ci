@@ -13,7 +13,6 @@ from ocs_ci.ocs import ocp, constants
 from ocs_ci.utility.utils import run_cmd, ceph_health_check
 from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 TARFILE = "cephfs.tar.gz"
 SIZE = "20Gi"
@@ -81,7 +80,7 @@ class MillionFilesOnCephfs(object):
         self.pod_name = pod_info["metadata"]["name"] + str(uuid.uuid4())
         config.RUN["cli_params"]["teardown"] = True
         self.cephfs_pvc = helpers.create_pvc(
-            sc_name=storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
+            sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
             namespace=config.ENV_DATA["cluster_namespace"],
             pvc_name=pvc_name,
             size=SIZE,

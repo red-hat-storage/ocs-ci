@@ -23,20 +23,19 @@ from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.perfresult import ResultsAnalyse
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
 
 log = logging.getLogger(__name__)
 
 Interfaces_info = {
     constants.CEPHBLOCKPOOL: {
         "name": "RBD",
-        "sc_interface": constants.OCS_COMPONENTS_MAP["blockpools"],
+        "sc_name": constants.DEFAULT_STORAGECLASS_RBD,
         "clone_yaml": constants.CSI_RBD_PVC_CLONE_YAML,
         "accessmode": constants.ACCESS_MODE_RWO,
     },
     constants.CEPHFILESYSTEM: {
         "name": "CephFS",
-        "sc_interface": constants.OCS_COMPONENTS_MAP["cephfs"],
+        "sc_name": constants.DEFAULT_STORAGECLASS_CEPHFS,
         "clone_yaml": constants.CSI_CEPHFS_PVC_CLONE_YAML,
         "accessmode": constants.ACCESS_MODE_RWX,
     },
@@ -140,9 +139,7 @@ class TestBulkCloneCreation(PASTest):
             pvc_dict_list = scale_lib.construct_pvc_creation_yaml_bulk_for_kube_job(
                 no_of_pvc=self.pvc_count,
                 access_mode=Interfaces_info[self.interface]["accessmode"],
-                sc_name=storageclass_name(
-                    Interfaces_info[self.interface]["sc_interface"]
-                ),
+                sc_name=Interfaces_info[self.interface]["sc_name"],
                 pvc_size=self.vol_size,
             )
 
@@ -202,7 +199,7 @@ class TestBulkCloneCreation(PASTest):
             clone_dict_list = scale_lib.construct_pvc_clone_yaml_bulk_for_kube_job(
                 pvc_dict_list,
                 Interfaces_info[self.interface]["clone_yaml"],
-                Interfaces_info[self.interface]["sc_interface"],
+                Interfaces_info[self.interface]["sc_name"],
             )
 
             log.info("Created clone dict list")
