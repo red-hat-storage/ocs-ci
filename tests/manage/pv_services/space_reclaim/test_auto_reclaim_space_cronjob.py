@@ -15,8 +15,8 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import PVCNotCreated, TimeoutExpiredError
 from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.ocs.exceptions import PVCNotCreated
 
 logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
