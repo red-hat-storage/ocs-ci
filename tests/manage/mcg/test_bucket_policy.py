@@ -985,3 +985,62 @@ class TestS3BucketPolicy(MCGTest):
         # Completing the Multipart Upload
         logger.info(f"Completing the MP Upload with on bucket: {bucket}")
         complete_multipart_upload(obc_obj, bucket, object_key, upload_id, uploaded_part)
+
+    @tier1
+    @pytest.mark.bugzilla("2210289")
+    @pytest.mark.polarion_id("OCS-5183")
+    def test_supported_bucket_policy_operations(self, mcg_obj, bucket_factory):
+        """
+        Test supported s3 bucket policies.
+        """
+        # Creating obc and obc object to get account details, keys etc
+        obc_name = bucket_factory(amount=1, interface="OC")[0].name
+        obc_obj = OBC(obc_name)
+
+        actions_list = [
+            "GetBucketObjectLockConfiguration",
+            "GetObjectRetention",
+            "GetObjectLegalHold",
+            "PutBucketObjectLockConfiguration",
+            "PutObjectRetention",
+            "GetObjectLegalHold",
+        ]
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=obc_obj.obc_account,
+            actions_list=actions_list,
+            resources_list=[obc_obj.bucket_name],
+        )
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        # Add Bucket Policy
+        logger.info(f"Creating bucket policy on bucket: {obc_obj.bucket_name}")
+        put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+
+        assert put_policy is not None, "Put policy response is None"
+        response = HttpResponseParser(put_policy)
+        assert (
+            response.status_code == 200
+        ), f"Invalid Status code: {response.status_code}"
+        logger.info("Bucket policy has been created successfully")
+
+        # Get bucket policy
+        logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        bucket_policy = get_policy["Policy"]
+        logger.info(f"Got bucket policy: {bucket_policy}")
+        bucket_policy = json.loads(bucket_policy)
+
+        # Find the missing bucket policies
+        bucket_policies = bucket_policy["statement"][0]["action"]
+        bucket_policies = [
+            action.split("s3:", 1)[1]
+            for action in bucket_policies
+            if action.startswith("s3:")
+        ]
+        actions_list = [action.lower() for action in actions_list]
+        missing_policies = [
+            action for action in actions_list if action not in bucket_policies
+        ]
+        assert (
+            not missing_policies
+        ), f"Some bucket_policies are not created : {missing_policies}"

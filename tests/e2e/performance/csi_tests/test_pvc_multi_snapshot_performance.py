@@ -21,6 +21,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     performance,
     performance_b,
+    ignore_leftovers,
 )
 
 from ocs_ci.helpers.helpers import get_full_test_logs_path
@@ -44,6 +45,7 @@ ERRMSG = "Error in command"
 @performance_b
 @skipif_ocp_version("<4.6")
 @skipif_ocs_version("<4.6")
+@ignore_leftovers
 class TestPvcMultiSnapshotPerformance(PASTest):
     """
     Tests to measure PVC snapshots creation performance & scale
