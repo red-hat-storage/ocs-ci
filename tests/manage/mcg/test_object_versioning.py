@@ -213,7 +213,7 @@ class TestObjectVersioning:
         assert object_info["Versions"][0]["VersionId"] != version_ids[0]
         assert object_info["Versions"][1]["IsLatest"] == False
         assert object_info["Versions"][2]["IsLatest"] == False
-        version_ids.append(object_info["versions"][0]["versionid"])
+        version_ids.append(object_info["Versions"][0]["VersionId"])
         assert object_info["Versions"][2]["VersionId"] == version_ids[0]
         assert len(set(version_ids)) == 3
         assert object_info["Versions"][0]["Key"] == object_info["Versions"][1]["Key"]
@@ -233,7 +233,7 @@ class TestObjectVersioning:
         assert object_info["Versions"][2]["IsLatest"] == False
         for i in range(3, 8):
             assert object_info["Versions"][i]["IsLatest"] == True
-            version_ids.append(object_info["versions"][i]["versionid"])
+            version_ids.append(object_info["Versions"][i]["VersionId"])
         assert len(set(version_ids)) == 8
 
         logger.info(
@@ -360,7 +360,7 @@ class TestObjectVersioning:
         )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
         version_ids3 = [x["VersionId"] for x in object_info["Versions"]]
-        assert len(set(version_ids3)) == 30
+        assert len(set(version_ids3)) == 31
         assert not set(version_ids2).intersection(version_ids3)
         assert object_info["NextVersionIdMarker"]
         assert object_info["NextKeyMarker"]
