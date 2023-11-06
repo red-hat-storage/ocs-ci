@@ -537,9 +537,10 @@ class TestFIOBenchmark(PASTest):
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
-        self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = self.crd_data["spec"][
+        #self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = self.crd_data["spec"][
             "workload"
         ]["args"]["bs"][0]
+        self.crd_data["spec"]["workload"]["args"]["prefill"] = "false'
 
         self.get_env_info()
 
