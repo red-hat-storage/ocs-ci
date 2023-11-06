@@ -54,8 +54,8 @@ class TestNodeDrainDuringFailoverRelocate:
         workload_type,
         pod_to_select_node,
         nodes_multicluster,
-        node_drain_teardown,
         node_restart_teardown,
+        node_drain_teardown,
     ):
         """
         Tests cases to verify that the failover and relocate operations are not affected when node is drained
