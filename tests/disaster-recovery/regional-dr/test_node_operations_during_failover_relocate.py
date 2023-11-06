@@ -132,14 +132,15 @@ class TestNodeDrainDuringFailoverRelocate:
             rdr_workload.workload_namespace,
         )
 
-        # Verify resources deletion from primary cluster
-        config.switch_to_cluster_by_name(primary_cluster_name)
-
         # Verify the result of node drain operation
         node_drain_operaton.result()
 
         # Make the node in the secondary cluster schedule-able
         schedule_nodes([node_name])
+
+        # Verify resources deletion from primary cluster
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
         # Start node on primary cluster
         logger.info(
@@ -154,9 +155,6 @@ class TestNodeDrainDuringFailoverRelocate:
         ), "Not all the pods reached running state"
         logger.info("Checking for Ceph Health OK")
         ceph_health_check()
-
-        # Verify resources deletion from primary cluster
-        dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
         dr_helpers.wait_for_mirroring_status_ok(
             replaying_images=rdr_workload.workload_pvc_count
