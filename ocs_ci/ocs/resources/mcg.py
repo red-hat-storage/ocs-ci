@@ -747,7 +747,7 @@ class MCG:
                 f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
             )
 
-    def check_if_mirroring_is_done(self, bucket_name, timeout=140):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=300):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
@@ -756,12 +756,12 @@ class MCG:
             bucket_name: The name of the bucket that should be checked
             timeout: timeout in seconds to check if mirroring
 
-        Returns:
-            bool: Whether mirroring finished successfully
+        Raises:
+            AssertionError: In case mirroring is not done in defined time.
 
         """
 
-        def _check_mirroring():
+        def _get_mirroring_percentage():
             results = []
             obj_list = (
                 self.send_rpc_query(
@@ -798,21 +798,29 @@ class MCG:
                         results.append(True)
                     else:
                         results.append(False)
+            current_percentage = (results.count(True) / len(results)) * 100
+            return current_percentage
 
-            return all(results)
-
-        try:
-            for mirroring_is_complete in TimeoutSampler(timeout, 5, _check_mirroring):
-                if mirroring_is_complete:
-                    logger.info("All objects mirrored successfully.")
-                    return True
-                else:
-                    logger.info("Waiting for the mirroring process to finish...")
-        except TimeoutExpiredError:
-            logger.error(
-                "The mirroring process did not complete within the time limit."
-            )
-            assert False
+        mirror_percentage = _get_mirroring_percentage()
+        logger.info(f"{mirror_percentage}% mirroring is done.")
+        previous_percentage = 0
+        while mirror_percentage < 100:
+            previous_percentage = mirror_percentage
+            try:
+                for mirror_percentage in TimeoutSampler(
+                    timeout, 5, _get_mirroring_percentage
+                ):
+                    if previous_percentage == mirror_percentage:
+                        logger.warning("The mirroring process is stuck.")
+                    else:
+                        break
+            except TimeoutExpiredError:
+                logger.error(
+                    f"The mirroring process is stuck from last {timeout} seconds."
+                )
+                assert False
+            mirror_percentage = _get_mirroring_percentage()
+        logger.info("All objects mirrored successfully.")
 
     def check_backingstore_state(self, backingstore_name, desired_state, timeout=600):
         """
