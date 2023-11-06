@@ -108,10 +108,11 @@ class TestNodeDrainDuringFailoverRelocate:
                 .get("nodeName")
             )
 
-        # Unschedule and start drain node operation
+        # Unschedule and start drain node operation on secondary cluster
         unschedule_nodes([node_name])
         executor = ThreadPoolExecutor(max_workers=1)
         node_drain_operaton = executor.submit(drain_nodes, [node_name])
+        sleep(2)
 
         # Failover operation
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -187,6 +188,7 @@ class TestNodeDrainDuringFailoverRelocate:
         unschedule_nodes([node_name])
         executor = ThreadPoolExecutor(max_workers=1)
         node_drain_operaton = executor.submit(drain_nodes, [node_name])
+        sleep(2)
 
         # Perform relocate
         dr_helpers.relocate(
