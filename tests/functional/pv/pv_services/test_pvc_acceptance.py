@@ -237,6 +237,9 @@ class TestPvcAcceptance(ManageTest):
         for test_variant in test_variants:
             if test_variant.access_mode == constants.ACCESS_MODE_RWO:
                 test_variant.delete_first_pod()
+        for test_variant in test_variants:
+            if test_variant.access_mode == constants.ACCESS_MODE_RWO:
+                test_variant.wait_for_first_pod_delete()
 
         for test_variant in test_variants:
             if test_variant.access_mode == constants.ACCESS_MODE_RWO:
@@ -269,6 +272,27 @@ class TestPvcAcceptance(ManageTest):
         ):
             self.verify_access_token_notin_odf_pod_logs()
 
+        for test_variant in test_variants:
+            if test_variant.access_mode != constants.ACCESS_MODE_RWO:
+                test_variant.delete_first_pod()
+            test_variant.delete_second_pod()
+        for test_variant in test_variants:
+            if test_variant.access_mode != constants.ACCESS_MODE_RWO:
+                test_variant.wait_for_first_pod_delete()
+            test_variant.wait_for_second_pod_delete()
+
+        for test_variant in test_variants:
+            test_variant.delete_pvc()
+        for test_variant in test_variants:
+            test_variant.wait_for_pvc_delete()
+
+        for test_variant in test_variants:
+            if test_variant.reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
+                test_variant.delete_pv()
+        for test_variant in test_variants:
+            if test_variant.reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
+                test_variant.wait_for_pv_delete()
+
     def verify_access_token_notin_odf_pod_logs(self):
         """
         This function will verify logs of kube-rbac-proxy container in
@@ -289,13 +313,17 @@ class TestPvcAcceptance(ManageTest):
 
 
 class PvcAcceptance:
+    cbp_name = helpers.default_ceph_block_pool()
+
     def log_execution(f):
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
+            used_size = helpers.fetch_used_size(PvcAcceptance.cbp_name)
             logger.info(
                 f"Executing '{f.__name__}' for interface type: '{self.interface_type}', "
                 f"reclaim policy: '{self.reclaim_policy}', access mode: '{self.access_mode}', "
-                f"volume mode: '{self.volume_mode}', size '{self.pvc_size} {self.pvc_size_unit}'"
+                f"volume mode: '{self.volume_mode}', size '{self.pvc_size} {self.pvc_size_unit}', "
+                f"used size: '{used_size} GB'"
             )
             return f(self, *args, **kwargs)
 
@@ -358,6 +386,8 @@ class PvcAcceptance:
         )
         self.io_size = kwargs.get("io_size", "1G")
         self.pod_dict_path = kwargs.get("pod_dict_path", constants.NGINX_POD_YAML)
+
+        self.pv_obj = None
 
     @log_execution
     def setup(self):
@@ -490,7 +520,7 @@ class PvcAcceptance:
         # such file or directory
         if self.volume_mode == constants.VOLUME_MODE_BLOCK:
             logger.info(
-                f"Skipping getting md5 checksum from {self.pvc_obj.name} on first pod ({self.pod_obj1.name})."
+                f"Skipping getting md5 checksum from {self.pvc_obj.name} on first pod ({self.pod_obj1.name})"
             )
             return
         self.md5sum_pod1_data = pod.cal_md5sum(
@@ -510,7 +540,7 @@ class PvcAcceptance:
         # such file or directory
         if self.volume_mode == constants.VOLUME_MODE_BLOCK:
             logger.info(
-                f"Skipping getting md5 checksum from {self.pvc_obj.name} on second pod ({self.pod_obj2.name})."
+                f"Skipping getting md5 checksum from {self.pvc_obj.name} on second pod ({self.pod_obj2.name})"
             )
             return
         self.md5sum_pod2_data = pod.cal_md5sum(
@@ -557,16 +587,16 @@ class PvcAcceptance:
 
         if self.volume_mode == constants.VOLUME_MODE_BLOCK:
             logger.info(
-                f"Skipping check of PVC {self.pvc_obj.name} as volume mode is Block."
+                f"Skipping check of PVC {self.pvc_obj.name} as volume mode is Block"
             )
             return
-        logger.info("Verifying new size on pods.")
+        logger.info("Verifying new size on pods")
         # Wait for 240 seconds to reflect the change on pod
         pods_for_check = [self.pod_obj1]
         if self.access_mode == constants.ACCESS_MODE_RWX:
             pods_for_check.append(self.pod_obj2)
         for pod_obj in pods_for_check:
-            logger.info(f"Checking pod {pod_obj.name} to verify the change.")
+            logger.info(f"Checking pod {pod_obj.name} to verify the change")
             for df_out in TimeoutSampler(
                 240, 3, pod_obj.exec_cmd_on_pod, command="df -kh"
             ):
@@ -588,19 +618,79 @@ class PvcAcceptance:
                     f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
                     f" on pod {pod_obj.name}. New size on mount is not "
                     f"{self.pvc_size_expanded}G as expected, but {new_size_mount}. "
-                    f"Checking again."
+                    f"Checking again"
                 )
 
     @log_execution
     def delete_first_pod(self):
         """
-        Delete firts pod
+        Delete first pod
         """
         logger.info(
             f"Deleting first pod so that second pod can attach PVC {self.pvc_obj.name}"
         )
         self.pod_obj1.delete()
+
+    @log_execution
+    def wait_for_first_pod_delete(self):
+        """
+        Wait for deletion of first pod
+        """
+        logger.info(f"Waiting for deletion of first pod {self.pod_obj1.name}")
         self.pod_obj1.ocp.wait_for_delete(resource_name=self.pod_obj1.name)
+
+    @log_execution
+    def delete_second_pod(self):
+        """
+        Delete second pod
+        """
+        logger.info(f"Deleting second pod {self.pod_obj2.name}")
+        self.pod_obj2.delete()
+
+    @log_execution
+    def wait_for_second_pod_delete(self):
+        """
+        Wait for deletion of second pod
+        """
+        logger.info(f"Waiting for deletion of second pod {self.pod_obj2.name}")
+        self.pod_obj2.ocp.wait_for_delete(resource_name=self.pod_obj2.name)
+
+    @log_execution
+    def delete_pvc(self):
+        """
+        Delete pvc
+        """
+        logger.info(f"Deleting PVC {self.pvc_obj.name}")
+        if self.reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
+            self.pv_obj = self.pvc_obj.backed_pv_obj
+        self.pvc_obj.delete()
+
+    @log_execution
+    def wait_for_pvc_delete(self):
+        """
+        Wait for PVC delete
+        """
+        logger.info(f"Waiting for deletion of PVC {self.pvc_obj.name}")
+        self.pvc_obj.ocp.wait_for_delete(resource_name=self.pvc_obj.name)
+
+    @log_execution
+    def delete_pv(self):
+        """
+        Delete pv manually (if it has ReclaimPolicy set to Retain)
+        """
+        if self.pv_obj:
+            logger.info(f"Deleting PV {self.pv_obj.name}")
+            helpers.wait_for_resource_state(self.pv_obj, constants.STATUS_RELEASED)
+            self.pv_obj.delete()
+
+    @log_execution
+    def wait_for_pv_delete(self):
+        """
+        Wait for pv deletion (if it has ReclaimPolicy set to Retain)
+        """
+        if self.pv_obj:
+            logger.info(f"Waiting for deletion of PV {self.pv_obj.name}")
+            self.pv_obj.ocp.wait_for_delete(resource_name=self.pv_obj.name)
 
     @log_execution
     def check_pod_state_running(self):
@@ -618,7 +708,7 @@ class PvcAcceptance:
         """
         if self.volume_mode == constants.VOLUME_MODE_BLOCK:
             logger.info(
-                f"Skipping verification of data from {self.pvc_obj.name} on first pod ({self.pod_obj1.name})."
+                f"Skipping verification of data from {self.pvc_obj.name} on first pod ({self.pod_obj1.name})"
             )
             return
         logger.info(f"Verify data on first pod {self.pod_obj1.name}")
@@ -635,7 +725,7 @@ class PvcAcceptance:
         """
         if self.volume_mode == constants.VOLUME_MODE_BLOCK:
             logger.info(
-                f"Skipping verification of data from {self.pvc_obj.name} on second pod ({self.pod_obj2.name})."
+                f"Skipping verification of data from {self.pvc_obj.name} on second pod ({self.pod_obj2.name})"
             )
             return
         logger.info(f"Verify data on second pod {self.pod_obj2.name}")
@@ -652,7 +742,7 @@ class PvcAcceptance:
         """
         if self.volume_mode == constants.VOLUME_MODE_BLOCK:
             logger.info(
-                f"Skipping verification of data mutability on Block volume mode ({self.pvc_obj.name})."
+                f"Skipping verification of data mutability on Block volume mode ({self.pvc_obj.name})"
             )
             return
         logger.info("Perform modification of files from alternate pod")
