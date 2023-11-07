@@ -403,7 +403,7 @@ class OCSUpgrade(object):
         )
         return get_images(csv_pre_upgrade.get())
 
-    def set_upgrade_channel(self):
+    def set_upgrade_channel(self, resource_name=OCS_OPERATOR_NAME):
         """
         Wait for the new package manifest for upgrade.
 
@@ -413,7 +413,7 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
         )
         package_manifest.wait_for_resource()
