@@ -156,7 +156,7 @@ class TestFIOBenchmark(PASTest):
         """
 
         # for development mode - use parameters for short test run
-        if not self.dev_mode:
+        if self.dev_mode:
             log.info("Setting up parameters for development mode")
             self.crd_data["spec"]["workload"]["args"]["filesize"] = "1GiB"
             self.crd_data["spec"]["workload"]["args"]["storagesize"] = "5Gi"
