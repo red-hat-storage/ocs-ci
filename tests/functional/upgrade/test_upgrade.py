@@ -6,9 +6,13 @@ from ocs_ci.framework.pytest_customization.marks import purple_squad, multiclust
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
     polarion_id,
+    mco_upgrade,
+    dr_hub_upgrade,
+    acm_upgrade,
 )
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
+from ocs_ci.ocs.dr_upgrade import MultiClusterOrchestratorUpgrade, DRHubUpgrade
 from ocs_ci.utility.reporting import get_polarion_id
 
 log = logging.getLogger(__name__)
@@ -76,3 +80,26 @@ def test_upgrade(upgrade_stats):
     """
 
     run_ocs_upgrade(upgrade_stats=upgrade_stats)
+
+
+@mco_upgrade
+@multicluster_roles(["mdr_all_acm"])
+def test_mco_upgrade():
+    """
+    Test upgrade procedure for multicluster orchestrator operator
+
+    """
+    mco_upgrade_obj = MultiClusterOrchestratorUpgrade()
+    mco_upgrade_obj.run_upgrade()
+
+
+@dr_hub_upgrade
+@multicluster_roles(["mdr_all_acm"])
+def test_dr_hub_upgrade():
+    """
+    Test upgrade procedure for DR hub operator
+
+    """
+    dr_hub_upgrade_obj = DRHubUpgrade()
+    dr_hub_upgrade_obj.run_upgrade()
+>>>>>>> 4fbd44181 (Add MCO and DR HUB operator upgrades class)
