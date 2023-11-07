@@ -14,6 +14,9 @@ from ocs_ci.ocs.constants import (
     ORDER_BEFORE_OCP_UPGRADE,
     ORDER_BEFORE_UPGRADE,
     ORDER_OCP_UPGRADE,
+    ORDER_MCO_UPGRADE,
+    ORDER_DR_HUB_UPGRADE,
+    ORDER_ACM_UPGRADE,
     ORDER_OCS_UPGRADE,
     ORDER_AFTER_OCP_UPGRADE,
     ORDER_AFTER_OCS_UPGRADE,
@@ -121,7 +124,14 @@ order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
+# multicluster orchestrator
+mco_upgrade = compose(order_mco_upgrade, pytest.mark.mco_upgrade)
+# dr hub operator
+dr_hub_upgrade = compose(order_dr_hub_upgrade, pytest.mark.dr_hub_upgrade)
+# acm operator
+acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+# pre_*_upgrade markers
 pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
 pre_ocp_upgrade = compose(
     order_pre_ocp_upgrade,
@@ -131,12 +141,16 @@ pre_ocs_upgrade = compose(
     order_pre_ocs_upgrade,
     pytest.mark.pre_ocs_upgrade,
 )
+# post_*_upgrade markers
 post_upgrade = compose(order_post_upgrade, pytest.mark.post_upgrade)
 post_ocp_upgrade = compose(order_post_ocp_upgrade, pytest.mark.post_ocp_upgrade)
 post_ocs_upgrade = compose(order_post_ocs_upgrade, pytest.mark.post_ocs_upgrade)
 
 upgrade_marks = [
     ocp_upgrade,
+    mco_upgrade,
+    dr_hub_upgrade,
+    acm_upgrade,
     ocs_upgrade,
     pre_upgrade,
     pre_ocp_upgrade,
