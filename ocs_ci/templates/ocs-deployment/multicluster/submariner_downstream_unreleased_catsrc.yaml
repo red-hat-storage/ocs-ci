@@ -1,0 +1,16 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: submariner-catalogsource
+  namespace: openshift-marketplace
+spec:
+  icon:
+    base64data: ""
+    mediatype: ""
+  image: PLACE_HOLDER
+  publisher: Red Hat
+  sourceType: grpc
+  priority: 100
+  updateStrategy:
+    registryPoll:
+      interval: 15m

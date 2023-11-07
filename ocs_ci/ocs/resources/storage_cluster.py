@@ -756,6 +756,13 @@ def ocs_install_verification(
             verify_storage_device_class(device_class)
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
+    # RDR with globalnet submariner
+    if (
+        config.ENV_DATA.get("enable_globalnet", True)
+        and config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
+    ):
+        validate_serviceexport()
+
 
 def mcg_only_install_verification(ocs_registry_image=None):
     """
@@ -2535,3 +2542,29 @@ def patch_storage_cluster_for_custom_storage_class(
     else:
         log.error(f"Invalid action: '{action}'")
         return False
+
+
+@retry(AssertionError, 50, 10, 1)
+def validate_serviceexport():
+    """
+    validate the serviceexport resource
+    Number of osds and mons should match
+
+    """
+    serviceexport = OCP(
+        kind="ServiceExport", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    osd_count = 0
+    mon_count = 0
+    for ent in serviceexport.get().get("items"):
+        if "osd" in ent["metadata"]["name"]:
+            osd_count += 1
+        elif "mon" in ent["metadata"]["name"]:
+            mon_count += 1
+    assert (
+        osd_count == get_osd_count()
+    ), f"osd serviceexport count mismatch {osd_count} != {get_osd_count()} "
+
+    assert mon_count == len(
+        get_mon_pods()
+    ), f"Mon serviceexport count mismatch {mon_count} != {len(get_mon_pods())}"

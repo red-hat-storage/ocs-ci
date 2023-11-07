@@ -1,6 +1,8 @@
 import logging
 import time
 import os
+import tempfile
+import requests
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -22,8 +24,10 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
+    get_ocp_version,
     get_running_acm_version,
     string_chunkify,
+    run_cmd,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
@@ -152,6 +156,38 @@ class AcmAddClusters(AcmPageNavigator):
             for s in get_non_acm_cluster_config()
             if s.MULTICLUSTER["multicluster_index"] != primary_index
         ][0]
+        # submariner catalogsource creation
+        if config.ENV_DATA["submariner_release_type"] == "unreleased":
+            submariner_downstream_unreleased = templating.load_yaml(
+                constants.SUBMARINER_DOWNSTREAM_UNRELEASED
+            )
+            # Update catalog source
+            submariner_full_url = "".join(
+                [
+                    constants.SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL,
+                    config.ENV_DATA["submariner_version"],
+                ]
+            )
+
+            resp = requests.get(submariner_full_url, verify=False)
+            raw_msg = resp.json()["raw_messages"]
+            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
+                f"v{get_ocp_version()}"
+            ].split(":")[1]
+            submariner_downstream_unreleased["spec"]["image"] = ":".join(
+                [constants.SUBMARINER_BREW_REPO, version_tag]
+            )
+            submariner_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="submariner_downstream_unreleased", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                submariner_downstream_unreleased, submariner_data_yaml.name
+            )
+            old_ctx = config.cur_index
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                run_cmd(f"oc create -f {submariner_data_yaml.name}", timeout=300)
+            config.switch_ctx(old_ctx)
 
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
         cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
@@ -222,6 +258,8 @@ class AcmAddClusters(AcmPageNavigator):
         )
         self.do_click(self.page_nav["gateway-count-btn"])
         self.do_click(self.page_nav["gateway-count-btn"])
+        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+            self.submariner_unreleased_downstream_info()
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it [2]")
@@ -231,6 +269,8 @@ class AcmAddClusters(AcmPageNavigator):
         )
         self.do_click(self.page_nav["gateway-count-btn"])
         self.do_click(self.page_nav["gateway-count-btn"])
+        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+            self.submariner_unreleased_downstream_info()
         log.info("Click on Next button [2]")
         self.do_click(self.page_nav["next-btn"])
         if ocs_version >= version.VERSION_4_13 and globalnet:
@@ -242,6 +282,23 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+
+    def submariner_unreleased_downstream_info(self):
+        self.do_click(self.page_nav["submariner-custom-subscription"])
+        self.do_clear(self.page_nav["submariner-custom-source"])
+        self.do_send_keys(
+            self.page_nav["submariner-custom-source"], "submariner-catalogsource"
+        )
+        submariner_unreleased_channel = (
+            config.ENV_DATA["submariner_unreleased_channel"]
+            if config.ENV_DATA["submariner_unreleased_channel"]
+            else config.ENV_DATA["submariner_version"].rpartition(".")[0]
+        )
+        channel_name = "stable-" + submariner_unreleased_channel
+        self.do_send_keys(
+            self.page_nav["submariner-custom-channel"],
+            channel_name,
+        )
 
     def submariner_validation_ui(self):
         """
