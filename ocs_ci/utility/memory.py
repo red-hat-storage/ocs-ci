@@ -124,7 +124,8 @@ def start_monitor_memory(interval: int = 3, create_csv: bool = False) -> MemoryM
     _df = pd.DataFrame(columns=_columns_df)
     _mem_csv_path = f"mem-data-{get_testrun_name()}"
     if create_csv:
-        _mem_csv = tempfile.mktemp(prefix=_mem_csv_path)
+        fd, _mem_csv = tempfile.mkstemp(prefix=_mem_csv_path)
+        os.close(fd)
     # interval cannot be smaller than 2 sec, otherwise we get mistakes in calculation
     if interval < 2:
         interval = 2
