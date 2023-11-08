@@ -759,7 +759,7 @@ def ocs_install_verification(
     # RDR with globalnet submariner
     if (
         config.ENV_DATA.get("enable_globalnet", True)
-        and config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
+        and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
     ):
         validate_serviceexport()
 
