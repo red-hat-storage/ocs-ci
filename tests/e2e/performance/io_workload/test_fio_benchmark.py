@@ -201,7 +201,7 @@ class TestFIOBenchmark(PASTest):
 
         """
         self.crd_data["spec"]["workload"]["args"]["prefill"] = "false"
-       log.info(f"Prefilll {self.crd_data["spec"]["workload"]["args"]["prefill"]} ")
+        log.info(f"Prefilll {self.crd_data["spec"]["workload"]["args"]["prefill"]} ")
         if io_pattern == "sequential":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
         if io_pattern == "random":
