@@ -362,8 +362,8 @@ class TestObjectVersioning:
         version_ids3 = [x["VersionId"] for x in object_info["Versions"]]
         assert len(set(version_ids3)) == 31
         assert not set(version_ids2).intersection(version_ids3)
-        assert object_info["NextVersionIdMarker"]
-        assert object_info["NextKeyMarker"]
+        assert not object_info.get("NextVersionIdMarker")
+        assert not object_info.get("NextKeyMarker")
 
         logger.info("Check listing of following 30 files, the list should be smaller")
         object_info = bucket.s3client.list_object_versions(
@@ -384,6 +384,71 @@ class TestObjectVersioning:
         """ """
         pass
 
-    def test_version_restore(self):
-        """ """
-        pass
+    def test_version_restore(self, bucket_factory, mcg_obj_session):
+        """
+        According to AWS documentation about restoring object versions
+        there are 2 ways:
+            * Copy a previous version of the object into the same bucket.
+                The copied object becomes the current version of that object an
+                all object versions are preserved.
+            * Permanently delete the current version of the object.
+                When you delete the current object version, you, in effect, turn the
+                previous version into the current version of that object.
+
+        AWS documentation:
+        https://docs.aws.amazon.com/AmazonS3/latest/userguide/RestoringPreviousVersions.html
+
+        """
+        s3_obj = mcg_obj_session
+        bucket = bucket_factory(interface="S3", versioning=True)[0]
+        logger.info(f"Bucket {bucket.name} created")
+        filename = f"file-{uuid4().hex}"
+        with open(filename, "wb") as f:
+            f.write(os.urandom(1000))
+        logger.info(f"Created file {filename}")
+        logger.info(f"Putting file {filename} into bucket {bucket.name}")
+        s3_put_object(s3_obj, bucket.name, filename, filename)
+        bucket_object1 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
+        logger.info(
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+        )
+
+        filename2 = f"file-{uuid4().hex}"
+        with open(filename2, "wb") as f:
+            f.write(os.urandom(300))
+        logger.info(f"Created file {filename2}")
+        logger.info(f"Putting file {filename2} into bucket {bucket.name}")
+        s3_put_object(s3_obj, bucket.name, filename, filename2)
+        bucket_object2 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
+        logger.info(
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+        )
+        assert bucket_object1["body"] != bucket_object2["body"]
+        bucket_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        assert object_info["Versions"][1]["IsLatest"] == True
+        assert bucket_object2["VersionId"] == object_info["Versions"][1]["VersionId"]
+
+        logger.info(f"Putting file {filename} into bucket {bucket.name} again")
+        s3_put_object(s3_obj, bucket.name, filename, filename)
+        bucket_object3 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
+        logger.info(
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+        )
+        assert bucket_object1["body"] == bucket_object3["body"]
+        bucket_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        assert object_info["Versions"][2]["IsLatest"] == True
+        assert bucket_object3["VersionId"] == object_info["Versions"][2]["VersionId"]
+
+        logger.info(
+            f"Deleting object {filename} twice from bucket {bucket.name} to get to oriinal version"
+        )
+        s3_delete_object(s3_obj, bucket.name, filename)
+        s3_delete_object(s3_obj, bucket.name, filename)
+        versioning_info = bucket.s3client.get_bucket_versioning(Bucket=bucket.name)
+        logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
+        bucket_object3 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
+        logger.info(
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+        )
