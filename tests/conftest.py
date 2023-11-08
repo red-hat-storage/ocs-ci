@@ -5633,7 +5633,11 @@ def nsfs_bucket_factory_fixture(
                 ocsci_config.ENV_DATA["cluster_namespace"],
             )[0]
         )
-        wait_for_pods_to_be_running(pod_names=[nsfs_obj.interface_pod.name], timeout=60, sleep=10)
+        wait_for_pods_to_be_running(
+            pod_names=[nsfs_obj.interface_pod.name],
+            timeout=60,
+            sleep=10,
+        )
 
         # Wait for the new noobaa-endpoint pods with the mount to be created
         # and for the obsolete noobaa-endpoint pods to be terminated
