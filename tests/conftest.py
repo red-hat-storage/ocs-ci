@@ -6365,11 +6365,15 @@ def dr_workload(request):
     """
     instances = []
 
-    def factory(num_of_subscription=1, num_of_appset=0):
+    def factory(
+        num_of_subscription=1, num_of_appset=0, pvc_interface=constants.CEPHBLOCKPOOL
+    ):
         """
         Args:
             num_of_subscription (int): Number of Subscription type workload to be created
             num_of_appset (int): Number of ApplicationSet type workload to be created
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS resource is created. RBD is default.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -6379,8 +6383,12 @@ def dr_workload(request):
 
         """
         total_pvc_count = 0
+        workload_key = "dr_workload_subscription"
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            workload_key = "dr_workload_subscription_cephfs"
+
         for index in range(num_of_subscription):
-            workload_details = ocsci_config.ENV_DATA["dr_workload_subscription"][index]
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],

@@ -12,6 +12,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
     verify_failover_relocate_status_ui,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -36,23 +37,34 @@ class TestFailover:
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["primary_cluster_down", "pvc_interface"],
         argvalues=[
             pytest.param(
-                False,
+                *[False, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
                 id="primary_up",
             ),
             pytest.param(
-                True,
+                *[True, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id(polarion_id_primary_down),
                 id="primary_down",
+            ),
+            pytest.param(
+                *[False, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id(""),
+                id="primary_up_cephfs",
+            ),
+            pytest.param(
+                *[True, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id(""),
+                id="primary_down_cephfs",
             ),
         ],
     )
     def test_failover(
         self,
         primary_cluster_down,
+        pvc_interface,
         setup_acm_ui,
         dr_workload,
         nodes_multicluster,
@@ -75,7 +87,9 @@ class TestFailover:
                 raise NotImplementedError
 
         acm_obj = AcmAddClusters()
-        rdr_workload = dr_workload(num_of_subscription=1)[0]
+        rdr_workload = dr_workload(num_of_subscription=1, pvc_interface=pvc_interface)[
+            0
+        ]
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             rdr_workload.workload_namespace
