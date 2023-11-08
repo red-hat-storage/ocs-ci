@@ -200,7 +200,7 @@ class TestFIOBenchmark(PASTest):
             io_pattern (str): the I/O pattern to run (random / sequential)
 
         """
-        self.crd_data["spec"]["workload"]["args"]["prefill"] = "false"
+        self.crd_data["spec"]["workload"]["args"]["prefill"] = false
         log.info(f"Prefilll {self.crd_data['spec']['workload']['args']['prefill']} ")
         if io_pattern == "sequential":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
