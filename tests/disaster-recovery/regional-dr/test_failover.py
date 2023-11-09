@@ -170,9 +170,10 @@ class TestFailover:
             ceph_health_check()
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
-        dr_helpers.wait_for_mirroring_status_ok(
-            replaying_images=rdr_workload.workload_pvc_count
-        )
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=rdr_workload.workload_pvc_count
+            )
 
         if config.RUN.get("rdr_failover_via_ui"):
             config.switch_acm_ctx()

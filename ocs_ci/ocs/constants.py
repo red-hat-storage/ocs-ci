@@ -180,6 +180,7 @@ CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
+REPLICATION_SOURCE = "ReplicationSource"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
