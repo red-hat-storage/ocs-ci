@@ -5938,7 +5938,7 @@ def toolbox_on_faas_consumer():
 @pytest.fixture(scope="function", autouse=True)
 def switch_to_provider_for_test(request):
     """
-    Switch to provider cluster as required by the test. Applicable for Managed Services only if
+    Switch to provider cluster as required by the test. Applicable for Managed Services and HCI Provider-client only if
     the marker 'runs_on_provider' is added in the test.
 
     """
@@ -5947,11 +5947,18 @@ def switch_to_provider_for_test(request):
     if (
         request.node.get_closest_marker("runs_on_provider")
         and ocsci_config.multicluster
-        and current_cluster.ENV_DATA.get("platform", "").lower()
-        in constants.MANAGED_SERVICE_PLATFORMS
+        and (
+            current_cluster.ENV_DATA.get("platform", "").lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+            or current_cluster.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        )
     ):
         for cluster in ocsci_config.clusters:
-            if cluster.ENV_DATA.get("cluster_type") == "provider":
+            if (
+                cluster.ENV_DATA.get("cluster_type") == "provider"
+                or cluster.ENV_DATA.get("cluster_type") == "hci_provider"
+            ):
                 provider_cluster = cluster
                 log.debug("Switching to the provider cluster context")
                 # TODO: Use 'switch_to_provider' function introduced in PR 5541

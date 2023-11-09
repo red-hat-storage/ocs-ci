@@ -355,7 +355,7 @@ class MultiClusterConfig:
 
     def is_provider_exist(self):
         """
-        Check ifq the provider cluster exists in the clusters
+        Check if the provider cluster exists in the clusters
 
         Returns:
             bool: True, if the provider cluster exists in the clusters. False, otherwise.
