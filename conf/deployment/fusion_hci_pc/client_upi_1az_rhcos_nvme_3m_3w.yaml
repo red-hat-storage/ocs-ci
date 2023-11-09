@@ -4,7 +4,7 @@ DEPLOYMENT:
   local_storage: true
 ENV_DATA:
   platform: 'baremetal'
-  cluster_type: 'provider'
+  cluster_type: 'client'
   cluster_namespace: "openshift-storage"
   deployment_type: 'upi'
   worker_replicas: 3
