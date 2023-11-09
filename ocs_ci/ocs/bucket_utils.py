@@ -163,6 +163,7 @@ def list_objects_from_bucket(
     pod_obj,
     target,
     prefix=None,
+    recursive=False,
     s3_obj=None,
     signed_request_creds=None,
     timeout=600,
@@ -186,6 +187,10 @@ def list_objects_from_bucket(
         retrieve_cmd = f"ls {target}/{prefix}"
     else:
         retrieve_cmd = f"ls {target}"
+
+    if recursive:
+        retrieve_cmd += " --recursive"
+
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -210,7 +215,9 @@ def list_objects_from_bucket(
     try:
         obj_list = [row.split()[3] for row in cmd_output.splitlines()]
     except Exception:
-        logger.warn(f"Failed to parse output of {retrieve_cmd} command: {cmd_output}")
+        logger.warning(
+            f"Failed to parse output of {retrieve_cmd} command: {cmd_output}"
+        )
     return obj_list
 
 

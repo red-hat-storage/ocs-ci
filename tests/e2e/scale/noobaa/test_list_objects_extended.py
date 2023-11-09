@@ -1,4 +1,14 @@
+import pytest
 import random
+import logging
+
+from ocs_ci.ocs.bucket_utils import (
+    sync_object_directory,
+    list_objects_from_bucket,
+    s3_list_objects_v2,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def generate_random_unicode_prefix(number_of_chars=3):
@@ -38,43 +48,120 @@ def generate_random_unicode_prefix(number_of_chars=3):
     return "".join(prefix)
 
 
-#
-# def setup_dir_struct_and_upload_objects(
-#     io_pod, objects_path, h_level, v_level, pref_len
-# ):
-#     if v_level == 0:
-#         v_level = 1
-#     if h_level == 0:
-#         h_level = 1
-#     all_prefixes = []
-#     for _ in range(v_level * h_level):
-#         all_prefixes.append(generate_random_unicode_prefix(pref_len))
-#
-#     num_of_objs = 100
-#     objs_per_pref = num_of_objs // (v_level * h_level)
-#     rem = num_of_objs % (v_level * h_level)
-#
-#     for _ in range(num_of_objs):
-#         pass
-#
-#
-# class TestListObjectsExtended:
-#     @pytest.mark.parametrize(
-#         argnames=["bucketclass", "h_level", "v_level"],
-#         argvalues=[
-#             pytest.param(
-#                 {
-#                     "interface": "OC",
-#                     "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-#                 },
-#                 5,
-#                 1,
-#             ),
-#         ],
-#         ids=[
-#             "AWS-Data",
-#         ],
-#     )
-#     def test_list_small_small(self, bucket_factory, bucketclass, h_level, v_level):
-#
-#         bucket = bucket_factory(bucketclass=bucketclass, amount=1)
+def get_number_of_objs(io_pod, objects_path):
+    return int(io_pod.exec_sh_cmd_on_pod(command=f"ls -ltr {objects_path} | wc -l")) - 1
+
+
+def make_dirs(io_pod):
+
+    uploaded_dir = "/data/uploaded_dir"
+    uploading_dir = "/data/uploading_dir"
+
+    io_pod.exec_sh_cmd_on_pod(
+        command=f"mkdir -p {uploading_dir} && mkdir -p {uploaded_dir}"
+    )
+    return uploading_dir, uploaded_dir
+
+
+def setup_dir_struct_and_upload_objects(
+    io_pod, s3_obj, bucket_name, objects_path, h_level, v_level, pref_len=5
+):
+    if v_level == 0:
+        v_level = 1
+    if h_level == 0:
+        h_level = 1
+
+    uploading_dir, uploaded_dir = make_dirs(io_pod)
+
+    all_prefixes = []
+    for _ in range(v_level * h_level):
+        all_prefixes.append(generate_random_unicode_prefix(pref_len))
+
+    num_of_objs = get_number_of_objs(io_pod, objects_path)
+    logger.info(f"Total number of objects: {num_of_objs}")
+
+    objs_per_pref = num_of_objs // (v_level * h_level)
+    rem = num_of_objs % (v_level * h_level)
+
+    for i in range(v_level):
+        pref_str = ""
+        for j in range(h_level):
+            pref = generate_random_unicode_prefix(pref_len)
+            pref_str += pref + "/"
+            logger.info(
+                f"uploading {objs_per_pref} onto {bucket_name} with prefix {pref_str}"
+            )
+            if i == v_level - 1 and j == h_level - 1:
+                n_obj = objs_per_pref + rem
+            else:
+                n_obj = objs_per_pref
+
+            objs = io_pod.exec_sh_cmd_on_pod(
+                command=f"ls -ltr {objects_path}| tail -n +2 | head -{n_obj} | awk '{{print $9}}'"
+            ).split()
+            logger.info(objs)
+            for obj in objs:
+                io_pod.exec_sh_cmd_on_pod(
+                    command=f"mv {objects_path}/{obj} {uploading_dir}/"
+                )
+            sync_object_directory(
+                io_pod,
+                f"{uploading_dir}/",
+                f"s3://{bucket_name}/{pref_str}",
+                s3_obj=s3_obj,
+            )
+            io_pod.exec_sh_cmd_on_pod(command=f"mv {uploading_dir}/* {uploaded_dir}")
+
+
+class TestListObjectsExtended:
+    @pytest.mark.parametrize(
+        argnames=["bucketclass", "h_level", "v_level"],
+        argvalues=[
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                },
+                5,
+                2,
+            ),
+        ],
+        ids=[
+            "AWS-Data",
+        ],
+    )
+    def test_list_small_small(
+        self,
+        scale_cli_v2_pod,
+        bucket_factory,
+        mcg_obj_session,
+        bucketclass,
+        h_level,
+        v_level,
+    ):
+
+        bucket = bucket_factory(bucketclass=bucketclass, amount=1)[0]
+        logger.info(f"bucket created: {bucket.name}")
+
+        setup_dir_struct_and_upload_objects(
+            scale_cli_v2_pod,
+            mcg_obj_session,
+            bucket.name,
+            "/data/small_small",
+            h_level,
+            v_level,
+        )
+
+        # List all the objects recursively
+        ls_objs = list_objects_from_bucket(
+            scale_cli_v2_pod, bucket.name, recursive=True, s3_obj=mcg_obj_session
+        )
+        assert len(ls_objs) == 100, "Not all the objects are listed"
+
+        # List objects specific to some random prefix,delimiter combination
+
+        # List all the objects in a directory
+        sync_object_directory(
+            scale_cli_v2_pod, "/data/small_small/", bucket.name, s3_obj=mcg_obj_session
+        )
+        s3_list_objects_v2(mcg_obj_session, bucket.name)
