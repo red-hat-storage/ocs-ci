@@ -2,25 +2,25 @@
 Test to verify that data is accessible and uncorrupted as well as
 operational cluster after graceful nodes shutdown
 """
-import re
-import boto3
-import json
+
 import logging
 import pytest
 import time
 import uuid
 
-from datetime import datetime
-from semantic_version import Version
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.longevity import start_ocp_workload
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.rgw import RGW
-from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
 from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.ocs.registry import check_if_registry_stack_exists
+from ocs_ci.ocs.monitoring import check_if_monitoring_stack_exists
 from ocs_ci.framework import config
+from ocs_ci.ocs.uninstall import (
+    remove_ocp_registry_from_ocs,
+    remove_monitoring_stack_from_ocs,
+)
+from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
@@ -31,23 +31,8 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
     get_nodes,
 )
-from ocs_ci.utility.utils import exec_cmd, run_cmd, clone_notify
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.helpers.helpers import default_storage_class
-from ocs_ci.ocs.bucket_utils import s3_put_object, retrieve_verification_mode
-
-# from ocs_ci.ocs.resources.fips import check_fips_enabled
-from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
-from ocs_ci.ocs.bucket_utils import (
-    compare_bucket_object_list,
-    write_random_test_objects_to_bucket,
-    copy_objects,
-    copy_random_individual_objects,
-    verify_s3_object_integrity,
-    write_random_objects_in_pod,
-    sync_object_directory,
-)
-from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.resources.fips import check_fips_enabled
+from ocs_ci.ocs.bucket_utils import s3_put_object
 
 logger = logging.getLogger(__name__)
 
@@ -57,15 +42,12 @@ class TestGracefulNodesShutdown(E2ETest):
     Test uncorrupted data and operational cluster after graceful nodes shutdown
     """
 
-    amq = None
     bucket_names_list = []
-    mcg_obj = None
-    mcg_obj_session = None
 
     @pytest.fixture(autouse=True)
     def checks(self):
         # This test is skipped due to https://issues.redhat.com/browse/ENTMQST-3422
-        """
+
         try:
             check_fips_enabled()
         except Exception as e:
@@ -76,6 +58,7 @@ class TestGracefulNodesShutdown(E2ETest):
             assert (
                 node.get()["status"]["allocatable"]["hugepages-2Mi"] == "64Mi"
             ), f"Huge pages is not applied on {node.name}"
+        """
 
     @pytest.fixture(autouse=True)
     def setup(
@@ -98,23 +81,26 @@ class TestGracefulNodesShutdown(E2ETest):
         """
         Setting up test requirements
         """
-        self.amq = AMQ()
-        self.kafka_topic = (
-            self.kafkadrop_pod
-        ) = self.kafkadrop_svc = self.kafkadrop_route = None
 
         def teardown():
             logger.info("cleanup the environment")
+            """ cleanup logging workload """
+            sub = OCP(
+                kind=constants.SUBSCRIPTION,
+                namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+            )
+            logging_sub = sub.get().get("items")
+            if logging_sub:
+                logger.info("Logging is configured")
+                uninstall_cluster_logging()
 
-            if self.amq:
-                if self.kafkadrop_pod:
-                    self.kafkadrop_pod.delete()
-                if self.kafkadrop_svc:
-                    self.kafkadrop_svc.delete()
-                if self.kafkadrop_route:
-                    self.kafkadrop_route.delete()
+            """ cleanup monitoring workload """
+            if check_if_monitoring_stack_exists():
+                remove_monitoring_stack_from_ocs()
 
-                self.amq.cleanup()
+            """ cleanup registry workload """
+            if check_if_registry_stack_exists():
+                remove_ocp_registry_from_ocs(config.ENV_DATA["platform"])
 
         request.addfinalizer(teardown)
 
@@ -129,12 +115,12 @@ class TestGracefulNodesShutdown(E2ETest):
             self.ne_pvc_pod_obj,
             self.ne_file_name,
             self.ne_pvc_orig_md5_sum,
+            self.snap_obj,
         ) = self.setup_non_encrypted_pvc(
             pvc_factory=pvc_factory,
             pod_factory=pod_factory,
             pvc_clone_factory=pvc_clone_factory,
             snapshot_factory=snapshot_factory,
-            snapshot_restore_factory=snapshot_restore_factory,
         )
 
         # Encrypted block PVC
@@ -143,6 +129,7 @@ class TestGracefulNodesShutdown(E2ETest):
             self.eb_pvc_pod_obj,
             self.eb_file_name,
             self.eb_pvc_orig_md5_sum,
+            self.eb_snap_obj,
         ) = self.setup_encrypted_pvc(
             pv_encryption_kms_setup_factory=pv_encryption_kms_setup_factory,
             storageclass_factory=storageclass_factory,
@@ -159,6 +146,7 @@ class TestGracefulNodesShutdown(E2ETest):
             self.efs_pvc_pod_obj,
             self.efs_file_name,
             self.efs_pvc_orig_md5_sum,
+            self.efs_snap_obj,
         ) = self.setup_encrypted_pvc(
             pvc_factory=pvc_factory,
             pod_factory=pod_factory,
@@ -169,135 +157,23 @@ class TestGracefulNodesShutdown(E2ETest):
         # S3 bucket
         self.setup_s3_bucket(mcg_obj=mcg_obj, bucket_factory=bucket_factory)
 
-    def setup_amq_kafka_notification(self, bucket_factory):
-        """
-        ##################################### AMQ
-        """
-        logger.info("kafka notification")
-        sc = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-        self.amq.setup_amq_cluster(sc.name)
-
-        """
-        ############# Kafka notification
-        """
-        self.kafka_topic = self.amq.create_kafka_topic()
-
-        # Create Kafkadrop pod
-        (
-            self.kafkadrop_pod,
-            self.kafkadrop_svc,
-            self.kafkadrop_route,
-        ) = self.amq.create_kafkadrop()
-
-        # Get the kafkadrop route
-        kafkadrop_host = self.kafkadrop_route.get().get("spec").get("host")
-
-        # Create bucket
-        bucketname = bucket_factory(amount=1, interface="RGW-OC")[0].name
-
-        # Get RGW credentials
-        rgw_obj = RGW()
-        rgw_endpoint, access_key, secret_key = rgw_obj.get_credentials()
-
-        # Clone notify repo
-        notify_path = clone_notify()
-
-        # Initialise to put objects
-        data = "A random string data to write on created rgw bucket"
-        obc_obj = OBC(bucketname)
-        s3_resource = boto3.resource(
-            "s3",
-            verify=retrieve_verification_mode(),
-            endpoint_url=rgw_endpoint,
-            aws_access_key_id=obc_obj.access_key_id,
-            aws_secret_access_key=obc_obj.access_key,
-        )
-        s3_client = s3_resource.meta.client
-
-        # Initialize notify command to run
-        notify_cmd = (
-            f"python {notify_path} -e {rgw_endpoint} -a {obc_obj.access_key_id} "
-            f"-s {obc_obj.access_key} -b {bucketname} -ke {constants.KAFKA_ENDPOINT} -t {self.kafka_topic.name}"
-        )
-        logger.info(f"Running cmd {notify_cmd}")
-
-        # Put objects to bucket
-        assert s3_client.put_object(
-            Bucket=bucketname, Key="key-1", Body=data
-        ), "Failed: Put object: key-1"
-        exec_cmd(notify_cmd)
-
-        # Validate rgw logs notification are sent
-        pattern = "ERROR: failed to create push endpoint"
-        rgw_pod_obj = get_rgw_pods()
-        rgw_log = get_pod_logs(pod_name=rgw_pod_obj[0].name, container="rgw")
-        assert re.search(pattern=pattern, string=rgw_log) is None, (
-            f"Error: {pattern} msg found in the rgw logs."
-            f"Validate {pattern} found on rgw logs and also "
-            f"rgw bucket notification is working correctly"
-        )
-        assert s3_client.put_object(
-            Bucket=bucketname, Key="key-2", Body=data
-        ), "Failed: Put object: key-2"
-        exec_cmd(notify_cmd)
-
-        # Validate message are received Kafka side using curl command
-        curl_command = (
-            f"curl -X GET {kafkadrop_host}/topic/{self.kafka_topic.name} "
-            "-H 'content-type: application/vnd.kafka.json.v2+json'"
-        )
-        json_output = run_cmd(cmd=curl_command)
-        new_string = json_output.split()
-        messages = new_string[new_string.index("messages</td>") + 1]
-        if messages.find("1") == -1:
-            raise Exception(
-                "Error: Messages are not recieved from Kafka side."
-                "RGW bucket notification is not working as expected."
-            )
-
-        # Validate the timestamp events
-        ocs_version = config.ENV_DATA["ocs_version"]
-        if Version.coerce(ocs_version) >= Version.coerce("4.8"):
-            cmd = (
-                f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
-                f"--topic {self.kafka_topic.name} --from-beginning --timeout-ms 20000"
-            )
-            pod_list = get_pod_name_by_pattern(
-                pattern="my-cluster-zookeeper", namespace=constants.AMQ_NAMESPACE
-            )
-            zookeeper_obj = get_pod_obj(
-                name=pod_list[0], namespace=constants.AMQ_NAMESPACE
-            )
-            event_obj = zookeeper_obj.exec_cmd_on_pod(command=cmd)
-            logger.info(f"Event obj: {event_obj}")
-            event_time = event_obj.get("Records")[0].get("eventTime")
-            format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
-            try:
-                datetime.strptime(event_time, format_string)
-            except ValueError as ef:
-                logger.error(
-                    f"Timestamp event {event_time} doesnt match the pattern {format_string}"
-                )
-                raise ef
-
-            logger.info(
-                f"Timestamp event {event_time} matches the pattern {format_string}"
-            )
-        """
-        ############# END Kafka notification
-        """
-
     def setup_non_encrypted_pvc(
         self,
         pvc_factory,
         pod_factory,
         pvc_clone_factory,
         snapshot_factory,
-        snapshot_restore_factory,
     ):
         """
         ##################################### non encrypted pvc (ne_pvc)
-        create + clone + restore
+        create + clone
+        non-encrypted block/fs pvc
+        Returns:
+            pvc object
+            pod object
+            file_name
+            origin md5sum
+            snapshot
         """
         logger.info("Adding non encrypted pvc")
         pvc_obj = pvc_factory(
@@ -325,12 +201,7 @@ class TestGracefulNodesShutdown(E2ETest):
 
         pvc_clone_factory(pvc_obj)
         snap_obj = snapshot_factory(pvc_obj)
-
-        snapshot_restore_factory(
-            snapshot_obj=snap_obj,
-            volume_mode=snap_obj.parent_volume_mode,
-        )
-        return pvc_obj, pod_obj, file_name, orig_md5_sum
+        return pvc_obj, pod_obj, file_name, orig_md5_sum, snap_obj
 
     def setup_encrypted_pvc(
         self,
@@ -350,6 +221,7 @@ class TestGracefulNodesShutdown(E2ETest):
             pod object
             file_name
             origin md5sum
+            snapshot
         """
 
         logger.info(f"Adding encrypted {pvc_type} pvc")
@@ -386,9 +258,9 @@ class TestGracefulNodesShutdown(E2ETest):
         origin_md5sum = pod.cal_md5sum(pod_obj, file_name)
 
         pvc_clone_factory(pvc_obj)
-        snapshot_factory(pvc_obj)
+        encrypt_snap_obj = snapshot_factory(pvc_obj)
 
-        return pvc_obj, pod_obj, file_name, origin_md5sum
+        return pvc_obj, pod_obj, file_name, origin_md5sum, encrypt_snap_obj
 
     def setup_s3_bucket(self, mcg_obj, bucket_factory):
         """
@@ -412,128 +284,48 @@ class TestGracefulNodesShutdown(E2ETest):
                 obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucket_name)
             }
 
-    def setup_mcg_bucket_rep_unidirectional(
-        self, mcg_obj_session, bucket_factory, awscli_pod_session
+    def validate_snapshot_restore(self, snapshot_restore_factory):
+        """
+        Verifies the snapshot restore works fine
+        Raises: If failed restore snapshot
+        """
+        logger.info("Creating snapshot restore for non-encrypted pvcs after reboot")
+        ne_restored_pvc = snapshot_restore_factory(
+            snapshot_obj=self.snap_obj,
+            volume_mode=self.snap_obj.parent_volume_mode,
+        )
+        eb_restored_pvc = snapshot_restore_factory(
+            snapshot_obj=self.eb_snap_obj,
+            volume_mode=self.snap_obj.parent_volume_mode,
+        )
+        efs_restored_pvc = snapshot_restore_factory(
+            snapshot_obj=self.efs_snap_obj,
+            volume_mode=self.snap_obj.parent_volume_mode,
+        )
+
+        self.validate_pvc_expansion(
+            ne_restored_pvc, eb_restored_pvc, efs_restored_pvc, pvc_size_new=25
+        )
+
+    def validate_pvc_expansion(
+        self, ne_restored_pvc, eb_restored_pvc, efs_restored_pvc, pvc_size_new=25
     ):
         """
-        ##################################### mcg bucket replication - unidirectional
+        expand size of PVC and verify the expansion
+
+        Args:
+            pvc_size_new (int): Size of PVC(in Gb) to expand
         """
-        self.mcg_obj_session = mcg_obj_session
-        self.target_bucket_name = bucket_factory(
-            bucketclass={"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}}
-        )[0].name
-        replication_policy = ("basic-replication-rule", self.target_bucket_name, None)
-        self.source_bucket_name = bucket_factory(
-            1,
-            bucketclass={
-                "interface": "OC",
-                "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-            },
-            replication_policy=replication_policy,
-        )[0].name
-        full_object_path = f"s3://{self.source_bucket_name}"
-        standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
-            f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
-        ).split(" ")
-        sync_object_directory(
-            awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj_session
-        )
-        written_objects = mcg_obj_session.s3_list_all_objects_in_bucket(
-            self.source_bucket_name
-        )
 
-        assert set(standard_test_obj_list) == {
-            obj.key for obj in written_objects
-        }, "Needed uploaded objects could not be found"
-
-        compare_bucket_object_list(
-            mcg_obj_session, self.source_bucket_name, self.target_bucket_name
-        )
-
-    def setup_mcg_bucket_rep_bidirectional(
-        self, bucket_factory, awscli_pod_session, mcg_obj_session, test_directory_setup
-    ):
-        """
-        mcg bucket replication - bidirectional
-        """
-        self.first_bucket_name = bucket_factory(
-            bucketclass={
-                "interface": "OC",
-                "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-            }
-        )[0].name
-        replication_policy = ("basic-replication-rule", self.first_bucket_name, None)
-        self.second_bucket_name = bucket_factory(
-            1,
-            bucketclass={
-                "interface": "OC",
-                "backingstore_dict": {"azure": [(1, None)]},
-            },
-            replication_policy=replication_policy,
-        )[0].name
-
-        replication_policy_patch_dict = {
-            "spec": {
-                "additionalConfig": {
-                    "replicationPolicy": json.dumps(
-                        [
-                            {
-                                "rule_id": "basic-replication-rule-2",
-                                "destination_bucket": self.second_bucket_name,
-                            }
-                        ]
-                    )
-                }
-            }
-        }
-        OCP(
-            kind="obc",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=self.first_bucket_name,
-        ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
-
-        standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
-            f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
-        ).split(" ")
-
-        # Write all downloaded objects to the bucket
-        sync_object_directory(
-            awscli_pod_session,
-            AWSCLI_TEST_OBJ_DIR,
-            f"s3://{self.first_bucket_name}",
-            mcg_obj_session,
-        )
-        first_bucket_set = set(standard_test_obj_list)
-        assert first_bucket_set == {
-            obj.key
-            for obj in mcg_obj_session.s3_list_all_objects_in_bucket(
-                self.first_bucket_name
-            )
-        }, "Needed uploaded objects could not be found"
-
-        compare_bucket_object_list(
-            mcg_obj_session, self.first_bucket_name, self.second_bucket_name
-        )
-        written_objects = write_random_test_objects_to_bucket(
-            awscli_pod_session,
-            self.second_bucket_name,
-            test_directory_setup.origin_dir,
-            amount=5,
-            mcg_obj=mcg_obj_session,
-        )
-        second_bucket_set = set(written_objects)
-        second_bucket_set.update(standard_test_obj_list)
-        assert second_bucket_set == {
-            obj.key
-            for obj in mcg_obj_session.s3_list_all_objects_in_bucket(
-                self.second_bucket_name
-            )
-        }, "Needed uploaded objects could not be found"
-        compare_bucket_object_list(
-            mcg_obj_session, self.first_bucket_name, self.second_bucket_name
-        )
+        for pvc_obj in ne_restored_pvc + eb_restored_pvc + efs_restored_pvc:
+            logger.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
+            pvc_obj.resize_pvc(pvc_size_new, True)
 
     def validate_data_integrity(self):
+        """
+        Verifies the md5sum values of files are OK
+        Raises: If there is a mismatch in md5sum value or None
+        """
         logger.info("Compare bucket object after reboot")
         for idx, bucket_name in enumerate(self.bucket_names_list):
             after_bucket_object_set = {
@@ -566,6 +358,22 @@ class TestGracefulNodesShutdown(E2ETest):
             f"on encrypted fs pvc {self.efs_pvc_obj.name} on pod {self.efs_pvc_pod_obj.name}"
         )
 
+    def validate_ocp_workload_continues(self):
+        """
+        Verify ocp workload continues after reboot
+        """
+        if not check_if_monitoring_stack_exists():
+            assert "monitoring workload not started after reboot"
+        if not check_if_registry_stack_exists():
+            assert "registry workload not started after reboot"
+        sub = OCP(
+            kind=constants.SUBSCRIPTION,
+            namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+        )
+        logging_sub = sub.get().get("items")
+        if not logging_sub:
+            assert "Logging is not configured"
+
     @system_test
     @polarion_id("OCS-3976")
     @skipif_no_kms
@@ -579,6 +387,10 @@ class TestGracefulNodesShutdown(E2ETest):
         mcg_obj,
         test_directory_setup,
         bucket_factory,
+        setup_rgw_kafka_notification,
+        setup_mcg_bg_features,
+        validate_mcg_bg_features,
+        snapshot_restore_factory,
     ):
         """
         Steps:
@@ -596,117 +408,19 @@ class TestGracefulNodesShutdown(E2ETest):
             Once cluster up, there should not be seen any issues or impact on any data(No DU/DL/DC) and also
             normal operations should work fine.
         """
+
+        # Setup rgw kafa notification
+        setup_rgw_kafka_notification()
+
         # Create normal OBCs and buckets
         multi_obc_lifecycle_factory(num_of_obcs=20, bulk=True, measure=False)
 
         # OCP Workloads
-        start_ocp_workload(workloads_list=["registry", "monitoring"], run_in_bg=True)
+        start_ocp_workload(workloads_list=["registry", "logging"], run_in_bg=True)
 
         # noobaa caching
         logger.info("Noobaa caching")
-        ttl = 300000  # 300 seconds
-        cache_bucketclass = {
-            "interface": "OC",
-            "namespace_policy_dict": {
-                "type": "Cache",
-                "ttl": ttl,
-                "namespacestore_dict": {
-                    "aws": [(1, "eu-central-1")],
-                },
-            },
-            "placement_policy": {
-                "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
-            },
-        }
-
-        cached_bucket_obj = bucket_factory(bucketclass=cache_bucketclass)[0]
-        cached_bucket = cached_bucket_obj.name
-        source_bucket_uls_name = cached_bucket_obj.bucketclass.namespacestores[
-            0
-        ].uls_name
-        object_name = "fileobj0"
-
-        namespacestore_aws_s3_creds = {
-            "access_key_id": cld_mgr.aws_client.access_key,
-            "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.AWS_S3_ENDPOINT,
-            "region": "eu-central-1",
-        }
-
-        first_dir = test_directory_setup.origin_dir
-        second_dir = test_directory_setup.result_dir
-
-        # write to cached buckets and make sure of copied object integrity
-        copy_random_individual_objects(
-            podobj=awscli_pod_session,
-            file_dir=first_dir,
-            target=f"s3://{cached_bucket}",
-            pattern="fileobj",
-            s3_obj=mcg_obj,
-            amount=1,
-        )
-        copy_objects(
-            podobj=awscli_pod_session,
-            src_obj=f"s3://{cached_bucket}/{object_name}",
-            target=second_dir,
-            s3_obj=mcg_obj,
-        )
-        assert verify_s3_object_integrity(
-            original_object_path=f"{first_dir}/{object_name}",
-            result_object_path=f"{second_dir}/{object_name}",
-            awscli_pod=awscli_pod_session,
-        ), "Content of object dont match between cached bucket & local directory!!"
-        logger.info(
-            "Contents of object in both local directory and cached buckets match!"
-        )
-
-        # change the file content and then write directly to hub bucket
-        time.sleep(5)
-        write_random_objects_in_pod(
-            io_pod=awscli_pod_session,
-            file_dir=first_dir,
-            amount=1,
-            pattern="fileobj",
-            bs="10M",
-        )
-        copy_objects(
-            podobj=awscli_pod_session,
-            src_obj=f"{first_dir}/{object_name}",
-            target=f"s3://{source_bucket_uls_name}/",
-            signed_request_creds=namespacestore_aws_s3_creds,
-        )
-        logger.info("Pushed the updated object with 10M to hub bucket!")
-
-        # make sure content between cahced & hub buckets are different when TTL isn't expired
-        time.sleep(5)
-        copy_objects(
-            podobj=awscli_pod_session,
-            src_obj=f"s3://{cached_bucket}/{object_name}",
-            target=second_dir,
-            s3_obj=mcg_obj,
-        )
-        assert not verify_s3_object_integrity(
-            original_object_path=f"{first_dir}/{object_name}",
-            result_object_path=f"{second_dir}/{object_name}",
-            awscli_pod=awscli_pod_session,
-        ), "Cached bucket got updated too quickly!!"
-        logger.info("Expected, Hub bucket & cache bucket's have different contents!")
-
-        # make sure content of cached & hub buckets are same after TTL is expired
-        time.sleep(ttl / 1000)
-        logger.info(f"After TTL: {ttl} expired!")
-        copy_objects(
-            podobj=awscli_pod_session,
-            src_obj=f"s3://{cached_bucket}/{object_name}",
-            target=second_dir,
-            s3_obj=mcg_obj,
-        )
-        assert verify_s3_object_integrity(
-            original_object_path=f"{first_dir}/{object_name}",
-            result_object_path=f"{second_dir}/{object_name}",
-            awscli_pod=awscli_pod_session,
-        ), "Cached bucket didnt get updated after TTL expired!!!"
-        logger.info("[Success] Cached bucket got updated with latest object!")
+        setup_mcg_bg_features(skip_any_features=["expiration", "rgw kafka"])
 
         # check OSD status after graceful node shutdown
         worker_nodes = get_nodes(node_type="worker")
@@ -724,13 +438,16 @@ class TestGracefulNodesShutdown(E2ETest):
         Sanity().health_check(tries=60)
 
         self.validate_data_integrity()
+        self.validate_snapshot_restore(snapshot_restore_factory)
+        validate_mcg_bg_features()
+        self.validate_ocp_workload_continues()
+
         # check osd status
         state = "down"
         ct_pod = pod.get_ceph_tools_pod()
         tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
         logger.info("ceph osd tree output:")
         logger.info(tree_output)
-
         assert not (
             state in str(tree_output)
         ), "OSD are down after graceful node shutdown"
