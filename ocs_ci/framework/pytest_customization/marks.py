@@ -25,6 +25,7 @@ from ocs_ci.ocs.constants import (
     OPENSHIFT_DEDICATED_PLATFORM,
     MANAGED_SERVICE_PLATFORMS,
     HPCS_KMS_PROVIDER,
+    HCI_PROVIDER_CLIENT_PLATFORMS,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -274,6 +275,31 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
 
+hci_client_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "hci_client"
+    ),
+    reason="Test runs ONLY on Fusion HCI Client cluster",
+)
+
+hci_provider_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "provider"
+    ),
+    reason="Test runs ONLY on Fusion HCI Provider cluster",
+)
+hci_provider_and_client_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.is_hci_provider_exist()
+        and config.is_hci_client_exist()
+    ),
+    reason="Test runs ONLY on Fusion HCI provider and client clusters",
+)
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
@@ -340,6 +366,27 @@ skipif_ms_provider_and_consumer = pytest.mark.skipif(
     and config.is_provider_exist()
     and config.is_consumer_exist(),
     reason="Test will not run on Managed service with provider and consumer clusters",
+)
+
+skipif_hci_provider = pytest.mark.skipif(
+    config.default_cluster_ctx.ENV_DATA["platform"].lower()
+    in HCI_PROVIDER_CLIENT_PLATFORMS
+    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "provider",
+    reason="Test will not run on Fusion HCI provider cluster",
+)
+
+skipif_hci_client = pytest.mark.skipif(
+    config.default_cluster_ctx.ENV_DATA["platform"].lower()
+    in HCI_PROVIDER_CLIENT_PLATFORMS
+    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "hci_client",
+    reason="Test will not run on Fusion HCI client cluster",
+)
+
+skipif_hci_provider_and_client = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+    and config.is_hci_provider_exist()
+    and config.is_hci_client_exist(),
+    reason="Test will not run on Fusion HCI provider and Client clusters",
 )
 
 skipif_rosa = pytest.mark.skipif(
