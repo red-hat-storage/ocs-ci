@@ -16,8 +16,13 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
 )
+from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.utils import run_cmd, run_cmd_interactive
+from ocs_ci.utility.utils import (
+    run_cmd,
+    run_cmd_interactive,
+    wait_for_machineconfigpool_status,
+)
 from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
 
 logger = logging.getLogger(__name__)
@@ -62,6 +67,8 @@ class Submariner(object):
     def __init__(self):
         # whether upstream OR downstream
         self.source = config.ENV_DATA["submariner_source"]
+        # released/unreleased
+        self.submariner_release_type = config.ENV_DATA.get("submariner_release_type")
         # Deployment type:
         self.deployment_type = config.ENV_DATA.get("submariner_deployment")
         # Designated broker cluster index where broker will be deployed
@@ -94,8 +101,27 @@ class Submariner(object):
 
         login_to_acm()
         acm_obj = AcmAddClusters()
+        if self.submariner_release_type == "unreleased":
+            old_ctx = config.cur_index
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                self.create_acm_brew_icsp()
+            config.switch_ctx(old_ctx)
         acm_obj.install_submariner_ui()
         acm_obj.submariner_validation_ui()
+
+    def create_acm_brew_icsp(self):
+        """
+        This is a prereq for downstream unreleased submariner
+
+        """
+        icsp_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_ICSP)
+        icsp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_icsp", delete=False
+        )
+        templating.dump_data_to_temp_yaml(icsp_data, icsp_data_yaml.name)
+        run_cmd(f"oc create -f {icsp_data_yaml.name}", timeout=300)
+        wait_for_machineconfigpool_status(node_type="all")
 
     def download_binary(self):
         if self.source == "upstream":

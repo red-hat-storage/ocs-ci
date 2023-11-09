@@ -879,6 +879,13 @@ acm_configuration_4_13 = {
     **acm_configuration_4_12,
 }
 
+acm_configuration_4_14 = {
+    **acm_configuration_4_13,
+    "submariner-custom-subscription": ("isCustomSubscription", By.ID),
+    "submariner-custom-source": ("source", By.ID),
+    "submariner-custom-channel": ("channel", By.ID),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -1710,6 +1717,7 @@ locators = {
             **acm_configuration_4_11,
             **acm_configuration_4_12,
             **acm_configuration_4_13,
+            **acm_configuration_4_14,
         },
         "validation": {
             **validation,

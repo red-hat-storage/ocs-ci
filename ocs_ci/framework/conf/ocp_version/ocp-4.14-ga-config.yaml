@@ -1,0 +1,14 @@
+---
+# Config file for OCP GA 4.14 stable channel
+RUN:
+  client_version: '4.14-ga'
+DEPLOYMENT:
+  ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+  installer_version: "4.14-ga"
+  terraform_version: "1.0.11"
+  ignition_version: "3.2.0"
+ENV_DATA:
+  #TODO: Update to the 4.14 GA RHCOS image once we have
+  vm_template: "rhcos-4.14.0-x86_64-vmware.x86_64"
+  acm_hub_channel: release-2.9
+  acm_version: "2.9"

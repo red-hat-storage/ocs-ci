@@ -391,7 +391,7 @@ class MCG:
 
         try:
             for total_size, total_reduced in TimeoutSampler(
-                140, 5, _retrieve_reduction_data
+                300, 5, _retrieve_reduction_data
             ):
                 if total_size - total_reduced > expected_reduction_in_bytes:
                     logger.info("Data reduced:" + str(total_size - total_reduced))
