@@ -1,0 +1,13 @@
+---
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'upi'
+  region: 'us-east-2'
+  worker_replicas: 3
+  master_replicas: 3
+  availability_zone_count: 1
+  worker_instance_type: 'm5.4xlarge'
+  enable_non_resilient_pools: true
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-5189'

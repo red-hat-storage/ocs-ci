@@ -1391,6 +1391,12 @@ class Deployment(object):
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
             )
 
+        # NonResilentPools Deployment
+        if config.ENV_DATA.get("enable_non_resilient_pools"):
+            cluster_data["spec"]["managedResources"]["cephNonResilientPools"][
+                "enable"
+            ] = True
+
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
         )

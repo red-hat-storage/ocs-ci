@@ -763,6 +763,12 @@ def ocs_install_verification(
     ):
         validate_serviceexport()
 
+    # Verify Non Resilient Pool Deployment
+    if config.ENV_DATA.get("enable_non_resilient_pools"):
+        assert (
+            verify_non_resilient_pool_deployment()
+        ), "Deployment with Non Resilient Pools is failed."
+
 
 def mcg_only_install_verification(ocs_registry_image=None):
     """
@@ -2568,3 +2574,21 @@ def validate_serviceexport():
     assert mon_count == len(
         get_mon_pods()
     ), f"Mon serviceexport count mismatch {mon_count} != {len(get_mon_pods())}"
+
+
+def verify_non_resilient_pool_deployment():
+    """_summary_"""
+    from ocs_ci.helpers.helpers import get_all_storageclass_names
+
+    sc_list = get_all_storageclass_names()
+    if (constants.DEFAULT_STORAGECLASS_NON_RESILIENT_POOL not in sc_list) or (
+        check_custom_storageclass_presence(
+            interface=constants.OCS_COMPONENTS_MAP["cephnonresilentpools"]
+        )
+    ):
+        log.info(
+            f"Storageclass {constants.DEFAULT_STORAGECLASS_NON_RESILIENT_POOL} is Not created. "
+        )
+        return False
+
+    return True
