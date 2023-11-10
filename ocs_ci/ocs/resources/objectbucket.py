@@ -144,6 +144,7 @@ class ObjectBucket(ABC):
         replication_policy=None,
         quota=None,
         versioning=False,
+        object_lock=False,
         *args,
         **kwargs,
     ):
@@ -159,6 +160,7 @@ class ObjectBucket(ABC):
 
         self.quota = quota
         self.versioning = versioning
+        self.object_lock = object_lock
         self.namespace = config.ENV_DATA["cluster_namespace"]
         logger.info(f"Creating bucket: {self.name}")
 
@@ -425,7 +427,9 @@ class MCGS3Bucket(ObjectBucket):
         else:
             self.s3resource = self.mcg.s3_resource
         self.s3client = self.mcg.s3_client
-        self.s3resource.create_bucket(Bucket=self.name)
+        self.s3resource.create_bucket(
+            Bucket=self.name, ObjectLockEnabledForBucket=self.object_lock
+        )
         if self.versioning:
             self.set_versioning("Enabled")
 

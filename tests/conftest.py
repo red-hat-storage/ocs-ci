@@ -2757,6 +2757,7 @@ def bucket_factory_fixture(
         bucketclass=None,
         replication_policy=None,
         versioning=False,
+        object_lock=False,
         *args,
         **kwargs,
     ):
@@ -2772,13 +2773,20 @@ def bucket_factory_fixture(
             bucketclass (dict): A dictionary describing a new
                 bucketclass to be created.
                 When None, the default bucketclass is used.
-            versioning (bool): Enable or disable versining for the bucket
+            versioning (bool): Enable or disable versioning for the bucket
+            object_lock (bool): Enable or disable Object Lock for the bucket
+                Versioning needs to be enabled for the bucket if object_lock
+                is enabled.
 
         Returns:
             list: A list of s3.Bucket objects, containing all the created
                 buckets
 
         """
+        if object_lock and not versioning:
+            raise ValueError(
+                "Enabling object_lock for a bucket requires to enable versioning too"
+            )
         if bucketclass:
             interface = bucketclass["interface"]
 
@@ -2804,6 +2812,7 @@ def bucket_factory_fixture(
                 bucketclass=bucketclass,
                 replication_policy=replication_policy,
                 versioning=versioning,
+                object_lock=object_lock,
                 *args,
                 **kwargs,
             )
