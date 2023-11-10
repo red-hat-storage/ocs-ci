@@ -346,6 +346,22 @@ def get_replicationsources_count(namespace):
     return len(rs_items)
 
 
+def get_replicationdestinations_count(namespace):
+    """
+    Gets ReplicationDestination resource count in given namespace
+
+    Args:
+        namespace (str): the namespace of the ReplicationDestination resources
+
+    Returns:
+         int: ReplicationDestination resource count
+
+    """
+    rs_obj = ocp.OCP(kind=constants.REPLICATIONDESTINATION, namespace=namespace)
+    rs_items = rs_obj.get().get("items")
+    return len(rs_items)
+
+
 def check_vr_state(state, namespace):
     """
     Check if all VRs in the given namespace are in expected state
@@ -502,6 +518,22 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
 
+        if "cephfs" in namespace:
+            set_current_secondary_cluster_context(namespace=namespace)
+            try:
+                logger.info(
+                    f"Waiting for {vr_count} {constants.REPLICATIONDESTINATION} to be created"
+                )
+                sample = TimeoutSampler(
+                    timeout=timeout,
+                    sleep=5,
+                    func=get_replicationdestinations_count,
+                    namespace=namespace,
+                )
+                sample.wait_for_func_value(vr_count)
+            finally:
+                set_current_primary_cluster_context(namespace=namespace)
+
     logger.info("Waiting for VRG to reach primary state")
     sample = TimeoutSampler(
         timeout=timeout,
@@ -568,24 +600,26 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
             logger.info(error_msg)
             raise TimeoutExpiredError(error_msg)
 
-    logger.info("Waiting for VRG to be deleted")
-    sample = TimeoutSampler(
-        timeout=timeout, sleep=5, func=check_vrg_existence, namespace=namespace
-    )
-    if not sample.wait_for_func_status(result=False):
-        error_msg = "VRG resource not deleted"
-        logger.info(error_msg)
-        raise TimeoutExpiredError(error_msg)
+    if "cephfs" not in namespace:
+        logger.info("Waiting for VRG to be deleted")
+        sample = TimeoutSampler(
+            timeout=timeout, sleep=5, func=check_vrg_existence, namespace=namespace
+        )
+        if not sample.wait_for_func_status(result=False):
+            error_msg = "VRG resource not deleted"
+            logger.info(error_msg)
+            raise TimeoutExpiredError(error_msg)
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        logger.info("Waiting for all VRs to be deleted")
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=count_function,
-            namespace=namespace,
-        )
-        sample.wait_for_func_value(0)
+        if "cephfs" not in namespace:
+            logger.info("Waiting for all VRs to be deleted")
+            sample = TimeoutSampler(
+                timeout=timeout,
+                sleep=5,
+                func=count_function,
+                namespace=namespace,
+            )
+            sample.wait_for_func_value(0)
 
 
 def wait_for_all_resources_creation(

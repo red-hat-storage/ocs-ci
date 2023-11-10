@@ -6,6 +6,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.dr_helpers import check_vrg_state
 from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
@@ -169,6 +170,9 @@ class TestFailover:
             logger.info("Checking for Ceph Health OK")
             ceph_health_check()
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
+
+        # Check VRG state on primary cluster
+        check_vrg_state("secondary", rdr_workload.workload_namespace)
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(

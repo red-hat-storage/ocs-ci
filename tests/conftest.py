@@ -6413,7 +6413,10 @@ def dr_workload(request):
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
         if ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+            if pvc_interface != constants.CEPHFILESYSTEM:
+                dr_helpers.wait_for_mirroring_status_ok(
+                    replaying_images=total_pvc_count
+                )
         return instances
 
     def teardown():
