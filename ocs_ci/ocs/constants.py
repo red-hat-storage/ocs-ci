@@ -2677,14 +2677,22 @@ GLOBALNET_STATUS = "True"
 SUBMARINER_DOWNSTREAM_UNRELEASED = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "submariner_downstream_unreleased_catsrc.yaml"
 )
+ACM_CATSRC = SUBMARINER_DOWNSTREAM_UNRELEASED
+ACM_CATSRC_NAME = "acm-catalogsource"
 # We need to append version string at the end of this url
 SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
     "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
     "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
     "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
 )
+ACM_BREW_BUILD_URL = (
+    "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
+    "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+    "&rows_per_page=25&delta=1296000&contains=acm"
+)
 SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
+ACM_BREW_REPO = SUBMARINER_BREW_REPO
 
 # Multicluster related
 
@@ -2721,6 +2729,7 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
 SUBMARINER_DOWNSTREAM_BREW_ICSP = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_icsp.yaml"
 )
+ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
