@@ -13,6 +13,7 @@ from ocs_ci.ocs.ui.page_objects.resource_page import ResourcePage
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ui.base_ui import logger, wait_for_element_to_be_visible
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 class CreateResourceForm(PageNavigator):
@@ -61,16 +62,27 @@ class CreateResourceForm(PageNavigator):
     def _verify_input_requirements(self):
         """
         Verify that all input requirements are met.
+        Function retries to get all error message rule texts during 120 seconds.
         """
-        rules_texts_ok = self._check_all_rules_exist(
-            self.generic_locators["text_input_popup_rules"]
-        )
-        self.test_results.loc[len(self.test_results)] = [
-            None,
-            self._check_all_rules_exist.__name__,
-            rules_texts_ok,
-        ]
+        # verify that all rules exist when input rules popup is visible
+        for sample in TimeoutSampler(
+            120,
+            3,
+            self._check_all_rules_exist,
+            self.generic_locators["text_input_popup_rules"],
+        ):
+            if sample:
+                self.test_results.loc[len(self.test_results)] = [
+                    None,
+                    self._check_all_rules_exist.__name__,
+                    True,
+                ]
+                break
+            else:
+                self.do_click(self.validation_loc["input_value_validator_icon"])
+                logger.info("retrying get all error message rule texts")
 
+        # invoke execution of every rule-checker function
         for rule, func in self.rules.items():
             res = func(rule)
             self.test_results.loc[len(self.test_results)] = [rule, func.__name__, res]
