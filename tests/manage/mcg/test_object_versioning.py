@@ -175,7 +175,7 @@ class TestObjectVersioning:
 
         logger.info("Checking that there is only one object with IsLatest set to True")
         assert len(object_info["Versions"]) == 1
-        assert object_info["Versions"][0]["IsLatest"] == True
+        assert object_info["Versions"][0]["IsLatest"] is True
         version_ids = []
         version_ids.append(object_info["Versions"][0]["VersionId"])
 
@@ -188,9 +188,9 @@ class TestObjectVersioning:
 
         logger.info("Checking 2 versions of the same file in a bucket")
         assert len(object_info["Versions"]) == 2
-        assert object_info["Versions"][0]["IsLatest"] == True
+        assert object_info["Versions"][0]["IsLatest"] is True
         assert object_info["Versions"][0]["VersionId"] != version_ids[0]
-        assert object_info["Versions"][1]["IsLatest"] == False
+        assert object_info["Versions"][1]["IsLatest"] is False
         version_ids.append(object_info["Versions"][0]["VersionId"])
         assert object_info["Versions"][1]["VersionId"] == version_ids[0]
         assert version_ids[0] != version_ids[1]
@@ -209,10 +209,10 @@ class TestObjectVersioning:
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
         assert len(object_info["Versions"]) == 3
-        assert object_info["Versions"][0]["IsLatest"] == True
+        assert object_info["Versions"][0]["IsLatest"] is True
         assert object_info["Versions"][0]["VersionId"] != version_ids[0]
-        assert object_info["Versions"][1]["IsLatest"] == False
-        assert object_info["Versions"][2]["IsLatest"] == False
+        assert object_info["Versions"][1]["IsLatest"] is False
+        assert object_info["Versions"][2]["IsLatest"] is False
         version_ids.append(object_info["Versions"][0]["VersionId"])
         assert object_info["Versions"][2]["VersionId"] == version_ids[0]
         assert len(set(version_ids)) == 3
@@ -228,11 +228,11 @@ class TestObjectVersioning:
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
         assert len(object_info["Versions"]) == 8
-        assert object_info["Versions"][0]["IsLatest"] == True
-        assert object_info["Versions"][1]["IsLatest"] == False
-        assert object_info["Versions"][2]["IsLatest"] == False
+        assert object_info["Versions"][0]["IsLatest"] is True
+        assert object_info["Versions"][1]["IsLatest"] is False
+        assert object_info["Versions"][2]["IsLatest"] is False
         for i in range(3, 8):
-            assert object_info["Versions"][i]["IsLatest"] == True
+            assert object_info["Versions"][i]["IsLatest"] is True
             version_ids.append(object_info["Versions"][i]["VersionId"])
         assert len(set(version_ids)) == 8
 
@@ -273,7 +273,7 @@ class TestObjectVersioning:
             assert version["IsLatest"] == False
         assert len(object_info["DeleteMarkers"]) == 6
 
-        logger.info(f"Deleting all object versions and delete markers")
+        logger.info("Deleting all object versions and delete markers")
         versions = object_info.get("Versions", [])
         versions.extend(object_info.get("DeleteMarkers", []))
         for version_id in [
@@ -281,7 +281,9 @@ class TestObjectVersioning:
             for x in versions
             if x["Key"] == filename and x["VersionId"] != "null"
         ]:
-            client.delete_object(Bucket=bucket.name, Key=filename, VersionId=version_id)
+            bucket.s3client.delete_object(
+                Bucket=bucket.name, Key=filename, VersionId=version_id
+            )
 
         bucket_object = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
         logger.info(
@@ -374,16 +376,36 @@ class TestObjectVersioning:
         assert len(set(version_ids4)) == 11
         assert not set(version_ids3).intersection(version_ids4)
 
-        logger.info(f"Check listing with a prefix and delimiter")
+        logger.info("Check listing with a prefix and delimiter")
         object_info = bucket.s3client.list_object_versions(
             Bucket=bucket.name, Prefix="testdir/", Delimiter="/"
         )
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
-    def test_locking(self):
-        """ """
-        pass
+    @tier2
+    @pytest.mark.parametrize(
+        argnames=["retention"],
+        argvalues=[
+            pytest.param(*["governance"], marks=pytest.mark.polarion_id("OCS-")),
+            pytest.param(*["compliance"], marks=pytest.mark.polarion_id("OCS-")),
+        ],
+    )
+    def test_locking(self, bucket_factory, mcg_obj_session, retention):
+        """
+        Test S3 Object Locking in Governance and Compliance retention modes.
 
+        """
+        s3_obj = mcg_obj_session
+        bucket = bucket_factory(interface="S3", versioning=True)[0]
+        logger.info(f"Bucket {bucket.name} created")
+        filename = f"file-{uuid4().hex}"
+        with open(filename, "wb") as f:
+            f.write(os.urandom(1000))
+        logger.info(f"Created file {filename}")
+        logger.info(f"Putting file {filename} into bucket {bucket.name}")
+        s3_put_object(s3_obj, bucket.name, filename, filename)
+
+    @tier2
     def test_version_restore(self, bucket_factory, mcg_obj_session):
         """
         According to AWS documentation about restoring object versions
@@ -410,7 +432,7 @@ class TestObjectVersioning:
         s3_put_object(s3_obj, bucket.name, filename, filename)
         bucket_object1 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
         logger.info(
-            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object1}"
         )
 
         filename2 = f"file-{uuid4().hex}"
@@ -421,24 +443,24 @@ class TestObjectVersioning:
         s3_put_object(s3_obj, bucket.name, filename, filename2)
         bucket_object2 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
         logger.info(
-            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object2}"
         )
         assert bucket_object1["body"] != bucket_object2["body"]
-        bucket_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        assert object_info["Versions"][1]["IsLatest"] == True
+        assert object_info["Versions"][1]["IsLatest"] is True
         assert bucket_object2["VersionId"] == object_info["Versions"][1]["VersionId"]
 
         logger.info(f"Putting file {filename} into bucket {bucket.name} again")
         s3_put_object(s3_obj, bucket.name, filename, filename)
         bucket_object3 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
         logger.info(
-            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object3}"
         )
         assert bucket_object1["body"] == bucket_object3["body"]
-        bucket_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        assert object_info["Versions"][2]["IsLatest"] == True
+        assert object_info["Versions"][2]["IsLatest"] is True
         assert bucket_object3["VersionId"] == object_info["Versions"][2]["VersionId"]
 
         logger.info(
@@ -450,5 +472,5 @@ class TestObjectVersioning:
         logger.info(f"Versioning info of bucket {bucket.name}: {versioning_info}")
         bucket_object3 = bucket.s3client.get_object(Bucket=bucket.name, Key=filename)
         logger.info(
-            f"info of object {filename} from bucket {bucket.name}: {bucket_object}"
+            f"info of object {filename} from bucket {bucket.name}: {bucket_object3}"
         )
