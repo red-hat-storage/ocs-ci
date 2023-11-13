@@ -31,7 +31,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
 )
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
@@ -114,7 +114,7 @@ class TestPvPool:
         """
         Test to check the scale out functionality of pv pool backing store.
         """
-        rbd_sc_name = storageclass_name(OCS_COMPONENTS_MAP["blockpools"])
+        rbd_sc_name = get_default_storage_class_name(OCS_COMPONENTS_MAP["blockpools"])
         pv_backingstore = backingstore_factory(
             "OC",
             {"pv": [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, rbd_sc_name)]},
@@ -220,7 +220,7 @@ class TestPvPool:
             pods.
 
         """
-        rbd_sc_name = storageclass_name(OCS_COMPONENTS_MAP["blockpools"])
+        rbd_sc_name = get_default_storage_class_name(OCS_COMPONENTS_MAP["blockpools"])
         bucketclass_dict["pv"][0].append(rbd_sc_name)
         bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
         bucket_name = bucket.name
@@ -306,7 +306,7 @@ class TestPvPool:
         """
         Test if ephemeral storage on pv backingstore pod node is getting consumed
         """
-        CEPHRBD_SC = storageclass_name(OCS_COMPONENTS_MAP["cephfs"])
+        CEPHRBD_SC = get_default_storage_class_name(OCS_COMPONENTS_MAP["cephfs"])
 
         # create pv pool backingstore
         pv_backingstore = backingstore_factory(

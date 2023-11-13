@@ -13,7 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from tempfile import mkdtemp
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +77,9 @@ class Warp(object):
         pvc_size = "50Gi"
         self.pod_name = "warppod"
         self.pvc_obj = helpers.create_pvc(
-            sc_name=storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
+            sc_name=get_default_storage_class_name(
+                constants.OCS_COMPONENTS_MAP["cephfs"]
+            ),
             namespace=self.namespace,
             size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,

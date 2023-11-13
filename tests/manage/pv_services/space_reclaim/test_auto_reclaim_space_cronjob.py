@@ -15,7 +15,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 from ocs_ci.ocs.exceptions import PVCNotCreated
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         logger.info(f"There are {existing_cronjobs_num} existing cronjobs")
 
         self.pvc_objs_created, _ = helpers.create_multiple_pvcs(
-            sc_name=storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]),
+            sc_name=get_default_storage_class_name(
+                constants.OCS_COMPONENTS_MAP["blockpools"]
+            ),
             namespace=self.namespace,
             number_of_pvc=num_of_pvcs,
             size="1Gi",
@@ -131,7 +133,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         # create CephFS PVC and test that no reclaim space job created for it
         try:
             pvc_obj = helpers.create_pvc(
-                sc_name=storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
+                sc_name=get_default_storage_class_name(
+                    constants.OCS_COMPONENTS_MAP["cephfs"]
+                ),
                 size="1Gi",
                 namespace=self.namespace,
             )
@@ -221,7 +225,9 @@ class TestReclaimSpaceCronJob(ManageTest):
 
         try:
             pvc_obj = helpers.create_pvc(
-                sc_name=storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]),
+                sc_name=get_default_storage_class_name(
+                    constants.OCS_COMPONENTS_MAP["blockpools"]
+                ),
                 size="1Gi",
                 namespace=namespace,
             )

@@ -351,9 +351,11 @@ def template_pvc(
 
     """
     if storageclass is None:
-        from ocs_ci.helpers.storageclass_helpers import storageclass_name
+        from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
-        storageclass = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
+        storageclass = get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["cephfs"]
+        )
     pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data["metadata"]["name"] = name
     pvc_data["metadata"]["namespace"] = namespace

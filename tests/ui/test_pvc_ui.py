@@ -12,7 +12,7 @@ from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resour
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class TestPvcUserInterface(object):
         # Creating a test project via CLI
         pro_obj = project_factory()
         project_name = pro_obj.namespace
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
 
         pvc_ui_obj = PvcUI()
 
@@ -131,7 +131,9 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
+        if sc_name in get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["blockpools"]
+        ):
             interface_type = constants.CEPHBLOCKPOOL
         elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL
@@ -240,7 +242,7 @@ class TestPvcUserInterface(object):
         """
         pvc_size = "1"
         vol_mode = constants.VOLUME_MODE_FILESYSTEM
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
 
         # Creating a project from CLI
         pro_obj = project_factory()

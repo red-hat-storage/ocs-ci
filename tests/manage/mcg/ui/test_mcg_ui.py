@@ -26,7 +26,7 @@ from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
     ObjectBucketClaimsTab,
 )
 from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
@@ -333,7 +333,9 @@ class TestObcUserInterface(object):
         obc_ui_obj = ObjectBucketClaimsTab()
 
         if storageclass == constants.DEFAULT_STORAGECLASS_RGW:
-            storageclass = storageclass_name(constants.OCS_COMPONENTS_MAP["rgw"])
+            storageclass = get_default_storage_class_name(
+                constants.OCS_COMPONENTS_MAP["rgw"]
+            )
 
         obc_page = obc_ui_obj.create_obc_ui(obc_name, storageclass, bucketclass)
 

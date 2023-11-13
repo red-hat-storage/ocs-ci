@@ -2,7 +2,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
 
-def storageclass_name(interface, external_mode=False):
+def get_default_storage_class_name(interface, external_mode=False):
     """
     This Function will return the default storage class name from the cluster.
     This will return only "cephfs", "rbd" and "rgw" type storage class names only.

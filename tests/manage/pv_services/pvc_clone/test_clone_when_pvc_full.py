@@ -17,7 +17,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.resources import pod as res_pod
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 
 log = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class TestCloneWhenFull(ManageTest):
         for pvc_obj in self.pvcs:
             if pvc_obj.backed_sc in [
                 constants.CEPHFILESYSTEM_SC,
-                storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
+                get_default_storage_class_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
             ]:
                 pv_obj = pvc_obj.backed_pv_obj
                 subvolumname = (
@@ -116,7 +116,7 @@ class TestCloneWhenFull(ManageTest):
         for clone_pvc in cloned_pvcs:
             if clone_pvc.backed_sc in [
                 constants.CEPHFILESYSTEM_SC,
-                storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
+                get_default_storage_class_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
             ]:
                 pv = clone_pvc.get().get("spec").get("volumeName")
                 error_msg = f"{pv} failed to create clone from subvolume"

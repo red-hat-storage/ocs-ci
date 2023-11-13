@@ -17,7 +17,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_external_mode,
 )
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 log = logging.getLogger(__name__)
 
@@ -31,8 +31,10 @@ def setup_sc(storageclass_factory_class):
         interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
     )
     return {
-        storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]): None,
-        storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]): None,
+        get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["blockpools"]
+        ): None,
+        get_default_storage_class_name(constants.OCS_COMPONENTS_MAP["cephfs"]): None,
         "sc-test-blk": sc_blk_obj,
         "sc-test-fs": sc_fs_obj,
     }
@@ -119,13 +121,13 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         if sc_interface not in constants.OCS_COMPONENTS_MAP:
             sc_name = sc_interface
         else:
-            sc_name = storageclass_name(sc_interface)
+            sc_name = get_default_storage_class_name(sc_interface)
 
         quota_names = {
-            storageclass_name(
+            get_default_storage_class_name(
                 constants.OCS_COMPONENTS_MAP["blockpools"]
             ): "ocs-storagecluster-ceph-rbd-quota-sc-test",
-            storageclass_name(
+            get_default_storage_class_name(
                 constants.OCS_COMPONENTS_MAP["cephfs"]
             ): "ocs-storagecluster-cephfs-quota-sc-test",
             "sc-test-blk": "sc-test-blk-quota-sc-test",

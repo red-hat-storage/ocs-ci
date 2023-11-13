@@ -19,7 +19,7 @@ from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_operator_pods
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ class TestBucketCreation(MCGTest):
         The factory checks the bucket's health by default.
         """
         if bucketclass_dict:
-            custom_rbd_storageclass = storageclass_name(
+            custom_rbd_storageclass = get_default_storage_class_name(
                 OCS_COMPONENTS_MAP["blockpools"]
             )
             bucketclass_dict["backingstore_dict"]["pv"][0].append(

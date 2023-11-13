@@ -12,7 +12,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
 )
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 log = logging.getLogger(__name__)
 
@@ -177,14 +177,18 @@ def available_subvolumes(sc_name, toolbox_pod, fs):
         list: subvolumes available for rbd or cephfs
 
     """
-    if sc_name == storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]):
+    if sc_name == get_default_storage_class_name(
+        constants.OCS_COMPONENTS_MAP["cephfs"]
+    ):
         cephfs_subvolumes = toolbox_pod.exec_cmd_on_pod(
             f"ceph fs subvolume ls {fs} --group_name csi"
         )
         log.info(f"available cephfs subvolumes-----{cephfs_subvolumes}")
         return cephfs_subvolumes
 
-    elif sc_name == storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
+    elif sc_name == get_default_storage_class_name(
+        constants.OCS_COMPONENTS_MAP["blockpools"]
+    ):
         rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod(f"rbd ls {fs} --format json")
         log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")
         return rbd_cephblockpool
@@ -212,10 +216,12 @@ def created_subvolume(available_subvolumes, updated_subvolumes, sc_name):
     for sub_vol in updated_subvolumes:
         if sub_vol not in available_subvolumes:
             created_subvolume = sub_vol
-            if sc_name == storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]):
+            if sc_name == get_default_storage_class_name(
+                constants.OCS_COMPONENTS_MAP["cephfs"]
+            ):
                 log.info(f"created sub volume---- {created_subvolume['name']}")
                 return created_subvolume["name"]
-            elif sc_name == storageclass_name(
+            elif sc_name == get_default_storage_class_name(
                 constants.OCS_COMPONENTS_MAP["blockpools"]
             ):
                 log.info(f"created sub volume---- {created_subvolume}")
@@ -251,7 +257,9 @@ def fetch_metadata(
         json: metadata details
 
     """
-    if sc_name == storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]):
+    if sc_name == get_default_storage_class_name(
+        constants.OCS_COMPONENTS_MAP["cephfs"]
+    ):
         if snapshot:
             snap_subvolume = toolbox_pod.exec_cmd_on_pod(
                 f"ceph fs subvolume snapshot ls {fs} {created_subvol} --group_name=csi --format=json"
@@ -265,7 +273,9 @@ def fetch_metadata(
             metadata = toolbox_pod.exec_cmd_on_pod(
                 f"ceph fs subvolume metadata ls {fs} {created_subvol} --group_name=csi --format=json"
             )
-    elif sc_name == storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
+    elif sc_name == get_default_storage_class_name(
+        constants.OCS_COMPONENTS_MAP["blockpools"]
+    ):
         if snapshot:
             created_subvol = created_subvolume(
                 available_subvolumes, updated_subvolumes, sc_name

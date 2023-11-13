@@ -31,7 +31,7 @@ from ocs_ci.ocs.ui.workload_ui import (
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class TestCapacityBreakdownUI(ManageTest):
         sc_type (str): storage class [fs, block]
 
         """
-        sc_type = storageclass_name(sc_interface)
+        sc_type = get_default_storage_class_name(sc_interface)
         project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(project_obj)
         logger.info(
@@ -160,10 +160,10 @@ class TestCapacityBreakdownUI(ManageTest):
             ceph_blockpool_sc = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             ceph_filesystem_sc = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
         else:
-            ceph_blockpool_sc = storageclass_name(
+            ceph_blockpool_sc = get_default_storage_class_name(
                 constants.OCS_COMPONENTS_MAP["blockpools"]
             )
-            ceph_filesystem_sc = storageclass_name(
+            ceph_filesystem_sc = get_default_storage_class_name(
                 constants.OCS_COMPONENTS_MAP["cephfs"]
             )
         sc_block_random_num = [

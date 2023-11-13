@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
 )
 from ocs_ci.utility import version
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +23,9 @@ def setup_sc(storageclass_factory_class):
         interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
     )
     yield {
-        storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]): None,
+        get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["blockpools"]
+        ): None,
         "sc-test-blk": sc_blk_obj,
     }
 

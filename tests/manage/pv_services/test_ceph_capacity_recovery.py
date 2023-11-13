@@ -24,7 +24,7 @@ from ocs_ci.helpers.managed_services import (
 
 from ocs_ci.ocs.resources import pvc, ocs
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check_base
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 
@@ -112,7 +112,9 @@ class TestCephCapacityRecovery(PASTest):
             kind="StorageCluster",
             metadata={
                 "namespace": self.namespace,
-                "name": storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"]),
+                "name": get_default_storage_class_name(
+                    constants.OCS_COMPONENTS_MAP["cephfs"]
+                ),
             },
         )
 

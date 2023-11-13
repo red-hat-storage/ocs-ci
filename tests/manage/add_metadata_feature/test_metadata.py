@@ -20,7 +20,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     polarion_id,
 )
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 
 log = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class TestMetadataUnavailable(ManageTest):
         and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
         fs = (
             ""
             if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
@@ -179,7 +179,7 @@ class TestDefaultMetadataDisabled(ManageTest):
             2. PVC clone
 
         """
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
         fs = (
             ""
             if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
@@ -324,7 +324,7 @@ class TestMetadata(ManageTest):
         4. Restore volume from snapshot
 
         """
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
         fs = (
             ""
             if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
@@ -459,7 +459,7 @@ class TestMetadata(ManageTest):
             5. Validate the metadata created for the new PVC
                is different than previous metadata
         """
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
         fs = (
             ""
             if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
@@ -575,7 +575,7 @@ class TestMetadata(ManageTest):
         no metadata details available for the volume clone and snapshot created
 
         """
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
         fs = (
             ""
             if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
@@ -725,7 +725,7 @@ class TestMetadata(ManageTest):
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
 
         """
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
         fs = (
             ""
             if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]
@@ -851,7 +851,7 @@ class TestMetadata(ManageTest):
             16. validate metadata for new PVC created
 
         """
-        sc_name = storageclass_name(sc_interface)
+        sc_name = get_default_storage_class_name(sc_interface)
         fs = (
             ""
             if sc_interface == constants.OCS_COMPONENTS_MAP["blockpools"]

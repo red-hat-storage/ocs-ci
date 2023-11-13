@@ -26,7 +26,7 @@ from ocs_ci.ocs.constants import OCS_COMPONENTS_MAP, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
@@ -134,7 +134,7 @@ class TestBucketDeletion(MCGTest):
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """
         if bucketclass_dict:
-            custom_rbd_storageclass = storageclass_name(
+            custom_rbd_storageclass = get_default_storage_class_name(
                 OCS_COMPONENTS_MAP["blockpools"]
             )
             bucketclass_dict["backingstore_dict"]["pv"][0].append(

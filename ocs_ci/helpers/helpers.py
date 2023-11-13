@@ -46,7 +46,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import convert_device_size
-from ocs_ci.helpers.storageclass_helpers import storageclass_name
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -108,9 +108,11 @@ def wait_for_resource_state(resource, state, timeout=60):
     """
     if check_cluster_is_compact():
         timeout = 180
-    if resource.name == storageclass_name(
+    if resource.name == get_default_storage_class_name(
         constants.OCS_COMPONENTS_MAP["cephfs"]
-    ) or resource.name == storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"]):
+    ) or resource.name == get_default_storage_class_name(
+        constants.OCS_COMPONENTS_MAP["blockpools"]
+    ):
         logger.info("Attempt to default default Secret or StorageClass")
         return
     try:
@@ -637,12 +639,16 @@ def default_storage_class(
         constants.CEPHBLOCKPOOL,
         constants.OCS_COMPONENTS_MAP["blockpools"],
     ]:
-        resource_name = storageclass_name(constants.OCS_COMPONENTS_MAP["blockpools"])
+        resource_name = get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["blockpools"]
+        )
     elif interface_type in [
         constants.CEPHFILESYSTEM,
         constants.OCS_COMPONENTS_MAP["cephfs"],
     ]:
-        resource_name = storageclass_name(constants.OCS_COMPONENTS_MAP["cephfs"])
+        resource_name = get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["cephfs"]
+        )
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
     base_sc.wait_for_resource(
         condition=resource_name,
