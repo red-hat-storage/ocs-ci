@@ -357,9 +357,9 @@ def get_replicationdestinations_count(namespace):
          int: ReplicationDestination resource count
 
     """
-    rs_obj = ocp.OCP(kind=constants.REPLICATIONDESTINATION, namespace=namespace)
-    rs_items = rs_obj.get().get("items")
-    return len(rs_items)
+    rd_obj = ocp.OCP(kind=constants.REPLICATIONDESTINATION, namespace=namespace)
+    rd_items = rd_obj.get().get("items")
+    return len(rd_items)
 
 
 def check_vr_state(state, namespace):
@@ -666,11 +666,15 @@ def wait_for_all_resources_deletion(
 
     logger.info("Waiting for all PVCs to be deleted")
     all_pvcs = get_all_pvc_objs(namespace=namespace)
+
+    num_of_volsync_pvc = 0
     for pvc_obj in all_pvcs:
-        if "volsync-" not in pvc_obj.name:
-            pvc_obj.ocp.wait_for_delete(
-                resource_name=pvc_obj.name, timeout=timeout, sleep=5
-            )
+        if "volsync-" in pvc_obj.name:
+            num_of_volsync_pvc += 1
+            continue
+        pvc_obj.ocp.wait_for_delete(
+            resource_name=pvc_obj.name, timeout=timeout, sleep=5
+        )
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         logger.info("Waiting for all PVs to be deleted")
@@ -680,25 +684,25 @@ def wait_for_all_resources_deletion(
             func=get_pv_count,
             namespace=namespace,
         )
-        sample.wait_for_func_value(0)
+        sample.wait_for_func_value(num_of_volsync_pvc)
 
 
-def wait_for_replication_destinations_creation(rep_dest__count, namespace, timeout=900):
+def wait_for_replication_destinations_creation(rep_dest_count, namespace, timeout=900):
     """
-    Wait for ReplicationDestination to be created
+    Wait for ReplicationDestination resources to be created
 
     Args:
-        rep_dest__count (int): Expected number of ReplicationDestination
+        rep_dest_count (int): Expected number of ReplicationDestination resource
         namespace (str): The namespace of the ReplicationDestination resources
         timeout (int): Time in seconds to wait for ReplicationDestination resources to be created
 
     Raises:
-        TimeoutExpiredError: In case all ReplicationDestination resources not created
+        TimeoutExpiredError: If expected number of ReplicationDestination resources not created
 
     """
 
     logger.info(
-        f"Waiting for {rep_dest__count} {constants.REPLICATIONDESTINATION} to be created"
+        f"Waiting for {rep_dest_count} {constants.REPLICATIONDESTINATION} to be created"
     )
     sample = TimeoutSampler(
         timeout=timeout,
@@ -706,19 +710,19 @@ def wait_for_replication_destinations_creation(rep_dest__count, namespace, timeo
         func=get_replicationdestinations_count,
         namespace=namespace,
     )
-    sample.wait_for_func_value(rep_dest__count)
+    sample.wait_for_func_value(rep_dest_count)
 
 
 def wait_for_replication_destinations_deletion(namespace, timeout=900):
     """
-    Wait for ReplicationDestination to be deleted
+    Wait for ReplicationDestination resources to be deleted
 
     Args:
         namespace (str): The namespace of the ReplicationDestination resources
         timeout (int): Time in seconds to wait for ReplicationDestination resources to be deleted
 
     Raises:
-        TimeoutExpiredError: In case all ReplicationDestination resources not deleted
+        TimeoutExpiredError: If expected number of ReplicationDestination resources not deleted
 
     """
 

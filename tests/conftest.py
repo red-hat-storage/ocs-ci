@@ -6373,7 +6373,7 @@ def dr_workload(request):
             num_of_subscription (int): Number of Subscription type workload to be created
             num_of_appset (int): Number of ApplicationSet type workload to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
-                This decides whether a RBD based or CephFS resource is created. RBD is default.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
