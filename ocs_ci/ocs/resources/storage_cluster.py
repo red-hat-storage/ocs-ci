@@ -1737,9 +1737,9 @@ def verify_multus_network():
             "k8s.v1.cni.cncf.io/networks"
         ]
         if public_net_created:
-            assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+            assert verify_networks_in_ceph_pod(
+                pod_networks, public_net_name, public_net_namespace
+            ), f"{public_net_name} not in {pod_networks}"
 
         osd_id = get_osd_pod_id(_pod)
         log.info(
@@ -1791,9 +1791,9 @@ def verify_multus_network():
             pod_networks = _pod.data["metadata"]["annotations"][
                 "k8s.v1.cni.cncf.io/networks"
             ]
-            assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+            assert verify_networks_in_ceph_pod(
+                pod_networks, public_net_name, public_net_namespace
+            ), f"{public_net_name} not in {pod_networks}"
 
         log.info("Verifying multus public network exists on CSI pods")
         csi_pods = []
@@ -1812,9 +1812,9 @@ def verify_multus_network():
             pod_networks = _pod.data["metadata"]["annotations"][
                 "k8s.v1.cni.cncf.io/networks"
             ]
-            assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+            assert verify_networks_in_ceph_pod(
+                pod_networks, public_net_name, public_net_namespace
+            ), f"{public_net_name} not in {pod_networks}"
 
         log.info("Verifying MDS Map IPs are in the multus public network range")
         ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
@@ -1840,6 +1840,33 @@ def verify_multus_network():
         assert selectors["cluster"] == (
             f"{config.ENV_DATA['multus_cluster_net_namespace']}/{config.ENV_DATA['multus_cluster_net_name']}"
         )
+
+
+def verify_networks_in_ceph_pod(pod_networks, net_name, net_namespace):
+    """
+    Verify network configuration on ceph pod
+
+    Args:
+        pod_networks (str): the value of k8s.v1.cni.cncf.io/networks param
+        net_name (str): the network-attachment-definitions name
+        net_namespace (str): the network-attachment-definitions namespace
+
+    Returns:
+        bool: return True if net_name and net_namespce exist in pod_networks otherwise False
+
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_14:
+        pod_networks_list = json.loads(pod_networks)
+        return any(
+            (
+                pod_network["name"] == net_name
+                and pod_network["namespace"] == net_namespace
+            )
+            for pod_network in pod_networks_list
+        )
+    else:
+        return f"{net_namespace}/{net_name}" in pod_networks
 
 
 def verify_managed_service_resources():
