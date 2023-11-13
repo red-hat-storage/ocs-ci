@@ -20,6 +20,7 @@ def workload_storageutilization_rbd(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     """
     In order to use this fixture you need to pass 3 indirect parameters:
@@ -49,6 +50,7 @@ def workload_storageutilization_rbd(
         target_percentage=target_percentage,
         keep_fio_data=keep_fio_data,
         minimal_time=minimal_time,
+        threading_lock=threading_lock,
     )
     return measured_op
 
@@ -63,6 +65,7 @@ def workload_storageutilization_cephfs(
     measurement_dir,
     tmp_path,
     supported_configuration,
+    threading_lock,
 ):
     """
     In order to use this fixture you need to pass 3 indirect parameters:
@@ -92,5 +95,6 @@ def workload_storageutilization_cephfs(
         target_percentage=target_percentage,
         keep_fio_data=keep_fio_data,
         minimal_time=minimal_time,
+        threading_lock=threading_lock,
     )
     return measured_op

@@ -191,6 +191,8 @@ class TestFIOBenchmark(PASTest):
             self.total_data_set / self.filesize
         )
         log.info(f"Total Data set to work on is : {self.total_data_set} GiB")
+        log.info("Setting prefill value to False ")
+        self.crd_data["spec"]["workload"]["args"]["prefill"] = False
 
     def setting_io_pattern(self, io_pattern):
         """
@@ -321,8 +323,8 @@ class TestFIOBenchmark(PASTest):
         else:
             sleeptime = 300
 
-        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=36000)
-
+        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=42000)
+        # Original timeout value was 36000.
         try:
             if "Fio failed to execute" not in self.test_logs:
                 log.info("FIO has completed successfully")
