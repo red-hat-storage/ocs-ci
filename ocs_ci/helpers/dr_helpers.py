@@ -667,9 +667,10 @@ def wait_for_all_resources_deletion(
     logger.info("Waiting for all PVCs to be deleted")
     all_pvcs = get_all_pvc_objs(namespace=namespace)
     for pvc_obj in all_pvcs:
-        pvc_obj.ocp.wait_for_delete(
-            resource_name=pvc_obj.name, timeout=timeout, sleep=5
-        )
+        if "volsync-" not in pvc_obj.name:
+            pvc_obj.ocp.wait_for_delete(
+                resource_name=pvc_obj.name, timeout=timeout, sleep=5
+            )
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         logger.info("Waiting for all PVs to be deleted")
