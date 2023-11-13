@@ -486,7 +486,7 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
 
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
-        resource_kind = "ReplicationSource"
+        resource_kind = constants.REPLICATION_SOURCE
         count_function = get_replicationsources_count
     else:
         resource_kind = constants.VOLUME_REPLICATION
@@ -518,22 +518,6 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
 
-        if "cephfs" in namespace:
-            set_current_secondary_cluster_context(namespace=namespace)
-            try:
-                logger.info(
-                    f"Waiting for {vr_count} {constants.REPLICATIONDESTINATION} to be created"
-                )
-                sample = TimeoutSampler(
-                    timeout=timeout,
-                    sleep=5,
-                    func=get_replicationdestinations_count,
-                    namespace=namespace,
-                )
-                sample.wait_for_func_value(vr_count)
-            finally:
-                set_current_primary_cluster_context(namespace=namespace)
-
     logger.info("Waiting for VRG to reach primary state")
     sample = TimeoutSampler(
         timeout=timeout,
@@ -564,7 +548,7 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
     """
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
-        resource_kind = "ReplicationSource"
+        resource_kind = constants.REPLICATION_SOURCE
         count_function = get_replicationsources_count
     else:
         resource_kind = constants.VOLUME_REPLICATION
@@ -611,15 +595,14 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
             raise TimeoutExpiredError(error_msg)
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        if "cephfs" not in namespace:
-            logger.info("Waiting for all VRs to be deleted")
-            sample = TimeoutSampler(
-                timeout=timeout,
-                sleep=5,
-                func=count_function,
-                namespace=namespace,
-            )
-            sample.wait_for_func_value(0)
+        logger.info(f"Waiting for all {resource_kind} to be deleted")
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=count_function,
+            namespace=namespace,
+        )
+        sample.wait_for_func_value(0)
 
 
 def wait_for_all_resources_creation(
@@ -672,9 +655,10 @@ def wait_for_all_resources_deletion(
     logger.info("Waiting for all pods to be deleted")
     all_pods = get_all_pods(namespace=namespace)
     for pod_obj in all_pods:
-        pod_obj.ocp.wait_for_delete(
-            resource_name=pod_obj.name, timeout=timeout, sleep=5
-        )
+        if "volsync-rsync-tls-dst" not in pod_obj.name:
+            pod_obj.ocp.wait_for_delete(
+                resource_name=pod_obj.name, timeout=timeout, sleep=5
+            )
 
     wait_for_replication_resources_deletion(
         namespace, timeout, check_replication_resources_state
@@ -696,6 +680,55 @@ def wait_for_all_resources_deletion(
             namespace=namespace,
         )
         sample.wait_for_func_value(0)
+
+
+def wait_for_replication_destinations_creation(rep_dest__count, namespace, timeout=900):
+    """
+    Wait for ReplicationDestination to be created
+
+    Args:
+        rep_dest__count (int): Expected number of ReplicationDestination
+        namespace (str): The namespace of the ReplicationDestination resources
+        timeout (int): Time in seconds to wait for ReplicationDestination resources to be created
+
+    Raises:
+        TimeoutExpiredError: In case all ReplicationDestination resources not created
+
+    """
+
+    logger.info(
+        f"Waiting for {rep_dest__count} {constants.REPLICATIONDESTINATION} to be created"
+    )
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=get_replicationdestinations_count,
+        namespace=namespace,
+    )
+    sample.wait_for_func_value(rep_dest__count)
+
+
+def wait_for_replication_destinations_deletion(namespace, timeout=900):
+    """
+    Wait for ReplicationDestination to be deleted
+
+    Args:
+        namespace (str): The namespace of the ReplicationDestination resources
+        timeout (int): Time in seconds to wait for ReplicationDestination resources to be deleted
+
+    Raises:
+        TimeoutExpiredError: In case all ReplicationDestination resources not deleted
+
+    """
+
+    logger.info(f"Waiting for all {constants.REPLICATIONDESTINATION} to be deleted")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=get_replicationdestinations_count,
+        namespace=namespace,
+    )
+    sample.wait_for_func_value(0)
 
 
 def get_image_uuids(namespace):

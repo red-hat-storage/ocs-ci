@@ -6,7 +6,11 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.helpers.dr_helpers import check_vrg_state
+from ocs_ci.helpers.dr_helpers import (
+    check_vrg_state,
+    wait_for_replication_destinations_creation,
+    wait_for_replication_destinations_deletion,
+)
 from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
@@ -52,12 +56,12 @@ class TestFailover:
             ),
             pytest.param(
                 *[False, constants.CEPHFILESYSTEM],
-                marks=pytest.mark.polarion_id(""),
+                marks=pytest.mark.polarion_id("OCS-4729"),
                 id="primary_up_cephfs",
             ),
             pytest.param(
                 *[True, constants.CEPHFILESYSTEM],
-                marks=pytest.mark.polarion_id(""),
+                marks=pytest.mark.polarion_id("OCS-4726"),
                 id="primary_down_cephfs",
             ),
         ],
@@ -101,6 +105,14 @@ class TestFailover:
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             rdr_workload.workload_namespace
         )
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the creation of ReplicationDestination resources on secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            wait_for_replication_destinations_creation(
+                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+            )
+            config.switch_to_cluster_by_name(primary_cluster_name)
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace
@@ -171,8 +183,11 @@ class TestFailover:
             ceph_health_check()
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
-        # Check VRG state on primary cluster
-        check_vrg_state("secondary", rdr_workload.workload_namespace)
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the deletion of ReplicationDestination resources on primary cluster
+            wait_for_replication_destinations_deletion(rdr_workload.workload_namespace)
+            # Check VRG state on primary cluster
+            check_vrg_state("secondary", rdr_workload.workload_namespace)
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(
