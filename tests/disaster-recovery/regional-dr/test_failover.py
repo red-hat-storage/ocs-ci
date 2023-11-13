@@ -7,7 +7,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
-    check_vrg_state,
     wait_for_replication_destinations_creation,
     wait_for_replication_destinations_deletion,
 )
@@ -184,10 +183,14 @@ class TestFailover:
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
         if pvc_interface == constants.CEPHFILESYSTEM:
-            # Verify the deletion of ReplicationDestination resources on primary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            # Verify the deletion of ReplicationDestination resources on secondary cluster
             wait_for_replication_destinations_deletion(rdr_workload.workload_namespace)
-            # Check VRG state on primary cluster
-            check_vrg_state("secondary", rdr_workload.workload_namespace)
+            config.switch_to_cluster_by_name(primary_cluster_name)
+            # Verify the creation of ReplicationDestination resources on primary cluster(current secondary)
+            wait_for_replication_destinations_creation(
+                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+            )
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(
