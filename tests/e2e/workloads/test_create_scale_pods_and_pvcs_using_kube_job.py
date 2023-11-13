@@ -13,8 +13,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ipi_deployment_required,
     ms_provider_and_consumer_required,
+    hci_provider_and_client_required,
     skipif_ms_provider_and_consumer,
+    # skipif_hci_provider_and_client,
     ms_consumer_required,
+    # hci_client_required,
     skipif_bm,
     magenta_squad,
 )
@@ -67,6 +70,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         log.info("The resources created successfully using the kube job")
 
     @ms_provider_and_consumer_required
+    @hci_provider_and_client_required
     def test_create_scale_pods_and_pvcs_using_kube_job_ms(
         self, create_scale_pods_and_pvcs_using_kube_job
     ):
@@ -121,6 +125,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
 @tier1
 @ignore_leftovers
 @ms_provider_and_consumer_required
+@hci_provider_and_client_required
 class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
     """
     Test create scale pods and PVCs using a kube job with MS consumers

@@ -131,7 +131,7 @@ from ocs_ci.utility.utils import (
     skipif_ocp_version,
     skipif_ocs_version,
     TimeoutSampler,
-    skipif_upgraded_from,
+    # skipif_upgraded_from,
     update_container_with_mirrored_image,
     skipif_ui_not_support,
     run_cmd,
@@ -311,9 +311,9 @@ def pytest_collection_modifyitems(session, config, items):
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
-            skipif_upgraded_from_marker = item.get_closest_marker(
-                "skipif_upgraded_from"
-            )
+            # skipif_upgraded_from_marker = item.get_closest_marker(
+            #    "skipif_upgraded_from"
+            # )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
             skipif_ui_not_support_marker = item.get_closest_marker(
                 "skipif_ui_not_support"
@@ -344,14 +344,14 @@ def pytest_collection_modifyitems(session, config, items):
                     log.debug(f"Test: {item} will be skipped due to {skip_condition}")
                     items.remove(item)
                     continue
-            if skipif_upgraded_from_marker:
-                skip_args = skipif_upgraded_from_marker.args
-                if skipif_upgraded_from(skip_args[0]):
-                    log.debug(
-                        f"Test: {item} will be skipped because the OCS cluster is"
-                        f" upgraded from one of these versions: {skip_args[0]}"
-                    )
-                    items.remove(item)
+            # if skipif_upgraded_from_marker:
+            #    skip_args = skipif_upgraded_from_marker.args
+            #    if skipif_upgraded_from(skip_args[0]):
+            #        log.debug(
+            #            f"Test: {item} will be skipped because the OCS cluster is"
+            #            f" upgraded from one of these versions: {skip_args[0]}"
+            #        )
+            #        items.remove(item)
             if skipif_no_kms_marker:
                 try:
                     if not is_kms_enabled(dont_raise=True):
