@@ -363,11 +363,26 @@ class CreateResourceForm(PageNavigator):
         Returns:
             bool: indicating whether all test cases passed.
         """
-        allowed_chars = string.ascii_lowercase + string.digits + "-"
+
+        def replace_consecutive_symbols(text, symbol):
+            # Use regular expression to match consecutive symbols and replace them
+            pattern = rf"({re.escape(symbol)}+)"  # Escape the symbol for safe use in the regex
+            return re.sub(
+                pattern,
+                lambda match: str(len(match.group(0)))
+                if len(match.group(0)) > 1
+                else match.group(0)[0],
+                text,
+            )
+
+        allowed_chars = string.ascii_lowercase + string.digits + "-."
+        allowed_chars = replace_consecutive_symbols(allowed_chars, "-")
+        allowed_chars = replace_consecutive_symbols(allowed_chars, ".")
 
         random_name = "".join(random.choices(allowed_chars, k=10))
         random_name = "a" + random_name + "z"
         name_with_consecutive_period = random_name[:4] + ".." + random_name[6:]
+        name_with_consecutive_hyphen = random_name[:4] + "--" + random_name[6:]
 
         uppercase_letters = "".join(random.choices(string.ascii_uppercase, k=2))
         name_with_uppercase_letters = (
@@ -380,6 +395,7 @@ class CreateResourceForm(PageNavigator):
             (rule_exp, name_with_consecutive_period, self.status_error),
             (rule_exp, name_with_uppercase_letters, self.status_error),
             (rule_exp, name_with_no_ascii, self.status_error),
+            (rule_exp, name_with_consecutive_hyphen, self.status_error),
             (rule_exp, random_name, self.status_success),
         ]
 
