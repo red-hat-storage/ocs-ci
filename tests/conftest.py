@@ -4780,10 +4780,14 @@ def setup_acm_ui(request):
 
 
 def setup_acm_ui_fixture(request):
+    restore_ctx_index = ocsci_config.cur_index
+    ocsci_config.switch_acm_ctx()
     driver = login_to_acm()
 
     def finalizer():
         close_browser()
+        log.info("Switching back to the initial cluster context")
+        ocsci_config.switch_ctx(restore_ctx_index)
 
     request.addfinalizer(finalizer)
 
