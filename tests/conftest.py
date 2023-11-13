@@ -474,7 +474,7 @@ def pytest_collection_modifyitems(session, config, items):
                         (MultiClusterUpgradeParametrize.MULTICLUSTER_UPGRADE_MARKERS)
                     )
                 )
-                and ocsci_config.multicluster_scenario
+                and ocsci_config.multicluster
             ):
                 if getattr(item, "callspec", ""):
                     zone_rank = item.callspec.params["zone_rank"]

@@ -3,6 +3,8 @@ All multicluster specific utility functions and classes can be here
 
 """
 
+from abc import ABC, abstractmethod
+
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_indexes,
@@ -13,7 +15,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.ocs.constants import MDR_ROLES
 
 
-class MultiClusterUpgradeParametrize(object):
+class MultiClusterUpgradeParametrize(ABC):
     """
     This base class abstracts upgrade parametrization for multicluster scenarios: MDR, RDR and Managed service
 
@@ -42,6 +44,7 @@ class MultiClusterUpgradeParametrize(object):
         # This rank comes handy when we have to order the tests
         self.zone_ranks = {}
 
+    @abstractmethod
     def get_roles(self, metafunc):
         """
         should be overridden in the child class
@@ -64,6 +67,7 @@ class MultiClusterUpgradeParametrize(object):
                 self.zone_base_rank + i * self.zone_base_rank
             )
 
+    @abstractmethod
     def generate_role_ranks(self):
         """
         Based on the multicluster scenario, child class should generate the corresponding
@@ -72,6 +76,7 @@ class MultiClusterUpgradeParametrize(object):
         """
         pass
 
+    @abstractmethod
     def generate_pytest_parameters(self, metafunc, roles):
         """
         should be overridden in the child class.
@@ -117,7 +122,7 @@ class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
     def generate_config_index_map(self):
         """
         Generate config indexes for all the MDRs cluster roles
-        ex: {"ActiveACM": 0, "PassiceACM": 2, "PrimaryODF": 1, "SecondaryODF": 3}
+        ex: {"ActiveACM": 0, "PassiveACM": 2, "PrimaryODF": 1, "SecondaryODF": 3}
 
         """
         for cluster in ocsci_config:
@@ -135,7 +140,7 @@ class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
 
     def generate_role_ranks(self):
         """
-        Based on current roles for MDR : ActiveACM:1, PassiceACM:1, PrimaryODF:2, SecondaryODF: 2
+        Based on current roles for MDR : ActiveACM:1, PassiveACM:1, PrimaryODF:2, SecondaryODF: 2
 
         """
         # For now we will stick to this convention
@@ -159,7 +164,7 @@ class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
     def generate_role_to_param_tuple_map(self):
         """
         For each of the MDRs applicable roles store a tuple (zone_rank, role_rank, config_index)
-        ex: {"ActiveACM": (1, 1, 0), "PassiceACM": (2, 1, 2), "PrimaryODF": (1, 2, 1), "SecondarODF": (2, 2, 3)}
+        ex: {"ActiveACM": (1, 1, 0), "PassiveACM": (2, 1, 2), "PrimaryODF": (1, 2, 1), "SecondarODF": (2, 2, 3)}
 
         """
         for role in self.all_mdr_roles:
