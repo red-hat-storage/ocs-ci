@@ -31,6 +31,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    create_directory_path,
     get_attr_chain,
     get_ocs_build_number,
     exec_cmd,
@@ -942,6 +943,10 @@ class MCG:
             image = f"{constants.MCG_CLI_IMAGE_PRE_4_13}:{get_ocs_build_number()}"
 
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+        # create DATA_DIR if it doesn't exist
+        if not os.path.exists(constants.DATA_DIR):
+            create_directory_path(constants.DATA_DIR)
 
         if not os.path.isfile(pull_secret_path):
             logger.info(
