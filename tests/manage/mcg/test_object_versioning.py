@@ -252,7 +252,7 @@ class TestObjectVersioning:
         assert versioning_info["Status"] == "Enabled"
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
-        assert object_info["Versions"][0]["IsLatest"] == False
+        assert object_info["Versions"][0]["IsLatest"] is False
         assert len(object_info["DeleteMarkers"]) == 1
         assert len(object_info["Versions"]) == 8
 
@@ -270,7 +270,7 @@ class TestObjectVersioning:
         object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
         logger.info(f"object info of bucket {bucket.name}: {object_info}")
         for version in object_info["Versions"]:
-            assert version["IsLatest"] == False
+            assert version["IsLatest"] is False
         assert len(object_info["DeleteMarkers"]) == 6
 
         logger.info("Deleting all object versions and delete markers")
@@ -396,7 +396,7 @@ class TestObjectVersioning:
 
         """
         s3_obj = mcg_obj_session
-        bucket = bucket_factory(interface="S3", versioning=True)[0]
+        bucket = bucket_factory(interface="S3", versioning=True, object_lock=True)[0]
         logger.info(f"Bucket {bucket.name} created")
         filename = f"file-{uuid4().hex}"
         with open(filename, "wb") as f:
@@ -404,6 +404,25 @@ class TestObjectVersioning:
         logger.info(f"Created file {filename}")
         logger.info(f"Putting file {filename} into bucket {bucket.name}")
         s3_put_object(s3_obj, bucket.name, filename, filename)
+
+        logger.info(
+            f"Setting object lock with with retention policy {retention} to {bucket.name}"
+        )
+        policy_response = bucket.s3client.put_object_lock_configuration(
+            Bucket=bucket.name,
+            ObjectLockConfiguration={
+                "ObjectLockEnabled": "Enabled",
+                "Rule": {"DefaultRetention": {"Mode": retention, "Days": 12}},
+            },
+        )
+        logger.debug(f"policy response: {policy_response}")
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
+        put_object_response = s3_put_object(s3_obj, bucket.name, filename, filename)
+        logger.info(f"put object response: {put_object_response}")
+
+        object_info = bucket.s3client.list_object_versions(Bucket=bucket.name)
+        logger.info(f"object info of bucket {bucket.name}: {object_info}")
 
     @tier2
     def test_version_restore(self, bucket_factory, mcg_obj_session):
