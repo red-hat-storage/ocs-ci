@@ -346,7 +346,7 @@ def pytest_collection_modifyitems(session, config, items):
                     continue
             if (
                 skipif_upgraded_from_marker
-                and config.ENV_DATA.get("platform", "").lower()
+                and ocsci_config.ENV_DATA.get("platform", "").lower()
                 not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
             ):
                 skip_args = skipif_upgraded_from_marker.args
