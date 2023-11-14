@@ -344,7 +344,11 @@ def pytest_collection_modifyitems(session, config, items):
                     log.debug(f"Test: {item} will be skipped due to {skip_condition}")
                     items.remove(item)
                     continue
-            if skipif_upgraded_from_marker:
+            if (
+                skipif_upgraded_from_marker
+                and config.ENV_DATA.get("platform", "").lower()
+                not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            ):
                 skip_args = skipif_upgraded_from_marker.args
                 if skipif_upgraded_from(skip_args[0]):
                     log.debug(
