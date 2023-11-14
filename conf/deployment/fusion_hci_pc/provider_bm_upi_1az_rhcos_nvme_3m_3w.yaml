@@ -3,7 +3,7 @@ DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
 ENV_DATA:
-  platform: 'baremetal'
+  platform: 'hci_baremetal'
   cluster_type: 'provider'
   cluster_namespace: "openshift-storage"
   deployment_type: 'upi'
