@@ -1393,9 +1393,9 @@ class Deployment(object):
 
         # NonResilentPools Deployment
         if config.ENV_DATA.get("enable_non_resilient_pools"):
-            cluster_data["spec"]["managedResources"]["cephNonResilientPools"][
-                "enable"
-            ] = True
+            cluster_data["spec"].setdefault("managedResources", {}).setdefault(
+                "cephNonResilientPools", {}
+            )["enable"] = True
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
