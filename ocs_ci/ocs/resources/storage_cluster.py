@@ -80,7 +80,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
-from ocs_ci.helpers.storageclass_helpers import storageclass_name as csc
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name as csc
 from time import sleep
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 
