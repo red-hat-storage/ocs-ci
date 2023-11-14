@@ -1812,7 +1812,7 @@ def get_ocs_build_number():
         operator_name = defaults.ODF_OPERATOR_NAME
         if (
             config.ENV_DATA.get("platform") in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            and config.ENV_DATA.get("cluster_type") == "hci_client"
+            and config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT
         ):
             operator_name = defaults.HCI_CLIENT_ODF_OPERATOR_NAME
     else:

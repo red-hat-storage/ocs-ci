@@ -237,6 +237,10 @@ MS_CONSUMER_TYPE = "consumer"
 MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
+# HCI cluster types
+HCI_CLIENT = "hci_client"
+HCI_PROVIDER = "provider"
+
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
 must_gather_pod_label = "app=must-gather"

@@ -2212,7 +2212,7 @@ def is_hci_client_cluster():
     """
     return (
         config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.ENV_DATA["cluster_type"].lower() == "hci_client"
+        and config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
     )
 
 
@@ -2240,7 +2240,7 @@ def is_hci_provider_cluster():
     """
     return (
         config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.ENV_DATA["cluster_type"].lower() == "provider"
+        and config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER
     )
 
 

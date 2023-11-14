@@ -13,6 +13,7 @@ import yaml
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from ocs_ci.ocs.constants import HCI_CLIENT, HCI_PROVIDER
 from ocs_ci.ocs.exceptions import ClusterNotFoundException
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -375,7 +376,7 @@ class MultiClusterConfig:
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
         return "consumer" in cluster_types
 
-    def is_hci_client_exist(self):
+    def hci_client_exist(self):
         """
         Check if the hci_client cluster exists in the clusters
 
@@ -384,9 +385,9 @@ class MultiClusterConfig:
 
         """
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
-        return "hci_client" in cluster_types
+        return HCI_CLIENT in cluster_types
 
-    def is_hci_provider_exist(self):
+    def hci_provider_exist(self):
         """
         Check if the provider cluster exists in the clusters
 
@@ -395,7 +396,7 @@ class MultiClusterConfig:
 
         """
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
-        return "provider" in cluster_types
+        return HCI_PROVIDER in cluster_types
 
     def is_cluster_type_exist(self, cluster_type):
         """
