@@ -5,6 +5,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier4, tier4b
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @tier4b
+@turquoise_squad
 class TestManagedClusterNodeFailure:
     """
     Test to verify failure of node hosting important pods of different
