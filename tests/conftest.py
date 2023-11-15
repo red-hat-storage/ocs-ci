@@ -344,7 +344,11 @@ def pytest_collection_modifyitems(session, config, items):
                     log.debug(f"Test: {item} will be skipped due to {skip_condition}")
                     items.remove(item)
                     continue
-            if skipif_upgraded_from_marker:
+            if (
+                skipif_upgraded_from_marker
+                and ocsci_config.ENV_DATA.get("platform", "").lower()
+                not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            ):
                 skip_args = skipif_upgraded_from_marker.args
                 if skipif_upgraded_from(skip_args[0]):
                     log.debug(
@@ -5938,7 +5942,7 @@ def toolbox_on_faas_consumer():
 @pytest.fixture(scope="function", autouse=True)
 def switch_to_provider_for_test(request):
     """
-    Switch to provider cluster as required by the test. Applicable for Managed Services only if
+    Switch to provider cluster as required by the test. Applicable for Managed Services and HCI Provider-client only if
     the marker 'runs_on_provider' is added in the test.
 
     """
@@ -5947,8 +5951,12 @@ def switch_to_provider_for_test(request):
     if (
         request.node.get_closest_marker("runs_on_provider")
         and ocsci_config.multicluster
-        and current_cluster.ENV_DATA.get("platform", "").lower()
-        in constants.MANAGED_SERVICE_PLATFORMS
+        and (
+            current_cluster.ENV_DATA.get("platform", "").lower()
+            in constants.MANAGED_SERVICE_PLATFORMS
+            or current_cluster.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        )
     ):
         for cluster in ocsci_config.clusters:
             if cluster.ENV_DATA.get("cluster_type") == "provider":

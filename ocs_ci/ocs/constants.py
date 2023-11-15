@@ -237,6 +237,10 @@ MS_CONSUMER_TYPE = "consumer"
 MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
+# HCI cluster types
+HCI_CLIENT = "hci_client"
+HCI_PROVIDER = "provider"
+
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
 must_gather_pod_label = "app=must-gather"
@@ -987,6 +991,8 @@ OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
+HCI_BAREMETAL = "hci_baremetal"
+HCI_VSPHERE = "hci_vsphere"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
@@ -1010,6 +1016,11 @@ MANAGED_SERVICE_PLATFORMS = [
     FUSIONAAS_PLATFORM,
 ]
 BAREMETAL_PLATFORMS = [BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
+
+HCI_PROVIDER_CLIENT_PLATFORMS = [
+    HCI_BAREMETAL,
+    HCI_VSPHERE,
+]
 
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"

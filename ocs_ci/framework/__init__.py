@@ -375,6 +375,28 @@ class MultiClusterConfig:
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
         return "consumer" in cluster_types
 
+    def hci_client_exist(self):
+        """
+        Check if the hci_client cluster exists in the clusters
+
+        Returns:
+            bool: True, if the hci_client cluster exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return "hci_client" in cluster_types
+
+    def hci_provider_exist(self):
+        """
+        Check if the provider cluster exists in the clusters
+
+        Returns:
+            bool: True, if the provider cluster exists in the clusters. False, otherwise.
+
+        """
+        cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
+        return "provider" in cluster_types
+
     def is_cluster_type_exist(self, cluster_type):
         """
         Check if the given cluster type exists in the clusters
