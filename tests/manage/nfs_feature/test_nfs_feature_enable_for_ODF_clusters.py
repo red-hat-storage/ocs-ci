@@ -1,7 +1,6 @@
 import pytest
 import logging
 import time
-import yaml
 import os
 
 
@@ -10,6 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.utility import templating
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -1143,6 +1143,7 @@ class TestNfsEnable(ManageTest):
 
             # Create deployment config for app pod
             log.info("----create deployment config----")
+            '''
             deployment_config = """
                         apiVersion: apps.openshift.io/v1
                         kind: DeploymentConfig
@@ -1186,7 +1187,8 @@ class TestNfsEnable(ManageTest):
                             - type: ConfigChange
                           paused: false
                         """
-            deployment_config_data = yaml.safe_load(deployment_config)
+                        '''
+            deployment_config_data = templating.load_yaml(constants.FIO_DEPLOYMENT_YAML)
             helpers.create_resource(**deployment_config_data)
             time.sleep(60)
 
