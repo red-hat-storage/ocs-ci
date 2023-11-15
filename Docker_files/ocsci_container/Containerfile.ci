@@ -36,13 +36,21 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
     && mv kubectl /usr/local/bin/
 
 RUN curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar -C /usr/local/bin -zxvf - oc
+COPY /Docker_files/ocsci_container/centos.repo /etc/yum.repos.d/
+COPY /Docker_files/ocsci_container/google-chrome.repo /etc/yum.repos.d/
 
-RUN dnf install -y --nodocs python38 git jq rsync make \
+# Install EPEL repos
+# RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm https://dl.fedoraproject.org/pub/epel/epel-next-release-latest-8.noarch.rpm
+
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False python38 git jq rsync make google-chrome \
     && dnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf /var/lib/dnf/repos /var/log/dnf.librepo.log /var/log/dnf.log /var/log/dnf.rpm.log /var/log/hawkey.log /var/cache/ldconfig \
     && curl -sL https://github.com/mikefarah/yq/releases/download/v4.32.2/yq_linux_amd64.tar.gz | tar -C /usr/local/bin -zxvf - ./yq_linux_amd64 \
     && mv -v /usr/local/bin/yq_linux_amd64 /usr/local/bin/yq
 
 COPY --from=BUILDER "${OCS_CI_DIR}" "${OCS_CI_DIR}"
+
+RUN groupadd -r tester && useradd -r -g tester tester
+USER tester
 
 CMD [ "run-ci", "--help" ]
