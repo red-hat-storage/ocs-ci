@@ -29,6 +29,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
     verify_failover_relocate_status_ui,
 )
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ polarion_id_primary_down = "OCS-4346"
 
 
 @tier1
+@turquoise_squad
 class TestApplicationFailoverAndRelocate:
     """
     Test Failover and Relocate actions for application
