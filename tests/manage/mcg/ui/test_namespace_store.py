@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import black_squad
 from ocs_ci.framework.testlib import tier1, ui, polarion_id
 from ocs_ci.ocs.ui.mcg_ui import NamespaceStoreUI
@@ -41,7 +42,7 @@ class TestNamespaceStoreUI(object):
 
         """
         self.namespace_store_obj = None
-        openshift_storage_ns_obj = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        openshift_storage_ns_obj = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             project=openshift_storage_ns_obj,

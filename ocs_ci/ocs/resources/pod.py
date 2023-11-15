@@ -3324,7 +3324,7 @@ def check_ceph_cmd_execute_successfully():
 def search_pattern_in_pod_logs(
     pod_name,
     pattern,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     container=None,
     all_containers=False,
 ):

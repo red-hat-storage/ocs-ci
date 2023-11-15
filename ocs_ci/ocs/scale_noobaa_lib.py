@@ -344,10 +344,10 @@ def get_pod_obj(pod_name):
     pod_obj = pod.get_pod_obj(
         (
             get_pod_name_by_pattern(
-                pattern=pod_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                pattern=pod_name, namespace=config.ENV_DATA["cluster_namespace"]
             )
         )[0],
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     return pod_obj
 

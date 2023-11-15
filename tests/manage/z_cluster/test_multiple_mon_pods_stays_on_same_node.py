@@ -15,7 +15,6 @@ from ocs_ci.helpers.helpers import mon_pods_running_on_same_node
 from ocs_ci.ocs.constants import (
     ROOK_CEPH_MON_ENDPOINTS,
     CONFIGMAP,
-    OPENSHIFT_STORAGE_NAMESPACE,
     STATUS_RUNNING,
     STATUS_PENDING,
     MON_APP_LABEL,
@@ -36,7 +35,7 @@ from ocs_ci.ocs.cluster import is_lso_cluster
 from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
-POD_OBJ = OCP(kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+POD_OBJ = OCP(kind=POD, namespace=config.ENV_DATA["cluster_namespace"])
 
 
 @brown_squad
@@ -130,7 +129,9 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
 
         # Edit the rook-ceph-mon-endpoints
         log.info(f"Edit the configmap {ROOK_CEPH_MON_ENDPOINTS}")
-        configmap_obj = OCP(kind=CONFIGMAP, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+        configmap_obj = OCP(
+            kind=CONFIGMAP, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         rook_ceph_mon_configmap = configmap_obj.get(
             resource_name=ROOK_CEPH_MON_ENDPOINTS
         )
@@ -150,7 +151,7 @@ class TestMultipleMonPodsStaysOnSameNode(ManageTest):
         )
 
         # Delete one mon deployment which had been edited
-        dep_obj = OCP(kind=DEPLOYMENT, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+        dep_obj = OCP(kind=DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"])
         mon_deployment_name_to_del = f"{rook_ceph_mon}-{mon_name_to_del}"
         log.info(f"Deleting mon {mon_deployment_name_to_del} deployments")
         dep_obj.delete(resource_name=mon_deployment_name_to_del)
