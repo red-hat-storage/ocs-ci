@@ -1143,52 +1143,7 @@ class TestNfsEnable(ManageTest):
 
             # Create deployment config for app pod
             log.info("----create deployment config----")
-            '''
-            deployment_config = """
-                        apiVersion: apps.openshift.io/v1
-                        kind: DeploymentConfig
-                        metadata:
-                          name: nfs-test-pod
-                          namespace: openshift-storage
-                          labels:
-                            app: nfs-test-pod
-                        spec:
-                          template:
-                            metadata:
-                              labels:
-                                name: nfs-test-pod
-                            spec:
-                              restartPolicy: Always
-                              volumes:
-                              - name: vol
-                                persistentVolumeClaim:
-                                  claimName: nfs-pvc
-                              containers:
-                              - name: fedora
-                                image: fedora
-                                command: ['/bin/bash', '-ce', 'tail -f /dev/null']
-                                imagePullPolicy: IfNotPresent
-                                securityContext:
-                                  capabilities: {}
-                                  privileged: true
-                                volumeMounts:
-                                - mountPath: /mnt
-                                  name: vol
-                                livenessProbe:
-                                  exec:
-                                    command:
-                                    - 'sh'
-                                    - '-ec'
-                                    - 'df /mnt'
-                                  initialDelaySeconds: 3
-                                  periodSeconds: 3
-                          replicas: 1
-                          triggers:
-                            - type: ConfigChange
-                          paused: false
-                        """
-                        '''
-            deployment_config_data = templating.load_yaml(constants.FIO_DEPLOYMENT_YAML)
+            deployment_config_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
             helpers.create_resource(**deployment_config_data)
             time.sleep(60)
 
