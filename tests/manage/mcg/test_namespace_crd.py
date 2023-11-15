@@ -29,6 +29,7 @@ from ocs_ci.ocs.bucket_utils import (
     check_cached_objects_by_name,
     s3_delete_object,
     retrieve_verification_mode,
+    check_objects_in_bucket,
     wait_for_cache,
 )
 from ocs_ci.framework.pytest_customization.marks import (
@@ -986,13 +987,19 @@ class TestNamespace(MCGTest):
         original_folder = test_directory_setup.origin_dir
         result_folder = test_directory_setup.result_dir
         logger.info("Upload files to NS bucket")
-        self.write_files_to_pod_and_upload(
+        uploaded_obj_list = self.write_files_to_pod_and_upload(
             mcg_obj,
             awscli_pod_session,
             bucket_to_write=ns_bucket,
             original_dir=original_folder,
             amount=3,
         )
+        logger.info("list uploaded objects")
+        obj_ls = check_objects_in_bucket(
+            ns_bucket, uploaded_obj_list, mcg_obj, awscli_pod_session, timeout=60
+        )
+        if not obj_ls:
+            raise UnexpectedBehaviour("Failed to sync objects")
 
         logger.info(f"Respin mcg resource {mcg_pod}")
         noobaa_pods = pod.get_noobaa_pods()
