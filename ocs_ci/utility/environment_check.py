@@ -96,7 +96,7 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             continue
         if item.get("kind") == constants.POD:
             name = item.get("metadata", {}).get("name", "")
-            if name.endswith("-debug"):
+            if name.endswith("-debug") or "-debug-" in name:
                 log.debug(f"ignoring item: {name}")
                 continue
             if name.startswith("session-awscli"):
