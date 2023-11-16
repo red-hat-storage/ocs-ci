@@ -39,7 +39,7 @@ class TestManagedClusterNodeFailure:
         },
         "rbd-mirror": {
             "label": constants.RBD_MIRROR_APP_LABEL,
-            "namespace": constants.OPENSHIFT_STORAGE_NAMESPACE,
+            "namespace": config.ENV_DATA["cluster_namespace"],
         },
         "submariner-gateway": {
             "label": constants.SUBMARINER_GATEWAY_ACTIVE_LABEL,

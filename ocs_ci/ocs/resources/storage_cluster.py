@@ -1270,7 +1270,7 @@ def get_in_transit_encryption_config_state():
 
     ocp_obj = StorageCluster(
         resource_name=cluster_name,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     try:
@@ -1307,7 +1307,7 @@ def set_in_transit_encryption(enabled=True):
 
     ocp_obj = StorageCluster(
         resource_name=cluster_name,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     patch = {"spec": {"network": {"connections": {"encryption": {"enabled": enabled}}}}}
@@ -2378,7 +2378,7 @@ def get_storageclass_names_from_storagecluster_spec():
     """
     sc_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     keys_to_search = [
@@ -2560,7 +2560,7 @@ def validate_serviceexport():
 
     """
     serviceexport = OCP(
-        kind="ServiceExport", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind="ServiceExport", namespace=config.ENV_DATA["cluster_namespace"]
     )
     osd_count = 0
     mon_count = 0
