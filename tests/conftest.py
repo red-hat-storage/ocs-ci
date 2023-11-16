@@ -1753,7 +1753,8 @@ def environment_checker(request):
         constants.HCI_VSPHERE,
     }:
         log.error(
-            "Environment checker is NOT IMPLEMENTED for Fusion service. This needds to be updated"
+            "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
+            "This needds to be updated"
         )
     else:
         request.addfinalizer(
