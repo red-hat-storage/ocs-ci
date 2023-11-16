@@ -62,9 +62,6 @@ class TestEndpointAutoScale(MCGTest):
                 ("numjobs", "4"),
             ],
         }
-        # for i in range(10):
-        #     exec(f"job{i} = mcg_job_factory(custom_options={options})")
-        # self._assert_endpoint_count(2)
         endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
         get_hpa_utilization(config.ENV_DATA["cluster_namespace"])
         job_cnt = 0
