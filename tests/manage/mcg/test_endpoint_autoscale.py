@@ -1,3 +1,5 @@
+import time
+import logging
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import MCGTest, tier1, skipif_ocs_version
 from ocs_ci.ocs import constants, ocp
@@ -5,7 +7,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     red_squad,
 )
-
+from ocs_ci.ocs.scale_noobaa_lib import (
+    get_endpoint_pod_count,
+    get_hpa_utilization
+)
+log = logging.getLogger(__name__)
 
 # @pytest.mark.polarion_id("OCS-XXXX")
 # Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
@@ -25,7 +31,7 @@ class TestEndpointAutoScale(MCGTest):
     MAX_ENDPOINT_COUNT = 2
 
     def test_scaling_under_load(self, mcg_job_factory):
-        self._assert_endpoint_count(1)
+        self._assert_endpoint_count(self.MIN_ENDPOINT_COUNT)
 
         options = {
             "create": [
@@ -56,14 +62,32 @@ class TestEndpointAutoScale(MCGTest):
                 ("numjobs", "4"),
             ],
         }
-        for i in range(10):
-            exec(f"job{i} = mcg_job_factory(custom_options={options})")
-        self._assert_endpoint_count(2)
-
-        for i in range(10):
-            exec(f"job{i}.delete()")
-            exec(f"job{i}.ocp.wait_for_delete(resource_name=job{i}.name, timeout=60)")
-        self._assert_endpoint_count(1)
+        # for i in range(10):
+        #     exec(f"job{i} = mcg_job_factory(custom_options={options})")
+        # self._assert_endpoint_count(2)
+        endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
+        get_hpa_utilization(config.ENV_DATA["cluster_namespace"])
+        job_cnt = 0
+        wait_time = 30
+        job_list = list()
+        while endpoint_cnt < self.MAX_ENDPOINT_COUNT:
+            exec(f"job{job_cnt} = mcg_job_factory(custom_options=options)")
+            job_list.append(f"job{job_cnt}")
+            time.sleep(wait_time)
+            endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
+            hpa_cpu_utilization = get_hpa_utilization(
+                config.ENV_DATA["cluster_namespace"]
+            )
+            log.info(
+                f"HPA CPU utilization by noobaa-endpoint is {hpa_cpu_utilization}%"
+            )
+            if endpoint_cnt == self.MAX_ENDPOINT_COUNT:
+                break
+            job_cnt += 1
+        for i in job_list:
+            exec(f"{i}.delete()")
+            exec(f"{i}.ocp.wait_for_delete(resource_name={i}.name, timeout=60)")
+        self._assert_endpoint_count(self.MIN_ENDPOINT_COUNT)
 
     def _assert_endpoint_count(self, desired_count):
         pod = ocp.OCP(
