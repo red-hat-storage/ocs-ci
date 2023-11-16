@@ -210,6 +210,7 @@ class TestDiskFailures(ManageTest):
         )
 
     @bugzilla("1830702")
+    @bugzilla("2248833")
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2172")
     @skipif_external_mode
