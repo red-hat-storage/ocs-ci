@@ -7,10 +7,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     red_squad,
 )
-from ocs_ci.ocs.scale_noobaa_lib import (
-    get_endpoint_pod_count,
-    get_hpa_utilization
-)
+from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilization
+
 log = logging.getLogger(__name__)
 
 # @pytest.mark.polarion_id("OCS-XXXX")
