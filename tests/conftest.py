@@ -1747,9 +1747,14 @@ def environment_checker(request):
             return
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
-    if ocsci_config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+    if ocsci_config.ENV_DATA["platform"] in {
+        constants.FUSIONAAS_PLATFORM,
+        constants.HCI_BAREMETAL,
+        constants.HCI_VSPHERE,
+    }:
         log.error(
-            "Environment checker is NOT IMPLEMENTED for Fusion service. This needds to be updated"
+            "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
+            "This needds to be updated"
         )
     else:
         request.addfinalizer(
