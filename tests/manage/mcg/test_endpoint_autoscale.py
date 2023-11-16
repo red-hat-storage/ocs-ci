@@ -67,7 +67,7 @@ class TestEndpointAutoScale(MCGTest):
         wait_time = 30
         job_list = list()
         while endpoint_cnt < self.MAX_ENDPOINT_COUNT:
-            exec(f"job{job_cnt} = mcg_job_factory(custom_options=options)")
+            exec(f"job{job_cnt} = mcg_job_factory(custom_options=self.options)")
             job_list.append(f"job{job_cnt}")
             time.sleep(wait_time)
             endpoint_cnt = get_endpoint_pod_count(config.ENV_DATA["cluster_namespace"])
