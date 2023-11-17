@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     ignore_leftover_label,
     managed_service_required,
+    hci_pc_platform_required,
 )
 from ocs_ci.ocs.managedservice import patch_consumer_toolbox
 from ocs_ci.ocs.ocp import OCP
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 @yellow_squad
 @tier4c
 @managed_service_required
+@hci_pc_platform_required
 @ignore_leftover_label(constants.TOOL_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3924")
 class TestPodDisruptions(ManageTest):

@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_ibm_cloud,
     managed_service_required,
+    hci_pc_platform_required,
 )
 from ocs_ci.ocs.node import (
     get_ocs_nodes,
@@ -36,6 +37,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @ignore_leftovers
 @managed_service_required
+@hci_pc_platform_required
 class TestRollingWorkerNodeShutdownAndRecoveryMS(ManageTest):
     """
     Test rolling shutdown and recovery of the OCS worker nodes when using the Managed Service
