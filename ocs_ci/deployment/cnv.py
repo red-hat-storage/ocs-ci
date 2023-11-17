@@ -200,6 +200,7 @@ class CNVInstaller(object):
         Note that software emulation, when enabled, is only used as a fallback when hardware emulation
         is not available. Hardware emulation is always attempted first, regardless of the value of the
         useEmulation.
+
         """
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
         annonation = (

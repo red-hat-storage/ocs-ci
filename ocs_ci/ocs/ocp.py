@@ -459,7 +459,7 @@ class OCP(object):
             resource_name (str): The name of the specific resource to wait for.
             condition (str): The condition to wait for (e.g.,'Available', 'Ready').
             timeout (int): Timeout in seconds for the wait operation.
-            namespace (str): The name of the namespace to use, by default it is openshift-cnv
+            selector (str): The label selector to look for
 
         Raises:
             TimeoutExpiredError: If the resource does not meet the specified condition within the timeout.
