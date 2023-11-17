@@ -445,6 +445,38 @@ class OCP(object):
             return True
         return False
 
+    def wait(
+        self,
+        resource_name="",
+        condition="Available",
+        timeout=300,
+        selector=None,
+    ):
+        """
+        Wait for a resource to meet a specific condition using 'oc wait' command.
+
+        Args:
+            resource_name (str): The name of the specific resource to wait for.
+            condition (str): The condition to wait for (e.g.,'Available', 'Ready').
+            timeout (int): Timeout in seconds for the wait operation.
+            namespace (str): The name of the namespace to use, by default it is openshift-cnv
+
+        Raises:
+            TimeoutExpiredError: If the resource does not meet the specified condition within the timeout.
+
+        """
+        resource_name = resource_name if resource_name else self.resource_name
+        command = f"wait {self.kind} {resource_name} --for=condition={condition}"
+        if timeout:
+            command += f" --timeout={timeout}s"
+        if selector:
+            command += f" --selector={selector}"
+        try:
+            self.exec_oc_cmd(command, out_yaml_format=False)
+            return True
+        except CommandFailed:
+            return False
+
     def add_label(self, resource_name, label):
         """
         Adds a new label for this pod
