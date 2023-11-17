@@ -6,33 +6,35 @@ operational cluster after graceful nodes shutdown
 import logging
 import pytest
 import time
-import uuid
 
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults, registry
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.longevity import start_ocp_workload
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.ocs.registry import check_if_registry_stack_exists
-from ocs_ci.ocs.monitoring import check_if_monitoring_stack_exists
-from ocs_ci.framework import config
-from ocs_ci.ocs.uninstall import (
-    remove_ocp_registry_from_ocs,
-    remove_monitoring_stack_from_ocs,
+from ocs_ci.ocs.monitoring import (
+    validate_pvc_created_and_bound_on_monitoring_pods,
+    validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
+from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
     skipif_no_kms,
     skipif_ocs_version,
+    magenta_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import (
     get_nodes,
 )
 from ocs_ci.ocs.resources.fips import check_fips_enabled
-from ocs_ci.ocs.bucket_utils import s3_put_object
 
 logger = logging.getLogger(__name__)
 
@@ -46,19 +48,16 @@ class TestGracefulNodesShutdown(E2ETest):
 
     @pytest.fixture(autouse=True)
     def checks(self):
-        # This test is skipped due to https://issues.redhat.com/browse/ENTMQST-3422
-
         try:
             check_fips_enabled()
         except Exception as e:
             logger.info(f"Handled prometheuous pod exception {e}")
-        """
+
         nodes = get_nodes()
         for node in nodes:
             assert (
                 node.get()["status"]["allocatable"]["hugepages-2Mi"] == "64Mi"
             ), f"Huge pages is not applied on {node.name}"
-        """
 
     @pytest.fixture(autouse=True)
     def setup(
@@ -71,20 +70,17 @@ class TestGracefulNodesShutdown(E2ETest):
         pod_factory,
         pvc_clone_factory,
         snapshot_factory,
-        snapshot_restore_factory,
-        mcg_obj,
-        bucket_factory,
-        awscli_pod_session,
-        mcg_obj_session,
-        test_directory_setup,
     ):
         """
         Setting up test requirements
+        1. Non encrypted fs PVC (create + clone + snapshot)
+        2. encrypted block PVC (create + clone + snapshot)
+        3. encrypted fs PVC ()
         """
 
         def teardown():
             logger.info("cleanup the environment")
-            """ cleanup logging workload """
+            # cleanup logging workload
             sub = OCP(
                 kind=constants.SUBSCRIPTION,
                 namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
@@ -93,14 +89,6 @@ class TestGracefulNodesShutdown(E2ETest):
             if logging_sub:
                 logger.info("Logging is configured")
                 uninstall_cluster_logging()
-
-            """ cleanup monitoring workload """
-            if check_if_monitoring_stack_exists():
-                remove_monitoring_stack_from_ocs()
-
-            """ cleanup registry workload """
-            if check_if_registry_stack_exists():
-                remove_ocp_registry_from_ocs(config.ENV_DATA["platform"])
 
         request.addfinalizer(teardown)
 
@@ -154,9 +142,6 @@ class TestGracefulNodesShutdown(E2ETest):
             snapshot_factory=snapshot_factory,
         )
 
-        # S3 bucket
-        self.setup_s3_bucket(mcg_obj=mcg_obj, bucket_factory=bucket_factory)
-
     def setup_non_encrypted_pvc(
         self,
         pvc_factory,
@@ -165,8 +150,8 @@ class TestGracefulNodesShutdown(E2ETest):
         snapshot_factory,
     ):
         """
-        ##################################### non encrypted pvc (ne_pvc)
-        create + clone
+        non encrypted pvc (ne_pvc)
+        create + clone + snapshot
         non-encrypted block/fs pvc
         Returns:
             pvc object
@@ -262,28 +247,6 @@ class TestGracefulNodesShutdown(E2ETest):
 
         return pvc_obj, pod_obj, file_name, origin_md5sum, encrypt_snap_obj
 
-    def setup_s3_bucket(self, mcg_obj, bucket_factory):
-        """
-        ##################################### S3 buckets
-        """
-
-        # Create 1 bucket of each type (CLI, OC & S3)
-        self.mcg_obj = mcg_obj
-        self.bucket_names_list.append(bucket_factory(interface="CLI")[0].name)
-        self.bucket_names_list.append(bucket_factory(interface="OC")[0].name)
-        obj_data = "A random string data"
-
-        self.before_bucket_object_list = [None] * len(self.bucket_names_list)
-        for idx, bucket_name in enumerate(self.bucket_names_list):
-            key = "ObjKey-" + str(uuid.uuid4().hex)
-            assert s3_put_object(
-                mcg_obj, bucket_name, key, obj_data
-            ), f"Failed: Put object, {key}, bucket name: {bucket_name}"
-
-            self.before_bucket_object_list[idx] = {
-                obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucket_name)
-            }
-
     def validate_snapshot_restore(self, snapshot_restore_factory):
         """
         Verifies the snapshot restore works fine
@@ -362,10 +325,33 @@ class TestGracefulNodesShutdown(E2ETest):
         """
         Verify ocp workload continues after reboot
         """
-        if not check_if_monitoring_stack_exists():
-            assert "monitoring workload not started after reboot"
-        if not check_if_registry_stack_exists():
-            assert "registry workload not started after reboot"
+        logger.info("Validate Monitoring stack exists")
+        pods_list = pod.get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE,
+            selector=["prometheus", "alertmanager"],
+        )
+        retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
+            pod.validate_pods_are_respinned_and_running_state
+        )(pods_list)
+
+        # Validate the pvc is created on monitoring pods
+        validate_pvc_created_and_bound_on_monitoring_pods()
+
+        # Validate the pvc are mounted on pods
+        retry((CommandFailed, AssertionError), tries=3, delay=15)(
+            validate_pvc_are_mounted_on_monitoring_pods
+        )(pods_list)
+
+        logger.info("Validate Registry stack exists after reboot")
+        # Validate registry pod status
+        retry((CommandFailed, UnexpectedBehaviour), tries=3, delay=15)(
+            registry.validate_registry_pod_status
+        )()
+
+        # Validate pvc mount in the registry pod
+        retry((CommandFailed, UnexpectedBehaviour, AssertionError), tries=3, delay=15)(
+            registry.validate_pvc_mount_on_registry_pod
+        )()
         sub = OCP(
             kind=constants.SUBSCRIPTION,
             namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
@@ -378,23 +364,18 @@ class TestGracefulNodesShutdown(E2ETest):
     @polarion_id("OCS-3976")
     @skipif_no_kms
     @skipif_ocs_version("<4.11")
+    @magenta_squad
     def test_graceful_nodes_shutdown(
         self,
         multi_obc_lifecycle_factory,
         nodes,
-        awscli_pod_session,
-        cld_mgr,
-        mcg_obj,
-        test_directory_setup,
-        bucket_factory,
-        setup_rgw_kafka_notification,
         setup_mcg_bg_features,
         validate_mcg_bg_features,
         snapshot_restore_factory,
     ):
         """
         Steps:
-          1) Have a cluster with FIPS, hugepages, encryption enabled
+          1) Have a cluster with FIPS, hugepages, encryption enabled.
           2) Create some resources: Create PVC (encrypt & non encrypt),
             take snapshot and restore it into new PVCs, clone PVC
           3) Configure OCP workloads(monitoring, registry, logging)
@@ -407,20 +388,25 @@ class TestGracefulNodesShutdown(E2ETest):
             https://access.redhat.com/articles/5394611, and bring up the cluster back.
             Once cluster up, there should not be seen any issues or impact on any data(No DU/DL/DC) and also
             normal operations should work fine.
+         10) Do the Validation of steps 2 to 8 after cluster up and running.
         """
-
-        # Setup rgw kafa notification
-        setup_rgw_kafka_notification()
 
         # Create normal OBCs and buckets
         multi_obc_lifecycle_factory(num_of_obcs=20, bulk=True, measure=False)
 
         # OCP Workloads
-        start_ocp_workload(workloads_list=["registry", "logging"], run_in_bg=True)
+        logger.info("start_ocp_workload")
+        start_ocp_workload(
+            workloads_list=["monitoring", "registry", "logging"], run_in_bg=True
+        )
 
-        # noobaa caching
-        logger.info("Noobaa caching")
-        setup_mcg_bg_features(skip_any_features=["expiration", "rgw kafka"])
+        # Setup MCG Features
+        logger.info(
+            "Setup MCG Features- Bucket replication,"
+            " Noobaa caching,Object expiration,"
+            "MCG NSFS,RGW kafka notification"
+        )
+        setup_mcg_bg_features(skip_any_features=["caching", "nsfs", "rgw kafka"])
 
         # check OSD status after graceful node shutdown
         worker_nodes = get_nodes(node_type="worker")
@@ -439,7 +425,7 @@ class TestGracefulNodesShutdown(E2ETest):
 
         self.validate_data_integrity()
         self.validate_snapshot_restore(snapshot_restore_factory)
-        validate_mcg_bg_features()
+        validate_mcg_bg_features(skip_any_features=["caching", "rgw kafka", "nsfs"])
         self.validate_ocp_workload_continues()
 
         # check osd status
