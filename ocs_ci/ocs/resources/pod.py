@@ -316,13 +316,18 @@ class Pod(OCS):
         """
         return self.pod_data.get("metadata").get("labels")
 
-    def exec_ceph_cmd(self, ceph_cmd, format="json-pretty"):
+    def exec_ceph_cmd(
+        self, ceph_cmd, format="json-pretty", out_yaml_format=True, timeout=600
+    ):
         """
         Execute a Ceph command on the Ceph tools pod
 
         Args:
             ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
             format (str): The returning output format of the Ceph command
+            out_yaml_format (bool): whether to return yaml loaded python
+                object OR to return raw output
+            timeout (int): timeout for the exec_cmd_on_pod, defaults to 600 seconds
 
         Returns:
             dict: Ceph command output
@@ -335,7 +340,9 @@ class Pod(OCS):
         ceph_cmd = ceph_cmd
         if format:
             ceph_cmd += f" --format {format}"
-        out = self.exec_cmd_on_pod(ceph_cmd)
+        out = self.exec_cmd_on_pod(
+            ceph_cmd, out_yaml_format=out_yaml_format, timeout=timeout
+        )
 
         # For some commands, like "ceph fs ls", the returned output is a list
         if isinstance(out, list):

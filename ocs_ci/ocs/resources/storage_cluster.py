@@ -72,8 +72,14 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    remove_ceph_crashes,
+    run_ceph_health_cmd,
+    run_cmd,
+    TimeoutSampler,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from time import sleep
 
 log = logging.getLogger(__name__)
 
@@ -616,6 +622,19 @@ def ocs_install_verification(
     health_check_tries = 20
     health_check_delay = 30
     if post_upgrade_verification:
+        # remove ceph crashes after upgrade due to bug
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2249844
+        # and Ceph bug:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2249814
+        log.info(
+            "Sleeping for 600 seconds to allow crash reports to report to ceph health"
+        )
+        sleep(600)
+        ceph_health = run_ceph_health_cmd()
+        if "daemons have recently crashed" in ceph_health:
+            # remove crashes on ceph
+            remove_ceph_crashes(ct_pod)
+
         # In case of upgrade with FIO we have to wait longer time to see
         # health OK. See discussion in BZ:
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
