@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
     bugzilla,
-    multicluster_platform_required,
+    provider_client_ms_platform_required,
     polarion_id,
 )
 from ocs_ci.ocs import constants
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 @brown_squad
 @ignore_leftovers
-@multicluster_platform_required
+@provider_client_ms_platform_required
 class TestNodesRestartMS(ManageTest):
     """
     Test nodes restart scenarios when using managed service
