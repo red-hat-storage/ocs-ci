@@ -5,8 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     acceptance,
-    # managed_service_required,
-    hci_pc_platform_required,
+    multicluster_platform_required,
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility.utils import TimeoutSampler
@@ -23,7 +22,7 @@ class TestAcceptance(ManageTest):
     """
 
     @acceptance
-    @hci_pc_platform_required
+    @multicluster_platform_required
     def test_acceptance(self, pvc_factory, pod_factory, teardown_factory):
         """
         Acceptance test

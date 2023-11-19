@@ -7,11 +7,9 @@ from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     acceptance,
-    managed_service_required,
-    hci_pc_platform_required,
+    multicluster_platform_required,
     ManageTest,
-    ms_provider_required,
-    hci_provider_required,
+    mutlicluster_provider_required,
     tier1,
     runs_on_provider,
     bugzilla,
@@ -22,22 +20,19 @@ log = logging.getLogger(__name__)
 
 
 @yellow_squad
-@managed_service_required
-@hci_pc_platform_required
+@multicluster_platform_required
 class TestPostInstallationState(ManageTest):
     """
     Post-installation tests for ROSA and OSD clusters
     """
 
     @acceptance
-    @managed_service_required
-    @hci_pc_platform_required
+    @multicluster_platform_required
     def test_post_installation(self):
         storage_cluster.ocs_install_verification()
 
     @acceptance
-    @ms_provider_required
-    @hci_provider_required
+    @mutlicluster_provider_required
     @pytest.mark.polarion_id("OCS-3909")
     def test_consumers_ceph_resources(self):
         """
@@ -60,8 +55,7 @@ class TestPostInstallationState(ManageTest):
                 ), f"{resource['name']} of {consumer_name} is in status {resource['status']}"
 
     @acceptance
-    @ms_provider_required
-    @hci_provider_required
+    @mutlicluster_provider_required
     @pytest.mark.polarion_id("OCS-3910")
     def test_consumers_capacity(self):
         """

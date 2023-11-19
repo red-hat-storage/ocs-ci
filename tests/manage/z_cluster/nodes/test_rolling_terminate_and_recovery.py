@@ -10,8 +10,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_external_mode,
     skipif_ibm_cloud,
-    managed_service_required,
-    hci_pc_platform_required,
+    multicluster_platform_required,
     ipi_deployment_required,
 )
 from ocs_ci.ocs.machine import (
@@ -168,8 +167,7 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
             else:
                 self.sanity_helpers.health_check(cluster_check=False, tries=40)
 
-    @managed_service_required
-    @hci_pc_platform_required
+    @multicluster_platform_required
     @pytest.mark.parametrize(
         "cluster_type",
         [MS_PROVIDER_TYPE, MS_CONSUMER_TYPE],
