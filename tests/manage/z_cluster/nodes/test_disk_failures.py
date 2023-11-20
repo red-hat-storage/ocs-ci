@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     skipif_ibm_cloud,
     skipif_external_mode,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
@@ -130,6 +131,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers = Sanity()
 
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
     @bugzilla("1825675")
@@ -178,6 +180,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers.health_check(tries=100)
 
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1086")
     @skipif_ibm_cloud

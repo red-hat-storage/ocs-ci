@@ -10,7 +10,12 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import blue_squad
-from ocs_ci.framework.testlib import skipif_managed_service, skipif_ocs_version, tier4c
+from ocs_ci.framework.testlib import (
+    skipif_managed_service,
+    skipif_ms_provider_and_consumer,
+    skipif_ocs_version,
+    tier4c,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources.ocs import OCS
@@ -25,6 +30,7 @@ logger = logging.getLogger(__name__)
 @tier4c
 @pytest.mark.polarion_id("OCS-2385")
 @skipif_managed_service
+@skipif_ms_provider_and_consumer
 def test_ceph_rgw_metrics_after_metrics_exporter_respin(
     rgw_deployments, threading_lock
 ):

@@ -57,6 +57,7 @@ else:
 @skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skipif_hci_provider_and_client
 class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
     """
     Tests to check Tenant configmap override vault namespace or not
