@@ -52,10 +52,10 @@ def remove_ocp_registry_from_ocs(platform):
 
     elif platform.lower() == constants.VSPHERE_PLATFORM:
         params_list.append(
-            '[{"op": "replace", "path": "/spec/storage", "value": {"emptyDir": "{}"}}]'
+            '[{"op": "replace", "path": "/spec/storage", "value": {"emptyDir": {}}}]'
         )
         params_list.append(
-            '[{"op": "replace", "path": "/status/storage", "value": {"emptyDir": "{}"}}]'
+            '[{"op": "replace", "path": "/status/storage", "value": {"emptyDir": {}}}]'
         )
 
     if params_list:
