@@ -521,6 +521,10 @@ class VSPHEREUPI(VSPHEREBASE):
             # Add shutdown_wait_timeout to VM's
             add_shutdown_wait_timeout()
 
+            # enable hardware virtualization
+            if config.ENV_DATA.get("enable_hw_virtualization"):
+                enable_hardware_virtualization()
+
             # sync guest time with host
             vm_file = (
                 constants.VM_MAIN
@@ -2202,3 +2206,29 @@ def comment_sensitive_var():
         f"commenting out {str_to_modify} in {constants.VM_VAR} as current terraform version doesn't support"
     )
     replace_content_in_file(constants.VM_VAR, str_to_modify, target_str)
+
+
+def enable_hardware_virtualization():
+    """
+    Enables Hardware Virtualization
+    """
+    # backup the existing VM_MAIN_JSON
+    ep_time = int(time.time())
+    file_name, file_extension = os.path.splitext(
+        os.path.basename(constants.VM_MAIN_JSON)
+    )
+    backup_file_name = f"{file_name}_{ep_time}{file_extension}"
+    backup_file_path = os.path.join(
+        os.path.dirname(constants.VM_MAIN_JSON), backup_file_name
+    )
+
+    copyfile(constants.VM_MAIN_JSON, backup_file_path)
+
+    # convert json content to dictionary
+    terraform_json_content = json_to_dict(constants.VM_MAIN_JSON)
+
+    vm_resource = terraform_json_content["resource"][0]["vsphere_virtual_machine"]
+    vm_resource["vm"].update(constants.hardware_virtualization_config)
+
+    # write data t json file
+    dump_data_to_json(terraform_json_content, constants.VM_MAIN_JSON)
