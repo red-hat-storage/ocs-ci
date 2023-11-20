@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_external_mode,
     skipif_ms_consumer,
+    skipif_hci_client,
     post_ocp_upgrade,
     bugzilla,
 )
@@ -32,6 +33,7 @@ class TestToCheckPDBPostUpgrade(ManageTest):
     @post_ocs_upgrade
     @skipif_external_mode
     @skipif_ms_consumer
+    @skipif_hci_client
     @pytest.mark.polarion_id("OCS-2449")
     def test_check_mon_pdb_post_upgrade(self):
         """
