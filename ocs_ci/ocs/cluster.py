@@ -2188,6 +2188,19 @@ def is_managed_service_cluster():
     return config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
 
 
+def is_hci_cluster():
+    """
+    Check if the cluster is an hci provider or client cluster
+
+    Returns:
+        bool: True, if the cluster is an hci cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    )
+
+
 def is_ms_consumer_cluster():
     """
     Check if the cluster is a managed service consumer cluster

@@ -9,10 +9,17 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.cluster import (
     is_managed_service_cluster,
+    is_hci_cluster,
 )
 from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityManagedService
-from ocs_ci.ocs.constants import MS_CONSUMER_TYPE, MS_PROVIDER_TYPE, NON_MS_CLUSTER_TYPE
+from ocs_ci.ocs.constants import (
+    MS_CONSUMER_TYPE,
+    MS_PROVIDER_TYPE,
+    HCI_CLIENT,
+    HCI_PROVIDER,
+    NON_MS_CLUSTER_TYPE,
+)
 
 from ocs_ci.ocs.managedservice import (
     check_switch_to_correct_cluster_at_setup,
@@ -39,6 +46,9 @@ class TestSwitchToCorrectIndexAtSetup(ManageTest):
             self.sanity_helpers = SanityManagedService(
                 create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
             )
+        elif is_hci_cluster:
+            # TODO: implement hci sanity helpers
+            pass
         else:
             self.sanity_helpers = Sanity()
 
@@ -50,6 +60,18 @@ class TestSwitchToCorrectIndexAtSetup(ManageTest):
     def test_switch_to_correct_cluster_with_ms_cluster_types(self, cluster_type):
         """
         Test switch to the correct cluster index at setup, when we have MS cluster types
+
+        """
+        check_switch_to_correct_cluster_at_setup(cluster_type)
+
+    @hci_required
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [HCI_CLIENT, HCI_PROVIDER],
+    )
+    def test_switch_to_correct_cluster_with_hci_cluster_types(self, cluster_type):
+        """
+        Test switch to the correct cluster index at setup, when we have hci cluster types
 
         """
         check_switch_to_correct_cluster_at_setup(cluster_type)

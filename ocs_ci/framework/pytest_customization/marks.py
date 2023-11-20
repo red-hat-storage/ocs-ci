@@ -250,6 +250,11 @@ managed_service_required = pytest.mark.skipif(
     reason="Test runs ONLY on OSD or ROSA cluster",
 )
 
+hci_required = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() not in HCI_PROVIDER_CLIENT_PLATFORMS),
+    reason="Test runs ONLY on hci provider or client cluster",
+)
+
 ms_provider_required = pytest.mark.skipif(
     not (
         config.default_cluster_ctx.ENV_DATA["platform"].lower()
