@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4b,
     ManageTest,
-    managed_service_required,
+    provider_client_ms_platform_required,
     ignore_leftovers,
 )
 
@@ -225,7 +225,7 @@ FAILURE_TYPE_FUNC_CALL_DICT = {
 @brown_squad
 @ignore_leftovers
 @tier4b
-@managed_service_required
+@provider_client_ms_platform_required
 class TestAutomatedRecoveryFromFailedNodeReactiveMS(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):

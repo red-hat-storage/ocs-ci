@@ -226,6 +226,11 @@ def cli_create_namespacestore(
             f"--account-name {get_attr_chain(cld_mgr, 'azure_client.account_name')} "
             f"--target-blob-container {uls_name}"
         ),
+        constants.AZURE_WITH_LOGS_PLATFORM: lambda: (
+            f"azure-blob {nss_name} "
+            f"--secret-name {get_attr_chain(cld_mgr, 'azure_with_logs_client.secret.name')} "
+            f"--target-blob-container {uls_name}"
+        ),
         constants.RGW_PLATFORM: lambda: (
             f"s3-compatible {nss_name} "
             f"--endpoint {get_attr_chain(cld_mgr, 'rgw_client.endpoint')} "
@@ -297,6 +302,18 @@ def oc_create_namespacestore(
                 "targetBlobContainer": uls_name,
                 "secret": {
                     "name": get_attr_chain(cld_mgr, "azure_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
+            },
+        },
+        constants.AZURE_WITH_LOGS_PLATFORM: lambda: {
+            "type": "azure-blob",
+            "azureBlob": {
+                "targetBlobContainer": uls_name,
+                "secret": {
+                    "name": get_attr_chain(
+                        cld_mgr, "azure_with_logs_client.secret.name"
+                    ),
                     "namespace": nss_data["metadata"]["namespace"],
                 },
             },

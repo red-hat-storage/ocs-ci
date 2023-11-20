@@ -5,6 +5,7 @@ import pytest
 import csv
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.helpers import helpers
@@ -17,7 +18,7 @@ log = logging.getLogger(__name__)
 @pytest.fixture(autouse=True)
 def teardown(request):
     def finalizer():
-        scale_noobaa_lib.cleanup(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        scale_noobaa_lib.cleanup(config.ENV_DATA["cluster_namespace"])
 
     request.addfinalizer(finalizer)
 
@@ -26,7 +27,7 @@ def teardown(request):
 @scale
 class TestScaleOBCStartTime(E2ETest):
 
-    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    namespace = config.ENV_DATA["cluster_namespace"]
     scale_obc_count = 10
     scale_obc_count_io = 2
     num_obc_batch = 5

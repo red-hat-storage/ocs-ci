@@ -20,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_external_mode,
     skipif_ms_consumer,
+    skipif_hci_client,
     brown_squad,
 )
 from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
@@ -258,6 +259,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @skipif_bmpsi
 @skipif_external_mode
 @skipif_ms_consumer
+@skipif_hci_client
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive

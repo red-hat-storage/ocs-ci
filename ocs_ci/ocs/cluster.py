@@ -1235,7 +1235,7 @@ def validate_pdb_creation():
 
     """
     pdb_obj = ocp.OCP(
-        kind="PodDisruptionBudget", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
     pdb_count = constants.PDB_COUNT

@@ -9,7 +9,7 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.14.0",
+    version="4.15.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
@@ -90,6 +90,13 @@ setup(
         "azure-identity==1.12.0",
         "azure-mgmt-storage==21.0.0",
         "fauxfactory==3.1.0",
+        "google-api-core==2.11.0",
+        "google-api-python-client==2.105.0",
+        "google-auth-httplib2==0.1.1",
+        "google-cloud-core==2.3.2",
+        "google-crc32c==1.5.0",
+        "google-resumable-media==2.4.1",
+        "googleapis-common-protos==1.59.0",
     ],
     entry_points={
         "console_scripts": [

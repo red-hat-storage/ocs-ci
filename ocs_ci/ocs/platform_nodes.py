@@ -60,7 +60,7 @@ from ocs_ci.utility.utils import (
     get_module_ip,
     get_terraform_ignition_provider,
 )
-from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes_in_statuses
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
 from paramiko.ssh_exception import NoValidConnectionsError, AuthenticationException
 from semantic_version import Version
@@ -83,7 +83,7 @@ class PlatformNodesFactory:
             "aws": AWSNodes,
             "baremetal": BaremetalNodes,
             "azure": AZURENodes,
-            "gcp": NodesBase,
+            "gcp": GCPNodes,
             "vsphere_lso": VMWareLSONodes,
             "powervs": IBMPowerNodes,
             "rhv": RHVNodes,
@@ -2963,3 +2963,109 @@ class VMWareUPINodes(VMWareNodes):
         for vm_name in vm_names:
             node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
             node_cls_obj.change_terraform_tfvars_after_remove_vm()
+
+
+class GCPNodes(NodesBase):
+    """
+    Google Cloud Platform Nodes class
+
+    """
+
+    def __init__(self):
+        super(GCPNodes, self).__init__()
+        from ocs_ci.utility import gcp
+
+        self.gcp = gcp.GoogleCloud()
+
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+
+        Raises:
+            OperationFailedToCompleteException: In case that not all the operations completed successfully
+
+        """
+        node_names = [n.name for n in nodes]
+        self.gcp.stop_instances(node_names)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+
+        Raises:
+            OperationFailedToCompleteException: In case that not all the operations completed successfully
+
+        """
+        node_names = [n.name for n in nodes]
+        self.gcp.start_instances(node_names)
+
+    def restart_nodes(self, nodes, wait=True):
+        """
+        Restart nodes. This is a hard reset - the instance does not do a graceful shutdown
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+
+        Raises:
+            OperationFailedToCompleteException: In case that not all the operations completed successfully
+
+        """
+        node_names = [n.name for n in nodes]
+        self.gcp.restart_instances(node_names, wait)
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to terminate, False otherwise
+
+        Raises:
+            OperationFailedToCompleteException: In case that not all the operations completed successfully
+
+        """
+        node_names = [n.name for n in nodes]
+        self.gcp.terminate_instances(node_names, wait)
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
+        """
+        Restart nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+            force (bool): True for force node stop, False otherwise
+
+        Raises:
+            OperationFailedToCompleteException: In case that not all the operations completed successfully
+
+        """
+        node_names = [n.name for n in nodes]
+        # In the Google Compute Engine instance, the stop operation is a clean shutdown without force.
+        # To perform a force stop and start, we need to use the GCP restart method, which performs a hard reset.
+        if force:
+            self.gcp.restart_instances(node_names, wait)
+        else:
+            self.gcp.restart_instances_by_stop_and_start(node_names, wait)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Start the nodes in a NotReady state
+
+        Raises:
+            OperationFailedToCompleteException: In case that not all the operations completed successfully
+
+        """
+        not_ready_nodes = get_nodes_in_statuses([constants.NODE_NOT_READY])
+        node_names = [n.name for n in not_ready_nodes]
+        self.gcp.start_instances(node_names)

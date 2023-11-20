@@ -9,7 +9,6 @@ from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import ManageTest
-from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -28,9 +27,12 @@ def fs_setup(request):
         fs_data = cephfs.get(defaults.CEPHFILESYSTEM_NAME)
         fs_data["spec"]["metadataServer"]["activeCount"] = original_active_count
         ceph_obj.apply(**fs_data)
-        pod = ocp.OCP(kind=constants.POD, namespace=ROOK_CLUSTER_NAMESPACE)
+        pod = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         mds_pods = pod.get(
-            selector=constants.MDS_APP_LABEL, all_namespaces=ROOK_CLUSTER_NAMESPACE
+            selector=constants.MDS_APP_LABEL,
+            all_namespaces=config.ENV_DATA["cluster_namespace"],
         )["items"]
         mds_names = [pod.get("metadata").get("name") for pod in mds_pods]
         for mds in mds_names:
