@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     libtest,
     ManageTest,
     managed_service_required,
+    hci_required,
 )
 from ocs_ci.ocs.cluster import (
     is_managed_service_cluster,
