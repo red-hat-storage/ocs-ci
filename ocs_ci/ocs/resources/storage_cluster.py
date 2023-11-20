@@ -2580,13 +2580,20 @@ def verify_non_resilient_pool_deployment():
     """
     Verify the deployment of the non-resilient pool storage class.
 
-    This function checks if the default non-resilient pool storage class is created
-    and if the custom storage class for non-resilient pools is present.
+    This function checks if the custom storage class for non-resilient pools is present
+    or if the default non-resilient pool storage class is created.
 
     Returns:
         bool: True if the storage class is verified, False otherwise.
     """
     from ocs_ci.helpers.helpers import get_all_storageclass_names
+
+    # Check if the custom storage class for non-resilient pools is present
+    if check_custom_storageclass_presence(
+        interface=constants.OCS_COMPONENTS_MAP["cephnonresilentpools"]
+    ):
+        log.info("Custom storage class for non-resilient pools is present.")
+        return True
 
     # Check if the default non-resilient pool storage class is not created
     if (
@@ -2596,13 +2603,6 @@ def verify_non_resilient_pool_deployment():
         log.info(
             f"Storage class {constants.DEFAULT_STORAGECLASS_NON_RESILIENT_POOL} is not created."
         )
-        return False
-
-    # Check if the custom storage class for non-resilient pools is present
-    if check_custom_storageclass_presence(
-        interface=constants.OCS_COMPONENTS_MAP["cephnonresilentpools"]
-    ):
-        log.info("Custom storage class for non-resilient pools is present.")
         return False
 
     return True
