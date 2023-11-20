@@ -52,9 +52,10 @@ class CNVInstaller(object):
         """
         logger.info("Adding CatalogSource for CNV")
         cnv_catalog_source_data = templating.load_yaml(CNV_CATALOG_SOURCE_YAML)
-        cnv_image = "quay.io/openshift-cnv/nightly-catalog"
         cnv_image_tag = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
-        cnv_catalog_source_data["spec"]["image"] = f"{cnv_image}:{cnv_image_tag}"
+        cnv_catalog_source_data["spec"][
+            "image"
+        ] = f"{constants.CNV_QUAY_NIGHTLY_IMAGE}:{cnv_image_tag}"
         cnv_catalog_source_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cnv_catalog_source_manifest", delete=False
         )
@@ -79,15 +80,17 @@ class CNVInstaller(object):
 
         """
         try:
+            logger.info(f"Creating namespace {self.namespace} for CNV resources")
             namespace_yaml_file = templating.load_yaml(CNV_NAMESPACE_YAML)
             namespace_yaml = OCS(**namespace_yaml_file)
             namespace_yaml.create()
+            logger.info(f"CNV namespace {self.namespace} was created successfully")
         except exceptions.CommandFailed as ef:
-            logger.info("Already present")
             if (
                 f'project.project.openshift.io "{self.namespace}" already exists'
                 not in str(ef)
             ):
+                logger.info(f"Namespace {self.namespace} already present")
                 raise ef
 
     def create_cnv_operatorgroup(self):
@@ -119,6 +122,7 @@ class CNVInstaller(object):
         templating.dump_data_to_temp_yaml(
             cnv_subscription_yaml_data, cnv_subscription_manifest.name
         )
+        logger.info("Creating subscription for CNV operator")
         run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
         self.wait_for_the_resource_to_discover(
             kind=constants.SUBSCRIPTION,
@@ -152,6 +156,7 @@ class CNVInstaller(object):
             resource_name (str): The name of the resource to wait for.
 
         """
+        logger.info(f"Waiting for resource {kind} to be discovered")
         for sample in TimeoutSampler(300, 10, ocp.OCP, kind=kind, namespace=namespace):
             resources = sample.get().get("items", [])
             for resource in resources:
@@ -202,6 +207,7 @@ class CNVInstaller(object):
         useEmulation.
 
         """
+        logger.info("Enabling software emulation on the cluster")
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
         annonation = (
             'kubevirt.kubevirt.io/jsonpatch=\'[{ "op": "add", "path": "/spec/configuration/developerConfiguration",'
@@ -221,23 +227,26 @@ class CNVInstaller(object):
             HyperConvergedHealthException: If the HyperConverged cluster health is not healthy.
 
         """
-        # Validate that all the nodes are ready and schedulable and CNV pods are running
+        # Validate that all the nodes are ready and CNV pods are running
+        logger.info("Validate that all the nodes are ready and CNV pods are running")
         wait_for_nodes_status()
         wait_for_pods_to_be_running(namespace=self.namespace)
 
         # Verify that all the deployments in the openshift-cnv namespace to be in the 'Available' condition
+        logger.info(f"Verify all the deployments status in {self.namespace}")
         ocp = OCP(kind="deployments", namespace=self.namespace)
         result = ocp.wait(
             condition="Available", timeout=600, selector=constants.CNV_SELECTOR
         )
         if not result:
-            err_str = "Timeout occurred, or one or more deployments did not met condition: Available."
+            err_str = "Timeout occurred, or one or more deployments did not meet condition: Available."
             raise exceptions.TimeoutExpiredError(err_str)
         logger.info(
-            "All the deployments in the openshit-cnv namespace met condition: Available"
+            f"All the deployments in the {self.namespace} namespace met condition: Available"
         )
 
         # validate that HyperConverged systemHealthStatus is healthy
+        logger.info("Validate that HyperConverged systemHealthStatus is healthy")
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
         health = (
             ocp.get(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
@@ -262,6 +271,7 @@ class CNVInstaller(object):
             exceptions.ResourceNotFoundError: If virtctl ConsoleCLIDownload is not found.
 
         """
+        logger.info("Retrieving the specification links for the virtctl client")
         ocp = OCP(
             kind=constants.CONSOLECLIDOWNLOAD,
             resource_name=constants.VIRTCTL_CLI_DOWNLOADS,
@@ -277,6 +287,9 @@ class CNVInstaller(object):
             )
 
         if virtctl_console_cli_downloads_spec_links:
+            logger.info(
+                "successfully retrieved the specification links for the virtctl client"
+            )
             return virtctl_console_cli_downloads_spec_links
         raise exceptions.ResourceNotFoundError(
             f"{constants.VIRTCTL_CLI_DOWNLOADS} {constants.CONSOLECLIDOWNLOAD} not found"
@@ -293,12 +306,16 @@ class CNVInstaller(object):
             exceptions.ResourceNotFoundError: If no URL entries are found.
 
         """
+        logger.info("Getting all the URL links from virtctl specification links")
         virtctl_console_cli_downloads_spec_links = self.get_virtctl_console_spec_links()
         virtctl_all_urls = [
             entry["href"] for entry in virtctl_console_cli_downloads_spec_links
         ]
 
         if virtctl_all_urls:
+            logger.info(
+                "Successfully pulled all the URL links from virtctl specification links"
+            )
             return virtctl_all_urls
         raise exceptions.ResourceNotFoundError(
             "No URL entries found in the virtctl console cli download"
@@ -317,6 +334,7 @@ class CNVInstaller(object):
             Optional[str]: The virtctl download URL if found, otherwise None.
 
         """
+        logger.info(f"Getting the virtctl download URL for {os_type} {os_machine_type}")
         virtctl_console_cli_downloads_all_spec_links = (
             self.get_virtctl_console_spec_links()
         )
@@ -341,6 +359,7 @@ class CNVInstaller(object):
             exceptions.ArchitectureNotSupported: If virtctl is not compatible.
 
         """
+        logger.info("Performing virtctl binary compatibility check...")
         os_type = platform.system()
         os_machine_type = platform.machine()
         virtctl_download_url = self.get_virtctl_download_url(

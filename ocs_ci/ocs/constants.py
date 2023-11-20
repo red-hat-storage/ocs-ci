@@ -318,6 +318,7 @@ DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # CNV constants
 CNV_NAMESPACE = "openshift-cnv"
+CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
 HYPERCONVERGED = "HyperConverged"
 KUBEVIRT_HCO_PREFIX = "kubevirt-hyperconverged-operator"
 CNV_OPERATOR_NIGHTLY_CATALOG_SOURCE_NAME = "cnv-nightly-catalog-source"
