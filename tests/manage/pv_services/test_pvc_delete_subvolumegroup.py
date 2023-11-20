@@ -1,8 +1,8 @@
 import pytest
 import logging
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pvc import delete_pvcs
+from ocs_ci.ocs import constants, registry
+from ocs_ci.ocs.resources.pvc import delete_pvcs, get_all_pvc_objs
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     tier2,
 )
+from ocs_ci.ocs.uninstall import remove_ocp_registry_from_ocs
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import get_cephfs_name
 
@@ -30,13 +31,30 @@ class TestPvcDeleteSubVolumeGroup(ManageTest):
     subvolumegroup_ls_cmd = None
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory):
+    def setup(self, request, project_factory):
         """
         create resources for the test
 
         Args:
             project_factory: A fixture to create new project
         """
+        registry_exists = registry.check_if_registry_stack_exists()
+        if registry_exists:
+            logger.info("Removing OCP registry from ODF")
+            remove_ocp_registry_from_ocs(config.ENV_DATA["platform"])
+            registry_pvc = get_all_pvc_objs(
+                namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+            )[0]
+            registry_pvc.delete()
+            registry_pvc.ocp.wait_for_delete(registry_pvc.name)
+
+        def finalizer():
+            if registry_exists:
+                logger.info("Configuring OCP registry to use ODF")
+                registry.change_registry_backend_to_ocs()
+
+        request.addfinalizer(finalizer)
+
         self.cephfs_name = config.ENV_DATA.get("cephfs_name") or get_cephfs_name()
         self.subvolumegroup_ls_cmd = f"ceph fs subvolumegroup ls {self.cephfs_name}"
 
