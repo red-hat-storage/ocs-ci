@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.cluster import get_specific_pool_pgid, get_osd_pg_log_dups_tracked
 from ocs_ci.ocs.resources.pod import (
@@ -31,6 +32,7 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_external_mode
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_ocs_version("<4.11")
 @pytest.mark.polarion_id("OCS-4471")
 @pytest.mark.bugzilla("2101798")

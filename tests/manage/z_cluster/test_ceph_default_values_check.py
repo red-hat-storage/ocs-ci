@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     skipif_mcg_only,
     post_ocs_upgrade,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     runs_on_provider,
 )
 from ocs_ci.ocs.resources import pod
@@ -177,6 +178,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @skipif_ocs_version("<4.9")
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """

@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_no_lso,
     skipif_lso,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     brown_squad,
 )
 from ocs_ci.framework.testlib import (
@@ -122,7 +123,7 @@ def add_capacity_test(ui_flag=False):
 @skipif_lso
 @skipif_external_mode
 @skipif_ibm_power
-@skipif_managed_service
+@skipif_hci_provider_and_client
 @ceph_health_retry
 class TestAddCapacity(ManageTest):
     """
@@ -148,13 +149,14 @@ class TestAddCapacity(ManageTest):
 @ignore_leftovers
 @polarion_id("OCS-4647")
 @pytest.mark.second_to_last
-@skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_aws_i3
 @skipif_bm
 @skipif_bmpsi
 @skipif_external_mode
 @skipif_ibm_power
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_no_lso
 @ceph_health_retry
 class TestAddCapacityLSO(ManageTest):
@@ -187,6 +189,7 @@ class TestAddCapacityLSO(ManageTest):
 @skipif_external_mode
 @cloud_platform_required
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @ceph_health_retry
 class TestAddCapacityPreUpgrade(ManageTest):
     """

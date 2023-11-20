@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     skipif_ibm_cloud,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_external_mode,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -81,6 +82,7 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
 @ignore_leftovers
 @tier4a
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2552")
 class TestCheckPodsAfterNodeFailure(ManageTest):

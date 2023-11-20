@@ -40,6 +40,7 @@ from ocs_ci.framework.testlib import (
     skipif_bm,
     bugzilla,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_more_than_three_workers,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
@@ -122,6 +123,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier1
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -189,6 +191,7 @@ class TestNodesMaintenance(ManageTest):
     @tier4a
     @skipif_bm
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
@@ -461,6 +464,7 @@ class TestNodesMaintenance(ManageTest):
     @bugzilla("1861104")
     @bugzilla("1946573")
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @skipif_more_than_three_workers
     @pytest.mark.polarion_id("OCS-2524")
     @tier4a

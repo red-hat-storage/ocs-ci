@@ -16,6 +16,7 @@ from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_clust
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_bmpsi,
     bugzilla,
     skipif_external_mode,
@@ -178,6 +179,7 @@ def delete_and_create_osd_node(osd_node_name):
 @ignore_leftovers
 @ipi_deployment_required
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_bmpsi
 @skipif_external_mode
 class TestNodeReplacementWithIO(ManageTest):
@@ -305,6 +307,7 @@ class TestNodeReplacement(ManageTest):
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
 @skipif_managed_service
+@skipif_hci_provider_and_client
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:

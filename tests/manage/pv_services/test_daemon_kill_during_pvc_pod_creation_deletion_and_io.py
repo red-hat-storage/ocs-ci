@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     polarion_id,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_external_mode,
 )
 from ocs_ci.framework import config
@@ -42,6 +43,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4c
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_external_mode
 class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
     """

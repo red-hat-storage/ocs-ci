@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     kms_config_required,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     ManageTest,
@@ -55,6 +56,7 @@ else:
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skipif_hci_provider_and_client
 class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
     """
     Tests to check Tenant configmap override vault namespace or not
