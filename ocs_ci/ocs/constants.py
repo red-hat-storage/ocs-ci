@@ -1886,6 +1886,8 @@ BACKINGSTORE_TYPE_AWS = "aws-s3"
 BACKINGSTORE_TYPE_AZURE = "azure-blob"
 BACKINGSTORE_TYPE_S3_COMP = "s3-compatible"
 BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
+BACKINGSTORE_TYPE_PV_POOL = "pv-pool"
+
 
 # Squads assignment
 # Tests are assigned to Squads based on patterns matching test path.

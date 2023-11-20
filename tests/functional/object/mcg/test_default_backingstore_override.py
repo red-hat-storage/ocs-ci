@@ -4,7 +4,13 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1, red_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    red_squad,
+    tier1,
+    pre_upgrade,
+    post_upgrade,
+    skipif_mcg_only,
+)
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import get_nb_bucket_stores
@@ -61,14 +67,69 @@ def allow_default_backingstore_override(request):
     patch_allow_manual_default_backingstore()
 
 
+def get_admin_default_resource_name(mcg_obj):
+    """
+    Get the default resource name of the admin account
+
+    Args:
+        mcg_obj (MCG): An MCG object
+
+    Returns:
+        str: The default resource name
+
+    """
+
+    read_account_output = mcg_obj.send_rpc_query(
+        "account_api",
+        "read_account",
+        params={
+            "email": mcg_obj.noobaa_user,
+        },
+    )
+    return read_account_output.json()["reply"]["default_resource"]
+
+
+def get_default_bc_backingstore_name(mcg_obj):
+    """
+    Get the default backingstore name of the default bucketclass
+
+    Args:
+        mcg_obj (MCG): An MCG object
+
+    Returns:
+        str: The default backingstore name
+
+    """
+    bucketclass_ocp_obj = OCP(
+        kind=constants.BUCKETCLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+    )
+    return (
+        bucketclass_ocp_obj.get()
+        .get("spec")
+        .get("placementPolicy")
+        .get("tiers")[0]
+        .get("backingStores")[0]
+    )
+
+
 @red_squad
 @pytest.mark.usefixtures(allow_default_backingstore_override.__name__)
 class TestDefaultBackingstoreOverride(MCGTest):
     """
     Test overriding the default noobaa backingstore
+
     """
 
+    @pytest.fixture(scope="session")
+    def override_nb_default_backingstore_session(self, request, mcg_obj_session):
+        return self.override_nb_default_backingstore(request, mcg_obj_session)
+
     @pytest.fixture(scope="function")
+    def override_nb_default_backingstore_function(self, request, mcg_obj_session):
+        return self.override_nb_default_backingstore(request, mcg_obj_session)
+
     def override_nb_default_backingstore(self, request, mcg_obj_session):
         """
         Override the default noobaa backingstore to the given alternative backingstore
@@ -91,6 +152,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
             Args:
                 mcg_obj (MCG): An MCG object
                 alternative_backingstore_name (str): The name of the alternative backingstore
+
             """
 
             # Update the new default resource of the admin account
@@ -135,7 +197,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
         mcg_obj_session,
         backingstore_factory,
         bucket_factory,
-        override_nb_default_backingstore,
+        override_nb_default_backingstore_function,
     ):
         """
         1. Override the default noobaa backingstore
@@ -152,7 +214,9 @@ class TestDefaultBackingstoreOverride(MCGTest):
             # Supported in all deployment types except mcg-only
             uls_dict = {"pv": [(1, 20, constants.DEFAULT_STORAGECLASS_RBD)]}
         alternative_backingstore = backingstore_factory("oc", uls_dict)[0]
-        override_nb_default_backingstore(mcg_obj_session, alternative_backingstore.name)
+        override_nb_default_backingstore_function(
+            mcg_obj_session, alternative_backingstore.name
+        )
 
         # 2. Create a new bucket using the mcg-cli with the default backingstore
         default_cli_bucket = bucket_factory(amount=1, interface="cli")[0]
@@ -170,10 +234,81 @@ class TestDefaultBackingstoreOverride(MCGTest):
             == alternative_backingstore.name
         ), "The default OC bucket does not use the new default backingstore!"
 
-        self.a
+    @pytest.fixture(scope="session")
+    def alt_bs_for_upgrade_tc(self, mcg_obj_session, backingstore_factory_session):
+        """
+        Create a new backingstore with the same type of the current default.
 
-    def test_default_backingstore_override_post_upgrade(self):
-        pass
+        Returns:
+            str: The name of the alternative backingstore
+
+        """
+        # Create the alternative backingstore that will be used as the new default.
+        original_bs_type = OCP(
+            kind="backingstore",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+        ).data["spec"]["type"]
+        bs_type_to_platform_mapping = {
+            constants.BACKINGSTORE_TYPE_AWS: "aws",
+            constants.BACKINGSTORE_TYPE_AZURE: "azure",
+            constants.BACKINGSTORE_TYPE_GOOGLE: "gcp",
+            constants.BACKINGSTORE_TYPE_PV_POOL: "pv",
+            constants.BACKINGSTORE_TYPE_S3_COMP: "rgw",
+        }
+        original_bs_platform_name = bs_type_to_platform_mapping[original_bs_type]
+        alternative_backingstore = backingstore_factory_session(
+            "oc",
+            {original_bs_platform_name: [(1, None)]}
+            if original_bs_platform_name != "pv"
+            else {"pv": [(1, 20, constants.DEFAULT_STORAGECLASS_RBD)]},
+        )[0]
+        return alternative_backingstore.name
+
+    @pre_upgrade
+    @skipif_mcg_only  # We can't create a bs with the same type of the current default in mcg-only
+    def test_default_backingstore_override_pre_upgrade(
+        self,
+        mcg_obj_session,
+        alt_bs_for_upgrade_tc,
+        override_nb_default_backingstore_session,
+    ):
+        """
+        1. Create a new backingstore with the same type of the current default
+            - We're using the same type of the current default to avoid affecting subsequent tests
+            - This step is done in the alt_bs_for_upgrade_tc fixture above to avoid leftover erors
+        2. Override the current default using the new backingstore
+        3. Verify the new default is set before the upgrade
+
+        """
+        # Create a new backingstore with the same type of the current default (implemented in fixture)
+        alt_bs = alt_bs_for_upgrade_tc
+
+        # Override the default noobaa backingstore
+        override_nb_default_backingstore_session(mcg_obj_session, alt_bs)
+
+        # Verify the new default is set before the upgrade
+        default_admin_resource = get_admin_default_resource_name(mcg_obj_session)
+        default_bc_backingstore = get_default_bc_backingstore_name(mcg_obj_session)
+        assert (
+            default_admin_resource == default_bc_backingstore == alt_bs
+        ), "The new default backingstore was not overriden before the upgrade!"
+
+    @post_upgrade
+    def test_default_backingstore_override_post_upgrade(
+        self,
+        mcg_obj_session,
+        alt_bs_for_upgrade_tc,
+    ):
+        """
+        Verify the new default is still set post-upgrade
+
+        """
+        default_admin_resource = get_admin_default_resource_name(mcg_obj_session)
+        default_bc_backingstore = get_default_bc_backingstore_name(mcg_obj_session)
+        assert (
+            default_admin_resource == default_bc_backingstore == alt_bs_for_upgrade_tc
+        ), "The new default backingstore was not preserved after the upgrade!"
 
     def test_bucketclass_replication_after_default_backingstore_override(
         self, override_nb_default_backingstore
