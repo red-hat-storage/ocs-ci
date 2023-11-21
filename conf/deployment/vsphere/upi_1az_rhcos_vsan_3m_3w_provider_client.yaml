@@ -3,6 +3,7 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
+  enable_hw_virtualization: true
   platform: 'vsphere'
   deployment_type: 'upi'
   worker_replicas: 3
