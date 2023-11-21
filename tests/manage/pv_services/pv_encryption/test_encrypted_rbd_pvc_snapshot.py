@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     kms_config_required,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
 )
@@ -69,6 +70,7 @@ else:
 @skipif_ocp_version("<4.8")
 @kms_config_required
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 class TestEncryptedRbdBlockPvcSnapshot(ManageTest):

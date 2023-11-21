@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     kms_config_required,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     config,
 )
 from ocs_ci.helpers.helpers import (
@@ -45,6 +46,7 @@ else:
 @skipif_ocs_version("<4.9")
 @kms_config_required
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @pytest.mark.parametrize(
