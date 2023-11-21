@@ -2446,13 +2446,18 @@ def awscli_pod_fixture(request, scope_name):
         constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME, scope_name
     )
     service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    service_ca_data["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+        "cluster_namespace"
+    ]
     log.info("Trying to create the AWS CLI service CA")
     service_ca_configmap = helpers.create_resource(**service_ca_data)
-
     awscli_sts_dict = templating.load_yaml(constants.S3CLI_MULTIARCH_STS_YAML)
     awscli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
         "name"
     ] = service_ca_configmap_name
+    awscli_sts_dict["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+        "cluster_namespace"
+    ]
 
     update_container_with_mirrored_image(awscli_sts_dict)
     update_container_with_proxy_env(awscli_sts_dict)
