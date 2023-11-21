@@ -130,6 +130,7 @@ def ui_add_capacity_conditions():
         "4.12",
         "4.13",
         "4.14",
+        "4.15",
     ):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
