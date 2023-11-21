@@ -25,6 +25,7 @@ def cloud_uls_factory(request, cld_mgr):
         "aws": set(),
         "gcp": set(),
         "azure": set(),
+        "azure-with-logs": set(),
         "ibmcos": set(),
         "rgw": set(),
     }
@@ -33,6 +34,7 @@ def cloud_uls_factory(request, cld_mgr):
             "aws": cld_mgr.aws_client,
             "gcp": cld_mgr.gcp_client,
             "azure": cld_mgr.azure_client,
+            "azure-with-logs": cld_mgr.azure_with_logs_client,
             "ibmcos": cld_mgr.ibmcos_client,
         }
     except AttributeError as e:
@@ -66,6 +68,7 @@ def cloud_uls_factory(request, cld_mgr):
             "aws": set(),
             "gcp": set(),
             "azure": set(),
+            "azure-with-logs": set(),
             "ibmcos": set(),
             "rgw": set(),
         }

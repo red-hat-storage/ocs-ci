@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     polarion_id,
     tier3,
+    black_squad,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -131,7 +132,7 @@ class TestCapacityBreakdownUI(ManageTest):
             project_name=project_name, pod_name=pod_name
         ), "The Project/Pod not created on Capacity Breakdown"
 
-    @green_squad
+    @black_squad
     @ui
     @tier3
     @bugzilla("2225223")

@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1, tier2, red_squad
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
@@ -400,7 +401,7 @@ class TestReplication(MCGTest):
             **(
                 get_pods_having_label(
                     label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )[0]
             )
         )

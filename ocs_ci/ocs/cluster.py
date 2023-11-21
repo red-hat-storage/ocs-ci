@@ -1235,7 +1235,7 @@ def validate_pdb_creation():
 
     """
     pdb_obj = ocp.OCP(
-        kind="PodDisruptionBudget", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
     pdb_count = constants.PDB_COUNT
@@ -2202,6 +2202,20 @@ def is_ms_consumer_cluster():
     )
 
 
+def is_hci_client_cluster():
+    """
+    Check if the cluster is a Fusion HCI Client cluster
+
+    Returns:
+        bool: True, if the cluster is a Fusion HCI client cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
+    )
+
+
 def is_ms_provider_cluster():
     """
     Check if the cluster is a managed service provider cluster
@@ -2213,6 +2227,20 @@ def is_ms_provider_cluster():
     return (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
         and config.ENV_DATA["cluster_type"].lower() == "provider"
+    )
+
+
+def is_hci_provider_cluster():
+    """
+    Check if the cluster is a Fusion HCI provider cluster
+
+    Returns:
+        bool: True, if the cluster is a Fusion HCI provider cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER
     )
 
 

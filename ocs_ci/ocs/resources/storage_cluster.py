@@ -72,16 +72,9 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import (
-    remove_ceph_crashes,
-    run_ceph_health_cmd,
-    run_cmd,
-    TimeoutSampler,
-)
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-
 from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name as csc
-from time import sleep
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 
@@ -654,19 +647,6 @@ def ocs_install_verification(
     health_check_tries = 20
     health_check_delay = 30
     if post_upgrade_verification:
-        # remove ceph crashes after upgrade due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2233762
-        # and https://bugzilla.redhat.com/show_bug.cgi?id=2237861
-        log.info(
-            "Sleeping for 600 seconds to allow crash reports to report to ceph health"
-        )
-        sleep(600)
-        ceph_health = run_ceph_health_cmd(
-            namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        if "daemons have recently crashed" in ceph_health:
-            # remove crashes on ceph
-            remove_ceph_crashes(ct_pod)
-
         # In case of upgrade with FIO we have to wait longer time to see
         # health OK. See discussion in BZ:
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
@@ -1294,7 +1274,7 @@ def get_in_transit_encryption_config_state():
 
     ocp_obj = StorageCluster(
         resource_name=cluster_name,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     try:
@@ -1331,7 +1311,7 @@ def set_in_transit_encryption(enabled=True):
 
     ocp_obj = StorageCluster(
         resource_name=cluster_name,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     patch = {"spec": {"network": {"connections": {"encryption": {"enabled": enabled}}}}}
@@ -1742,9 +1722,9 @@ def verify_multus_network():
             "k8s.v1.cni.cncf.io/networks"
         ]
         if public_net_created:
-            assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+            assert verify_networks_in_ceph_pod(
+                pod_networks, public_net_name, public_net_namespace
+            ), f"{public_net_name} not in {pod_networks}"
 
         osd_id = get_osd_pod_id(_pod)
         log.info(
@@ -1796,9 +1776,9 @@ def verify_multus_network():
             pod_networks = _pod.data["metadata"]["annotations"][
                 "k8s.v1.cni.cncf.io/networks"
             ]
-            assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+            assert verify_networks_in_ceph_pod(
+                pod_networks, public_net_name, public_net_namespace
+            ), f"{public_net_name} not in {pod_networks}"
 
         log.info("Verifying multus public network exists on CSI pods")
         csi_pods = []
@@ -1817,9 +1797,9 @@ def verify_multus_network():
             pod_networks = _pod.data["metadata"]["annotations"][
                 "k8s.v1.cni.cncf.io/networks"
             ]
-            assert (
-                public_net_full_name in pod_networks
-            ), f"{public_net_full_name} not in {pod_networks}"
+            assert verify_networks_in_ceph_pod(
+                pod_networks, public_net_name, public_net_namespace
+            ), f"{public_net_name} not in {pod_networks}"
 
         log.info("Verifying MDS Map IPs are in the multus public network range")
         ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
@@ -1845,6 +1825,33 @@ def verify_multus_network():
         assert selectors["cluster"] == (
             f"{config.ENV_DATA['multus_cluster_net_namespace']}/{config.ENV_DATA['multus_cluster_net_name']}"
         )
+
+
+def verify_networks_in_ceph_pod(pod_networks, net_name, net_namespace):
+    """
+    Verify network configuration on ceph pod
+
+    Args:
+        pod_networks (str): the value of k8s.v1.cni.cncf.io/networks param
+        net_name (str): the network-attachment-definitions name
+        net_namespace (str): the network-attachment-definitions namespace
+
+    Returns:
+        bool: return True if net_name and net_namespce exist in pod_networks otherwise False
+
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_14:
+        pod_networks_list = json.loads(pod_networks)
+        return any(
+            (
+                pod_network["name"] == net_name
+                and pod_network["namespace"] == net_namespace
+            )
+            for pod_network in pod_networks_list
+        )
+    else:
+        return f"{net_namespace}/{net_name}" in pod_networks
 
 
 def verify_managed_service_resources():
@@ -2375,7 +2382,7 @@ def get_storageclass_names_from_storagecluster_spec():
     """
     sc_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
     keys_to_search = [
@@ -2557,7 +2564,7 @@ def validate_serviceexport():
 
     """
     serviceexport = OCP(
-        kind="ServiceExport", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind="ServiceExport", namespace=config.ENV_DATA["cluster_namespace"]
     )
     osd_count = 0
     mon_count = 0

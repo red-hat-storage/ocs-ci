@@ -2,13 +2,13 @@
 
 from logging import getLogger
 from ocs_ci.ocs.constants import (
-    OPENSHIFT_STORAGE_NAMESPACE,
     CSI_CEPHFSPLUGIN_LABEL,
     POD,
     CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
     CSI_RBDPLUGIN_LABEL,
     CSI_RBDPLUGIN_PROVISIONER_LABEL,
 )
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     bugzilla,
@@ -34,21 +34,23 @@ def test_no_liveness_container():
 
     """
     csi_plugin_pod = OCP(
-        kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE, selector=CSI_CEPHFSPLUGIN_LABEL
+        kind=POD,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=CSI_CEPHFSPLUGIN_LABEL,
     )
     csi_prov_pod = OCP(
         kind=POD,
-        namespace=OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
     )
     rbd_plugin_pod = OCP(
         kind=POD,
-        namespace=OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=CSI_RBDPLUGIN_LABEL,
     )
     rbd_prov_pod = OCP(
         kind=POD,
-        namespace=OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         selector=CSI_RBDPLUGIN_PROVISIONER_LABEL,
     )
     for pods in (csi_plugin_pod, rbd_plugin_pod, rbd_prov_pod, csi_prov_pod):

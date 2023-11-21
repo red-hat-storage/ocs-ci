@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.framework.testlib import E2ETest, tier4b
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import skipif_no_lso, brown_squad
@@ -33,12 +32,16 @@ class TestDeleteLocalVolumeSymLink(E2ETest):
         """
         # Get rook-ceph-crashcollector pod objects
         crashcollector_pods = get_pod_name_by_pattern(
-            pattern="rook-ceph-crashcollector", namespace=ROOK_CLUSTER_NAMESPACE
+            pattern="rook-ceph-crashcollector",
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         crashcollector_pods_objs = []
         for crashcollector_pod in crashcollector_pods:
             crashcollector_pods_objs.append(
-                get_pod_obj(name=crashcollector_pod, namespace=ROOK_CLUSTER_NAMESPACE)
+                get_pod_obj(
+                    name=crashcollector_pod,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )
             )
 
         # Get Node object
@@ -47,12 +50,14 @@ class TestDeleteLocalVolumeSymLink(E2ETest):
         # Get Sym link
         osd_pvcs = get_deviceset_pvcs()
         pv_name = osd_pvcs[0].data["spec"]["volumeName"]
-        ocp_obj = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE, kind=constants.PV)
+        ocp_obj = ocp.OCP(
+            namespace=config.ENV_DATA["cluster_namespace"], kind=constants.PV
+        )
         pv_obj = ocp_obj.get(resource_name=pv_name)
         path = pv_obj["spec"]["local"]["path"]
 
         log.info("Delete sym link")
-        oc_cmd = ocp.OCP(namespace=ROOK_CLUSTER_NAMESPACE)
+        oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
         cmd = f"rm -rfv {path}"
         oc_cmd.exec_oc_debug_cmd(node=node_obj.name, cmd_list=[cmd])
 

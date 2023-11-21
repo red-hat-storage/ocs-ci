@@ -22,7 +22,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
 )
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
-from ocs_ci.ocs.resources.mcg_replication_policy import LogBasedReplicationPolicy
+from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class TestLogBasedBucketReplication(MCGTest):
             platform=constants.AWS_PLATFORM,
             region=self.DEFAULT_AWS_REGION,
         )
-        replication_policy = LogBasedReplicationPolicy(
+        replication_policy = AwsLogBasedReplicationPolicy(
             destination_bucket=target_bucket.name,
             sync_deletions=True,
             logs_bucket=mockup_logger.logs_bucket_uls_name,
@@ -218,7 +218,7 @@ class TestLogBasedBucketReplication(MCGTest):
             platform=constants.AWS_PLATFORM,
             region=self.DEFAULT_AWS_REGION,
         )
-        replication_policy = LogBasedReplicationPolicy(
+        replication_policy = AwsLogBasedReplicationPolicy(
             destination_bucket=target_bucket.name,
             sync_deletions=True,
             logs_bucket=mockup_logger.logs_bucket_uls_name,

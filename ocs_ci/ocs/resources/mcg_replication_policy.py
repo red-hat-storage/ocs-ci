@@ -1,11 +1,10 @@
+from abc import ABC, abstractmethod
 import uuid
 
 
 class McgReplicationPolicy:
     """
-    A class representing an MCG bucket replication policy.
-
-    This class handles the parsing of the relevant parameters to a dictionary that matches the expected JSON structure.
+    A class to handle the MCG bucket replication policy JSON structure.
 
     """
 
@@ -29,9 +28,33 @@ class McgReplicationPolicy:
         return str(self.to_dict())
 
 
-class LogBasedReplicationPolicy(McgReplicationPolicy):
+class LogBasedReplicationPolicy(McgReplicationPolicy, ABC):
     """
-    A subclass of ReplicationPolicy that includes log-based replication information.
+    An abstract subclass of ReplicationPolicy that includes log-based replication information.
+
+    """
+
+    def __init__(
+        self,
+        destination_bucket,
+        sync_deletions=False,
+        prefix="",
+    ):
+        super().__init__(destination_bucket, prefix)
+        self.sync_deletions = sync_deletions
+
+    @abstractmethod
+    def to_dict(self):
+        dict = super().to_dict()
+        dict["rules"][0]["sync_deletions"] = self.sync_deletions
+        dict["log_replication_info"] = {}
+
+        return dict
+
+
+class AwsLogBasedReplicationPolicy(LogBasedReplicationPolicy):
+    """
+    A class to handle the AWS log-based bucket replication policy JSON structure.
 
     """
 
@@ -43,19 +66,36 @@ class LogBasedReplicationPolicy(McgReplicationPolicy):
         prefix="",
         logs_location_prefix="",
     ):
-        super().__init__(destination_bucket, prefix)
-        self.sync_deletions = sync_deletions
+        super().__init__(destination_bucket, sync_deletions, prefix)
         self.logs_bucket = logs_bucket
         self.logs_location_prefix = logs_location_prefix
 
     def to_dict(self):
         dict = super().to_dict()
-        dict["rules"][0]["sync_deletions"] = self.sync_deletions
-        dict["log_replication_info"] = {
-            "logs_location": {
-                "logs_bucket": self.logs_bucket,
-                "prefix": self.logs_location_prefix,
-            }
+        dict["log_replication_info"]["logs_location"] = {
+            "logs_bucket": self.logs_bucket,
+            "prefix": self.logs_location_prefix,
         }
+
+        return dict
+
+
+class AzureLogBasedReplicationPolicy(LogBasedReplicationPolicy):
+    """
+    A class to handle the Azure log-based bucket replication policy JSON structure.
+
+    """
+
+    def __init__(
+        self,
+        destination_bucket,
+        sync_deletions=False,
+        prefix="",
+    ):
+        super().__init__(destination_bucket, sync_deletions, prefix)
+
+    def to_dict(self):
+        dict = super().to_dict()
+        dict["log_replication_info"]["endpoint_type"] = "AZURE"
 
         return dict

@@ -237,6 +237,10 @@ MS_CONSUMER_TYPE = "consumer"
 MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
+# HCI cluster types
+HCI_CLIENT = "hci_client"
+HCI_PROVIDER = "provider"
+
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
 must_gather_pod_label = "app=must-gather"
@@ -974,6 +978,7 @@ PSA_RESTRICTED = "restricted"
 # Platforms
 AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"
+AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
@@ -987,6 +992,8 @@ OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
+HCI_BAREMETAL = "hci_baremetal"
+HCI_VSPHERE = "hci_vsphere"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
@@ -994,6 +1001,8 @@ ON_PREM_PLATFORMS = [
     BAREMETALPSI_PLATFORM,
     IBM_POWER_PLATFORM,
     RHV_PLATFORM,
+    HCI_BAREMETAL,
+    HCI_VSPHERE,
 ]
 CLOUD_PLATFORMS = [
     AWS_PLATFORM,
@@ -1010,6 +1019,11 @@ MANAGED_SERVICE_PLATFORMS = [
     FUSIONAAS_PLATFORM,
 ]
 BAREMETAL_PLATFORMS = [BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
+
+HCI_PROVIDER_CLIENT_PLATFORMS = [
+    HCI_BAREMETAL,
+    HCI_VSPHERE,
+]
 
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
@@ -1045,6 +1059,7 @@ VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
 INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VM_MAIN = os.path.join(VSPHERE_DIR, "vm/main.tf")
+VM_MAIN_JSON = os.path.join(VSPHERE_DIR, "vm/main.tf.json")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
@@ -1083,6 +1098,9 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
 CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
+
+# Hardware Virtualization
+hardware_virtualization_config = {"nested_hv_enabled": "true"}
 
 # VMware Datastore types
 VMFS = "VMFS"
@@ -1850,7 +1868,7 @@ SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
 # Cloud Manager available platforms
-CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
+CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "AZURE_WITH_LOGS", "IBMCOS"]
 
 # Vault related configurations
 VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
@@ -2341,3 +2359,12 @@ AWS_REGIONS_DOC_URL = "https://docs.aws.amazon.com/general/latest/gr/rande.html"
 
 # dir of template for html reports
 HTML_REPORT_TEMPLATE_DIR = "ocs_ci/templates/html_reports/"
+
+
+# Google Cloud platform
+GCP_PROJECT_ODF_QE = "odf-qe"
+# Operation names
+OPERATION_STOP = "stop"
+OPERATION_START = "start"
+OPERATION_RESTART = "restart"
+OPERATION_TERMINATE = "terminate"

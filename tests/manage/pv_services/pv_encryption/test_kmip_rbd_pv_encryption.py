@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     aws_platform_required,
     kms_config_required,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     polarion_id,
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.12")
 @kms_config_required
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @polarion_id("OCS-4665")

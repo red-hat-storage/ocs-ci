@@ -15,10 +15,7 @@ from ocs_ci.ocs.must_gather.const_must_gather import (
     GATHER_COMMANDS_LOG,
 )
 from ocs_ci.utility import version
-from ocs_ci.ocs.constants import (
-    OPENSHIFT_STORAGE_NAMESPACE,
-    MANAGED_SERVICE_PLATFORMS,
-)
+from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
 
 
 logger = logging.getLogger(__name__)
@@ -151,7 +148,7 @@ class MustGather(object):
         """
         if self.type_log != "OTHERS":
             return
-        pod_objs = get_all_pods(namespace=OPENSHIFT_STORAGE_NAMESPACE)
+        pod_objs = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         pod_names = []
         logger.info("Get pod names on openshift-storage project")
         for pod in pod_objs:
