@@ -418,7 +418,11 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
     if cluster_type == MS_CONSUMER_TYPE:
         assert is_ms_consumer_cluster(), "The cluster is not an MS consumer cluster"
         logger.info("The cluster is an MS consumer cluster as expected")
-    elif cluster_type == MS_PROVIDER_TYPE:
+    elif cluster_type == MS_PROVIDER_TYPE and (
+        config.ENV_DATA["platform"].lower()
+        not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    ):
+        # MS_PROVIDER_TYPE and HCI_PROVIDER are both "provider"
         assert is_ms_provider_cluster(), "The cluster is not an MS provider cluster"
         logger.info("The cluster is an MS provider cluster as expected")
     elif cluster_type == HCI_CLIENT:
