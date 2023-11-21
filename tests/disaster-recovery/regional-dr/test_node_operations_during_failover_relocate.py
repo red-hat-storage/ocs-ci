@@ -4,7 +4,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4b
+from ocs_ci.framework.testlib import tier4b, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import (
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier4b
+@turquoise_squad
 class TestNodeDrainDuringFailoverRelocate:
     """
     Tests to verify that the failover and relocate operations are not affected by node drain
