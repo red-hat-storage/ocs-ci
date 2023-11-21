@@ -7,9 +7,11 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     tier1,
+    tier2,
     pre_upgrade,
     post_upgrade,
     skipif_mcg_only,
+    polarion_id,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
@@ -192,6 +194,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
         return override_nb_default_backingstore_implementation
 
     @tier1
+    @polarion_id("OCS-5193")
     def test_default_buckets_backingstore(
         self,
         mcg_obj_session,
@@ -295,6 +298,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
         ), "The new default backingstore was not overriden before the upgrade!"
 
     @post_upgrade
+    @polarion_id("OCS-5194")
     def test_default_backingstore_override_post_upgrade(
         self,
         mcg_obj_session,
@@ -310,6 +314,8 @@ class TestDefaultBackingstoreOverride(MCGTest):
             default_admin_resource == default_bc_backingstore == alt_bs_for_upgrade_tc
         ), "The new default backingstore was not preserved after the upgrade!"
 
+    @tier2
+    @polarion_id("OCS-5195")
     def test_bucketclass_replication_after_default_backingstore_override(
         self, override_nb_default_backingstore
     ):
