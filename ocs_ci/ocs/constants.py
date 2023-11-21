@@ -1059,6 +1059,7 @@ VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
 INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VM_MAIN = os.path.join(VSPHERE_DIR, "vm/main.tf")
+VM_MAIN_JSON = os.path.join(VSPHERE_DIR, "vm/main.tf.json")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
@@ -1097,6 +1098,9 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
 CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
+
+# Hardware Virtualization
+hardware_virtualization_config = {"nested_hv_enabled": "true"}
 
 # VMware Datastore types
 VMFS = "VMFS"
