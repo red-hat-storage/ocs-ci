@@ -1,5 +1,8 @@
+import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+
+log = logging.getLogger(__name__)
 
 
 def get_default_storage_class_name(interface, external_mode=False):
@@ -12,6 +15,7 @@ def get_default_storage_class_name(interface, external_mode=False):
     Returns:
         (str): storage class name
     """
+    log.info("getting the default storageclass name.")
 
     INTERFACE_TO_SC_MAP = {
         constants.OCS_COMPONENTS_MAP["blockpools"]: {
