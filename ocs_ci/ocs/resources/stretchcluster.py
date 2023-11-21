@@ -10,7 +10,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnexpectedBehaviour,
-    CephHealthException,
 )
 
 from ocs_ci.ocs import constants
@@ -20,8 +19,9 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     get_pods_having_label,
     wait_for_pods_to_be_in_statuses,
+    get_mon_pods,
+    get_mon_pod_id,
 )
-from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +240,7 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] = list(set(self.logfile_map[label][0]))
         logger.info(self.logfile_map[label][0])
 
-    @retry(UnexpectedBehaviour, tries=5, delay=5)
+    @retry(UnexpectedBehaviour, tries=6, delay=2)
     def get_logwriter_reader_pods(
         self,
         label,
@@ -309,9 +309,7 @@ class StretchCluster(OCS):
             Bool: True if no data corruption else False
 
         """
-        self.get_logwriter_reader_pods(
-            label,
-        )
+        self.get_logwriter_reader_pods(label, statuses=["Running", "Completed"])
         for pod in self.workload_map[label][0]:
             if label == constants.LOGREADER_CEPHFS_LABEL:
                 read_logs = get_pod_logs(pod_name=pod.name, namespace=namespace)
@@ -384,12 +382,11 @@ class StretchCluster(OCS):
         ceph_tools_pod = get_ceph_tools_pod()
 
         try:
-            if (
-                "monclient(hunting): authenticate timed out"
-                in ceph_tools_pod.exec_sh_cmd_on_pod(
-                    command=command, timeout=timeout + grace
-                )
-            ):
+            ceph_out = ceph_tools_pod.exec_sh_cmd_on_pod(
+                command=command, timeout=timeout + grace
+            )
+            logger.info(ceph_out)
+            if "monclient(hunting): authenticate timed out" in ceph_out:
                 logger.warning("Ceph was hung for sometime.")
                 return False
             return True
@@ -399,6 +396,18 @@ class StretchCluster(OCS):
                 return False
             else:
                 raise
+
+    def reset_conn_score(self):
+        """
+        Reset connection scores for all the mon's
+
+        """
+        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        for pod in mon_pods:
+            mon_pod_id = get_mon_pod_id(pod)
+            cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
+            pod.exec_cmd_on_pod(command=cmd)
+        return mon_pods
 
     def validate_conn_score(self, conn_score_map, quorum_ranks):
         """
@@ -550,14 +559,3 @@ class StretchCluster(OCS):
             failure_check_map[type](
                 start_time, end_time, wait_for_read_completion=wait_for_read_completion
             )
-
-        # make sure ceph is accessible
-        try:
-            assert ceph_health_check(), "Ceph health is not OK"
-        except CephHealthException as e:
-            assert all(
-                err in e.args[0]
-                for err in ["HEALTH_WARN", "daemons have recently crashed"]
-            ), f"[CephHealthException]: {e.args[0]}"
-            get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-            logger.info("Archived ceph crash!")

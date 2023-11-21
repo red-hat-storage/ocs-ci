@@ -2813,7 +2813,9 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
-def modify_deployment_replica_count(deployment_name, replica_count):
+def modify_deployment_replica_count(
+    deployment_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Function to modify deployment replica count,
     i.e to scale up or down deployment
@@ -2826,11 +2828,17 @@ def modify_deployment_replica_count(deployment_name, replica_count):
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=deployment_name, params=params)
+
+
+def modify_job_parallelism_count(
+    job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    ocp_obj = ocp.OCP(kind=constants.JOB, namespace=namespace)
+    params = f'{{"spec": {{"parallelism": {count}}}}}'
+    return ocp_obj.patch(resource_name=job_name, params=params)
 
 
 def collect_performance_stats(dir_name):
@@ -3545,7 +3553,9 @@ def get_failure_domain():
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
 
 
-def modify_statefulset_replica_count(statefulset_name, replica_count):
+def modify_statefulset_replica_count(
+    statefulset_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Function to modify statefulset replica count,
     i.e to scale up or down statefulset
@@ -3558,9 +3568,7 @@ def modify_statefulset_replica_count(statefulset_name, replica_count):
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = OCP(
-        kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
 

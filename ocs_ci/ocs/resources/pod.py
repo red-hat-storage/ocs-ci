@@ -2307,6 +2307,32 @@ def get_running_state_pods(namespace=config.ENV_DATA["cluster_namespace"]):
     return running_pods_object
 
 
+def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get all the non-running pods in a given namespace
+    and give selector
+
+    Returns:
+        List: all the pods that are not Running
+
+    """
+
+    if selector is not None:
+        pod_objs = [
+            Pod(**pod_info) for pod_info in get_pods_having_label(selector, namespace)
+        ]
+    else:
+        pod_objs = get_all_pods(namespace)
+
+    pods_not_running = list()
+    for pod in pod_objs:
+        status = pod.status()
+        if status != "Running":
+            pods_not_running.append(pod)
+
+    return pods_not_running
+
+
 def wait_for_pods_to_be_running(
     namespace=config.ENV_DATA["cluster_namespace"],
     pod_names=None,
@@ -3447,3 +3473,36 @@ def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         )
 
     return debug_pods
+
+
+def wait_for_pods_deletion(
+    label, timeout=120, sleep=5, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
+    """
+    Wait for the pods with particular label to be deleted
+    until the given timeout
+
+    Args:
+        label (str): Pod label
+        timeout (int): Timeout
+        namespace (str): Namespace in which pods are running
+
+    Raises:
+        TimeoutExpiredError
+
+    """
+
+    def _check_if_pod_deleted(label, namespace):
+        if len(get_pods_having_label(label, namespace)) == 0:
+            return True
+        else:
+            return False
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=_check_if_pod_deleted,
+        label=label,
+        namespace=namespace,
+    )
+    sampler.wait_for_func_status(True)

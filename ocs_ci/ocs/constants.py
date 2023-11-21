@@ -2371,6 +2371,10 @@ LOGWRITER_CEPHFS_LABEL = "app=logwriter-cephfs"
 LOGREADER_CEPHFS_LABEL = "app=logreader-cephfs"
 LOGWRITER_RBD_LABEL = "app=logwriter-rbd"
 
+# Logwriter workload names
+LOGWRITER_CEPHFS_NAME = "logwriter-cephfs"
+LOGWRITER_RBD_NAME = "logwriter-rbd"
+LOGREADER_CEPHFS_NAME = "logreader-cephfs"
 
 # prometheus metrics queries
 PVC_NAMESPACES_BY_USED = (

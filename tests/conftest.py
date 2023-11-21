@@ -94,8 +94,6 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_pod_count,
     wait_for_pods_by_label_count,
-    get_mon_pods,
-    get_mon_pod_id,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -6856,9 +6854,6 @@ def setup_stretch_cluster_project(request, project_factory_session):
 
 @pytest.fixture()
 def logwriter_workload_factory(request, teardown_factory):
-<<<<<<< HEAD
-    def factory(pvc, logwriter_path):
-=======
     """
     Fixture to create logwriter deployment
 
@@ -6874,7 +6869,6 @@ def logwriter_workload_factory(request, teardown_factory):
             OCS object: Lgwriter deployment object
 
         """
->>>>>>> e7c1a7ef (Review changes)
         dc_data = templating.load_yaml(logwriter_path)
         dc_data["metadata"]["namespace"] = pvc.namespace
         dc_data["spec"]["replicas"] = 4
@@ -6909,14 +6903,6 @@ def logwriter_workload_factory(request, teardown_factory):
 
 @pytest.fixture()
 def logreader_workload_factory(request, teardown_factory):
-<<<<<<< HEAD
-    def factory(pvc, logreader_path, duration=30):
-=======
-    """
-    Fixture to create logreader job
-
-    """
-
     def factory(pvc, logreader_path, duration=30):
         """
         Args:
@@ -6928,7 +6914,7 @@ def logreader_workload_factory(request, teardown_factory):
             OCS object: Logreader job object
 
         """
->>>>>>> e7c1a7ef (Review changes)
+
         job_data = templating.load_yaml(logreader_path)
         job_data["metadata"]["namespace"] = pvc.namespace
         job_data["spec"]["completions"] = 4
@@ -7006,8 +6992,6 @@ def setup_logwriter_cephfs_workload_factory(
 def setup_logwriter_rbd_workload_factory(
     request, setup_stretch_cluster_project, teardown_factory
 ):
-<<<<<<< HEAD
-=======
     """
     This fixture will create the RWO RBD volume, create logwriter sts using that volume
 
@@ -7015,7 +6999,7 @@ def setup_logwriter_rbd_workload_factory(
         OCS object: Logwriter sts object
 
     """
->>>>>>> e7c1a7ef (Review changes)
+
     logwriter_sts_path = constants.LOGWRITER_STS_PATH
     sts_data = templating.load_yaml(logwriter_sts_path)
     sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
@@ -7063,9 +7047,6 @@ def reset_conn_score():
     each mon's
 
     """
-    mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-    for pod in mon_pods:
-        mon_pod_id = get_mon_pod_id(pod)
-        cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
-        pod.exec_cmd_on_pod(command=cmd)
-    return mon_pods
+    from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+
+    return StretchCluster().reset_conn_score()
