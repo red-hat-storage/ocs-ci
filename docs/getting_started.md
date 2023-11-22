@@ -4,9 +4,9 @@
 
 ## Prerequisites
 
-1. Python version >= 3.8
+1. Python version >= 3.8.1
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
-   - gcc, git, openssl-devel, python3-devel or python specific version packages 
+   - gcc, git, openssl-devel, python3-devel or python specific version packages
    depends on Python version installed e.g. python38-devel (or similar packages for ubuntu).
 3. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
