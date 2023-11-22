@@ -11,8 +11,6 @@ from ocs_ci.utility.utils import (
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
 
-logger = logging.getLogger(__name__)
-
 
 log = logging.getLogger(__name__)
 
@@ -113,9 +111,9 @@ def pytest_sessionfinish(session, exitstatus):
                     values.get("total", "NA"),
                 ]
                 c.writerow(row)
-        logger.info(f"Test Time report saved to '{time_report_file}'")
+        log.info(f"Test Time report saved to '{time_report_file}'")
     except Exception as e:
-        logger.warning(
+        log.warning(
             f"Failed to save Test Time report to logs directory with exception. {e}"
         )
 
@@ -148,7 +146,7 @@ def pytest_report_teststatus(report, config):
 
     if report.when == "setup":
         setup_duration = round(report.duration, 2)
-        logger.info(
+        log.info(
             f"duration reported by {report.nodeid} immediately after test execution: {setup_duration}"
         )
         GV.TIMEREPORT_DICT[report.nodeid]["setup"] = setup_duration
@@ -159,7 +157,7 @@ def pytest_report_teststatus(report, config):
 
     if report.when == "call":
         call_duration = round(report.duration, 2)
-        logger.info(
+        log.info(
             f"duration reported by {report.nodeid} immediately after test execution: {call_duration}"
         )
         GV.TIMEREPORT_DICT[report.nodeid]["call"] = call_duration
@@ -169,7 +167,7 @@ def pytest_report_teststatus(report, config):
 
     if report.when == "teardown":
         teardown_duration = round(report.duration, 2)
-        logger.info(
+        log.info(
             f"duration reported by {report.nodeid} immediately after test execution: {teardown_duration}"
         )
         GV.TIMEREPORT_DICT[report.nodeid]["teardown"] = teardown_duration
