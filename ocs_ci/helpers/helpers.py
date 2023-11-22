@@ -3078,6 +3078,9 @@ def default_volumesnapshotclass(interface_type):
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS
             if config.ENV_DATA["platform"].lower()
             in constants.MANAGED_SERVICE_PLATFORMS
+            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_PC
+            if config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         )
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -3087,6 +3090,9 @@ def default_volumesnapshotclass(interface_type):
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS
             if config.ENV_DATA["platform"].lower()
             in constants.MANAGED_SERVICE_PLATFORMS
+            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_PC
+            if config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
         )
     base_snapshot_class = OCP(
