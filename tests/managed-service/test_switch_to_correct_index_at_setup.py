@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
     libtest,
     ManageTest,
     managed_service_required,
-    hci_required,
+    hci_provider_and_client_required,
 )
 from ocs_ci.ocs.cluster import (
     is_managed_service_cluster,
@@ -65,7 +65,7 @@ class TestSwitchToCorrectIndexAtSetup(ManageTest):
         """
         check_switch_to_correct_cluster_at_setup(cluster_type)
 
-    @hci_required
+    @hci_provider_and_client_required
     @pytest.mark.parametrize(
         "cluster_type",
         [HCI_CLIENT, HCI_PROVIDER],
