@@ -92,5 +92,5 @@ module "compute_vm" {
   data_disks_count  = var.compute_data_disks_count
   data_disks_size   = var.compute_data_disks_size
   iso_image         = vsphere_file.discovery_iso.destination_file
-  nested_hv_enabled = false
+  nested_hv_enabled = true
 }
