@@ -561,8 +561,3 @@ ignore_owner = pytest.mark.ignore_owner
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
-
-# Mark the test with marker below to allow re-tries in ceph health fixture
-# for known issues when waiting in re-balance and flip flop from health OK
-# to 1-2 PGs waiting to be Clean
-ceph_health_retry = pytest.mark.ceph_health_retry

@@ -121,7 +121,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
-    ceph_health_check_base,
     get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
@@ -1617,21 +1616,13 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    ceph_health_retry = False
-                    for mark in node.iter_markers():
-                        if "ceph_health_retry" == mark.name:
-                            ceph_health_retry = True
-                    if ceph_health_retry:
-                        ceph_health_check(
-                            namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-                        )
-                        log.info(
-                            "Ceph health check passed at teardown. (After test "
-                            "marked with @ceph_health_retry. For such TC we allow more re-tries)"
-                        )
-                    else:
-                        ceph_health_check()
-                        log.info("Ceph health check passed at teardown")
+                    # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
+                    # "flip-flopping ceph health OK and warn because of:
+                    # HEALTH_WARN Reduced data availability: 2 pgs peering
+                    ceph_health_check(
+                        namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                    )
+                    log.info("Ceph health check passed at teardown!")
             except CephHealthException:
                 if not ocsci_config.RUN["skip_reason_test_found"]:
                     squad_name = None
@@ -1646,7 +1637,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check()
+                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
                 raise
 
     request.addfinalizer(finalizer)
@@ -1656,7 +1647,11 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
         ):
             log.info("Checking for Ceph Health OK ")
             try:
-                status = ceph_health_check_base()
+                status = ceph_health_check(
+                    namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                    tries=10,
+                    delay=15,
+                )
                 if status:
                     log.info("Ceph health check passed at setup")
                     return
