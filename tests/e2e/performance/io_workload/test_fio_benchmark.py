@@ -192,9 +192,6 @@ class TestFIOBenchmark(PASTest):
         )
         log.info(f"Total Data set to work on is : {self.total_data_set} GiB")
 
-        log.info(f"Setting prefill value to False ")
-        self.crd_data["spec"]["workload"]["args"]["prefill"] = False
-
     def setting_io_pattern(self, io_pattern):
         """
         Setting the test jobs according to the io pattern - random / sequential
@@ -203,8 +200,6 @@ class TestFIOBenchmark(PASTest):
             io_pattern (str): the I/O pattern to run (random / sequential)
 
         """
-        log.info(f"Prefilll {self.crd_data['spec']['workload']['args']['prefill']} ")
-        self.crd_data["spec"]["workload"]["args"]["prefill"] = False
         if io_pattern == "sequential":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
         if io_pattern == "random":
