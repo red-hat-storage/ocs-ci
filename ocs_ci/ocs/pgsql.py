@@ -73,7 +73,7 @@ class Postgresql(BenchmarkOperator):
             if (
                 storagecluster_independent_check()
                 and config.ENV_DATA["platform"].lower()
-                not in constants.MANAGED_SERVICE_PLATFORMS
+                not in constants.HCI_PC_OR_MS_PLATFORM
             ):
                 pgsql_sset["spec"]["volumeClaimTemplates"][0]["spec"][
                     "storageClassName"

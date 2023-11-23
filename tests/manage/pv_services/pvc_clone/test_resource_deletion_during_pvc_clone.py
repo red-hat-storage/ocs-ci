@@ -43,7 +43,7 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
         Create PVCs and pods
 
         """
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
             # Get the index of current cluster
             initial_cluster_index = config.cur_index
             # Get the index of provider cluster. provider_index will be used as a flag to decide whether switching to

@@ -47,7 +47,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
             # Get the index of consumer cluster
             self.consumer_cluster_index = config.get_consumer_indexes_list()[0]
 

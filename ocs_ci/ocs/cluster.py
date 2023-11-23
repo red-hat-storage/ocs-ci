@@ -278,26 +278,31 @@ class CephCluster(object):
 
         self.scan_cluster()
 
-        if (
-            config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
-            and config.ENV_DATA["cluster_type"] == "consumer"
-        ):
-            # on Managed Service Consumer cluster, check that there are no
-            # extra Ceph pods
+        if config.ENV_DATA[
+            "platform"
+        ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
+            "consumer",
+            constant.HCI_CLIENT,
+        ]:
+            # on Managed Service Consumer cluster and HCI Client cluster,
+            # check that there are no extra Ceph pods
             mon_pods = pod.get_mon_pods()
             if mon_pods:
                 raise exceptions.CephHealthException(
-                    "Managed Service Consumer cluster shouldn't have any mon pods!"
+                    "Managed Service Consumer cluster or HCI Client Cluster"
+                    " shouldn't have any mon pods!"
                 )
             osd_pods = pod.get_osd_pods()
             if osd_pods:
                 raise exceptions.CephHealthException(
-                    "Managed Service Consumer cluster shouldn't have any osd pods!"
+                    "Managed Service Consumer cluster or HCI Client Cluster "
+                    "shouldn't have any osd pods!"
                 )
             mds_pods = pod.get_mds_pods()
             if mds_pods:
                 raise exceptions.CephHealthException(
-                    "Managed Service Consumer cluster shouldn't have any mds pods!"
+                    "Managed Service Consumer cluster or HCI Client Cluster "
+                    "shouldn't have any mds pods!"
                 )
             return True
 

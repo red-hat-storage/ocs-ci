@@ -48,7 +48,7 @@ def test_deployment(pvc_factory, pod_factory):
                 config.switch_ctx(restore_ctx_index)
                 if (
                     config.ENV_DATA["platform"].lower()
-                    in constants.MANAGED_SERVICE_PLATFORMS
+                    in constants.HCI_PC_OR_MS_PLATFORM
                 ):
                     post_onboarding_verification()
             else:
@@ -74,7 +74,7 @@ def test_deployment(pvc_factory, pod_factory):
                     sanity_helpers = Sanity()
                 if (
                     config.ENV_DATA["platform"].lower()
-                    in constants.MANAGED_SERVICE_PLATFORMS
+                    in constants.HCI_PC_OR_MS_PLATFORM
                 ):
                     try:
                         sanity_helpers.health_check()

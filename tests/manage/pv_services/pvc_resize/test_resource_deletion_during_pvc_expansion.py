@@ -59,7 +59,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
 
         """
         if (
-            config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+            config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
         ) and (resource_to_delete in ["mds", "mon", "mgr", "osd"]):
             # Get the index of current cluster
             self.initial_cluster_index = config.cur_index

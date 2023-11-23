@@ -235,7 +235,7 @@ class Jenkins(object):
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             if storagecluster_independent_check()
             and config.ENV_DATA["platform"].lower()
-            not in constants.MANAGED_SERVICE_PLATFORMS
+            not in constants.HCI_PC_OR_MS_PLATFORM
             else constants.DEFAULT_STORAGECLASS_RBD
         )
         for project in self.projects:
