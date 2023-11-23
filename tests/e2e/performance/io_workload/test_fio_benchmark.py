@@ -321,7 +321,7 @@ class TestFIOBenchmark(PASTest):
         else:
             sleeptime = 300
 
-        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=120000)
+        self.wait_for_wl_to_finish(sleep=sleeptime, timeout=36000)
 
         try:
             if "Fio failed to execute" not in self.test_logs:
@@ -537,7 +537,7 @@ class TestFIOBenchmark(PASTest):
 
         # Setting the data set to 40% of the total storage capacity
         self.setting_storage_usage()
-
+        self.crd_data["spec"]["workload"]["args"]["prefill_bs"] = self.crd_data["spec"]["workload"]["args"]["bs"][0]
         self.get_env_info()
 
         self.crd_data["spec"]["workload"]["args"]["storageclass"] = sc
