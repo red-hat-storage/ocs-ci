@@ -312,8 +312,8 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-rbdplugin-snapclass"
 )
-DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS = f"{DEFAULT_CLUSTERNAME}-cephfs"
-DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
+DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
+DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
@@ -1530,6 +1530,8 @@ OCS_PROVISIONERS = [
     "openshift-storage.noobaa.io/obc",
     "topolvm.cybozu.com",
     "topolvm.io",
+    "openshift-storage-client.rbd.csi.ceph.com",
+    "openshift-storage-client.cephfs.csi.ceph.com",
 ]
 RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
