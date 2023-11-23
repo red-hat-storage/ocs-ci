@@ -264,6 +264,8 @@ ENV_DATA:
   multus_cluster_net_type: "macvlan"
   multus_cluster_net_mode: "bridge"
 
+  # Assisted Installer related settings
+
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
