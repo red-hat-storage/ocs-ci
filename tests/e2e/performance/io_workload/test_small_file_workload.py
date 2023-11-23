@@ -38,7 +38,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
-os.environ["redis_timeout"] = 120
+os.environ["redis_timeout"] = "120"
 
 class SmallFileResultsAnalyse(PerfResult):
     """
