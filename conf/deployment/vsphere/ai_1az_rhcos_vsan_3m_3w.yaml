@@ -1,0 +1,15 @@
+---
+# This config is suppose to work on DC-CP, DC-ECO, DC-PS
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'ai'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  extra_disks: 2
+  fio_storageutilization_min_mbps: 10.0
