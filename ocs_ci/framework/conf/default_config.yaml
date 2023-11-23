@@ -33,7 +33,7 @@ RUN:
   # This config file disables scale app pods to use OCS workers
   use_ocs_worker_for_scale: False
   load_status: None
-  skip_reason_test_found: None
+  skip_reason_test_found: {}
   skipped_tests_ceph_health: 0
   number_of_tests: None
   skipped_on_ceph_health_ratio: 0
