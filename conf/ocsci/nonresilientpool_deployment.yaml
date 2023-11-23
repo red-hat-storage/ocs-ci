@@ -1,0 +1,4 @@
+---
+# This config is used to deploy with NonResilientPool storageclass.
+ENV_DATA:
+  enable_non_resilient_pools: true
