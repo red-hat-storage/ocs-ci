@@ -3014,15 +3014,25 @@ def storagecluster_independent_check():
         bool: True if storagecluster is running on external mode False otherwise
 
     """
+    consumer_cluster_index = None
+    if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+        # Get the index of current consumer cluster
+        consumer_cluster_index = config.cur_index
+        # Switch to provider cluster context
+        config.switch_to_provider()
+
     storage_cluster = (
         OCP(kind="StorageCluster", namespace=config.ENV_DATA["cluster_namespace"])
         .get()
         .get("items")[0]
     )
-
-    return bool(
+    ret_val = bool(
         storage_cluster.get("spec", {}).get("externalStorage", {}).get("enable", False)
     )
+    if consumer_cluster_index is not None:
+        # Switch back to consumer cluster context
+        config.switch_to_consumer(consumer_cluster_index)
+    return ret_val
 
 
 def get_pv_size(storageclass=None):

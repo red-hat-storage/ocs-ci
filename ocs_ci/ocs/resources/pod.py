@@ -741,7 +741,11 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     else:
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
 
-    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    if cluster_kubeconfig:
+        namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    else:
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
     ocp_pod_obj = OCP(
         kind=constants.POD,
         namespace=namespace,
