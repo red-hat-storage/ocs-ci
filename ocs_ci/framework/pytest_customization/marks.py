@@ -28,6 +28,7 @@ from ocs_ci.ocs.constants import (
     HCI_PROVIDER_CLIENT_PLATFORMS,
     HCI_PC_OR_MS_PLATFORM,
     HCI_CLIENT,
+    MS_CONSUMER_TYPE,
     HCI_PROVIDER,
 )
 from ocs_ci.utility import version
@@ -276,6 +277,15 @@ ms_provider_required = pytest.mark.skipif(
     reason="Test runs ONLY on managed service provider cluster",
 )
 
+pc_or_ms_consumer_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+        in [HCI_CLIENT, MS_CONSUMER_TYPE]
+        and config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PC_OR_MS_PLATFORM
+    ),
+    reason="Test runs ONLY on managed service provider or provider of provider-client cluster",
+)
 ms_consumer_required = pytest.mark.skipif(
     not (
         config.default_cluster_ctx.ENV_DATA["platform"].lower()
