@@ -417,11 +417,12 @@ class PASTest(BaseTest):
 
         """
         log.info(f"Waiting for {self.client_pod_name} to complete")
-
+        timeout=24000
         Finished = 0
         restarts = 0
         total_time = timeout
         while not Finished and total_time > 0:
+            log.info(f"total_time {total_time}")
             results = run_oc_command(
                 "get pod --no-headers -o custom-columns=:metadata.name,:status.phase",
                 namespace=benchmark_operator.BMO_NAME,
