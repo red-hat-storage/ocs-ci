@@ -281,7 +281,7 @@ class CephCluster(object):
         if config.ENV_DATA[
             "platform"
         ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
-            "consumer",
+            constants.MS_CONSUMER_TYPE,
             constant.HCI_CLIENT,
         ]:
             # on Managed Service Consumer cluster and HCI Client cluster,

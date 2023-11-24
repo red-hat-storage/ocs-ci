@@ -320,7 +320,7 @@ def get_pool_name(fixture_name):
         ].lower() in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA.get(
             "cluster_type", ""
         ).lower() in [
-            "consumer",
+            constants.MS_CONSUMER_TYPE,
             constants.HCI_CLIENT,
         ]:
             cluster_id = run_cmd(
