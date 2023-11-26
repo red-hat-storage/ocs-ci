@@ -31,6 +31,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     bugzilla,
     skipif_ocs_version,
+    on_prem_platform_required,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from uuid import uuid4
@@ -132,6 +133,20 @@ class TestBucketIO(MCGTest):
                 ],
                 marks=[tier1],
             ),
+            pytest.param(
+                *[
+                    "OC",
+                    {"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}},
+                ],
+                marks=[tier1, on_prem_platform_required],
+            ),
+            pytest.param(
+                *[
+                    "CLI",
+                    {"interface": "CLI", "backingstore_dict": {"rgw": [(1, None)]}},
+                ],
+                marks=[tier1, on_prem_platform_required],
+            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
@@ -140,6 +155,8 @@ class TestBucketIO(MCGTest):
             "GCP-OC-1",
             "IBMCOS-OC-1",
             "IBMCOS-CLI-1",
+            "RGW-OC-1",
+            "RGW-CLI-1",
         ],
     )
     @flaky
