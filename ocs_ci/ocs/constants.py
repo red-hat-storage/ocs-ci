@@ -2512,6 +2512,22 @@ ACM_LOCAL_CLUSTER = "local-cluster"
 ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
+ACM_VSPHERE_CRED_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "vsphere_credential.yaml"
+)
+ACM_VSPHERE_INSTALL_CONFIG_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "install-config.yaml"
+)
+ACM_MANAGEDCLUSTER_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "managed-cluster.yaml"
+)
+ACM_MACHINE_POOL_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "machine-pool.yaml"
+)
+ACM_CLUSTER_DEPLOYMENT = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "cluster-deployment.yaml"
+)
+ACM_SECRET_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "secret.yaml")
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"

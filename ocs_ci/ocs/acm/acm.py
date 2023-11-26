@@ -3,6 +3,9 @@ import time
 import os
 import tempfile
 import requests
+import yaml
+import copy
+import base64
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -43,6 +46,9 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
+from ocs_ci.ocs.utils import get_secret_name_by_pattern, get_all_acm_indexes
+from ocs_ci.helpers.helpers import get_secret_obj
+
 
 log = logging.getLogger(__name__)
 
@@ -625,3 +631,375 @@ def import_clusters_with_acm():
         )
     else:
         import_clusters_via_cli(clusters)
+
+
+class CreateClusterViaACM(object):
+    """
+    Create cluster via ACM
+
+    """
+
+    def __init__(self):
+        self.cluster_name = config.ENV_DATA["cluster_name"]
+
+        ssh_priv_key_path = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
+        with open(ssh_priv_key_path, "r") as fp:
+            self.ssh_priv_key = fp.read()
+
+        ssh_public_key_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
+        with open(ssh_public_key_path, "r") as fp:
+            self.ssh_public_key = fp.read()
+
+        with open(constants.VSPHERE_CA_FILE_PATH, "r") as fp:
+            self.vsphere_ca = fp.read()
+
+        with open(os.path.join(constants.DATA_DIR, "pull-secret"), "r") as fp:
+            self.pull_secret = fp.read()
+
+        self.ips = ["a", "b"]
+
+        self.secret_yaml = templating.load_yaml(constants.ACM_SECRET_YAML)
+        self.manifest_location = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="create-cluster-", delete=False
+        )
+        self.file_paths = list()
+
+    def create_credential(self):
+        """
+        Create credential
+
+        """
+        with RunWithConfigContext():
+            cred_vsphere = templating.load_yaml(constants.ACM_VSPHERE_CRED_YAML)
+            cred_vsphere["stringData"]["vCenter"] = config.ENV_DATA["vsphere_server"]
+            cred_vsphere["stringData"]["username"] = config.ENV_DATA["vsphere_user"]
+            cred_vsphere["stringData"]["password"] = config.ENV_DATA["vsphere_password"]
+            cred_vsphere["stringData"]["cacertificate"] = self.vsphere_ca
+
+            cred_vsphere["stringData"]["cluster"] = config.ENV_DATA["vsphere_cluster"]
+            cred_vsphere["stringData"]["datacenter"] = config.ENV_DATA[
+                "vsphere_datacenter"
+            ]
+            cred_vsphere["stringData"]["defaultDatastore"] = config.ENV_DATA[
+                "vsphere_datastore"
+            ]
+            cred_vsphere["stringData"]["baseDomain"] = config.ENV_DATA["base_domain"]
+            cred_vsphere["stringData"]["ssh-privatekey"] = self.ssh_priv_key
+
+            cred_vsphere["stringData"]["ssh-publickey"] = self.ssh_public_key
+            manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="manifest-", delete=False
+            )
+            logging.info(f"Tmp file name: {manifest.name}")
+            templating.dump_data_to_temp_yaml(cred_vsphere, manifest.name)
+            run_cmd(f"oc apply -f {manifest.name}")
+
+    def set_install_config(self):
+        """
+        Set Install Config
+
+        """
+        install_config = templating.load_yaml(constants.ACM_VSPHERE_INSTALL_CONFIG_YAML)
+        install_config["baseDomain"] = config.ENV_DATA["base_domain"]
+        install_config["platform"]["vsphere"]["vCenter"] = config.ENV_DATA[
+            "vsphere_server"
+        ]
+        install_config["platform"]["vsphere"]["username"] = config.ENV_DATA[
+            "vsphere_user"
+        ]
+        install_config["platform"]["vsphere"]["password"] = config.ENV_DATA[
+            "vsphere_password"
+        ]
+        install_config["platform"]["vsphere"]["datacenter"] = config.ENV_DATA[
+            "vsphere_datacenter"
+        ]
+        install_config["platform"]["vsphere"]["defaultDatastore"] = config.ENV_DATA[
+            "vsphere_datastore"
+        ]
+        install_config["platform"]["vsphere"]["cluster"] = config.ENV_DATA[
+            "vsphere_server"
+        ]
+        install_config["networking"]["networkType"] = config.ACM_CONFIG["networktype"]
+        install_config["networking"]["clusterNetwork"][0]["cidr"] = config.ACM_CONFIG[
+            "clusternetwork_cidr"
+        ]
+        install_config["networking"]["clusterNetwork"][0][
+            "hostPrefix"
+        ] = config.ACM_CONFIG["clusternetwork_hostprefix"]
+        install_config["networking"]["machineNetwork"][0]["cidr"] = config.ENV_DATA[
+            "machine_cidr"
+        ]
+        install_config["networking"]["serviceNetwork"][0] = config.ACM_CONFIG[
+            "servicenetwork"
+        ]
+        install_config["platform"]["vsphere"]["apiVIP"] = self.ips[0]
+        install_config["platform"]["vsphere"]["ingressVIP"] = self.ips[1]
+        install_config["sshKey"] = self.ssh_public_key
+        self.install_config_yaml = yaml.dump(install_config, default_flow_style=False)
+
+    def set_managed_cluster(self):
+        """
+        Set managed_cluster
+
+        """
+        log.info("Creating ManagedCluster configuration")
+        managed_cluster = templating.load_yaml(constants.ACM_MANAGEDCLUSTER_YAML)
+        managed_cluster["metadata"]["labels"]["cloud"] = "vSphere"
+        managed_cluster["metadata"]["labels"]["name"] = self.cluster_name
+        managed_cluster["metadata"]["labels"]["vendor"] = "OpenShift"
+        managed_cluster["metadata"]["name"] = self.cluster_name
+        self.apply_manifest(managed_cluster)
+
+    def set_cluster_deployment(self):
+        """
+        Set cluster deployment
+
+        """
+        log.info("Creating ClusterDeployment configuration")
+        cluster_deployment = templating.load_yaml(constants.ACM_CLUSTER_DEPLOYMENT)
+        cluster_deployment["metadata"]["name"] = self.cluster_name
+        cluster_deployment["metadata"]["namespace"] = self.cluster_name
+        cluster_deployment["metadata"]["labels"]["cloud"] = "vSphere"
+        cluster_deployment["metadata"]["labels"]["vendor"] = "OpenShift"
+
+        cluster_deployment["spec"]["baseDomain"] = config.ENV_DATA["base_domain"]
+        cluster_deployment["spec"]["clusterName"] = self.cluster_name
+
+        cluster_deployment["spec"]["platform"]["vsphere"]["cluster"] = config.ENV_DATA[
+            "vsphere_cluster"
+        ]
+        cluster_deployment["spec"]["platform"]["vsphere"]["certificatesSecretRef"][
+            "name"
+        ] = f"{self.cluster_name}-vsphere-certs"
+
+        cluster_deployment["spec"]["platform"]["vsphere"]["credentialsSecretRef"][
+            "name"
+        ] = f"{self.cluster_name}-vsphere-creds"
+        cluster_deployment["spec"]["platform"]["vsphere"]["vCenter"] = config.ENV_DATA[
+            "vsphere_server"
+        ]
+
+        cluster_deployment["spec"]["platform"]["vsphere"][
+            "datacenter"
+        ] = config.ENV_DATA["vsphere_datacenter"]
+        cluster_deployment["spec"]["platform"]["vsphere"][
+            "defaultDatastore"
+        ] = config.ENV_DATA["vsphere_datastore"]
+        cluster_deployment["spec"]["platform"]["vsphere"]["network"] = config.ENV_DATA[
+            "vm_network"
+        ]
+        cluster_deployment["spec"]["provisioning"]["installConfigSecretRef"][
+            "name"
+        ] = f"{self.cluster_name}-install-config"
+        cluster_deployment["spec"]["provisioning"]["sshPrivateKeySecretRef"][
+            "name"
+        ] = f"{self.cluster_name}-ssh-private-key"
+        cluster_deployment["spec"]["provisioning"]["imageSetRef"][
+            "name"
+        ] = config.ACM_CONFIG["ocp_image"]
+        cluster_deployment["spec"]["pullSecretRef"][
+            "name"
+        ] = f"{self.cluster_name}-pull-secret"
+        self.apply_manifest(cluster_deployment)
+
+    def set_machine_pool(self):
+        """
+        Set machine pool
+
+        """
+        log.info("Creating MachinePool configuration")
+        machine_pool = templating.load_yaml(constants.ACM_MACHINE_POOL_YAML)
+        machine_pool["metadata"]["name"] = f"{self.cluster_name}-worker"
+        machine_pool["metadata"]["namespace"] = self.cluster_name
+        machine_pool["spec"]["clusterDeploymentRef"]["name"] = self.cluster_name
+        machine_pool["spec"]["name"] = "worker"
+        self.apply_manifest(machine_pool)
+
+    def set_klusterlet_config(self):
+        """
+        Set klusterlet config
+
+        """
+        log.info("Creating klusterlet addon configuration")
+        klusterlet_config = templating.load_yaml(constants.ACM_HUB_KLUSTERLET_YAML)
+        klusterlet_config["metadata"]["name"] = self.cluster_name
+        klusterlet_config["metadata"]["namespace"] = self.cluster_name
+        klusterlet_config["spec"]["clusterName"] = self.cluster_name
+        klusterlet_config["spec"]["clusterNamespace"] = self.cluster_name
+        klusterlet_config["spec"]["clusterLabels"]["cloud"] = "vSphere"
+        klusterlet_config["spec"]["clusterLabels"]["vendor"] = "OpenShift"
+        self.apply_manifest(klusterlet_config)
+
+    def set_secret1(self):
+        secret1 = copy.deepcopy(self.secret_yaml)
+        secret1["metadata"]["name"] = f"{self.cluster_name}-pull-secret"
+        secret1["metadata"]["namespace"] = self.cluster_name
+        secret1["stringData"] = {".dockerconfigjson": self.pull_secret}
+        secret1["type"] = "kubernetes.io/dockerconfigjson"
+        self.apply_manifest(secret1)
+
+    def set_secret2(self):
+        secret2 = copy.deepcopy(self.secret_yaml)
+        secret2["metadata"]["name"] = f"{self.cluster_name}-install-config"
+        secret2["metadata"]["namespace"] = self.cluster_name
+        encoded_install_config_yaml = base64.b64encode(
+            self.install_config_yaml.encode("utf-8")
+        )
+        encoded_install_config = encoded_install_config_yaml.decode("utf-8")
+        secret2["data"] = {"install-config.yaml": encoded_install_config}
+        self.apply_manifest(secret2)
+
+    def set_secret3(self):
+        secret3 = copy.deepcopy(self.secret_yaml)
+        secret3["metadata"]["name"] = f"{self.cluster_name}-ssh-private-key"
+        secret3["metadata"]["namespace"] = self.cluster_name
+        secret3["stringData"] = {"ssh-privatekey": self.ssh_priv_key}
+        self.apply_manifest(secret3)
+
+    def set_secret4(self):
+        secret4 = copy.deepcopy(self.secret_yaml)
+        secret4["metadata"]["name"] = f"{self.cluster_name}-vsphere-creds"
+        secret4["metadata"]["namespace"] = self.cluster_name
+        secret4["stringData"] = {
+            "username": config.ENV_DATA["vsphere_user"],
+            "password": config.ENV_DATA["vsphere_password"],
+        }
+        # secret4["stringData"] = {"password": config.ENV_DATA["vsphere_password"]}
+        self.apply_manifest(secret4)
+
+    def set_secret5(self):
+        secret5 = copy.deepcopy(self.secret_yaml)
+        secret5["metadata"]["name"] = f"{self.cluster_name}-ssh-private-key"
+        secret5["metadata"]["namespace"] = self.cluster_name
+        encoded_vsphere_ca = base64.b64encode(self.vsphere_ca.encode("utf-8"))
+        encoded_vsphere_ca_str = encoded_vsphere_ca.decode("utf-8")
+        secret5["data"] = {".cacert": encoded_vsphere_ca_str}
+        self.apply_manifest(secret5)
+
+    def delete_cluster(self):
+        """
+        Delete cluster
+
+        """
+        with RunWithConfigContext():
+            ocp_obj = OCP()
+            log.info(f"Detach a managed cluster {self.cluster_name}")
+            ocp_obj.exec_oc_cmd(
+                f"delete managedcluster {self.cluster_name}", out_yaml_format=False
+            )
+            log.info(f"Destroy the managed cluster {self.cluster_name} after detaching")
+            ocp_obj.exec_oc_cmd(
+                f"delete clusterdeployment {self.cluster_name} -n {self.cluster_name}",
+                out_yaml_format=False,
+            )
+
+    def apply_manifest(self, data):
+        """
+        Create yaml template
+
+        Args:
+            data (dic): yaml data
+
+        """
+        manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="manifest-", delete=False
+        )
+        logging.info(f"Tmp file name: {manifest.name}")
+        templating.dump_data_to_temp_yaml(data, manifest.name)
+        self.file_paths.append(manifest.name)
+
+    def download_kubeadmin_password(self):
+        """
+        Download kubeconfig anf kubeadmin-password from ACM hub
+
+        Returns:
+            kuconfig, kubeadmin-password (tuple):
+
+        """
+        with RunWithConfigContext():
+            kubeadmin_password_secret_name = get_secret_name_by_pattern(
+                pattern="admin-password", namespace=self.cluster_name
+            )
+            kubeadmin_password_secret_obj = get_secret_obj(
+                name=kubeadmin_password_secret_name[0], namespace=self.cluster_name
+            )
+            kubeadmin_password_encode = kubeadmin_password_secret_obj["data"][
+                "password"
+            ]
+            kubeadmin_password_decode = base64.b64decode(kubeadmin_password_encode)
+            kubeadmin_password_decode_str = kubeadmin_password_decode.decode("utf-8")
+
+            kubeconfig_secret_name = get_secret_name_by_pattern(
+                pattern="admin-kubeconfig", namespace=self.cluster_name
+            )
+            kubeconfig_secret_obj = get_secret_obj(
+                name=kubeconfig_secret_name[0], namespace=self.cluster_name
+            )
+            kubeconfig_encode = kubeconfig_secret_obj["data"]["kubeconfig"]
+            kubeconfig_decode = base64.b64decode(kubeconfig_encode)
+            kubeconfig_decode_str = kubeconfig_decode.decode("utf-8")
+            return kubeconfig_decode_str, kubeadmin_password_decode_str
+
+    def verify_cluster_status(self):
+        """
+        Verify new OCP cluster created
+
+        """
+        with RunWithConfigContext():
+            ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+            ocp_obj.wait_for_resource(
+                timeout=10,
+                condition="True",
+                column="AVAILABLE",
+                resource_name=self.cluster_name,
+            )
+            ocp_obj.wait_for_resource(
+                timeout=10,
+                condition="True",
+                column="JOINED",
+                resource_name=self.cluster_name,
+            )
+
+    def combine_yaml_files(self):
+        """
+        Combine yaml files
+
+        """
+        with open(self.manifest_location.name, "w") as output_file:
+            for file_path in self.file_paths:
+                with open(file_path, "r") as input_file:
+                    data = yaml.safe_load(input_file)
+                    yaml.dump(data, output_file, default_flow_style=False)
+                    output_file.write("---\n")
+        run_cmd(f"oc apply -f {output_file.name}")
+
+    def create_cluster(self):
+        """
+        Create Cluster
+
+        """
+        self.create_credential()
+        self.set_install_config()
+        self.set_cluster_deployment()
+        self.set_managed_cluster()
+        self.set_machine_pool()
+        self.set_secret1()
+        self.set_secret2()
+        self.set_secret3()
+        self.set_secret4()
+        self.set_secret5()
+        self.set_klusterlet_config()
+        self.combine_yaml_files()
+
+
+class RunWithConfigContext(object):
+    def __init__(self):
+        self.original_config_index = config.cur_index
+        self.acm_index = get_all_acm_indexes()[0]
+
+    def __enter__(self):
+        config.switch_ctx(self.acm_index)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        config.switch_ctx(self.original_config_index)
