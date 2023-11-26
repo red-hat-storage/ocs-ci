@@ -4449,3 +4449,22 @@ def check_selinux_relabeling(pod_obj):
     key = '"selinuxRelabel": false'
     assert key in output, f"{key} is not present in inspect logs"
     logger.info(f"{key} is present in inspect logs of application pod running node")
+
+
+def get_secret_obj(name, namespace):
+    """
+    Get Secret obj by name
+
+    Args:
+        name (str): the name secret
+        namespace (str): the namespace
+
+    Returns:
+        ocp object: ocp object of secret
+
+    """
+    return OCP(
+        kind="secret",
+        namespace=namespace,
+        resource_name=name,
+    ).get()

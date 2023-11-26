@@ -1,0 +1,48 @@
+apiVersion: v1
+metadata:
+  name: cluster-name
+baseDomain: X
+controlPlane:
+  hyperthreading: Enabled
+  name: master
+  replicas: 3
+  platform:
+    vsphere:
+      cpus:  4
+      coresPerSocket:  2
+      memoryMB:  16384
+      osDisk:
+        diskSizeGB: 120
+compute:
+- hyperthreading: Enabled
+  name: 'worker'
+  replicas: 3
+  platform:
+    vsphere:
+      cpus:  16
+      coresPerSocket:  2
+      memoryMB:  65536
+      osDisk:
+        diskSizeGB: 120
+networking:
+  networkType: OVNKubernetes
+  clusterNetwork:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  machineNetwork:
+  - cidr: X
+  serviceNetwork:
+  - 172.30.0.0/16
+platform:
+  vsphere:
+    vCenter: X
+    username: X
+    password: X
+    datacenter: X
+    defaultDatastore: vsanDatastore
+    cluster: X
+    apiVIP: X
+    ingressVIP: X
+    network: X
+pullSecret: "" # skip, hive will inject based on it's secrets
+sshKey: X
