@@ -124,8 +124,6 @@ def add_capacity_test(ui_flag=False):
 @skipif_ibm_power
 @skipif_managed_service
 @skipif_hci_provider_and_client
-@ceph_health_retry
-
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
@@ -150,7 +148,6 @@ class TestAddCapacity(ManageTest):
 @ignore_leftovers
 @polarion_id("OCS-4647")
 @pytest.mark.second_to_last
-@skipif_hci_provider_and_client
 @skipif_aws_i3
 @skipif_bm
 @skipif_bmpsi
@@ -189,7 +186,6 @@ class TestAddCapacityLSO(ManageTest):
 @skipif_external_mode
 @cloud_platform_required
 @skipif_managed_service
-@ceph_health_retryx`x`
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade

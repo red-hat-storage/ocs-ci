@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     gather_metrics_on_fail,
     skipif_managed_service,
-    skipif_ms_provider_and_consumer,
+    runs_on_provider,
     blue_squad,
 )
 from ocs_ci.ocs import constants
@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
 )
 @skipif_managed_service
-@skipif_ms_provider_and_consumer
+@runs_on_provider
 def test_rbd_capacity_workload_alerts(
     workload_storageutilization_97p_rbd, threading_lock
 ):
@@ -92,7 +92,7 @@ def test_rbd_capacity_workload_alerts(
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
 )
 @skipif_managed_service
-@skipif_ms_provider_and_consumer
+@runs_on_provider
 def test_cephfs_capacity_workload_alerts(
     workload_storageutilization_97p_cephfs, threading_lock
 ):

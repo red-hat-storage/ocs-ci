@@ -5,7 +5,7 @@ from ocs_ci.framework.testlib import (
     tier4,
     tier4a,
     skipif_managed_service,
-    skipif_ms_provider_and_consumer,
+    runs_on_provider,
     blue_squad,
 )
 from ocs_ci.ocs import constants
@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 @tier4a
 @pytest.mark.polarion_id("OCS-903")
 @skipif_managed_service
-@skipif_ms_provider_and_consumer
+@runs_on_provider
 def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
     """
     Test that there are appropriate alerts when Placement group
@@ -67,7 +67,7 @@ def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
 @tier4a
 @pytest.mark.polarion_id("OCS-898")
 @skipif_managed_service
-@skipif_ms_provider_and_consumer
+@runs_on_provider
 def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
     """
     Test that there are appropriate alerts for Ceph health triggered.
