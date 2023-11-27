@@ -1108,3 +1108,42 @@ class MCG:
 
         logger.info("Waiting a bit for the change to propogate through the system...")
         sleep(15)
+
+    def get_admin_default_resource_name(self):
+        """
+        Get the default resource name of the admin account
+
+        Returns:
+            str: The default resource name
+
+        """
+
+        read_account_output = self.send_rpc_query(
+            "account_api",
+            "read_account",
+            params={
+                "email": self.noobaa_user,
+            },
+        )
+        return read_account_output.json()["reply"]["default_resource"]
+
+    def get_default_bc_backingstore_name(self):
+        """
+        Get the default backingstore name of the default bucketclass
+
+        Returns:
+            str: The default backingstore name
+
+        """
+        bucketclass_ocp_obj = OCP(
+            kind=constants.BUCKETCLASS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+        )
+        return (
+            bucketclass_ocp_obj.get()
+            .get("spec")
+            .get("placementPolicy")
+            .get("tiers")[0]
+            .get("backingStores")[0]
+        )

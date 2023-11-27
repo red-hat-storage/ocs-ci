@@ -7054,3 +7054,157 @@ def reset_conn_score():
     from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 
     return StretchCluster().reset_conn_score()
+
+
+@pytest.fixture(scope="session")
+def allow_default_backingstore_override(request):
+    """
+    Modify the noobaa CR to allow overriding the default backingstore
+
+    """
+
+    nb_ocp_obj = OCP(
+        kind="noobaa",
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        resource_name="noobaa",
+    )
+
+    def patch_allow_manual_default_backingstore():
+        """
+        Patch "manualDefaultBackingStore: true" to the noobaa CR
+
+        """
+        add_op = [
+            {"op": "add", "path": "/spec/manualDefaultBackingStore", "value": True}
+        ]
+        nb_ocp_obj.patch(
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            params=json.dumps(add_op),
+            format_type="json",
+        )
+
+    def finalizer():
+        """
+        Remove "manualDefaultBackingStore: true" from the noobaa CR
+
+        """
+        remove_op = [
+            {
+                "op": "remove",
+                "path": "/spec/manualDefaultBackingStore",
+            }
+        ]
+        nb_ocp_obj.patch(
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            params=json.dumps(remove_op),
+            format_type="json",
+        )
+
+    request.addfinalizer(finalizer)
+    patch_allow_manual_default_backingstore()
+
+
+@pytest.fixture(scope="session")
+def override_default_backingstore_session(
+    request,
+    mcg_obj_session,
+    backingstore_factory_session,
+    allow_default_backingstore_override,
+):
+    return override_default_backingstore_fixture(
+        request, mcg_obj_session, backingstore_factory_session
+    )
+
+
+@pytest.fixture(scope="function")
+def override_default_backingstore(
+    request, mcg_obj_session, backingstore_factory, allow_default_backingstore_override
+):
+    return override_default_backingstore_fixture(
+        request, mcg_obj_session, backingstore_factory
+    )
+
+
+def override_default_backingstore_fixture(
+    request, mcg_obj_session, backingstore_factory
+):
+    """
+    Returns a function that overrides the default backingstore with an alternative
+    of the same type.
+
+    """
+
+    bucketclass_ocp_obj = OCP(
+        kind=constants.BUCKETCLASS,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+    )
+
+    def _override_nb_default_backingstore_implementation(alt_backingstore_name=None):
+        """
+        1. If the name of an alternative backingstore is not provided,
+            Create a new backingstore of the same type as the current default
+        2. Update the new default resource of the admin account
+        3. Patch the default bucketclass to use the new default backingstore
+
+        Args:
+            alternative_backingstore_name (str, optional): The name of an alternative backingstore
+
+        """
+
+        # 1. if the name of an alternative backingstore is not provided,
+        # Create a new backingstore of the same type as the current default
+        if alt_backingstore_name is None:
+            original_bs_type = OCP(
+                kind="backingstore",
+                namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+            ).data["spec"]["type"]
+            original_bs_platform_name = constants.BS_TYPE_TO_PLATFORM_NAME_MAPPING[
+                original_bs_type
+            ]
+            if original_bs_platform_name != "pv":
+                alt_bs_dict = {original_bs_platform_name: [(1, None)]}
+            elif ocsci_config.ENV_DATA["mcg_only_deployment"]:
+                alt_bs_dict = {"pv": [1, 20, constants.THIN_CSI_STORAGECLASS]}
+            else:
+                alt_bs_dict = {"pv": [(1, 20, constants.DEFAULT_STORAGECLASS_RBD)]}
+            alt_backingstore_name = backingstore_factory("oc", alt_bs_dict)[0].name
+
+        # 2. Update the new default resource of the admin account
+        mcg_obj_session.exec_mcg_cmd(
+            "".join(
+                (
+                    f"account update {mcg_obj_session.noobaa_user} ",
+                    f"--new_default_resource={alt_backingstore_name}",
+                )
+            )
+        )
+
+        # 3. Patch the default bucketclass to use the new default backingstore
+        update_op = [
+            {
+                "op": "replace",
+                "path": "/spec/placementPolicy/tiers/0/backingStores/0",
+                "value": alt_backingstore_name,
+            }
+        ]
+        bucketclass_ocp_obj.patch(
+            resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+            params=json.dumps(update_op),
+            format_type="json",
+        )
+
+        return alt_backingstore_name
+
+    def finalizer():
+        """
+        Change the default backingstore back to the original
+
+        """
+        _override_nb_default_backingstore_implementation(
+            constants.DEFAULT_NOOBAA_BACKINGSTORE
+        )
+
+    request.addfinalizer(finalizer)
+    return _override_nb_default_backingstore_implementation
