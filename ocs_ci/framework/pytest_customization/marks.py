@@ -253,8 +253,8 @@ managed_service_required = pytest.mark.skipif(
 )
 
 provider_client_ms_platform_required = pytest.mark.skipif(
-    not ((config.ENV_DATA["platform"].lower() not in HCI_PC_OR_MS_PLATFORM),),
-    reason="Test runs ONLY on cluster with managed service or provider-client  platform",
+    not (config.ENV_DATA["platform"].lower() not in HCI_PC_OR_MS_PLATFORM),
+    reason="Test runs ONLY on cluster with managed service or HCI provider-client platform",
 )
 
 pc_or_ms_provider_required = pytest.mark.skipif(
@@ -265,7 +265,7 @@ pc_or_ms_provider_required = pytest.mark.skipif(
             in HCI_PC_OR_MS_PLATFORM
         )
     ),
-    reason="Test runs ONLY on managed service provider or provider of provider-client cluster",
+    reason="Test runs ONLY on managed service provider or provider of HCI provider-client cluster",
 )
 
 ms_provider_required = pytest.mark.skipif(
@@ -284,7 +284,7 @@ pc_or_ms_consumer_required = pytest.mark.skipif(
         and config.default_cluster_ctx.ENV_DATA["platform"].lower()
         in HCI_PC_OR_MS_PLATFORM
     ),
-    reason="Test runs ONLY on managed service provider or provider of provider-client cluster",
+    reason="Test runs ONLY on managed service provider or provider of HCI provider-client cluster",
 )
 ms_consumer_required = pytest.mark.skipif(
     not (
