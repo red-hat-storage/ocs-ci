@@ -4320,9 +4320,6 @@ def nb_ensure_endpoint_count(request):
     """
     Validate and ensure the number of running noobaa endpoints
     """
-    # TODO: remove return once bug https://bugzilla.redhat.com/show_bug.cgi?id=2251741 is verified
-    # return since test cases are not dependant on endpoint count
-    return
     cls = request.cls
     min_ep_count = cls.MIN_ENDPOINT_COUNT
     max_ep_count = cls.MAX_ENDPOINT_COUNT
