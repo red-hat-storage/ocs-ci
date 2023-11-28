@@ -3014,15 +3014,25 @@ def storagecluster_independent_check():
         bool: True if storagecluster is running on external mode False otherwise
 
     """
+    consumer_cluster_index = None
+    if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+        # Get the index of current consumer cluster
+        consumer_cluster_index = config.cur_index
+        # Switch to provider cluster context
+        config.switch_to_provider()
+
     storage_cluster = (
         OCP(kind="StorageCluster", namespace=config.ENV_DATA["cluster_namespace"])
         .get()
         .get("items")[0]
     )
-
-    return bool(
+    ret_val = bool(
         storage_cluster.get("spec", {}).get("externalStorage", {}).get("enable", False)
     )
+    if consumer_cluster_index is not None:
+        # Switch back to consumer cluster context
+        config.switch_to_consumer(consumer_cluster_index)
+    return ret_val
 
 
 def get_pv_size(storageclass=None):
@@ -3076,12 +3086,7 @@ def default_volumesnapshotclass(interface_type):
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
             if external
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
-            if (
-                config.ENV_DATA["platform"].lower()
-                in constants.MANAGED_SERVICE_PLATFORMS
-                or config.ENV_DATA["platform"].lower()
-                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            )
+            if (config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM)
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         )
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -3089,12 +3094,7 @@ def default_volumesnapshotclass(interface_type):
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
             if external
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
-            if (
-                config.ENV_DATA["platform"].lower()
-                in constants.MANAGED_SERVICE_PLATFORMS
-                or config.ENV_DATA["platform"].lower()
-                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            )
+            if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
         )
     base_snapshot_class = OCP(
@@ -4067,10 +4067,11 @@ def get_cephfs_subvolumegroup():
         str: The name of cephfilesystemsubvolumegroup
 
     """
-    if (
-        config.ENV_DATA.get("platform", "").lower()
-        in constants.MANAGED_SERVICE_PLATFORMS
-        and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+    if config.ENV_DATA.get(
+        "platform", ""
+    ).lower() in constants.HCI_PC_OR_MS_PLATFORM and (
+        config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+        or config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
     ):
         subvolume_group = ocp.OCP(
             kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,

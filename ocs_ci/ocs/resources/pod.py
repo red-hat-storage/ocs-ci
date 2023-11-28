@@ -729,9 +729,9 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     if (
         config.multicluster
         and config.ENV_DATA.get("platform", "").lower()
-        in constants.MANAGED_SERVICE_PLATFORMS
+        in constants.HCI_PC_OR_MS_PLATFORM
         and config.ENV_DATA.get("cluster_type", "").lower()
-        == constants.MS_CONSUMER_TYPE
+        in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
     ):
         provider_kubeconfig = os.path.join(
             config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
@@ -741,7 +741,11 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     else:
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
 
-    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    if cluster_kubeconfig:
+        namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    else:
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
     ocp_pod_obj = OCP(
         kind=constants.POD,
         namespace=namespace,

@@ -315,10 +315,14 @@ def get_pool_name(fixture_name):
     if config.DEPLOYMENT["external_mode"]:
         ceph_pool_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
     elif fixture_name.endswith("rbd"):
-        if (
-            config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
-            and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
-        ):
+        if config.ENV_DATA[
+            "platform"
+        ].lower() in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA.get(
+            "cluster_type", ""
+        ).lower() in [
+            constants.MS_CONSUMER_TYPE,
+            constants.HCI_CLIENT,
+        ]:
             cluster_id = run_cmd(
                 "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
             )

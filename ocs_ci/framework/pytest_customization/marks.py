@@ -26,7 +26,9 @@ from ocs_ci.ocs.constants import (
     MANAGED_SERVICE_PLATFORMS,
     HPCS_KMS_PROVIDER,
     HCI_PROVIDER_CLIENT_PLATFORMS,
+    HCI_PC_OR_MS_PLATFORM,
     HCI_CLIENT,
+    MS_CONSUMER_TYPE,
     HCI_PROVIDER,
 )
 from ocs_ci.utility import version
@@ -251,11 +253,8 @@ managed_service_required = pytest.mark.skipif(
 )
 
 provider_client_ms_platform_required = pytest.mark.skipif(
-    not (
-        (config.ENV_DATA["platform"].lower() not in HCI_PROVIDER_CLIENT_PLATFORMS)
-        or (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS),
-    ),
-    reason="Test runs ONLY on cluster with managed service or provider-client  platform",
+    not (config.ENV_DATA["platform"].lower() not in HCI_PC_OR_MS_PLATFORM),
+    reason="Test runs ONLY on cluster with managed service or HCI provider-client platform",
 )
 
 pc_or_ms_provider_required = pytest.mark.skipif(
@@ -263,12 +262,10 @@ pc_or_ms_provider_required = pytest.mark.skipif(
         config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == "provider"
         and (
             config.default_cluster_ctx.ENV_DATA["platform"].lower()
-            in MANAGED_SERVICE_PLATFORMS
-            or config.default_cluster_ctx.ENV_DATA["platform"].lower()
-            in HCI_PROVIDER_CLIENT_PLATFORMS
+            in HCI_PC_OR_MS_PLATFORM
         )
     ),
-    reason="Test runs ONLY on managed service provider or provider of provider-client cluster",
+    reason="Test runs ONLY on managed service provider or provider of HCI provider-client cluster",
 )
 
 ms_provider_required = pytest.mark.skipif(
@@ -280,6 +277,15 @@ ms_provider_required = pytest.mark.skipif(
     reason="Test runs ONLY on managed service provider cluster",
 )
 
+pc_or_ms_consumer_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+        in [HCI_CLIENT, MS_CONSUMER_TYPE]
+        and config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PC_OR_MS_PLATFORM
+    ),
+    reason="Test runs ONLY on managed service provider or provider of HCI provider-client cluster",
+)
 ms_consumer_required = pytest.mark.skipif(
     not (
         config.default_cluster_ctx.ENV_DATA["platform"].lower()

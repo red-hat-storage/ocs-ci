@@ -42,9 +42,9 @@ class Disruptions:
 
     def set_resource(self, resource, leader_type="provisioner", cluster_index=None):
         self.resource = resource
-        if (config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS) and (
-            resource in CEPH_PODS
-        ):
+        if (
+            config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
+        ) and (resource in CEPH_PODS):
             # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
             # Consumer cluster will be the primary cluster context in a multicluster run. Setting 'cluster_kubeconfig'
             # attribute to use as the value of the parameter '--kubeconfig' in the 'oc' commands to get ceph pods.
@@ -55,8 +55,8 @@ class Disruptions:
                 ),
             )
             self.cluster_kubeconfig = provider_kubeconfig
-        elif config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS:
-            # cluster_index is used to identify the the cluster in which the pod is residing. If cluster_index is not
+        elif config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM:
+            # cluster_index is used to identify the  cluster in which the pod is residing. If cluster_index is not
             # passed, assume that the context is already changed to the cluster where the pod is residing.
             cluster_index = (
                 cluster_index if cluster_index is not None else config.cur_index

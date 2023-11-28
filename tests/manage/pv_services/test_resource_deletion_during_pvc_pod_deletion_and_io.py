@@ -123,7 +123,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         """
         Create PVCs and pods
         """
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
             # Get the index of current consumer cluster
             self.consumer_cluster_index = config.cur_index
 
@@ -241,10 +241,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         # Consumer cluster will be the primary cluster. Switching to provider cluster is required to get ceph pods
         switch_to_provider_needed = (
             True
-            if (
-                config.ENV_DATA["platform"].lower()
-                in constants.MANAGED_SERVICE_PLATFORMS
-            )
+            if (config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM)
             and (resource_to_delete in ["mds", "mon", "mgr", "osd"])
             else False
         )

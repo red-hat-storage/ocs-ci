@@ -5968,9 +5968,7 @@ def switch_to_provider_for_test(request):
         and ocsci_config.multicluster
         and (
             current_cluster.ENV_DATA.get("platform", "").lower()
-            in constants.MANAGED_SERVICE_PLATFORMS
-            or current_cluster.ENV_DATA.get("platform", "").lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            in constants.HCI_PC_OR_MS_PLATFORM
         )
     ):
         for cluster in ocsci_config.clusters:
@@ -6260,7 +6258,7 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         if (
             ocsci_config.multicluster
             and ocsci_config.ENV_DATA.get("platform", "").lower()
-            in constants.MANAGED_SERVICE_PLATFORMS
+            in constants.HCI_PC_OR_MS_PLATFORM
         ):
             orig_index = ocsci_config.cur_index
 

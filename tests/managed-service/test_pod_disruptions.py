@@ -42,7 +42,7 @@ class TestPodDisruptions(ManageTest):
         """
         self.provider_cluster_index = config.get_provider_index()
         self.consumer_indexes = config.get_consumer_indexes_list()
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
             # Get the index of current cluster
             initial_cluster_index = config.cur_index
 
