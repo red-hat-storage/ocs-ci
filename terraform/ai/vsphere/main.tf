@@ -73,7 +73,7 @@ module "control_plane_vm" {
   memory            = var.control_plane_memory
   system_disk_size  = var.system_disk_size
   iso_image         = vsphere_file.discovery_iso.destination_file
-  nested_hv_enabled = false
+  nested_hv_enabled = true
 }
 
 // create Compute VMs
