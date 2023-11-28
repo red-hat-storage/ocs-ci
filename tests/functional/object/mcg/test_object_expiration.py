@@ -17,7 +17,7 @@ from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
-    expire_mcg_objects,
+    expire_objects_in_bucket,
     list_objects_from_bucket,
     s3_put_object,
     s3_get_object,
@@ -116,7 +116,7 @@ class TestObjectExpiration(MCGTest):
         )
 
         # 4. Manually expire objects in the target prefix (skip one object to keep the prefix alive)
-        expire_mcg_objects(bucket, objs_to_expire[1:], prefix=prefix_to_expire)
+        expire_objects_in_bucket(bucket, objs_to_expire[1:], prefix=prefix_to_expire)
 
         # 5. Wait and verify the deletion of the objects that were set to expire
         logger.info(f"Waiting for the expiration of s3://{bucket}/{prefix_to_expire}")
@@ -318,7 +318,7 @@ class TestObjectExpiration(MCGTest):
 
         # 6. Set the creation time of all of the objects to be older than the expiration time
         logger.info(f"Setting back the creation time of all the objects in {bucket}:")
-        expire_mcg_objects(bucket)
+        expire_objects_in_bucket(bucket)
 
         # 7. Verify that only the objects that should have been expired were deleted
         logger.info("Waiting for the expiration of the objects that should expire:")
@@ -403,7 +403,7 @@ class TestObjectExpiration(MCGTest):
         objs_to_expire = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {test_directory_setup.origin_dir}"
         ).split(" ")
-        expire_mcg_objects(bucket, objs_to_expire)
+        expire_objects_in_bucket(bucket, objs_to_expire)
 
         # 5. Wait and verify that the objects were not deleted
         logger.info("Verifying that the uploaded objects still exists")

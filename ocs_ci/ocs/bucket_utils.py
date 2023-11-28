@@ -2,14 +2,12 @@
 Helper functions file for working with object buckets
 """
 
-import datetime
 import json
 import logging
 import os
 import shlex
 import time
 from uuid import uuid4
-from datetime import date
 
 import boto3
 from botocore.handlers import disable_signing
@@ -2177,44 +2175,62 @@ def create_aws_bs_using_cli(
     )
 
 
-def get_objects_creation_time_from_noobaa_db(bucket_name, object_keys=[]):
+def change_objects_creation_date_in_noobaa_db(
+    bucket_name, object_keys=[], new_creation_time=0
+):
     """
-    Get the creation time of a given object by querying the noobaa-db
+    Change the creation date of objects at the noobaa-db.
 
     Args:
-        bucket_name (str): The name of the bucket where the object resides
-        object_keys (list, optional): A list of object keys to get the creation time of
-            Note:
-                If object_keys is empty, return the creation time of all objects in the bucket
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list, optional): A list of object keys to change their creation date
+            Note: If object_keys is empty, all objects in the bucket will be changed.
+        new_creation_time (int): The new creation time in unix timestamp in seconds
 
-    Returns:
-        dict: A dictionary containing the object keys as keys and their creation time
+    Example usage:
+        # Change the creation date of objects obj1 and obj2 in bucket my-bucket to one minute back
+        change_objects_creation_date("my-bucket", ["obj1", "obj2"], time.time() - 60)
 
     """
     psql_query = (
-        "SELECT data ->>'key', data ->>'create_time' "
-        "FROM objectmds "
-        "WHERE data ->> 'bucket' IN ( "
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({new_creation_time}))) "
+        "WHERE data->>'bucket' IN ( "
         "SELECT _id "
         "FROM buckets "
-        f"WHERE data ->>'name' = '{bucket_name}')"
+        f"WHERE data->>'name' = '{bucket_name}')"
     )
     if object_keys:
         psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
     psql_query += ";"
-    output = exec_nb_db_query(psql_query)
 
-    # Parse the output to create a dictionary of object keys to datetime objects
-    objs_to_dtime = {}
-    dtime_format = "%Y-%m-%dT%H:%M:%S.%fZ"
-    for row in output:
-        output_obj_key = row.split("|")[0].strip()
-        output_time_str = row.split("|")[1].strip()
-        # Convert the raw time string to a datetime object
-        output_dtime = datetime.datetime.strptime(output_time_str, dtime_format)
-        objs_to_dtime[output_obj_key] = output_dtime
+    exec_nb_db_query(psql_query)
 
-    return objs_to_dtime
+
+def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
+    """
+    Expire objects in a bucket by changing their creation date to one year back.
+
+    Note that this is a workaround for the fact that the shortest expiration
+    time that expiraiton policies allows is 1 day, which is too long for the tests to wait.
+
+    Args:
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list): A list of object keys to expire
+            Note:
+                If object_keys is empty, all objects in the bucket will be expired.
+        prefix (str): The prefix of the objects to expire
+
+    """
+    logger.info(
+        f"Expiring objects in bucket {bucket_name} by changing their creation date"
+    )
+    object_keys = [prefix + key for key in object_keys]
+    SECONDS_IN_YEAR = 60 * 60 * 24 * 365
+    change_objects_creation_date_in_noobaa_db(
+        bucket_name, object_keys, time.time() - SECONDS_IN_YEAR
+    )
 
 
 def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
@@ -2387,64 +2403,6 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
             stores.update(tier_data["reply"]["attached_pools"])
 
     return list(stores)
-
-
-def change_objects_creation_date_in_noobaa_db(
-    bucket_name, object_keys=[], new_creation_time=0
-):
-    """
-    Change the creation date of objects at the noobaa-db.
-
-    Args:
-        bucket_name (str): The name of the bucket where the objects reside
-        object_keys (list, optional): A list of object keys to change their creation date
-            Note: If object_keys is empty, all objects in the bucket will be changed.
-        new_creation_time (int): The new creation time in unix timestamp in seconds
-
-    Example usage:
-        # Change the creation date of objects obj1 and obj2 in bucket my-bucket to one minute back
-        change_objects_creation_date("my-bucket", ["obj1", "obj2"], time.time() - 60)
-
-    """
-    psql_query = (
-        "UPDATE objectmds "
-        "SET data = jsonb_set(data, '{create_time}', "
-        f"to_jsonb(to_timestamp({new_creation_time}))) "
-        "WHERE data->>'bucket' IN ( "
-        "SELECT _id "
-        "FROM buckets "
-        f"WHERE data->>'name' = '{bucket_name}')"
-    )
-    if object_keys:
-        psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
-    psql_query += ";"
-
-    exec_nb_db_query(psql_query)
-
-
-def expire_mcg_objects(bucket_name, object_keys=[], prefix=""):
-    """
-    Expire objects in a bucket by changing their creation date to one year back.
-
-    Note that this is a workaround for the fact that the shortest expiration
-    time that expiraiton policies allows is 1 day, which is too long for the tests to wait.
-
-    Args:
-        bucket_name (str): The name of the bucket where the objects reside
-        object_keys (list): A list of object keys to expire
-            Note:
-                If object_keys is empty, all objects in the bucket will be expired.
-        prefix (str): The prefix of the objects to expire
-
-    """
-    logger.info(
-        f"Expiring objects in bucket {bucket_name} by changing their creation date"
-    )
-    object_keys = [prefix + key for key in object_keys]
-    SECONDS_IN_YEAR = 60 * 60 * 24 * 365
-    change_objects_creation_date_in_noobaa_db(
-        bucket_name, object_keys, time.time() - SECONDS_IN_YEAR
-    )
 
 
 def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):
