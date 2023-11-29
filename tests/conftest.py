@@ -2415,6 +2415,28 @@ def awscli_pod_session(request):
     existing_pod = Pod(**awscli_pods[0]) if len(awscli_pods) > 0 else None
     return existing_pod or awscli_pod_fixture(request, scope_name="session")
 
+@pytest.fixture
+def awscli_pod_client(request):
+    """
+    Create or return an existingawscli pod on first client cluster.
+
+    Returns:
+        Object: Object representing an aws cli pod
+        int: client cluster context
+    """
+    original_cluster = ocsci_config.cluster_ctx
+    ocsci_config.switch_to_client()
+    client_cluster = ocsci_config.cluster_ctx
+    log.info(f"Switched to client with index {client_cluster}")
+    awscli_pods = get_pods_having_label(
+        constants.S3CLI_LABEL, ocsci_config.ENV_DATA["cluster_namespace"]
+    )
+    existing_pod = Pod(**awscli_pods[0]) if len(awscli_pods) > 0 else None
+    ocsci_config.switch_ctx(original_cluster)
+    log.info(f"Switched to original cluster with index {original_cluster}")
+    pod_obj = existing_pod or awscli_pod_fixture(request, scope_name="session")
+    return pod_obj, client_cluster
+
 
 @pytest.fixture(scope="session")
 def awscli_pod(request, awscli_pod_session):
