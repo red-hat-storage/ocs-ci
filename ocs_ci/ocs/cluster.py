@@ -278,26 +278,31 @@ class CephCluster(object):
 
         self.scan_cluster()
 
-        if (
-            config.ENV_DATA["platform"] in constants.MANAGED_SERVICE_PLATFORMS
-            and config.ENV_DATA["cluster_type"] == "consumer"
-        ):
-            # on Managed Service Consumer cluster, check that there are no
-            # extra Ceph pods
+        if config.ENV_DATA[
+            "platform"
+        ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
+            constants.MS_CONSUMER_TYPE,
+            constant.HCI_CLIENT,
+        ]:
+            # on Managed Service Consumer cluster and HCI Client cluster,
+            # check that there are no extra Ceph pods
             mon_pods = pod.get_mon_pods()
             if mon_pods:
                 raise exceptions.CephHealthException(
-                    "Managed Service Consumer cluster shouldn't have any mon pods!"
+                    "Managed Service Consumer cluster or HCI Client Cluster"
+                    " shouldn't have any mon pods!"
                 )
             osd_pods = pod.get_osd_pods()
             if osd_pods:
                 raise exceptions.CephHealthException(
-                    "Managed Service Consumer cluster shouldn't have any osd pods!"
+                    "Managed Service Consumer cluster or HCI Client Cluster "
+                    "shouldn't have any osd pods!"
                 )
             mds_pods = pod.get_mds_pods()
             if mds_pods:
                 raise exceptions.CephHealthException(
-                    "Managed Service Consumer cluster shouldn't have any mds pods!"
+                    "Managed Service Consumer cluster or HCI Client Cluster "
+                    "shouldn't have any mds pods!"
                 )
             return True
 
@@ -1235,14 +1240,31 @@ def validate_pdb_creation():
 
     """
     pdb_obj = ocp.OCP(
-        kind="PodDisruptionBudget", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
     pdb_count = constants.PDB_COUNT
     pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
+
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_15:
+        pdb_count = constants.PDB_COUNT_2_MGR
+        pdb_required = [
+            constants.MDS_PDB,
+            constants.MON_PDB,
+            constants.OSD_PDB,
+            constants.MGR_PDB,
+        ]
+
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
-        pdb_required.extend((constants.MGR_PDB, constants.RGW_PDB))
+        pdb_required = [
+            constants.MDS_PDB,
+            constants.MON_PDB,
+            constants.OSD_PDB,
+            constants.MGR_PDB,
+            constants.RGW_PDB,
+        ]
+
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
             f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
@@ -2171,6 +2193,19 @@ def is_managed_service_cluster():
     return config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
 
 
+def is_hci_cluster():
+    """
+    Check if the cluster is an hci provider or client cluster
+
+    Returns:
+        bool: True, if the cluster is an hci cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    )
+
+
 def is_ms_consumer_cluster():
     """
     Check if the cluster is a managed service consumer cluster
@@ -2185,6 +2220,20 @@ def is_ms_consumer_cluster():
     )
 
 
+def is_hci_client_cluster():
+    """
+    Check if the cluster is a Fusion HCI Client cluster
+
+    Returns:
+        bool: True, if the cluster is a Fusion HCI client cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
+    )
+
+
 def is_ms_provider_cluster():
     """
     Check if the cluster is a managed service provider cluster
@@ -2196,6 +2245,20 @@ def is_ms_provider_cluster():
     return (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
         and config.ENV_DATA["cluster_type"].lower() == "provider"
+    )
+
+
+def is_hci_provider_cluster():
+    """
+    Check if the cluster is a Fusion HCI provider cluster
+
+    Returns:
+        bool: True, if the cluster is a Fusion HCI provider cluster. False, otherwise
+
+    """
+    return (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER
     )
 
 

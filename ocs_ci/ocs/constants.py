@@ -237,6 +237,10 @@ MS_CONSUMER_TYPE = "consumer"
 MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
+# HCI cluster types
+HCI_CLIENT = "hci_client"
+HCI_PROVIDER = "provider"
+
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
 must_gather_pod_label = "app=must-gather"
@@ -308,8 +312,8 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-rbdplugin-snapclass"
 )
-DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS = f"{DEFAULT_CLUSTERNAME}-cephfs"
-DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
+DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
+DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
@@ -849,6 +853,7 @@ MDR_BACKUP_SCHEDULE_YAML = os.path.join(
 )
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 
+
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
@@ -973,6 +978,7 @@ PSA_RESTRICTED = "restricted"
 # Platforms
 AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"
+AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
@@ -986,6 +992,8 @@ OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
+HCI_BAREMETAL = "hci_baremetal"
+HCI_VSPHERE = "hci_vsphere"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
 ON_PREM_PLATFORMS = [
     VSPHERE_PLATFORM,
@@ -993,6 +1001,8 @@ ON_PREM_PLATFORMS = [
     BAREMETALPSI_PLATFORM,
     IBM_POWER_PLATFORM,
     RHV_PLATFORM,
+    HCI_BAREMETAL,
+    HCI_VSPHERE,
 ]
 CLOUD_PLATFORMS = [
     AWS_PLATFORM,
@@ -1010,6 +1020,12 @@ MANAGED_SERVICE_PLATFORMS = [
 ]
 BAREMETAL_PLATFORMS = [BAREMETAL_PLATFORM, BAREMETALPSI_PLATFORM]
 
+HCI_PROVIDER_CLIENT_PLATFORMS = [
+    HCI_BAREMETAL,
+    HCI_VSPHERE,
+]
+
+HCI_PC_OR_MS_PLATFORM = MANAGED_SERVICE_PLATFORMS + HCI_PROVIDER_CLIENT_PLATFORMS
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 
@@ -1044,6 +1060,7 @@ VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
 INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VM_MAIN = os.path.join(VSPHERE_DIR, "vm/main.tf")
+VM_MAIN_JSON = os.path.join(VSPHERE_DIR, "vm/main.tf.json")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 VSPHERE_VAR = os.path.join(VSPHERE_DIR, "variables.tf")
@@ -1082,6 +1099,9 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
 CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
+
+# Hardware Virtualization
+hardware_virtualization_config = {"nested_hv_enabled": "true"}
 
 # VMware Datastore types
 VMFS = "VMFS"
@@ -1216,7 +1236,12 @@ MON_PDB = "rook-ceph-mon-pdb"
 MGR_PDB = "rook-ceph-mgr-pdb"
 RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 PDB_COUNT = 3
+PDB_COUNT_2_MGR = 4
 PDB_COUNT_ARBITER = 5
+
+# MGR COUNT
+MGR_COUNT = 1
+MGR_COUNT_415 = 2
 
 # Root Disk size
 CURRENT_VM_ROOT_DISK_SIZE = "60"
@@ -1506,6 +1531,8 @@ OCS_PROVISIONERS = [
     "openshift-storage.noobaa.io/obc",
     "topolvm.cybozu.com",
     "topolvm.io",
+    "openshift-storage-client.rbd.csi.ceph.com",
+    "openshift-storage-client.cephfs.csi.ceph.com",
 ]
 RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 
@@ -1606,6 +1633,10 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.14"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.15"
 ] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
 
@@ -1840,7 +1871,7 @@ SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
 # Cloud Manager available platforms
-CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "IBMCOS"]
+CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "AZURE_WITH_LOGS", "IBMCOS"]
 
 # Vault related configurations
 VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
@@ -2069,6 +2100,16 @@ SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"
 SUBMARINER_GATEWAY_ACTIVE_LABEL = "gateway.submariner.io/status=active"
 SUBMARINER_GATEWAY_NODE_LABEL = "submariner.io/gateway=true"
 GLOBALNET_STATUS = "True"
+SUBMARINER_DOWNSTREAM_UNRELEASED = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "submariner_downstream_unreleased_catsrc.yaml"
+)
+# We need to append version string at the end of this url
+SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
+    "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
+    "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+    "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
+)
+SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
 
 # Multicluster related
 
@@ -2101,6 +2142,9 @@ ACM_MULTICLUSTER_RESOURCE = "multiclusterhub"
 ACM_HUB_UNRELEASED_DEPLOY_REPO = "https://github.com/stolostron/deploy.git"
 ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "imagecontentsourcepolicy.yaml"
+)
+SUBMARINER_DOWNSTREAM_BREW_ICSP = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_icsp.yaml"
 )
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
@@ -2318,3 +2362,12 @@ AWS_REGIONS_DOC_URL = "https://docs.aws.amazon.com/general/latest/gr/rande.html"
 
 # dir of template for html reports
 HTML_REPORT_TEMPLATE_DIR = "ocs_ci/templates/html_reports/"
+
+
+# Google Cloud platform
+GCP_PROJECT_ODF_QE = "odf-qe"
+# Operation names
+OPERATION_STOP = "stop"
+OPERATION_START = "start"
+OPERATION_RESTART = "restart"
+OPERATION_TERMINATE = "terminate"

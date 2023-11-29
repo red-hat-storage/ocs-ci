@@ -439,7 +439,6 @@ class BusyBox_AppSet(DRWorkload):
             ResourceNotDeleted: In case workload resources not deleted properly
 
         """
-        drpc_name = f"{self.appset_placement_name}-drpc"
         image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
         try:
             config.switch_acm_ctx()
@@ -482,12 +481,6 @@ class BusyBox_AppSet(DRWorkload):
             if force:
                 self.resources_cleanup(self.workload_namespace, image_uuids)
             raise ResourceNotDeleted(err_msg)
-
-        finally:
-            config.switch_acm_ctx()
-            run_cmd(
-                f"oc delete drpc -n {constants.GITOPS_CLUSTER_NAMESPACE} {drpc_name}"
-            )
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):

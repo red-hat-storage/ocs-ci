@@ -3,7 +3,6 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    ceph_health_retry,
     polarion_id,
     pre_upgrade,
     skipif_aws_i3,
@@ -123,7 +122,6 @@ def add_capacity_test(ui_flag=False):
 @skipif_external_mode
 @skipif_ibm_power
 @skipif_managed_service
-@ceph_health_retry
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
@@ -156,7 +154,6 @@ class TestAddCapacity(ManageTest):
 @skipif_ibm_power
 @skipif_managed_service
 @skipif_no_lso
-@ceph_health_retry
 class TestAddCapacityLSO(ManageTest):
     """
     Add capacity on lso cluster
@@ -187,7 +184,6 @@ class TestAddCapacityLSO(ManageTest):
 @skipif_external_mode
 @cloud_platform_required
 @skipif_managed_service
-@ceph_health_retry
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade

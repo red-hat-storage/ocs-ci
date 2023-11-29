@@ -653,3 +653,7 @@ class NoThreadingLockUsedError(Exception):
 
 class VSLMNotFoundException(Exception):
     pass
+
+
+class OperationFailedToCompleteException(Exception):
+    pass

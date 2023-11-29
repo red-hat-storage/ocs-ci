@@ -1,0 +1,2 @@
+ENV_DATA:
+  enable_globalnet: false 

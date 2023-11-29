@@ -6,6 +6,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
+@turquoise_squad
 class TestSequentialFailover:
     """
     Test Sequential Failover actions

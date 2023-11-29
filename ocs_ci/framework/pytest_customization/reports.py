@@ -11,8 +11,6 @@ from ocs_ci.utility.utils import (
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
 
-logger = logging.getLogger(__name__)
-
 
 log = logging.getLogger(__name__)
 
@@ -113,9 +111,9 @@ def pytest_sessionfinish(session, exitstatus):
                     values.get("total", "NA"),
                 ]
                 c.writerow(row)
-        logger.info(f"Test Time report saved to '{time_report_file}'")
+        log.info(f"Test Time report saved to '{time_report_file}'")
     except Exception as e:
-        logger.warning(
+        log.warning(
             f"Failed to save Test Time report to logs directory with exception. {e}"
         )
 
@@ -147,25 +145,32 @@ def pytest_report_teststatus(report, config):
     GV.TIMEREPORT_DICT[report.nodeid] = GV.TIMEREPORT_DICT.get(report.nodeid, {})
 
     if report.when == "setup":
-        logger.info(
-            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+        setup_duration = round(report.duration, 2)
+        log.info(
+            f"duration reported by {report.nodeid} immediately after test execution: {setup_duration}"
         )
-        GV.TIMEREPORT_DICT[report.nodeid]["setup"] = round(report.duration, 2)
-        GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["setup"] = setup_duration
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = setup_duration
 
     if "total" not in GV.TIMEREPORT_DICT[report.nodeid]:
         GV.TIMEREPORT_DICT[report.nodeid]["total"] = 0
 
     if report.when == "call":
-        logger.info(
-            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+        call_duration = round(report.duration, 2)
+        log.info(
+            f"duration reported by {report.nodeid} immediately after test execution: {call_duration}"
         )
-        GV.TIMEREPORT_DICT[report.nodeid]["call"] = round(report.duration, 2)
-        GV.TIMEREPORT_DICT[report.nodeid]["total"] += round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["call"] = call_duration
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(
+            GV.TIMEREPORT_DICT[report.nodeid]["total"] + call_duration, 2
+        )
 
     if report.when == "teardown":
-        logger.info(
-            f"duration reported by {report.nodeid} immediately after test execution: {round(report.duration, 2)}"
+        teardown_duration = round(report.duration, 2)
+        log.info(
+            f"duration reported by {report.nodeid} immediately after test execution: {teardown_duration}"
         )
-        GV.TIMEREPORT_DICT[report.nodeid]["teardown"] = round(report.duration, 2)
-        GV.TIMEREPORT_DICT[report.nodeid]["total"] += round(report.duration, 2)
+        GV.TIMEREPORT_DICT[report.nodeid]["teardown"] = teardown_duration
+        GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(
+            GV.TIMEREPORT_DICT[report.nodeid]["total"] + teardown_duration, 2
+        )

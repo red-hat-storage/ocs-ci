@@ -230,7 +230,7 @@ class TestODFTopology(object):
     @ignore_leftovers
     @polarion_id("OCS-4905")
     def test_stop_start_node_validate_topology(
-        self, nodes, setup_ui_class, teardown_nodes_job
+        self, nodes, setup_ui_class, teardown_nodes_job, threading_lock
     ):
         """
         Test to validate ODF Topology when node hard-stopped and started again
@@ -269,7 +269,7 @@ class TestODFTopology(object):
         )
         nodes.stop_nodes(nodes=[random_node_under_test], force=True)
 
-        api = prometheus.PrometheusAPI()
+        api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         logger.info(f"Verifying whether {constants.ALERT_NODEDOWN} has been triggered")
         alerts = api.wait_for_alert(name=constants.ALERT_NODEDOWN, state="firing")
         test_checks = dict()

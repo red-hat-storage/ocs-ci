@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     skipif_external_mode,
     skipif_ms_consumer,
+    skipif_hci_client,
 )
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
@@ -40,6 +41,7 @@ class TestMustGather(ManageTest):
                     pytest.mark.polarion_id("OCS-1583"),
                     skipif_external_mode,
                     skipif_ms_consumer,
+                    skipif_hci_client,
                 ]
             ),
             pytest.param(
@@ -48,6 +50,7 @@ class TestMustGather(ManageTest):
                     pytest.mark.polarion_id("OCS-1583"),
                     skipif_external_mode,
                     skipif_ms_consumer,
+                    skipif_hci_client,
                 ]
             ),
             pytest.param(*["OTHERS"], marks=pytest.mark.polarion_id("OCS-1583")),

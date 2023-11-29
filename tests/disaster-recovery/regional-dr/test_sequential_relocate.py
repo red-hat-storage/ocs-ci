@@ -6,12 +6,14 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
 
 logger = logging.getLogger(__name__)
 
 
 @tier1
+@turquoise_squad
 @pytest.mark.polarion_id("OCS-4772")
 class TestSequentialRelocate:
     """

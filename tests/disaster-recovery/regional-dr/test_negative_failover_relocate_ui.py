@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     rdr_ui_relocate_config_required,
 )
 from ocs_ci.framework.testlib import tier3, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier3
+@turquoise_squad
 @skipif_ocs_version("<4.13")
 class TestNegativeFailoverRelocate:
     """

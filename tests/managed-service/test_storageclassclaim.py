@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     polarion_id,
-    ms_consumer_required,
+    pc_or_ms_consumer_required,
     skipif_ocs_version,
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, ResourceWrongStatusException
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 @tier1
 @polarion_id("OCS-4628")
 @skipif_ocs_version("<4.11")
-@ms_consumer_required
+@pc_or_ms_consumer_required
 class TestStorageClassClaim(ManageTest):
     """
     Tests to verify storageclassclaim

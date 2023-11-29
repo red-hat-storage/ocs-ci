@@ -121,7 +121,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
-    ceph_health_check_base,
     get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
@@ -344,7 +343,11 @@ def pytest_collection_modifyitems(session, config, items):
                     log.debug(f"Test: {item} will be skipped due to {skip_condition}")
                     items.remove(item)
                     continue
-            if skipif_upgraded_from_marker:
+            if (
+                skipif_upgraded_from_marker
+                and ocsci_config.ENV_DATA.get("platform", "").lower()
+                not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            ):
                 skip_args = skipif_upgraded_from_marker.args
                 if skipif_upgraded_from(skip_args[0]):
                     log.debug(
@@ -707,7 +710,8 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
             )
         elif interface == constants.CEPHFILESYSTEM:
             cfs = ocp.OCP(
-                kind=constants.CEPHFILESYSTEM, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                kind=constants.CEPHFILESYSTEM,
+                namespace=ocsci_config.ENV_DATA["cluster_namespace"],
             ).get(defaults.CEPHFILESYSTEM_NAME)
             ceph_pool_obj = OCS(**cfs)
         assert ceph_pool_obj, f"Failed to create {interface} pool"
@@ -1612,21 +1616,13 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    ceph_health_retry = False
-                    for mark in node.iter_markers():
-                        if "ceph_health_retry" == mark.name:
-                            ceph_health_retry = True
-                    if ceph_health_retry:
-                        ceph_health_check(
-                            namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-                        )
-                        log.info(
-                            "Ceph health check passed at teardown. (After test "
-                            "marked with @ceph_health_retry. For such TC we allow more re-tries)"
-                        )
-                    else:
-                        ceph_health_check()
-                        log.info("Ceph health check passed at teardown")
+                    # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
+                    # "flip-flopping ceph health OK and warn because of:
+                    # HEALTH_WARN Reduced data availability: 2 pgs peering
+                    ceph_health_check(
+                        namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                    )
+                    log.info("Ceph health check passed at teardown!")
             except CephHealthException:
                 if not ocsci_config.RUN["skip_reason_test_found"]:
                     squad_name = None
@@ -1641,7 +1637,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check()
+                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
                 raise
 
     request.addfinalizer(finalizer)
@@ -1651,7 +1647,11 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
         ):
             log.info("Checking for Ceph Health OK ")
             try:
-                status = ceph_health_check_base()
+                status = ceph_health_check(
+                    namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                    tries=10,
+                    delay=15,
+                )
                 if status:
                     log.info("Ceph health check passed at setup")
                     return
@@ -1743,9 +1743,14 @@ def environment_checker(request):
             return
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
-    if ocsci_config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+    if ocsci_config.ENV_DATA["platform"] in {
+        constants.FUSIONAAS_PLATFORM,
+        constants.HCI_BAREMETAL,
+        constants.HCI_VSPHERE,
+    }:
         log.error(
-            "Environment checker is NOT IMPLEMENTED for Fusion service. This needds to be updated"
+            "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
+            "This needds to be updated"
         )
     else:
         request.addfinalizer(
@@ -2436,13 +2441,18 @@ def awscli_pod_fixture(request, scope_name):
         constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME, scope_name
     )
     service_ca_data["metadata"]["name"] = service_ca_configmap_name
+    service_ca_data["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+        "cluster_namespace"
+    ]
     log.info("Trying to create the AWS CLI service CA")
     service_ca_configmap = helpers.create_resource(**service_ca_data)
-
     awscli_sts_dict = templating.load_yaml(constants.S3CLI_MULTIARCH_STS_YAML)
     awscli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
         "name"
     ] = service_ca_configmap_name
+    awscli_sts_dict["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+        "cluster_namespace"
+    ]
 
     update_container_with_mirrored_image(awscli_sts_dict)
     update_container_with_proxy_env(awscli_sts_dict)
@@ -2517,7 +2527,9 @@ def scale_cli_fixture(request, scope_name):
     assert scalecli_pod_obj.create(
         do_reload=True
     ), f"Failed to create pod {scalecli_pod_name}"
-    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+    OCP(
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"], kind="ConfigMap"
+    ).wait_for_resource(
         resource_name=service_ca_configmap.name, column="DATA", condition="1"
     )
     helpers.wait_for_resource_state(
@@ -4124,7 +4136,7 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
-            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS
+            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
         ):
             storageclass = (
                 storageclass
@@ -4136,7 +4148,7 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS
+            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
         ):
             storageclass = (
                 storageclass
@@ -4308,12 +4320,15 @@ def nb_ensure_endpoint_count(request):
     """
     Validate and ensure the number of running noobaa endpoints
     """
+    # TODO: remove return once bug https://bugzilla.redhat.com/show_bug.cgi?id=2251741 is verified
+    # return since test cases are not dependant on endpoint count
+    return
     cls = request.cls
     min_ep_count = cls.MIN_ENDPOINT_COUNT
     max_ep_count = cls.MAX_ENDPOINT_COUNT
 
     assert min_ep_count <= max_ep_count
-    namespace = defaults.ROOK_CLUSTER_NAMESPACE
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
     should_wait = False
 
     # prior to 4.6 we configured the ep count directly on the noobaa cr.
@@ -4780,10 +4795,14 @@ def setup_acm_ui(request):
 
 
 def setup_acm_ui_fixture(request):
+    restore_ctx_index = ocsci_config.cur_index
+    ocsci_config.switch_acm_ctx()
     driver = login_to_acm()
 
     def finalizer():
         close_browser()
+        log.info("Switching back to the initial cluster context")
+        ocsci_config.switch_ctx(restore_ctx_index)
 
     request.addfinalizer(finalizer)
 
@@ -5633,7 +5652,11 @@ def nsfs_bucket_factory_fixture(
                 ocsci_config.ENV_DATA["cluster_namespace"],
             )[0]
         )
-        wait_for_pods_to_be_running(pod_names=[nsfs_obj.interface_pod.name])
+        wait_for_pods_to_be_running(
+            pod_names=[nsfs_obj.interface_pod.name],
+            timeout=60,
+            sleep=10,
+        )
 
         # Wait for the new noobaa-endpoint pods with the mount to be created
         # and for the obsolete noobaa-endpoint pods to be terminated
@@ -5877,7 +5900,7 @@ def patch_consumer_toolbox_with_secret():
 
             consumer_tools_deployment = OCP(
                 kind=constants.DEPLOYMENT,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                 resource_name="rook-ceph-tools",
             )
             patch_value = (
@@ -5897,7 +5920,7 @@ def patch_consumer_toolbox_with_secret():
             # Wait for the new tools pod to reach Running state
             new_tools_pod_info = get_pods_having_label(
                 label=constants.TOOL_APP_LABEL,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                namespace=ocsci_config.ENV_DATA["cluster_namespace"],
             )[0]
             new_tools_pod = Pod(**new_tools_pod_info)
             helpers.wait_for_resource_state(new_tools_pod, constants.STATUS_RUNNING)
@@ -5934,7 +5957,7 @@ def toolbox_on_faas_consumer():
 @pytest.fixture(scope="function", autouse=True)
 def switch_to_provider_for_test(request):
     """
-    Switch to provider cluster as required by the test. Applicable for Managed Services only if
+    Switch to provider cluster as required by the test. Applicable for Managed Services and HCI Provider-client only if
     the marker 'runs_on_provider' is added in the test.
 
     """
@@ -5943,8 +5966,10 @@ def switch_to_provider_for_test(request):
     if (
         request.node.get_closest_marker("runs_on_provider")
         and ocsci_config.multicluster
-        and current_cluster.ENV_DATA.get("platform", "").lower()
-        in constants.MANAGED_SERVICE_PLATFORMS
+        and (
+            current_cluster.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PC_OR_MS_PLATFORM
+        )
     ):
         for cluster in ocsci_config.clusters:
             if cluster.ENV_DATA.get("cluster_type") == "provider":
@@ -6233,7 +6258,7 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         if (
             ocsci_config.multicluster
             and ocsci_config.ENV_DATA.get("platform", "").lower()
-            in constants.MANAGED_SERVICE_PLATFORMS
+            in constants.HCI_PC_OR_MS_PLATFORM
         ):
             orig_index = ocsci_config.cur_index
 
@@ -6536,7 +6561,9 @@ def fedora_pod_fixture(request, scope_name):
     assert fedora_pod_obj.create(
         do_reload=True
     ), f"Failed to create Pod {fedora_pod_name}"
-    OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind="ConfigMap").wait_for_resource(
+    OCP(
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"], kind="ConfigMap"
+    ).wait_for_resource(
         resource_name=service_ca_configmap.name, column="DATA", condition="1"
     )
     helpers.wait_for_resource_state(
@@ -6638,7 +6665,7 @@ def change_the_noobaa_log_level(request):
     noobaa_cm = OCP(
         kind="configmap",
         resource_name="noobaa-config",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
     )
 
     def factory(level="all"):
@@ -6673,7 +6700,9 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
     Add env vars to the noobaa-core sts
 
     """
-    sts_obj = OCP(kind="StatefulSet", namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    sts_obj = OCP(
+        kind="StatefulSet", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+    )
     yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
     op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
 

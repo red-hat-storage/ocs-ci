@@ -9,14 +9,15 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.14.0",
+    version="4.15.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
     license="MIT",
+    python_requires=">3.8.1",
     install_requires=[
         "apache-libcloud==3.1.0",
-        "cryptography==39.0.1",
+        "cryptography==41.0.5",
         "docopt==0.6.2",
         # https://pypi.org/project/gevent/ the latest version resolves problem for Mac M1 chips
         # This issue is caused by a program attempting to load an x86_64-only library from a native arm64 process.
@@ -75,13 +76,13 @@ setup(
         # compatible systems. Resolves problem for m1 Mac chips
         "greenlet==1.1.2",
         "ovirt-engine-sdk-python==4.4.11",
-        "junitparser",
+        "junitparser==3.1.0",
         "flaky==3.7.0",
-        "ocp-network-split",
-        "pyopenssl",
-        "pyparsing ==2.4.7",
+        "ocp-network-split==0.3.0",
+        "pyopenssl==23.3.0",
+        "pyparsing==2.4.7",
         "mysql-connector-python==8.0.27",
-        "pytest-repeat",
+        "pytest-repeat==0.9.3",
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
         "protobuf==4.21.7",
@@ -89,7 +90,14 @@ setup(
         "psutil==5.9.0",
         "azure-identity==1.12.0",
         "azure-mgmt-storage==21.0.0",
-        "fauxfactory",
+        "fauxfactory==3.1.0",
+        "google-api-core==2.11.0",
+        "google-api-python-client==2.105.0",
+        "google-auth-httplib2==0.1.1",
+        "google-cloud-core==2.3.2",
+        "google-crc32c==1.5.0",
+        "google-resumable-media==2.4.1",
+        "googleapis-common-protos==1.59.0",
     ],
     entry_points={
         "console_scripts": [

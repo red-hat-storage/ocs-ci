@@ -5,6 +5,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
@@ -25,6 +26,7 @@ if config.RUN.get("rdr_relocate_via_ui"):
 
 @acceptance
 @tier1
+@turquoise_squad
 @pytest.mark.polarion_id(polarion_id_relocate)
 class TestRelocate:
     """

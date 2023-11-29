@@ -83,6 +83,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
     get_osd_count,
+    StorageCluster,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -351,6 +352,46 @@ class Deployment(object):
                             "ocs_registry_image", None
                         )
                         ocs_install_verification(ocs_registry_image=ocs_registry_image)
+                # if we have Globalnet enabled in case of submariner with RDR
+                # we need to add a flag to storagecluster
+                if (
+                    config.ENV_DATA.get("enable_globalnet", True)
+                    and config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
+                ):
+                    for cluster in get_non_acm_cluster_config():
+                        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                        storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+                        logger.info(
+                            "Updating the StorageCluster resource for globalnet"
+                        )
+                        storage_cluster = StorageCluster(
+                            resource_name=storage_cluster_name,
+                            namespace=config.ENV_DATA["cluster_namespace"],
+                        )
+                        storage_cluster.reload_data()
+                        storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
+                        ptch = (
+                            f'\'{{"spec": {{"network": {{"multiClusterService": '
+                            f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
+                        )
+                        ptch_cmd = (
+                            f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+                            f"-n openshift-storage  --type merge --patch {ptch}"
+                        )
+                        run_cmd(ptch_cmd)
+                        ocs_registry_image = config.DEPLOYMENT.get(
+                            "ocs_registry_image", None
+                        )
+                        storage_cluster.reload_data()
+                        assert (
+                            storage_cluster.data.get("spec")
+                            .get("network")
+                            .get("multiClusterService")
+                            .get("enabled")
+                        ), "Failed to update StorageCluster globalnet"
+                        ocs_install_verification(
+                            timeout=2000, ocs_registry_image=ocs_registry_image
+                        )
                 config.reset_ctx()
         else:
             logger.warning("OCS deployment will be skipped")
@@ -1559,6 +1600,12 @@ class Deployment(object):
                 mcg_only_post_deployment_checks()
                 return
 
+            # get ODF version and set MGR count based on ODF version
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            mgr_count = constants.MGR_COUNT_415
+            if ocs_version < version.VERSION_4_15:
+                mgr_count = constants.MGR_COUNT
+
             pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
             cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
             # Check for Ceph pods
@@ -1570,7 +1617,10 @@ class Deployment(object):
                 timeout=mon_pod_timeout,
             )
             assert pod.wait_for_resource(
-                condition="Running", selector="app=rook-ceph-mgr", timeout=600
+                condition="Running",
+                selector="app=rook-ceph-mgr",
+                resource_count=mgr_count,
+                timeout=600,
             )
             assert pod.wait_for_resource(
                 condition="Running",
@@ -1583,7 +1633,6 @@ class Deployment(object):
             validate_cluster_on_pvc()
 
             # check for odf-console
-            ocs_version = version.get_semantic_ocs_version_from_config()
             if ocs_version >= version.VERSION_4_9:
                 assert pod.wait_for_resource(
                     condition="Running", selector="app=odf-console", timeout=600

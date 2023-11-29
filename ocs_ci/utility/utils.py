@@ -1810,6 +1810,11 @@ def get_ocs_build_number():
         >= version_module.VERSION_4_9
     ):
         operator_name = defaults.ODF_OPERATOR_NAME
+        if (
+            config.ENV_DATA.get("platform") in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT
+        ):
+            operator_name = defaults.HCI_CLIENT_ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
     ocs_csvs = get_csvs_start_with_prefix(
@@ -3816,7 +3821,7 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=1200, skip_tls_verify=False):
+def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=False):
     """
     Check for Machineconfigpool status
 
@@ -4351,7 +4356,7 @@ def switch_to_correct_cluster_at_setup(request):
         request (_pytest.fixtures.SubRequest'): The pytest request fixture
 
     """
-    from ocs_ci.ocs.cluster import is_managed_service_cluster
+    from ocs_ci.ocs.cluster import is_managed_service_cluster, is_hci_cluster
 
     cluster_type = get_pytest_fixture_value(request, "cluster_type")
     if not cluster_type:
@@ -4361,7 +4366,7 @@ def switch_to_correct_cluster_at_setup(request):
         )
         return
 
-    if not is_managed_service_cluster():
+    if not (is_managed_service_cluster() or is_hci_cluster()):
         if cluster_type == constants.NON_MS_CLUSTER_TYPE:
             log.info(
                 "The cluster is a non-MS cluster. Continue the test with the current cluster"

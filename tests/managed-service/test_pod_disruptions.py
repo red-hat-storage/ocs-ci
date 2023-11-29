@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
     ignore_leftover_label,
-    managed_service_required,
+    provider_client_ms_platform_required,
 )
 from ocs_ci.ocs.managedservice import patch_consumer_toolbox
 from ocs_ci.ocs.ocp import OCP
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 @yellow_squad
 @tier4c
-@managed_service_required
+@provider_client_ms_platform_required
 @ignore_leftover_label(constants.TOOL_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3924")
 class TestPodDisruptions(ManageTest):
@@ -42,7 +42,7 @@ class TestPodDisruptions(ManageTest):
         """
         self.provider_cluster_index = config.get_provider_index()
         self.consumer_indexes = config.get_consumer_indexes_list()
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
             # Get the index of current cluster
             initial_cluster_index = config.cur_index
 

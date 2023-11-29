@@ -3,7 +3,7 @@ import logging
 
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     polarion_id,
@@ -23,7 +23,7 @@ class TestDisableMCGExternalService:
         # get noobaa object
         noobaa_ocp_obj = OCP(
             kind="noobaa",
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="noobaa",
         )
 
@@ -73,7 +73,7 @@ class TestDisableMCGExternalService:
 
         # verify that services are now Cluster IP
         service_obj = OCP(
-            kind="service", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind="service", namespace=config.ENV_DATA["cluster_namespace"]
         )
         services = ["s3", "sts"]
 

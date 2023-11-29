@@ -7,6 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     on_prem_platform_required,
+    red_squad,
     skipif_external_mode,
     tier1,
 )
@@ -22,6 +23,7 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 log = logging.getLogger(__name__)
 
 
+@red_squad
 @on_prem_platform_required
 class TestRGWRoutes:
     """

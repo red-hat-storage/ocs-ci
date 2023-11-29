@@ -7,7 +7,13 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.constants import MS_CONSUMER_TYPE, MS_PROVIDER_TYPE, NON_MS_CLUSTER_TYPE
+from ocs_ci.ocs.constants import (
+    MS_CONSUMER_TYPE,
+    MS_PROVIDER_TYPE,
+    NON_MS_CLUSTER_TYPE,
+    HCI_PROVIDER,
+    HCI_CLIENT,
+)
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_pods_having_label, Pod
 from ocs_ci.utility import templating
@@ -386,6 +392,8 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
         is_ms_consumer_cluster,
         is_ms_provider_cluster,
         is_managed_service_cluster,
+        is_hci_client_cluster,
+        is_hci_provider_cluster,
     )
 
     logger.info(f"The cluster type is: {cluster_type}")
@@ -396,7 +404,13 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
         )
         return
 
-    valid_cluster_types = [MS_CONSUMER_TYPE, MS_PROVIDER_TYPE, NON_MS_CLUSTER_TYPE]
+    valid_cluster_types = [
+        MS_CONSUMER_TYPE,
+        MS_PROVIDER_TYPE,
+        NON_MS_CLUSTER_TYPE,
+        HCI_PROVIDER,
+        HCI_CLIENT,
+    ]
     assert (
         cluster_type in valid_cluster_types
     ), f"The cluster type {cluster_type} does not appear in the correct cluster types {valid_cluster_types}"
@@ -404,9 +418,19 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
     if cluster_type == MS_CONSUMER_TYPE:
         assert is_ms_consumer_cluster(), "The cluster is not an MS consumer cluster"
         logger.info("The cluster is an MS consumer cluster as expected")
-    elif cluster_type == MS_PROVIDER_TYPE:
+    elif cluster_type == MS_PROVIDER_TYPE and (
+        config.ENV_DATA["platform"].lower()
+        not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    ):
+        # MS_PROVIDER_TYPE and HCI_PROVIDER are both "provider"
         assert is_ms_provider_cluster(), "The cluster is not an MS provider cluster"
         logger.info("The cluster is an MS provider cluster as expected")
+    elif cluster_type == HCI_CLIENT:
+        assert is_hci_client_cluster(), "The cluster is not an HCI client cluster"
+        logger.info("The cluster is an HCI client cluster as expected")
+    elif cluster_type == HCI_PROVIDER:
+        assert is_hci_provider_cluster(), "The cluster is not an HCI provider cluster"
+        logger.info("The cluster is an HCI provider cluster as expected")
     elif cluster_type == NON_MS_CLUSTER_TYPE:
         assert (
             not is_managed_service_cluster()

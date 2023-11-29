@@ -235,12 +235,12 @@ class PVC(OCS):
         from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
 
         assert self.provisioner in constants.OCS_PROVISIONERS, "Unknown provisioner"
-        if self.provisioner == "openshift-storage.rbd.csi.ceph.com":
+        if "rbd.csi.ceph.com" in self.provisioner:
             snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
             snapshotclass = helpers.default_volumesnapshotclass(
                 constants.CEPHBLOCKPOOL
             ).name
-        elif self.provisioner == "openshift-storage.cephfs.csi.ceph.com":
+        elif "cephfs.csi.ceph.com" in self.provisioner:
             snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
             snapshotclass = helpers.default_volumesnapshotclass(
                 constants.CEPHFILESYSTEM

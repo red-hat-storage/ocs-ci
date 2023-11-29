@@ -23,7 +23,9 @@ log = logging.getLogger(__name__)
 @tier4c
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
-@ignore_leftover_label(constants.drain_canary_pod_label)
+@ignore_leftover_label(
+    constants.drain_canary_pod_label, constants.ROOK_CEPH_DETECT_VERSION_LABEL
+)
 @pytest.mark.polarion_id("OCS-2413")
 class TestResourceDeletionDuringPvcClone(ManageTest):
     """
@@ -41,7 +43,7 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
         Create PVCs and pods
 
         """
-        if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
             # Get the index of current cluster
             initial_cluster_index = config.cur_index
             # Get the index of provider cluster. provider_index will be used as a flag to decide whether switching to

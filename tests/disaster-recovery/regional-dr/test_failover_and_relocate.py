@@ -6,6 +6,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -36,6 +37,7 @@ if config.RUN.get("rdr_failover_via_ui"):
 #  This test case is added in ODF 4.13 test plan.
 
 
+@turquoise_squad
 @acceptance
 @tier1
 class TestFailoverAndRelocate:

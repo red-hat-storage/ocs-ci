@@ -39,7 +39,7 @@ class TestSelinuxrelabel(E2ETest):
             pod_obj = helpers.create_pod(
                 interface_type=constants.CEPHFS_INTERFACE,
                 pvc_name=self.pvc_obj.name,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 sa_name=self.service_account_obj.name,
                 dc_deployment=True,
                 pod_dict_path=constants.PERF_DC_YAML,
@@ -135,7 +135,7 @@ class TestSelinuxrelabel(E2ETest):
             }
         ]
         ocp_pvc = ocp.OCP(
-            kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
         )
         ocp_pvc.patch(
             resource_name=self.pvc_obj.name,
@@ -157,7 +157,7 @@ class TestSelinuxrelabel(E2ETest):
         """
         try:
             # Get the pod conditions
-            pod = ocp.OCP(kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+            pod = ocp.OCP(kind="pod", namespace=config.ENV_DATA["cluster_namespace"])
             conditions = pod.exec_oc_cmd(
                 f"get pod {pod_name} -n openshift-storage -o jsonpath='{{.status.conditions}}'"
             )
@@ -218,7 +218,7 @@ class TestSelinuxrelabel(E2ETest):
 
         """
         self.ocp_project = ocp.OCP(
-            kind=constants.NAMESPACE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.NAMESPACE, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
         # Create cephfs pvc
@@ -249,7 +249,7 @@ class TestSelinuxrelabel(E2ETest):
         # Get the md5sum of some random files
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         num_of_files = random.randint(3, 9)
-        pod = ocp.OCP(kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        pod = ocp.OCP(kind="pod", namespace=config.ENV_DATA["cluster_namespace"])
         random_files = pod.exec_oc_cmd(
             f"exec -it {self.pod_obj.name} -- /bin/bash"
             f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
@@ -296,7 +296,7 @@ class TestSelinuxrelabel(E2ETest):
         node_name = res_pod.get_pod_node(pod_obj=self.pod_obj).name
 
         # Check SeLinux Relabeling is set to false
-        oc_cmd = ocp.OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
         cmd1 = "crictl inspect $(crictl ps --name perf -q)"
         output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
         key = '"selinuxRelabel": false'

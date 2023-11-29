@@ -134,6 +134,9 @@ class TestMetadataUnavailable(ManageTest):
         ), f"PVC {pvc_obj.name} is not deleted"
 
 
+@pytest.mark.skip(
+    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8759"
+)
 @tier1
 @skipif_ocs_version("<4.12")
 @skipif_ocp_version("<4.12")
@@ -221,6 +224,9 @@ class TestDefaultMetadataDisabled(ManageTest):
         ), f"PVC {cloned_pvc_obj.name} is not deleted"
 
 
+@pytest.mark.skip(
+    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8759"
+)
 @skipif_ocs_version("<4.12")
 @skipif_ocp_version("<4.12")
 @skipif_managed_service
