@@ -203,6 +203,13 @@ deployment_4_12 = {
     "standard_csi_sc": ("standard-csi-link", By.ID),
 }
 
+deployment_4_15 = {
+    "drop_down_projects": (
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        By.CSS_SELECTOR,
+    )
+}
+
 generic_locators = {
     "project_selector": (
         'button[class="pf-c-dropdown__toggle pf-m-plain"],'
@@ -584,7 +591,7 @@ page_nav = {
     ),
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
     "drop_down_projects": (
-        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
@@ -1670,6 +1677,7 @@ locators = {
             **deployment_4_10,
             **deployment_4_11,
             **deployment_4_12,
+            **deployment_4_15,
         },
         "obc": obc,
         "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
