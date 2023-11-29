@@ -90,7 +90,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(interface=interface, pvc=pvc_obj, status=None)
             )
         for pod in self.pod_objs:
-            wait_for_resource_state(pod, constants.STATUS_RUNNING, 90)
+            wait_for_resource_state(pod, constants.STATUS_RUNNING, 180)
             pod.reload()
 
     def run_and_verify_io(self, pods_list, do_setup=True):
@@ -223,7 +223,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(interface=interface, pvc=pvc_obj, status=None)
             )
         for pod in new_pod_objs:
-            wait_for_resource_state(pod, constants.STATUS_RUNNING, 90)
+            wait_for_resource_state(pod, constants.STATUS_RUNNING, 180)
             pod.reload()
 
         # Run IO on new pods
