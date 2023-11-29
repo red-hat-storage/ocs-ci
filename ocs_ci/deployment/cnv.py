@@ -141,6 +141,7 @@ class CNVInstaller(object):
         csv = get_csvs_start_with_prefix(
             csv_prefix=constants.KUBEVIRT_HCO_PREFIX, namespace=self.namespace
         )
+        logger.info(f"csvs found: {csv}")
         csv_name = csv[0]["metadata"]["name"]
         csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
         csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
@@ -206,16 +207,22 @@ class CNVInstaller(object):
         useEmulation.
 
         """
-        logger.info("Enabling software emulation on the cluster")
-        ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
-        annonation = (
-            'kubevirt.kubevirt.io/jsonpatch=\'[{ "op": "add", "path": "/spec/configuration/developerConfiguration",'
-            ' "value": { "useEmulation": true } }]\''
-        )
-        ocp.annotate(
-            annotation=annonation, resource_name=constants.KUBEVIRT_HYPERCONVERGED
-        )
-        logger.info("successfully enabled software emulation on the cluster")
+        if (
+            config.ENV_DATA["platform"].lower() == "baremetal"
+            and config.DEPLOYMENT.get("local_storage") is True
+        ):
+            logger.info("Skipping enabling software emulation")
+        else:
+            logger.info("Enabling software emulation on the cluster")
+            ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
+            annonation = (
+                'kubevirt.kubevirt.io/jsonpatch=\'[{ "op": "add", "path": "/spec/configuration/developerConfiguration",'
+                ' "value": { "useEmulation": true } }]\''
+            )
+            ocp.annotate(
+                annotation=annonation, resource_name=constants.KUBEVIRT_HYPERCONVERGED
+            )
+            logger.info("successfully enabled software emulation on the cluster")
 
     def post_install_verification(self):
         """
