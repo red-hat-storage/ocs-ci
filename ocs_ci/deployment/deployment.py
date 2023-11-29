@@ -553,8 +553,7 @@ class Deployment(object):
             config.DEPLOYMENT.get("cnv_deployment")
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
-            cnv = CNVInstaller()
-            cnv.deploy_cnv()
+            CNVInstaller().deploy_cnv()
 
     def get_rdr_conf(self):
         """

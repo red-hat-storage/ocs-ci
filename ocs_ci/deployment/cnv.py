@@ -20,7 +20,6 @@ from ocs_ci.ocs.constants import (
     CNV_SUBSCRIPTION_YAML,
     CNV_CATALOG_SOURCE_YAML,
     CNV_HYPERCONVERGED_YAML,
-    CNV_OPERATOR_NIGHTLY_CATALOG_SOURCE_NAME,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
@@ -52,6 +51,7 @@ class CNVInstaller(object):
         """
         logger.info("Adding CatalogSource for CNV")
         cnv_catalog_source_data = templating.load_yaml(CNV_CATALOG_SOURCE_YAML)
+        cnv_catalog_source_name = cnv_catalog_source_data.get("metadata").get("name")
         cnv_image_tag = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
         cnv_catalog_source_data["spec"][
             "image"
@@ -64,7 +64,7 @@ class CNVInstaller(object):
         )
         run_cmd(f"oc apply -f {cnv_catalog_source_manifest.name}", timeout=2400)
         cnv_catalog_source = CatalogSource(
-            resource_name=CNV_OPERATOR_NIGHTLY_CATALOG_SOURCE_NAME,
+            resource_name=cnv_catalog_source_name,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
 
@@ -88,7 +88,7 @@ class CNVInstaller(object):
         except exceptions.CommandFailed as ef:
             if (
                 f'project.project.openshift.io "{self.namespace}" already exists'
-                not in str(ef)
+                in str(ef)
             ):
                 logger.info(f"Namespace {self.namespace} already present")
                 raise ef
@@ -111,8 +111,7 @@ class CNVInstaller(object):
         # Create an operator group for CNV
         logger.info("Creating OperatorGroup for CNV")
         self.create_cnv_operatorgroup()
-        cnv_subscription_yaml_file = CNV_SUBSCRIPTION_YAML
-        cnv_subscription_yaml_data = templating.load_yaml(cnv_subscription_yaml_file)
+        cnv_subscription_yaml_data = templating.load_yaml(CNV_SUBSCRIPTION_YAML)
         cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
         cnv_sub_channel = f"nightly-{cnv_channel_version}"
         cnv_subscription_yaml_data["spec"]["channel"] = f"{cnv_sub_channel}"
