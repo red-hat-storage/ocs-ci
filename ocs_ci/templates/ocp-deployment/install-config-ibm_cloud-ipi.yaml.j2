@@ -28,6 +28,9 @@ networking:
   networkType: {{ network_type | default('OVNKubernetes') }}
   serviceNetwork:
   - {{ service_network_cidr | default('172.30.0.0/16') }}
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
 platform:
   ibmcloud:
     region: {{ region | default('us-south') }}
