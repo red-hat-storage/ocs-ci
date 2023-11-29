@@ -108,7 +108,13 @@ def verify_s3_object_integrity(
                 command=f"md5sum {original_object_path} {result_object_path}"
             )
         )
-    logger.info(f"\nMD5 of {md5sum[1]}: {md5sum[0]} \nMD5 of {md5sum[3]}: {md5sum[2]}")
+    try:
+        logger.info(
+            f"\nMD5 of {md5sum[1]}: {md5sum[0]} \nMD5 of {md5sum[3]}: {md5sum[2]}"
+        )
+    except IndexError as e:
+        logger.error(f"Failed to parse md5sum output: {md5sum}")
+        raise e
     if md5sum[0] == md5sum[2]:
         logger.info(
             f"Passed: MD5 comparison for {original_object_path} and {result_object_path}"
