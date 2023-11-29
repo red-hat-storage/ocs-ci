@@ -17,7 +17,7 @@ setup(
     python_requires=">3.8.1",
     install_requires=[
         "apache-libcloud==3.1.0",
-        "cryptography==41.0.5",
+        "cryptography==41.0.6",
         "docopt==0.6.2",
         # https://pypi.org/project/gevent/ the latest version resolves problem for Mac M1 chips
         # This issue is caused by a program attempting to load an x86_64-only library from a native arm64 process.
