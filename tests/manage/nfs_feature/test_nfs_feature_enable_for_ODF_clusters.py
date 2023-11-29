@@ -90,7 +90,7 @@ class TestNfsEnable(ManageTest):
         By default in our jenkins jobs we are creating one of our custom config file,
         so we can make sure
         ENV_DATA:
-            nfs_client_ip: "10.0.151.68"
+            nfs_client_ip: "10.xx.xxx.xx"
             nfs_client_user: "root"
             nfs_client_private_key: constants.SSH_PRIV_KEY
         these values are provided in all our automation runs in Jenkins.
@@ -98,7 +98,7 @@ class TestNfsEnable(ManageTest):
         But if someone will run locally, they will need to create custom config file and provide that via
         --ocsci-conf in order to run the external nfs consume tests. Example:
         ENV_DATA:
-            nfs_client_ip: "10.10.10.10"
+            nfs_client_ip: "10.xx.xxx.xx"
             nfs_client_user: "root"
             nfs_client_private_key: "<path to ssh private key>"
 
