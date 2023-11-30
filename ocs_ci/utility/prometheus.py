@@ -437,7 +437,7 @@ class PrometheusAPI(object):
                 },
             ):
                 response = sample_response
-                if response.status_code == 503:
+                if not response.ok:
                     logger.warning(f"There was an error in response: {response.text}")
                     logger.warning("Refreshing connection")
                     self.refresh_connection()
