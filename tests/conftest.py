@@ -2425,7 +2425,7 @@ def awscli_pod_client(request):
         int: client cluster context
     """
     original_cluster = ocsci_config.cluster_ctx
-    ocsci_config.switch_to_client()
+    ocsci_config.switch_to_consumer()
     client_cluster = ocsci_config.cluster_ctx
     log.info(f"Switched to client with index {client_cluster}")
     awscli_pods = get_pods_having_label(

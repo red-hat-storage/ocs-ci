@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     acceptance,
     performance,
+    provider_client_ms_platform_required,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -435,3 +436,36 @@ class TestBucketIO(MCGTest):
         logger.info(
             "Put object operation is preserving ContentEncoding as a object metadata"
         )
+
+    @tier1
+    @provider_client_ms_platform_required
+    def test_write_file_to_bucket_on_client(
+        self,
+        mcg_obj_client,
+        awscli_pod_client,
+        bucket_factory,
+        interface,
+    ):
+        """
+        Test object IO using the S3 SDK on bucket created on provider and used on client.
+        """
+        # Retrieve a list of all objects on the test-objects bucket and
+        # downloads them to the pod
+        bucketname = bucket_factory()[0].name
+
+        original_cluster = config.cluster_ctx
+        config.switch_to_consumer()
+
+        full_object_path = f"s3://{bucketname}"
+        downloaded_files = awscli_pod_client.exec_cmd_on_pod(
+            f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
+        ).split(" ")
+        # Write all downloaded objects to the new bucket
+        sync_object_directory(
+            awscli_pod_client, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+        )
+
+        assert set(downloaded_files).issubset(
+            obj.key for obj in mcg_obj_client.s3_list_all_objects_in_bucket(bucketname)
+        )
+        config.switch_ctx(original_cluster)
