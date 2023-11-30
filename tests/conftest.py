@@ -7352,7 +7352,6 @@ def scale_noobaa_resources():
     log.info("Scaled noobaa pod resources")
     time.sleep(60)
 
-
 @pytest.fixture(scope="function")
 def create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(request):
     """
@@ -7442,7 +7441,8 @@ def create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(request):
     request.addfinalizer(finalizer)
     return factory
 
-@pytest.fixture(scope="class")
+
+@pytest.fixture()
 def reduce_replication_delay_setup(add_env_vars_to_noobaa_core_class):
     """
     A fixture to reduce the replication delay to one minute.
@@ -7464,7 +7464,7 @@ def reduce_replication_delay_setup(add_env_vars_to_noobaa_core_class):
 
 
 @pytest.fixture()
-def log_based_replication_setup(
+def aws_log_based_replication_setup(
     awscli_pod_session, mcg_obj_session, bucket_factory, reduce_replication_delay_setup
 ):
     """
@@ -7480,6 +7480,8 @@ def log_based_replication_setup(
         Bucket: The source bucket
         Bucket: The target bucket
     """
+
+    reduce_replication_delay_setup()
 
     def factory(bucketclass_dict=None):
         log.info("Starting log-based replication setup")
@@ -7517,4 +7519,3 @@ def log_based_replication_setup(
         return mockup_logger, source_bucket, target_bucket
 
     return factory
-

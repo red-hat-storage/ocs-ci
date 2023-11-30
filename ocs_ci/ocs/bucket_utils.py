@@ -2040,25 +2040,6 @@ def patch_replication_policy_to_bucketclass(
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
-def remove_replication_policy(bucket_name):
-    """
-    Remove replication policy for a bucket
-
-    Args:
-        bucket_name(str): Name of the bucket
-
-    """
-    replication_policy_patch_dict = {
-        "spec": {"additionalConfig": {{"replicationPolicy": ""}}}
-    }
-
-    OCP(
-        kind="obc",
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=bucket_name,
-    ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
-
-
 def random_object_round_trip_verification(
     io_pod,
     bucket_name,
@@ -2341,6 +2322,7 @@ def sample_if_objects_expired(mcg_obj, bucket_name, prefix="", timeout=600, slee
 
     assert sampler.wait_for_func_status(result=True), f"{message} are not expired"
     logger.info(f"{message} are expired")
+
 
 def delete_all_noobaa_buckets(mcg_obj, request):
     """
@@ -2634,10 +2616,6 @@ def upload_test_objects_to_source_and_wait_for_replication(
     logger.info("Uploading test objects and waiting for replication to complete")
     mockup_logger.upload_test_objs_and_log(source_bucket.name)
 
-    logger.info(
-        "Resetting the noobaa-core pod to trigger the replication background worker"
-    )
-
     assert compare_bucket_object_list(
         mcg_obj,
         source_bucket.name,
@@ -2656,14 +2634,9 @@ def delete_objects_from_source_and_wait_for_deletion_sync(
     logger.info("Deleting source objects and waiting for deletion sync with target")
     mockup_logger.delete_all_objects_and_log(source_bucket.name)
 
-    logger.info(
-        "Resetting the noobaa-core pod to trigger the replication background worker"
-    )
-
     assert compare_bucket_object_list(
         mcg_obj,
         source_bucket.name,
         target_bucket.name,
         timeout=timeout,
     ), f"Deletion sync failed to complete in {timeout} seconds"
-

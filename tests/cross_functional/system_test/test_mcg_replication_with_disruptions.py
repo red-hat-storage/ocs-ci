@@ -5,6 +5,7 @@ import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     E2ETest,
     skipif_ocs_version,
@@ -26,7 +27,6 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     upload_test_objects_to_source_and_wait_for_replication,
     update_replication_policy,
-    remove_replication_policy,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -37,8 +37,8 @@ from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
     get_noobaa_db_pod,
     get_noobaa_core_pod,
-    wait_for_storage_pods,
     get_noobaa_pods,
+    wait_for_noobaa_pods_running,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -248,7 +248,7 @@ class TestLogBasedReplicationWithDisruptions:
     def test_log_based_replication_with_disruptions(
         self,
         mcg_obj_session,
-        log_based_replication_setup,
+        aws_log_based_replication_setup,
         noobaa_db_backup,
         noobaa_db_recovery_from_backup,
         setup_mcg_bg_features,
@@ -281,10 +281,10 @@ class TestLogBasedReplicationWithDisruptions:
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
-            skip_any_features=["nsfs", "rgw kafka", "caching"],
+            skip_any_features=["nsfs", "rgw kafka", "caching", "replication"],
         )
 
-        mockup_logger, source_bucket, target_bucket = log_based_replication_setup()
+        mockup_logger, source_bucket, target_bucket = aws_log_based_replication_setup()
 
         # upload test objects to the bucket and verify replication
         upload_test_objects_to_source_and_wait_for_replication(
@@ -334,7 +334,7 @@ class TestLogBasedReplicationWithDisruptions:
         noobaa_pods = get_noobaa_pods()
 
         # Get noobaa PVC before execution
-        noobaa_pvc_obj = get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
+        noobaa_pvc_obj = get_pvc_objs(pvc_names=[constants.NOOBAA_DB_PVC_NAME])
 
         _, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
 
@@ -347,12 +347,12 @@ class TestLogBasedReplicationWithDisruptions:
             mcg_obj_session,
             source_bucket.name,
             target_bucket.name,
-            timeout=600,
+            timeout=300,
         ), "Deletion sync was done but not expected"
 
         # Do noobaa db recovery and see if the deletion sync works now
         noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
-        wait_for_storage_pods()
+        wait_for_noobaa_pods_running(timeout=420)
 
         assert compare_bucket_object_list(
             mcg_obj_session,
@@ -363,20 +363,19 @@ class TestLogBasedReplicationWithDisruptions:
 
         # Remove replication policy and upload some objects to the bucket
         # make sure the replication itself doesn't take place
-        remove_replication_policy(source_bucket.name)
+        disable_replication = source_bucket.replication_policy
+        disable_replication["rules"] = []
+        update_replication_policy(source_bucket.name, dict())
+
         logger.info("Uploading test objects and waiting for replication to complete")
         mockup_logger.upload_test_objs_and_log(source_bucket.name)
-
-        logger.info(
-            "Resetting the noobaa-core pod to trigger the replication background worker"
-        )
 
         assert not compare_bucket_object_list(
             mcg_obj_session,
             source_bucket.name,
             target_bucket.name,
-            timeout=600,
-        ), f"Standard replication completed even though replication policy is removed"
+            timeout=300,
+        ), "Standard replication completed even though replication policy is removed"
 
         validate_mcg_bg_features(
             feature_setup_map,
