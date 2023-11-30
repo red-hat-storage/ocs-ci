@@ -7,6 +7,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutException
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ocs_upgrade import OCSUpgrade, verify_image_versions
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
@@ -14,6 +15,8 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
 )
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -44,6 +47,11 @@ class DRUpgrade(OCSUpgrade):
         self.upgrade_in_current_source = upgrade_in_current_source
         self.external_cluster = None
         self.operator_name = None
+        self.subscription_name = None
+        self.pre_upgrade_data = None
+        self.post_upgrade_data = None
+        # Upgraded phases [pre_upgrade, post_upgrade]
+        self.upgrade_phase = "pre_upgrade"
 
         super.__init__(
             self.namespace,
@@ -74,7 +82,7 @@ class DRUpgrade(OCSUpgrade):
         # we need to update subscriptions individually for DR operator as we don't want
         # to upgrade ODF at the time of DR operator (MCO, DR Hub), ODF would follow the upgrade
         # of DR operators
-        self.update_subscription(self.channel)
+        self.update_subscription(self.channel, self.subscription_name)
         # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
         # we need to wait and approve install plan, otherwise it's approved in the
         # subscribe_ocs method.
@@ -98,12 +106,84 @@ class DRUpgrade(OCSUpgrade):
         old_image = self.get_images_post_upgrade(
             self.channel, self.pre_upgrade_images, self.upgrade_version
         )
-
         verify_image_versions(
             old_image,
             self.get_parsed_versions()[1],
             self.version_before_upgrade,
         )
+
+    def update_subscription(self, channel, subscription_name):
+        subscription = OCP(
+            resource_name=subscription_name,
+            kind="subscription",
+            # namespace could be different on managed clusters
+            # TODO: Handle different namespaces
+            namespace=constants.OPENSHIFT_OPERATORS,
+        )
+        current_source = subscription.data["spec"]["source"]
+        log.info(f"Current MCO source: {current_source}")
+        mco_source = (
+            current_source
+            if self.upgrade_in_current_source
+            else constants.OPERATOR_CATALOG_SOURCE_NAME
+        )
+        patch_subscription_cmd = (
+            f"patch subscription {subscription_name} "
+            f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
+            f'"{self.channel}", "source": "{mco_source}"}}}}\''
+        )
+        subscription.exec_oc_cmd(patch_subscription_cmd, out_yaml_format=False)
+
+    def validate_upgrade(self):
+        # In case of both MCO and DRhub operator, validation steps are similar
+        # just the resource names changes
+        assert (
+            self.post_upgrade_data["pod_status"] == "Running"
+        ), f"Pod {self.pod_name_pattern} not in Running state post upgrade"
+        assert (
+            self.post_upgrade_data["age"] <= self.pre_upgrade_data["age"]
+        ), f"{self.pod_name_pattern} didn't restart after upgrade"
+        assert (
+            self.post_upgrade_data["version"] != self.pre_upgrade_data["version"]
+        ), "CSV version not upgraded"
+        check_all_csvs_are_succeeded(namespace=self.namespace)
+
+    def collect_data(self):
+        """
+        Collect DR operator related pods and csv data
+        """
+        pod_data = pod.get_all_pods(namespace=self.namespace)
+        for p in pod_data:
+            if self.pod_name_pattern in p["metadata"]["name"]:
+                pod_obj = OCP(
+                    namespace=self.namespace,
+                    resource_name=p["metadata"]["name"],
+                    kind="Pod",
+                )
+                if self.upgrade_phase == "pre_upgrade":
+                    self.pre_upgrade_data["age"] = pod_obj.get_resource(column="AGE")
+                    self.pre_upgrade_data["pod_status"] = pod_obj.get_resource_status()
+                if self.upgrade_phse == "post_upgrade":
+                    self.post_upgrade_data["age"] = pod_obj.get_resource(column="AGE")
+                    self.post_upgrade_data["pod_status"] = pod_obj.get_resource_status()
+
+        # get pre-upgrade csv for MCO
+        csv_objs = CSV(namespace=self.namespace)
+        for csv in csv_objs:
+            if self.operator_name in csv["metadata"]["name"]:
+                csv_obj = CSV(
+                    namespace=self.namespace, resource_name=csv["metadata"]["name"]
+                )
+                if self.upgrade_phase == "pre_upgrade":
+                    self.pre_upgrade_data["version"] = csv_obj.get_resource(
+                        column="VERSION"
+                    )
+                if self.upgrade_phase == "post_upgrade":
+                    self.post_upgrade_data["version"] = csv_obj.get_resource(
+                        column="VERSION"
+                    )
+        # Make sure all csvs are in succeeded state
+        check_all_csvs_are_succeeded(namespace=self.namespace)
 
 
 class MultiClusterOrchestratorUpgrade(DRUpgrade):
@@ -115,9 +195,25 @@ class MultiClusterOrchestratorUpgrade(DRUpgrade):
     def __init__(self):
         super.__init__()
         self.operator_name = defaults.MCO_OPERATOR_NAME
-    
+        self.subscription_name = constants.MCO_SUBSCRIPTION
+
     def run_upgrade(self):
-        return super().run_upgrade()
+        # Collect some pre-upgrade data for comparision after the upgrade
+        self.pod_name_pattern = "odfmo-contoller-manager"
+        self.collect_data()
+        assert (
+            self.pre_upgrade_data["pod_status"] == "Running"
+        ), "odfmo-controller pod is not in Running status"
+        super().run_upgrade()
+        self.collect_data()
+        self.upgrade_phase = "post-upgrade"
+        self.validate_upgrade()
+
+    def validate_upgrade(self):
+        # validate csv VERSION, PHASE==Succeeded
+        # validate  odfmo-controller-manager pods age
+        super().validate_upgrade()
+
 
 class DRHubUpgrade(DRUpgrade):
     """
@@ -128,3 +224,20 @@ class DRHubUpgrade(DRUpgrade):
     def __init__(self):
         super.__init__()
         self.operator_name = defaults.DR_HUB_OPERATOR_NAME
+        self.subscription_name = constants.DR_HUB_OPERATOR_SUBSCRIPTION
+
+    def run_upgrade(self):
+        self.pod_name_pattern = "ramen-hub-operator"
+        self.collect_data()
+        assert (
+            self.pre_upgrade_data["pod_status"] == "Running"
+        ), "ramen-hub-operator pod is not in Running status"
+        super().run_upgrade()
+        self.upgrade_phase = "post-upgrade"
+        self.collect_data()
+        self.validate_upgrade()
+
+    def validate_upgrade(self):
+        # validate csv odr-hub-operator.v4.13.5-rhodf VERSION, PHASE
+        # validate pod/ramen-hub-operator-
+        super().validate_upgrade()
