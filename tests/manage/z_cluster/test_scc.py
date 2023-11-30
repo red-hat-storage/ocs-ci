@@ -22,6 +22,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier2,
     skipif_ocs_version,
+    skipif_hci_provider_and_client,
     brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -34,6 +35,7 @@ class TestSCC:
     @tier2
     @bugzilla("1938647")
     @polarion_id("OCS-4483")
+    @skipif_hci_provider_and_client
     def test_custom_scc_with_pod_respin(self, scc_factory):
         """
         Test if OCS deployments/pods get affected if custom scc is created

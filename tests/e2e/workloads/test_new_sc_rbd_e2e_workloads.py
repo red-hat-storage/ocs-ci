@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     ignore_leftovers,
     skipif_external_mode,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @skipif_external_mode
+@skipif_hci_provider_and_client
 @ignore_leftovers
 @tier2
 class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):

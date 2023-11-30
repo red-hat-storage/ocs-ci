@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
     skipif_external_mode,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.constants import (
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 
 @magenta_squad
+@skipif_hci_provider_and_client
 @tier2
 class TestCompressedSCAndSupportSnapClone(E2ETest):
     """
