@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -187,8 +188,16 @@ class TestDynamicPvc(ManageTest):
             logger.info(
                 f"Verify that second pod {pod_obj2.name} is still in ContainerCreating state"
             )
+            timeout = 60
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            ):
+                timeout = 180
             helpers.wait_for_resource_state(
-                resource=pod_obj2, state=constants.STATUS_CONTAINER_CREATING
+                resource=pod_obj2,
+                state=constants.STATUS_CONTAINER_CREATING,
+                timeout=timeout,
             )
             self.verify_expected_failure_event(
                 ocs_obj=pod_obj2, failure_str=expected_failure_str
@@ -201,8 +210,14 @@ class TestDynamicPvc(ManageTest):
         pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
 
         # Wait for second pod to be in Running state
+        timeout = 240
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            timeout = 360
         helpers.wait_for_resource_state(
-            resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=240
+            resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=timeout
         )
 
         logger.info(f"Verify data from second pod {pod_obj2.name}")

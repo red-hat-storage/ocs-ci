@@ -90,8 +90,14 @@ class TestPvcAssignPodNode(ManageTest):
         teardown_factory(pod_obj)
 
         # Confirm that the pod is running on the selected_node
+        timeout = 120
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            timeout = 180
         helpers.wait_for_resource_state(
-            resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
+            resource=pod_obj, state=constants.STATUS_RUNNING, timeout=timeout
         )
         pod_obj.reload()
         assert pod.verify_node_name(
@@ -168,8 +174,14 @@ class TestPvcAssignPodNode(ManageTest):
         for index in range(0, len(selected_nodes)):
             pod_obj = pod_list[index]
             selected_node = selected_nodes[index]
+            timeout = 120
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            ):
+                timeout = 180
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=timeout
             )
             pod_obj.reload()
             assert pod.verify_node_name(pod_obj, selected_node), (
