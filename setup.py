@@ -14,6 +14,7 @@ setup(
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
     license="MIT",
+    python_requires=">3.8.1",
     install_requires=[
         "apache-libcloud==3.1.0",
         "cryptography==41.0.5",
