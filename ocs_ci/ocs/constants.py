@@ -1570,6 +1570,10 @@ ARO_WORKER_SUBNET = "worker-subnet"
 ARO_MASTER_SUBNET = "master-subnet"
 ARO_WORKER_SUBNET_ADDRESS_PREFIXES = "10.0.2.0/23"
 ARO_MASTER_SUBNET_ADDRESS_PREFIXES = "10.0.0.0/23"
+MCO_SUBSCRIPTION = "odf-multicluster-orchestrator"
+DR_HUB_OPERATOR_SUBSCRIPTION = (
+    "odr-hub-operator-stable-PLACEHOLDER-redhat-operators-openshift-marketplace"
+)
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"

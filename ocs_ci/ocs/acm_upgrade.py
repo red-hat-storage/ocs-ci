@@ -9,6 +9,8 @@ import tempfile
 import requests
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import get_ocp_version, get_running_acm_version, run_cmd
 from ocs_ci.utility.version import get_semantic_version
@@ -35,6 +37,7 @@ class ACMUpgrade(object):
         self.acm_patch_subscription()
         self.annotate_mch()
         run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
+        self.validate_upgrade()
 
     def annotate_mch(self):
         annotation = f'\'{{"source": "{constants.ACM_CATSRC_NAME}"}}\''
@@ -71,5 +74,24 @@ class ACMUpgrade(object):
         run_cmd(f"oc create -f {acm_data_yaml.name}", timeout=300)
 
     def validate_upgrade(self):
-        # TODO: add validation of upgrade
-        pass
+        acm_sub = OCP(
+            namespace=self.namespace,
+            resource_name=self.operator_name,
+            kind="Subscription",
+        )
+        assert (
+            acm_sub.get()["items"][0]["spec"]["channel"]
+            == config.ENV_DATA["acm_hub_channel"]
+        )
+        logger.info("Checking ACM status")
+        acm_mch = OCP(
+            kind=constants.ACM_MULTICLUSTER_HUB,
+            namespace=constants.ACM_HUB_NAMESPACE,
+        )
+        acm_mch.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            column="STATUS",
+            timeout=720,
+            sleep=5,
+        )
