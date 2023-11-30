@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     dr_hub_upgrade,
     acm_upgrade,
 )
+from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 from ocs_ci.ocs.dr_upgrade import MultiClusterOrchestratorUpgrade, DRHubUpgrade
@@ -82,6 +83,7 @@ def test_upgrade(upgrade_stats):
     run_ocs_upgrade(upgrade_stats=upgrade_stats)
 
 
+@purple_squad
 @mco_upgrade
 @multicluster_roles(["mdr_all_acm"])
 def test_mco_upgrade():
@@ -93,6 +95,7 @@ def test_mco_upgrade():
     mco_upgrade_obj.run_upgrade()
 
 
+@purple_squad
 @dr_hub_upgrade
 @multicluster_roles(["mdr_all_acm"])
 def test_dr_hub_upgrade():
@@ -102,4 +105,15 @@ def test_dr_hub_upgrade():
     """
     dr_hub_upgrade_obj = DRHubUpgrade()
     dr_hub_upgrade_obj.run_upgrade()
->>>>>>> 4fbd44181 (Add MCO and DR HUB operator upgrades class)
+
+
+@purple_squad
+@acm_upgrade
+@multicluster_roles(["mdr_all_acm"])
+def test_acm_upgrade():
+    """
+    Test upgrade procedure for ACM operator
+
+    """
+    acm_hub_upgrade_obj = ACMUpgrade()
+    acm_hub_upgrade_obj.run_upgrade()
