@@ -77,6 +77,10 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
         # if any of the above mentioned error messages are present in the
         # describe outpout we scaled down respective deployment/job/statefulset
         if check_errors_regex(desc_out, error_messages):
+
+            if pod.status() == "ContainerStatusUnknown":
+                pod.delete()
+
             if (
                 constants.LOGWRITER_CEPHFS_LABEL.split("=")[1] in labels
                 and constants.LOGWRITER_CEPHFS_LABEL not in scaled_down
@@ -88,7 +92,7 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
                 )
                 wait_for_pods_deletion(
                     constants.LOGWRITER_CEPHFS_LABEL,
-                    timeout=180,
+                    timeout=300,
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
                 scaled_down.append(constants.LOGWRITER_CEPHFS_LABEL)
@@ -104,7 +108,7 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
                 )
                 wait_for_pods_deletion(
                     constants.LOGWRITER_RBD_LABEL,
-                    timeout=180,
+                    timeout=300,
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
                 scaled_down.append(constants.LOGWRITER_RBD_LABEL)
@@ -119,7 +123,7 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
                 )
                 wait_for_pods_deletion(
                     constants.LOGREADER_CEPHFS_LABEL,
-                    timeout=180,
+                    timeout=300,
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
                 scaled_down.append(constants.LOGREADER_CEPHFS_LABEL)

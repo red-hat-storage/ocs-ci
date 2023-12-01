@@ -710,13 +710,14 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
+def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
     """
     Get the Ceph tools pod
 
     Args:
         skip_creating_pod (bool): True if user doesn't want to create new tool box
             if it doesn't exist
+        wait (bool): True if you want to wait for the tool pods to be Running
         namespace: Namespace of OCS
 
     Returns:
@@ -760,8 +761,14 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
         setup_ceph_toolbox()
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
-    @retry(NoRunningCephToolBoxException, tries=5, delay=10)
-    def get_tools_pod_objs():
+    def _get_tools_pod_objs():
+        """
+        Method to get the Running ceph tool box pod objects
+
+        Returns:
+            List: of pod objects
+
+        """
         ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=namespace,
@@ -787,19 +794,32 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
 
         # In the case of node failure, the CT pod will be recreated with the old
         # one in status Terminated. Therefore, need to filter out the Terminated pod
+
+        # Update the OCP pod object without the selector
+        ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=namespace,
+        )
         running_ct_pods = list()
         for pod in ct_pod_items:
-            if (
-                ocp_pod_obj.get_resource_status(pod.get("metadata").get("name"))
-                == constants.STATUS_RUNNING
-            ):
+            pod_status = ocp_pod_obj.get_resource_status(
+                pod.get("metadata").get("name")
+            )
+            logger.info(f"Pod name: {pod.get('metadata').get('name')}")
+            logger.info(f"Pod status: {pod_status}")
+            if pod_status == constants.STATUS_RUNNING:
                 running_ct_pods.append(pod)
 
         if not running_ct_pods:
-            raise NoRunningCephToolBoxException("No running Ceph tools pod found")
+            raise NoRunningCephToolBoxException
         return running_ct_pods
 
-    running_ct_pods = get_tools_pod_objs()
+    if wait:
+        running_ct_pods = retry(NoRunningCephToolBoxException, tries=10, delay=5)(
+            _get_tools_pod_objs
+        )()
+    else:
+        running_ct_pods = _get_tools_pod_objs()
 
     ceph_pod = Pod(**running_ct_pods[0])
     ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig

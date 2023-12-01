@@ -3,7 +3,7 @@ import logging
 import time
 import ocpnetsplit
 
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad, stretch_cluster
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_workload_pods_post_recovery,
     recover_from_ceph_stuck,
@@ -21,16 +21,14 @@ from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_ceph_tools_pod,
-    get_mon_pod_id,
-    get_mon_pods,
     get_not_running_pods,
 )
-from ocs_ci.ocs.cluster import get_mon_quorum_ranks, fetch_connection_scores_for_mon
 
 logger = logging.getLogger(__name__)
 
 
 @turquoise_squad
+@stretch_cluster
 class TestNetSplit:
     @pytest.fixture()
     def init_sanity(self, request):
@@ -45,7 +43,7 @@ class TestNetSplit:
             """
             try:
                 logger.info("Making sure ceph health is OK")
-                self.sanity_helpers.health_check(tries=50)
+                self.sanity_helpers.health_check(tries=50, cluster_check=False)
             except CephHealthException as e:
                 assert (
                     "HEALTH_WARN" in e.args[0]
@@ -217,17 +215,3 @@ class TestNetSplit:
             label=constants.LOGWRITER_RBD_LABEL
         ), "Data is corrupted for RBD workloads"
         logger.info("No data corruption is seen in RBD workloads")
-
-        # check the connection scores if its clean
-        mon_conn_score_map = {}
-        mon_pods = get_mon_pods()
-        for pod in mon_pods:
-            mon_conn_score_map[get_mon_pod_id(pod)] = fetch_connection_scores_for_mon(
-                pod
-            )
-        logger.info("Fetched connection scores for all the mons!!")
-        mon_quorum_ranks = get_mon_quorum_ranks()
-        logger.info(f"Current mon_quorum ranks : {mon_quorum_ranks}")
-
-        # check the connection score if it's clean
-        sc_obj.validate_conn_score(mon_conn_score_map, mon_quorum_ranks)

@@ -2,8 +2,6 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     ignore_leftovers,
@@ -60,4 +58,3 @@ class TestMCGRecovery(E2ETest):
             object_amount=object_amount,
         )
         log.info("No issues seen with the MCG bg feature validation")
-

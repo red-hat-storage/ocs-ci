@@ -240,7 +240,7 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] = list(set(self.logfile_map[label][0]))
         logger.info(self.logfile_map[label][0])
 
-    @retry(UnexpectedBehaviour, tries=6, delay=2)
+    @retry(UnexpectedBehaviour, tries=10, delay=5)
     def get_logwriter_reader_pods(
         self,
         label,
@@ -273,10 +273,13 @@ class StretchCluster(OCS):
 
         statuses = self.workload_map[label][1] if statuses is None else statuses
         pods_with_statuses = list()
+        try:
+            for pod in self.workload_map[label][0]:
+                if pod.status() in statuses:
+                    pods_with_statuses.append(pod)
+        except CommandFailed:
+            raise UnexpectedBehaviour
 
-        for pod in self.workload_map[label][0]:
-            if pod.status() in statuses:
-                pods_with_statuses.append(pod)
         logger.info(
             f"These are the pods {[pod.name for pod in pods_with_statuses]} "
             f"found in statues {statuses}"
@@ -379,7 +382,7 @@ class StretchCluster(OCS):
             f"SECONDS=0;while true;do ceph -s;sleep {delay};duration=$SECONDS;"
             f"if [ $duration -ge {timeout} ];then break;fi;done"
         )
-        ceph_tools_pod = get_ceph_tools_pod()
+        ceph_tools_pod = get_ceph_tools_pod(wait=True)
 
         try:
             ceph_out = ceph_tools_pod.exec_sh_cmd_on_pod(
@@ -394,8 +397,9 @@ class StretchCluster(OCS):
             if "TimeoutExpired" in err.args[0]:
                 logger.error("Ceph status check got timed out. maybe ceph is hung.")
                 return False
-            else:
-                raise
+            elif "connect: no route to host" in err.args[0]:
+                ceph_tools_pod.delete(wait=False)
+            raise
 
     def reset_conn_score(self):
         """
