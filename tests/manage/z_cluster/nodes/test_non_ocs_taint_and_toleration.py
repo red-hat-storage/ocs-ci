@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     skipif_tainted_nodes,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @skipif_tainted_nodes
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @bugzilla("1992472")
 @pytest.mark.polarion_id("OCS-2705")
 class TestNonOCSTaintAndTolerations(E2ETest):

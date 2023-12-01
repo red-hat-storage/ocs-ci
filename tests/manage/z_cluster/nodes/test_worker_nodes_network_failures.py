@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     skipif_ibm_power,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     bugzilla,
     brown_squad,
 )
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @skipif_vsphere_ipi
 @skipif_ibm_power
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @ignore_leftovers
 @bugzilla("2029690")
 class TestWorkerNodesFailure(ManageTest):
