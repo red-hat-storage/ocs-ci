@@ -186,6 +186,7 @@ class TestAddCapacityLSO(ManageTest):
 @skipif_external_mode
 @cloud_platform_required
 @skipif_managed_service
+@skipif_hci_provider_and_client
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade

@@ -3,7 +3,6 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud_managed,
     skipif_managed_service,
-    skipif_hci_provider_and_client,
     black_squad,
     polarion_id,
     tier3,
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 @black_squad
 @skipif_ibm_cloud_managed
 @skipif_managed_service
-@skipif_hci_provider_and_client
 @skipif_ocs_version("<4.13")
 class TestErrorMessageImprovements(ManageTest):
     @bugzilla("2193109")
