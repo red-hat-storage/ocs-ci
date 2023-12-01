@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
@@ -92,6 +93,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.polarion_id("OCS-530"),
                     pytest.mark.bugzilla("1772990"),
                     skipif_managed_service,
+                    skipif_hci_provider_and_client,
                 ],
             ),
             pytest.param(
@@ -110,6 +112,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.bugzilla("1750916"),
                     pytest.mark.bugzilla("1772990"),
                     skipif_managed_service,
+                    skipif_hci_provider_and_client,
                 ],
             ),
             pytest.param(
@@ -245,7 +248,11 @@ class TestDynamicPvc(ManageTest):
         argvalues=[
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
-                marks=[pytest.mark.polarion_id("OCS-542"), skipif_managed_service],
+                marks=[
+                    pytest.mark.polarion_id("OCS-542"),
+                    skipif_managed_service,
+                    skipif_hci_provider_and_client,
+                ],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],

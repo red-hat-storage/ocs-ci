@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     polarion_id,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_external_mode,
 )
 from ocs_ci.ocs.exceptions import (
@@ -59,6 +60,7 @@ class TestRbdSpaceReclaim(ManageTest):
     @tier1
     @skipif_external_mode
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     def test_rbd_space_reclaim(self):
         """
         Test to verify RBD space reclamation
@@ -142,6 +144,7 @@ class TestRbdSpaceReclaim(ManageTest):
     @polarion_id("OCS-2774")
     @tier1
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @skipif_external_mode
     def test_rbd_space_reclaim_no_space(self):
         """

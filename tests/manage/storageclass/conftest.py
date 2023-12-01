@@ -1,6 +1,6 @@
 import logging
 from ocs_ci.framework import config
-from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
+from ocs_ci.ocs.constants import HCI_PC_OR_MS_PLATFORM
 
 log = logging.getLogger(__name__)
 
@@ -8,13 +8,14 @@ log = logging.getLogger(__name__)
 def pytest_collection_modifyitems(items):
     """
     A pytest hook to filter out storageclass tests
-    when running on managed service platforms
+    when running on managed service platforms and
+    on HCI Provider Client Platform
 
     Args:
         items: list of collected tests
 
     """
-    if config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS:
+    if config.ENV_DATA["platform"].lower() in HCI_PC_OR_MS_PLATFORM:
         for item in items.copy():
             if "manage/storageclass" in str(item.fspath):
                 log.debug(
