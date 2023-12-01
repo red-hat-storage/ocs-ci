@@ -4452,10 +4452,10 @@ def pvc_clone_factory_fixture(request):
             pvc_obj.provisioner in constants.OCS_PROVISIONERS
         ), f"Unknown provisioner in PVC {pvc_obj.name}"
         no_interface = False
-        if pvc_obj.provisioner == "openshift-storage.rbd.csi.ceph.com":
+        if "rbd.csi.ceph.com" in pvc_obj.provisioner:
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             interface = constants.CEPHBLOCKPOOL
-        elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
+        elif "cephfs.csi.ceph.com" in pvc_obj.provisioner:
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
         elif pvc_obj.provisioner in [
