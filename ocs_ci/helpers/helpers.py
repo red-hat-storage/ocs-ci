@@ -731,6 +731,7 @@ def create_storage_class(
         volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
             pod attachment.
         allow_volume_expansion(bool): True to create sc with volume expansion
+        kernelMountOptions (str): Mount option for security context
     Returns:
         OCS: An OCS instance for the storage class
     """

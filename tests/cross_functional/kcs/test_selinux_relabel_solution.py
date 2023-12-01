@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 
 
 @magenta_squad
+@tier1
 class TestSelinuxrelabel(E2ETest):
     def create_deploymentconfig_pod(self, **kwargs):
         """
@@ -189,13 +190,56 @@ class TestSelinuxrelabel(E2ETest):
 
         return None
 
+    def check_selinux_relabeling(self, pod_obj):
+        """
+        Check SeLinux Relabeling is set to false.
+
+        Args:
+            pod_obj (Pod object): App pod
+
+        """
+        # Get the node on which application pod is running
+        self.pod_obj = self.get_app_pod_obj()
+        node_name = res_pod.get_pod_node(pod_obj=pod_obj).name
+
+        # Check SeLinux Relabeling is set to false
+        log.info("checking for crictl logs")
+        oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+        cmd1 = "crictl inspect $(crictl ps --name perf -q)"
+        output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
+        key = '"selinuxRelabel": false'
+        assert key in output, f"{key} is not present in inspect logs"
+        log.info(f"{key} is present in inspect logs of application pod running node")
+
+    def get_random_files(self, pod_obj):
+        """
+        Get random files list.
+
+        Args:
+            pod_obj (Pod object): App pod
+
+        Returns:
+            list : list of random files
+
+        """
+        # Get random files
+        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
+        num_of_files = random.randint(3, 9)
+        random_files = res_pod.exec_oc_cmd(
+            f"exec -it {pod_obj.name} -- /bin/bash"
+            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
+            timeout=300,
+        )
+        random_files = random_files.split()
+        log.info(f"files are {random_files}")
+        return random_files
+
     def teardown(self):
         """
         Cleanup the test environment
         """
         res_pod.delete_deploymentconfig_pods(self.pod_obj)
 
-    @tier1
     @bugzilla("1988284")
     @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
@@ -247,16 +291,7 @@ class TestSelinuxrelabel(E2ETest):
         time.sleep(120)
 
         # Get the md5sum of some random files
-        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
-        num_of_files = random.randint(3, 9)
-        pod = ocp.OCP(kind="pod", namespace=config.ENV_DATA["cluster_namespace"])
-        random_files = pod.exec_oc_cmd(
-            f"exec -it {self.pod_obj.name} -- /bin/bash"
-            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
-            timeout=300,
-        )
-        random_files = random_files.split()
-        log.info(f"files are {random_files}")
+        random_files = self.get_random_files(self.pod_obj)
         initial_md5sum = []
         for file_path in random_files:
             md5sum = res_pod.cal_md5sum(
@@ -291,17 +326,8 @@ class TestSelinuxrelabel(E2ETest):
             pod_names=[self.pod_obj.name], timeout=600, sleep=15
         ), f"Pod {self.pod_obj.name} didn't reach to running state"
 
-        # Get the node of cephfs pod
-        self.pod_obj = self.get_app_pod_obj()
-        node_name = res_pod.get_pod_node(pod_obj=self.pod_obj).name
-
         # Check SeLinux Relabeling is set to false
-        oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
-        cmd1 = "crictl inspect $(crictl ps --name perf -q)"
-        output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
-        key = '"selinuxRelabel": false'
-        assert key in output, f"{key} is not present in inspect logs"
-        log.info(f"{key} is present in inspect logs of application pod running node")
+        self.check_selinux_relabeling(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
 
         # Restart pod after applying fix
@@ -358,9 +384,6 @@ class TestSelinuxrelabel(E2ETest):
 
         """
         # Create storageclass with security context
-        self.ocp_project = ocp.OCP(
-            kind=constants.NAMESPACE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
         sc_name = "ocs-storagecluster-cephfs-selinux-relabel"
         self.storage_class = storageclass_factory(
             sc_name=sc_name,
@@ -369,6 +392,9 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         # Create PVC using new storageclass
+        self.ocp_project = ocp.OCP(
+            kind=constants.NAMESPACE, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         self.pvc_obj = pvc_factory(
             project=self.ocp_project,
             storageclass=self.storage_class,
@@ -391,16 +417,7 @@ class TestSelinuxrelabel(E2ETest):
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
         # Get the md5sum of some random files
-        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
-        num_of_files = random.randint(3, 9)
-        pod = ocp.OCP(kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        random_files = pod.exec_oc_cmd(
-            f"exec -it {self.pod_obj.name} -- /bin/bash"
-            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
-            timeout=300,
-        )
-        random_files = random_files.split()
-        log.info(f"files are {random_files}")
+        random_files = self.get_random_files(self.pod_obj)
         initial_md5sum = []
         for file_path in random_files:
             md5sum = res_pod.cal_md5sum(
@@ -409,7 +426,7 @@ class TestSelinuxrelabel(E2ETest):
             )
             initial_md5sum.append(md5sum)
 
-        # Check data integrity and Get time for pod restart
+        # Delete app pod and measure pod restart time
         self.pod_obj.delete(wait=True)
         self.pod_obj = self.get_app_pod_obj()
         try:
@@ -421,6 +438,8 @@ class TestSelinuxrelabel(E2ETest):
 
         pod_restart_time_after_fix = self.get_pod_start_time(pod_name=self.pod_obj.name)
         log.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
+
+        # Check Data integrity
         final_md5sum = []
         for file_path in random_files:
             md5sum = res_pod.cal_md5sum(
@@ -428,18 +447,10 @@ class TestSelinuxrelabel(E2ETest):
                 file_name=file_path,
             )
             final_md5sum.append(md5sum)
-        assert initial_md5sum == final_md5sum, "Data integrity failed after on new PVC."
-
-        # Get the node on which application pod is running
-        self.pod_obj = self.get_app_pod_obj()
-        node_name = res_pod.get_pod_node(pod_obj=self.pod_obj).name
+        assert (
+            initial_md5sum == final_md5sum
+        ), f"Data integrity failed after for PVC: {self.pvc_obj.name}"
 
         # Check SeLinux Relabeling is set to false
-        log.info("checking for crictl logs")
-        oc_cmd = ocp.OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        cmd1 = "crictl inspect $(crictl ps --name perf -q)"
-        output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
-        key = '"selinuxRelabel": false'
-        assert key in output, f"{key} is not present in inspect logs"
-        log.info(f"{key} is present in inspect logs of application pod running node")
+        self.check_selinux_relabeling(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is skipped for the pvc {self.pvc_obj.name}")

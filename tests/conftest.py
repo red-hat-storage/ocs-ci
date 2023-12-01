@@ -843,7 +843,8 @@ def storageclass_factory_fixture(
                     csi-kms-connection-details configmap
             volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending
                 till pod attachment.
-            allow_volume_expansion (bool)= True to Allows volume expansion
+            allow_volume_expansion (bool): True to Allows volume expansion
+            kernelMountOptions (str): Mount option for security context
 
         Returns:
             object: helpers.create_storage_class instance with links to
