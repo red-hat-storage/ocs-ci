@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.framework.testlib import (
     skipif_aws_creds_are_missing,
     skipif_vsphere_ipi,
+    skipif_disconnected_cluster,
     ignore_leftover_label,
     polarion_id,
     tier1,
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
 @skipif_aws_creds_are_missing
+@skipif_disconnected_cluster
 class TestLogBasedBucketReplication(MCGTest):
     """
     Test log-based replication with deletion sync.
