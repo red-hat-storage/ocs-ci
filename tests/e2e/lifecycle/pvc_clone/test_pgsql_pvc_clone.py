@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     E2ETest,
     tier2,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.constants import STATUS_COMPLETED, VOLUME_MODE_FILESYSTEM, CEPHBLOCKPOOL
@@ -152,6 +153,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
     @skipif_ocs_version("<4.8")
     @skipif_ocp_version("<4.8")
+    @skipif_hci_provider_and_client
     @pytest.mark.parametrize(
         argnames=["kv_version"],
         argvalues=[
