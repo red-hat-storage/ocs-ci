@@ -110,8 +110,10 @@ class TestPvcAssignPodNode(ManageTest):
         pod.get_fio_rw_iops(pod_obj)
 
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if (ocs_version >= version.VERSION_4_12) and (
+        if ocs_version >= version.VERSION_4_12 and (
             config.ENV_DATA.get("platform") != constants.FUSIONAAS_PLATFORM
+            or config.ENV_DATA.get("platform")
+            not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             self.verify_access_token_notin_odf_pod_logs()
 

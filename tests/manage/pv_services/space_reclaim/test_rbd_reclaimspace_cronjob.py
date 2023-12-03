@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_external_mode,
     bugzilla,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import (
@@ -55,6 +56,7 @@ class TestRbdSpaceReclaim(ManageTest):
         )
 
     @polarion_id("OCS-2759")
+    @skipif_hci_provider_and_client
     @tier1
     def test_rbd_space_reclaim_cronjob(self, pause_and_resume_cluster_load):
         """
@@ -148,6 +150,7 @@ class TestRbdSpaceReclaim(ManageTest):
 
     @tier1
     @bugzilla("2046677")
+    @skipif_hci_provider_and_client
     @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],

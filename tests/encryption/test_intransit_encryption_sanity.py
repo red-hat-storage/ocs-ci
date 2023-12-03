@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ocs_version,
     green_squad,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.framework import config
 
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
     reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8759"
 )
 @green_squad
+@skipif_hci_provider_and_client
 class TestInTransitEncryptionSanity:
     @pytest.fixture(autouse=True)
     def set_encryption_at_teardown(self, request):
