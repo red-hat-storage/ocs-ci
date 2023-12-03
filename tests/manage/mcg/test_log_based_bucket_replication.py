@@ -245,7 +245,7 @@ class TestLogBasedBucketReplication(MCGTest):
     @tier3
     @polarion_id("OCS-4940")
     def test_deletion_sync_after_instant_deletion(
-        self, mcg_obj_session, log_based_replication_setup
+        self, mcg_obj, log_based_replication_setup
     ):
         """
         Test deletion sync behavior when an object is immediately deleted after being uploaded to the source bucket.
@@ -267,7 +267,7 @@ class TestLogBasedBucketReplication(MCGTest):
         mockup_logger.delete_all_objects_and_log(source_bucket.name)
 
         upload_test_objects_to_source_and_wait_for_replication(
-            mcg_obj_session,
+            mcg_obj,
             source_bucket,
             target_bucket,
             mockup_logger,
@@ -275,7 +275,7 @@ class TestLogBasedBucketReplication(MCGTest):
         )
 
         delete_objects_from_source_and_wait_for_deletion_sync(
-            mcg_obj_session,
+            mcg_obj,
             source_bucket,
             target_bucket,
             mockup_logger,
