@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.resources.pv import get_all_pvs
+from ocs_ci.ocs.resources.pv import get_all_pvs, get_pv_status
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
 from ocs_ci.ocs.utils import (
@@ -626,6 +626,12 @@ def wait_for_all_resources_deletion(
             namespace=namespace,
         )
         sample.wait_for_func_value(0)
+    else:
+        logger.info("Verify all PVs are in Available state")
+        for pvc_obj in all_pvcs:
+            pvc_status = get_pv_status(pvc_obj)
+            if not pvc_status == constants.STATUS_RELEASED:
+                raise Exception(f"{pvc_obj} is not Released state")
 
 
 def get_image_uuids(namespace):
@@ -712,17 +718,7 @@ def enable_fence(drcluster_name):
 
     """
 
-    logger.info(
-        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
-    )
-    restore_index = config.cur_index
-    config.switch_acm_ctx()
-    fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
-    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
-    if not drcluster_obj.patch(params=fence_params, format_type="merge"):
-        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
-    logger.info(f"Successfully fenced {constants.DRCLUSTER}: {drcluster_name}")
-    config.switch_ctx(restore_index)
+    fence_state(drcluster_name=drcluster_name, fence_state=constants.ACTION_FENCE)
 
 
 def configure_drcluster_for_fencing():
@@ -765,17 +761,7 @@ def enable_unfence(drcluster_name):
 
     """
 
-    logger.info(
-        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
-    )
-    restore_index = config.cur_index
-    config.switch_acm_ctx()
-    unfence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_UNFENCE}"}}}}'
-    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
-    if not drcluster_obj.patch(params=unfence_params, format_type="merge"):
-        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
-    logger.info(f"Successfully unfenced {constants.DRCLUSTER}: {drcluster_name}")
-    config.switch_ctx(restore_index)
+    fence_state(drcluster_name=drcluster_name, fence_state=constants.ACTION_UNFENCE)
 
 
 def fence_state(drcluster_name, fence_state):
@@ -860,3 +846,126 @@ def gracefully_reboot_ocp_nodes(
     else:
         set_current_secondary_cluster_context(namespace, workload_type)
     gracefully_reboot_nodes()
+
+
+def failover_relocate_status_cli(namespace, action=constants.ACTION_FAILOVER):
+    """
+    Get the current status of in progress Failover/Relocate operation in hub using drpc status
+
+    Args:
+        namespace (str): the namespace of the drpc resources
+        action (str): action "Failover" or "Relocate" which was taken on the workloads,
+                    "Failover" is set to default
+
+    Returns:
+        bool: True if the action is succeed without any errors, else False
+
+    """
+
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    # Verify the drpc status of application
+    drpc_obj = ocp.OCP(kind=constants.DRPC, namespace=namespace)
+    state = drpc_obj.get().get("items")[0].get("status").get("phase")
+    progression_state = drpc_obj.get().get("items")[0].get("status").get("progression")
+    peer_ready_state = (
+        drpc_obj.get().get("items")[0].get("status").get("conditions")[1].get("status")
+    )
+    if action == constants.ACTION_FAILOVER:
+        if (
+            state == "FailedOver"
+            and progression_state == "Completed"
+            and peer_ready_state
+        ):
+            logger.info(f"{action} successfully verified, the app is in {state} state")
+            return True
+        else:
+            logger.warning("Failover verification from drpc output failed")
+            logger.warning(f"The drpc yaml output: {drpc_obj.get()}")
+            return False
+    elif action == constants.ACTION_RELOCATE:
+        if (
+            state == "Relocated"
+            and progression_state == "Completed"
+            and peer_ready_state
+        ):
+            logger.info(f"{action} successfully verified, the app is in {state} state")
+            return True
+        else:
+            logger.warning("Relocate verification from drpc output failed")
+            logger.warning(f"The drpc yaml output: {drpc_obj.get()}")
+            return False
+    config.switch_ctx(restore_index)
+
+
+def verify_failover_relocate_status_cli(
+    namespace, action=constants.ACTION_FAILOVER, timeout=200, sleep=10
+):
+    """
+    Function to verify current status of in progress Failover/Relocate operation in hub using drpc status
+
+    Args:
+        namespace (str): the namespace of the drpc resources
+        action (str): action "Failover" or "Relocate" which was taken on the workloads,
+                "Failover" is set to default
+        timeout (int): timeout to wait for certain elements to be found or reach state
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        bool: True if the action is succeed without any errors, else False
+
+    """
+
+    try:
+        for status in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=failover_relocate_status_cli,
+            namespace=namespace,
+            action=action,
+        ):
+            #
+            if status:
+                logger.info(f" {action} successfully verified! ")
+                return True
+
+    except TimeoutExpiredError:
+        logger.warning(
+            f"{action} didn't reach the expected state " f"after {timeout} seconds"
+        )
+        return False
+
+
+def verify_ramen_pod_running_and_not_restarted(
+    pod_restart_count=0, namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE
+):
+    """
+    Validate ramen pod is in running state and not restarted or re-spinned
+
+    Args:
+        pod_restart_count (int): Restart count of pod, default to 0
+        namespace (str): Namespace of the pod
+
+    Returns:
+        bool : True if pod is in running state and not restarted
+               count matches the previous one
+
+    """
+
+    pod_obj_list = get_all_pods(namespace=namespace)
+    for pod_obj in pod_obj_list:
+        restart_count = (
+            pod_obj.get("status")
+            .get("status")
+            .get("containerStatuses")[0]
+            .get("restartCount")
+        )
+        pod_state = pod_obj.get("status").get("status").get("phase")
+        if pod_state == "Running" and restart_count == pod_restart_count:
+            logger.info(f"Pod {pod_obj.name} is running state and not restarted ")
+            return True
+        logger.error(
+            f"Pod {pod_obj.name} is in {pod_state} state and restart count of pod {restart_count}"
+        )
+        logger.info(f"{pod_obj}")
+        return False

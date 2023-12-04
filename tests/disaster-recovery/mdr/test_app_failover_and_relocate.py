@@ -23,6 +23,8 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_creation,
     wait_for_all_resources_deletion,
     gracefully_reboot_ocp_nodes,
+    verify_failover_relocate_status_cli,
+    verify_ramen_pod_running_and_not_restarted,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
@@ -225,11 +227,17 @@ class TestApplicationFailoverAndRelocate:
         )
         wait_for_all_resources_deletion(workload.workload_namespace)
 
+        # Verify the drpc status
+        assert verify_failover_relocate_status_cli(workload.workload_namespace)
+
         # Validate data integrity
         set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
 
-        # Un-fence the managed cluster which was Fenced earlier
+        # Verify the ramen pod restart
+        assert verify_ramen_pod_running_and_not_restarted()
+
+        # Unfenced the managed cluster which was Fenced earlier
         enable_unfence(drcluster_name=self.primary_cluster_name)
 
         # Reboot the nodes which unfenced
@@ -286,7 +294,15 @@ class TestApplicationFailoverAndRelocate:
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE
             )
+        else:
+            # Verify the drpc status
+            assert verify_failover_relocate_status_cli(
+                workload.workload_namespace, action=constants.ACTION_RELOCATE
+            )
 
         # Validate data integrity
         set_current_primary_cluster_context(workload.workload_namespace, workload_type)
         validate_data_integrity(workload.workload_namespace)
+
+        # Verify the ramen pod restart
+        assert verify_ramen_pod_running_and_not_restarted()
