@@ -75,6 +75,7 @@ from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
 
 log = logging.getLogger(__name__)
 
@@ -751,6 +752,12 @@ def ocs_install_verification(
         and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
     ):
         validate_serviceexport()
+
+    # check that noobaa root secrets are not public
+    assert (
+        check_if_mcg_root_secret_public()
+    ), "Seems like MCG root secrets are public, please check"
+    log.info("Noobaa root secrets are not public")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
