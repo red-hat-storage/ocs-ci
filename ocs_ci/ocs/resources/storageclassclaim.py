@@ -89,7 +89,7 @@ def create_storageclassclaim(
         )
     )
 
-    if config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM:
+    if config.ENV_DATA["platform"] in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
         # Get the storageclient name and namespace if not available
         if not (storageclient_name and storageclient_namespace):
             storageclient_obj = OCP(
@@ -109,7 +109,7 @@ def create_storageclassclaim(
             "name": storageclient_name,
             "namespace": storageclient_namespace,
         }
-        # Storageclassclaim is a cluster scoped resource in ODF versions supported in FaaS
+        # Storageclassclaim is a cluster scoped resource in ODF versions supported in HCI provider-client setup
         namespace = None
 
     if namespace:
