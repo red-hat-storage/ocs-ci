@@ -138,9 +138,16 @@ class CNVInstaller(object):
         cnv_package_manifest.wait_for_resource(
             resource_name=constants.KUBEVIRT_HYPERCONVERGED, timeout=300
         )
-        csv = get_csvs_start_with_prefix(
-            csv_prefix=constants.KUBEVIRT_HCO_PREFIX, namespace=self.namespace
-        )
+        # csv sometimes takes more time to discover
+        for csv in TimeoutSampler(
+            timeout=900,
+            sleep=15,
+            func=get_csvs_start_with_prefix,
+            csv_prefix=constants.KUBEVIRT_HCO_PREFIX,
+            namespace=self.namespace,
+        ):
+            if csv:
+                break
         csv_name = csv[0]["metadata"]["name"]
         csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
         csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
