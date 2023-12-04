@@ -2400,7 +2400,6 @@ def mcg_obj_client(request):
     mcg_obj = mcg_obj_fixture(request)
     ocsci_config.switch_ctx(original_cluster)
     log.info(f"Switched to original cluster with index {original_cluster}")
-    pod_obj = existing_pod or awscli_pod_fixture(request, scope_name="session")
     return mcg_obj, client_cluster
 
 
@@ -2453,9 +2452,9 @@ def awscli_pod_client(request):
         constants.S3CLI_LABEL, ocsci_config.ENV_DATA["cluster_namespace"]
     )
     existing_pod = Pod(**awscli_pods[0]) if len(awscli_pods) > 0 else None
+    pod_obj = existing_pod or awscli_pod_fixture(request, scope_name="session")
     ocsci_config.switch_ctx(original_cluster)
     log.info(f"Switched to original cluster with index {original_cluster}")
-    pod_obj = existing_pod or awscli_pod_fixture(request, scope_name="session")
     return pod_obj, client_cluster
 
 
