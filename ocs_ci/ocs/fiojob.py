@@ -21,6 +21,7 @@ import pytest
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -315,18 +316,22 @@ def get_pool_name(fixture_name):
     if config.DEPLOYMENT["external_mode"]:
         ceph_pool_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
     elif fixture_name.endswith("rbd"):
-        if config.ENV_DATA[
-            "platform"
-        ].lower() in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA.get(
-            "cluster_type", ""
-        ).lower() in [
-            constants.MS_CONSUMER_TYPE,
-            constants.HCI_CLIENT,
-        ]:
+        if (
+            config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+            and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
+        ):
             cluster_id = run_cmd(
                 "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
             )
             ceph_pool_name = f"cephblockpool-storageconsumer-{cluster_id}"
+        elif (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+        ):
+            # Get pool name form storageclass
+            default_sc = default_storage_class(constants.CEPHBLOCKPOOL)
+            ceph_pool_name = default_sc.get()["parameters"]["pool"]
         else:
             ceph_pool_name = "ocs-storagecluster-cephblockpool"
     elif fixture_name.endswith("cephfs"):
