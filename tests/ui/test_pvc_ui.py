@@ -36,28 +36,32 @@ class TestPvcUserInterface(object):
                 "ReadWriteMany",
                 "2",
                 "Filesystem",
+                marks=pytest.mark.polarion_id("OCS-5210"),
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "ReadWriteMany",
                 "3",
                 "Block",
+                marks=pytest.mark.polarion_id("OCS-5211"),
             ),
             pytest.param(
                 "ocs-storagecluster-cephfs",
                 "ReadWriteOnce",
                 "10",
                 "Filesystem",
+                marks=pytest.mark.polarion_id("OCS-5212"),
             ),
             pytest.param(
                 *["ocs-storagecluster-ceph-rbd", "ReadWriteOnce", "11", "Block"],
-                marks=[skipif_ocs_version("<4.7")],
+                marks=[skipif_ocs_version("<4.7"), pytest.mark.polarion_id("OCS-5206")],
             ),
             pytest.param(
                 "ocs-storagecluster-ceph-rbd",
                 "ReadWriteOnce",
                 "13",
                 "Filesystem",
+                marks=pytest.mark.polarion_id("OCS-5207"),
             ),
         ],
     )
@@ -217,11 +221,13 @@ class TestPvcUserInterface(object):
                 "ocs-storagecluster-ceph-rbd",
                 constants.ACCESS_MODE_RWO,
                 constants.ACCESS_MODE_RWO,
+                marks=pytest.mark.polarion_id("OCS-5208"),
             ),
             pytest.param(
                 "ocs-storagecluster-cephfs",
                 constants.ACCESS_MODE_RWX,
                 constants.ACCESS_MODE_RWO,
+                marks=pytest.mark.polarion_id("OCS-5209"),
             ),
         ],
     )
