@@ -263,6 +263,11 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
+        "--upgrade-acm-version",
+        dest="upgrade_acm_version",
+        help="acm version to upgrade(e.g. 2.8), use only with DR upgrade scenario",
+    )
+    parser.addoption(
         "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
     )
     parser.addoption(
@@ -660,6 +665,9 @@ def process_cluster_cli_params(config):
     if custom_kubeconfig_location:
         os.environ["KUBECONFIG"] = custom_kubeconfig_location
         ocsci_config.RUN["kubeconfig"] = custom_kubeconfig_location
+    upgrade_acm_version = get_cli_param(config, "--upgrade-acm-version")
+    if upgrade_acm_version:
+        ocsci_config.UPGRADE["upgrade_acm_version"] = upgrade_acm_version
 
 
 def pytest_collection_modifyitems(session, config, items):
