@@ -453,7 +453,8 @@ class CNVInstaller(object):
             virtctl_download_url (str): The URL of the virtctl download.
 
         Returns:
-            Union[zipfile.ZipFile, tarfile.TarFile]: The archive file binary object.
+            Union[zipfile.ZipFile, tarfile.TarFile]: Returns the archive file binary object of either
+            zipfile.ZipFile or tarfile.TarFile type based on the file extension.
 
         """
         zip_file_extension = ".zip"
