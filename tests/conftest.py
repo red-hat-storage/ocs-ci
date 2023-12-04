@@ -2384,6 +2384,26 @@ def mcg_obj_session(request):
     return mcg_obj_fixture(request)
 
 
+@pytest.fixture
+def mcg_obj_client(request):
+    """
+    Returns an MCG resource that's connected to the S3 endpoint
+
+    Returns:
+        object: An MCG resource
+        int: client cluster context
+    """
+    original_cluster = ocsci_config.cluster_ctx
+    ocsci_config.switch_to_consumer()
+    client_cluster = ocsci_config.cluster_ctx
+    log.info(f"Switched to client with index {client_cluster}")
+    mcg_obj = mcg_obj_fixture(request)
+    ocsci_config.switch_ctx(original_cluster)
+    log.info(f"Switched to original cluster with index {original_cluster}")
+    pod_obj = existing_pod or awscli_pod_fixture(request, scope_name="session")
+    return mcg_obj, client_cluster
+
+
 def mcg_obj_fixture(request, *args, **kwargs):
     """
     Returns an MCG resource that's connected to the S3 endpoint
