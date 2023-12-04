@@ -5,6 +5,7 @@ ACM operator upgrade classes and utilities
 
 import logging
 import tempfile
+from pkg_resources import parse_version
 
 import requests
 
@@ -27,17 +28,58 @@ class ACMUpgrade(object):
         # Hence we can't rely on ENV_DATA['acm_version'] for the pre-upgrade version
         # we need to dynamically find it
         self.version_before_upgrade = self.get_acm_version_before_upgrade()
+        self.upgrade_version = config.UPGRADE["upgrade_acm_version"]
+        # In case if we are using registry image
+        self.acm_registry_image = config.UPGRADE.get("upgrade_acm_registry_image", "")
 
     def get_acm_version_before_upgrade(self):
         running_acm_version = get_running_acm_version()
         return get_semantic_version(running_acm_version)
 
+    def get_parsed_versions(self):
+        parsed_version_before_upgrade = parse_version(self.version_before_upgrade)
+        parsed_upgrade_version = parse_version(self.upgrade_version)
+
+        return parsed_version_before_upgrade, parsed_upgrade_version
+
     def run_upgrade(self):
-        self.create_catalog_source()
-        self.acm_patch_subscription()
-        self.annotate_mch()
-        run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
+        self.version_change = (
+            self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
+        )
+        # either this would be GA to Unreleased upgrade of same version OR
+        # GA to unreleased upgrade to higher version
+        if self.acm_registry_image and self.version_change:
+            self.upgrade_with_registry()
+            self.annotate_mch()
+            run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
+        else:
+            # GA to GA
+            self.upgrade_without_registry()
         self.validate_upgrade()
+
+    def upgrade_without_registry(self):
+        """
+        GA to GA acm upgrade
+
+        """
+        patch = f'\'{{"spec": {{"channel": "release-{self.upgrade_version}"}}}}\''
+        self.acm_patch_subscription(patch)
+
+    def upgrade_with_registry(self):
+        """
+        There are 2 scenarios with registry
+        1. GA to unreleased same version (ex: 2.8.1 GA to 2.8.2 Unreleased)
+        2. GA to unreleased higher version (ex: 2.8.9 GA to 2.9.1 Unreleased)
+
+        """
+        if self.acm_registry_image and (not self.version_change):
+            # This is GA to unreleased: same version
+            self.create_catalog_source()
+        else:
+            # This is GA to unreleased version: upgrade to next version
+            self.create_catalog_source()
+            patch = f'\'{{"spec": "{constants.ACM_CATSRC_NAME}"}}\''
+            self.acm_patch_subscription(patch)
 
     def annotate_mch(self):
         annotation = f'\'{{"source": "{constants.ACM_CATSRC_NAME}"}}\''
@@ -47,8 +89,7 @@ class ACMUpgrade(object):
         )
         run_cmd(annotate_cmd)
 
-    def acm_patch_subscription(self):
-        patch = f'\'{{"spec": "{constants.ACM_CATSRC_NAME}"}}\''
+    def acm_patch_subscription(self, patch):
         patch_cmd = (
             f"oc -n {constants.ACM_HUB_NAMESPACE} patch sub advanced-cluster-management "
             f"-p {patch} --type merge"
@@ -58,14 +99,19 @@ class ACMUpgrade(object):
     def create_catalog_source(self):
         logger.info("Creating ACM catalog source")
         acm_catsrc = templating.load_yaml(constants.ACM_CATSRC)
-        # Update catalog source
-        resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False)
-        raw_msg = resp.json()["raw_messages"]
-        # TODO: Find way to get ocp version before upgrade
-        version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-            f"v{get_ocp_version()}"
-        ].split(":")[1]
-        acm_catsrc["spec"]["image"] = ":".jon([constants.ACM_BREW_REPO, version_tag])
+        if self.acm_registry_image:
+            acm_catsrc["spec"]["image"] = self.acm_registry_image
+        else:
+            # Update catalog source
+            resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False)
+            raw_msg = resp.json()["raw_messages"]
+            # TODO: Find way to get ocp version before upgrade
+            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
+                f"v{get_ocp_version()}"
+            ].split(":")[1]
+            acm_catsrc["spec"]["image"] = ":".jon(
+                [constants.ACM_BREW_REPO, version_tag]
+            )
         acm_catsrc["metadata"]["name"] = constants.ACM_CATSRC_NAME
         acm_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_catsrc", delete=False
