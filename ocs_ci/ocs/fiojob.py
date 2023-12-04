@@ -335,7 +335,16 @@ def get_pool_name(fixture_name):
         else:
             ceph_pool_name = "ocs-storagecluster-cephblockpool"
     elif fixture_name.endswith("cephfs"):
-        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+        ):
+            # Get pool name form storageclass
+            default_sc = default_storage_class(constants.CEPHFILESYSTEM)
+            ceph_pool_name = default_sc.get()["parameters"]["pool"]
+        else:
+            ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
     else:
         raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
     return ceph_pool_name
