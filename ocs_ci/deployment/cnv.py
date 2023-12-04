@@ -141,7 +141,6 @@ class CNVInstaller(object):
         csv = get_csvs_start_with_prefix(
             csv_prefix=constants.KUBEVIRT_HCO_PREFIX, namespace=self.namespace
         )
-        logger.info(f"csvs found: {csv}")
         csv_name = csv[0]["metadata"]["name"]
         csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
         csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
@@ -207,9 +206,8 @@ class CNVInstaller(object):
         useEmulation.
 
         """
-        if (
-            config.ENV_DATA["platform"].lower() == "baremetal"
-            and config.DEPLOYMENT.get("local_storage") is True
+        if config.ENV_DATA["platform"].lower() == "baremetal" and config.DEPLOYMENT.get(
+            "local_storage"
         ):
             logger.info("Skipping enabling software emulation")
         else:
@@ -283,14 +281,7 @@ class CNVInstaller(object):
             resource_name=constants.VIRTCTL_CLI_DOWNLOADS,
             namespace=self.namespace,
         )
-        try:
-            virtctl_console_cli_downloads_spec_links = (
-                ocp.get().get("spec").get("links")
-            )
-        except KeyError:
-            raise exceptions.ResourceNotFoundError(
-                "Failed to retrieve virtctl ConsoleCLIDownload specification links"
-            )
+        virtctl_console_cli_downloads_spec_links = ocp.get().get("spec").get("links")
 
         if virtctl_console_cli_downloads_spec_links:
             logger.info(
@@ -378,11 +369,11 @@ class CNVInstaller(object):
             or (os_machine_type.lower() not in virtctl_download_url)
         ):
             raise exceptions.ArchitectureNotSupported(
-                f"Virtcl is NOT compatible to run on this machine: {os_type} {platform.machine()}"
+                f"Virtctl is NOT compatible to run on this machine: {os_type} {platform.machine()}"
             )
 
         logger.info(
-            f"Virtcl is compatible to run on this machine: {os_type} {platform.machine()}"
+            f"Virtctl is compatible to run on this machine: {os_type} {platform.machine()}"
         )
 
     def download_and_extract_virtctl_binary(self, bin_dir=None):
@@ -423,7 +414,7 @@ class CNVInstaller(object):
             os_machine_type (str): The operating system machine architecture.
 
         Returns:
-        Tuple[io.BytesIO, str]: Binary data of the downloaded archive and the virtctl download URL.
+        Tuple(io.BytesIO, str): Binary data of the downloaded archive and the virtctl download URL.
 
         Raises:
             exceptions.RequestFailed: If the download request fails.
