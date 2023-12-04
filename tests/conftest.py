@@ -2435,6 +2435,7 @@ def awscli_pod_session(request):
     existing_pod = Pod(**awscli_pods[0]) if len(awscli_pods) > 0 else None
     return existing_pod or awscli_pod_fixture(request, scope_name="session")
 
+
 @pytest.fixture
 def awscli_pod_client(request):
     """
