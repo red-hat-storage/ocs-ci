@@ -1,0 +1,17 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'gcp'
+  deployment_type: 'ipi'
+  region: 'europe-west1'
+  base_domain: 'gcp.qe.rh-ocs.com'
+  gcp_project_id: 'odf-qe'
+  worker_replicas: 3
+  master_replicas: 3
+  master_instance_type: 'n2-standard-16'
+  worker_instance_type: 'n2-standard-16'
+  machine_secure_boot: 'Enabled'
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2372'
