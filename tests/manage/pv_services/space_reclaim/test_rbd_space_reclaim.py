@@ -201,6 +201,7 @@ class TestRbdSpaceReclaim(ManageTest):
     @polarion_id("OCS-3733")
     @tier2
     @skipif_external_mode
+    @skipif_hci_provider_and_client
     def test_no_volume_mounted(self):
         """
         Test reclaimspace job with no volume mounted

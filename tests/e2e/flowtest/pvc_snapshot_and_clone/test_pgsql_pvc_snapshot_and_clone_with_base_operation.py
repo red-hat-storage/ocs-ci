@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     flowtests,
     ignore_leftovers,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
@@ -119,6 +120,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
     @skipif_ocs_version("<4.9")
     @skipif_ocp_version("<4.9")
+    @skipif_hci_provider_and_client
     @pytest.mark.parametrize(
         argnames=["kv_version"],
         argvalues=[

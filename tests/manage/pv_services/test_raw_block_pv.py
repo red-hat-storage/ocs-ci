@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     acceptance,
     skipif_managed_service,
+    hci_provider_and_client_required,
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.helpers import helpers
@@ -31,7 +32,11 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             constants.RECLAIM_POLICY_RETAIN,
-            marks=[pytest.mark.polarion_id("OCS-750"), skipif_managed_service],
+            marks=[
+                pytest.mark.polarion_id("OCS-750"),
+                skipif_managed_service,
+                hci_provider_and_client_required,
+            ],
         ),
     ],
 )
