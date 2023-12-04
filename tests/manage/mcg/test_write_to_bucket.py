@@ -6,6 +6,7 @@ from zipfile import ZipFile
 import pytest
 from flaky import flaky
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
@@ -18,6 +19,7 @@ from ocs_ci.framework.testlib import (
     acceptance,
     performance,
     provider_client_ms_platform_required,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -438,7 +440,9 @@ class TestBucketIO(MCGTest):
         )
 
     @tier1
+    @runs_on_provider
     @provider_client_ms_platform_required
+    @pytest.mark.polarion_id("OCS-5214")
     def test_write_file_to_bucket_on_client(
         self,
         mcg_obj_client,
@@ -454,15 +458,17 @@ class TestBucketIO(MCGTest):
         bucketname = bucket_factory()[0].name
 
         original_cluster = config.cluster_ctx
-        config.switch_to_consumer()
+        mcg_obj, client_cluster = mcg_obj_client
+        config.switch_ctx(client_cluster)
+        awscli_pod, _ = awscli_pod_client
 
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = awscli_pod_client.exec_cmd_on_pod(
+        downloaded_files = awscli_pod.exec_cmd_on_pod(
             f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
         ).split(" ")
         # Write all downloaded objects to the new bucket
         sync_object_directory(
-            awscli_pod_client, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+            awscli_pod, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
         )
 
         assert set(downloaded_files).issubset(
