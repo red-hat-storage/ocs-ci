@@ -33,7 +33,7 @@ ENV_DATA:
 
   dr_workload_subscription_cephfs: [
     { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/app-busybox-1", pod_count: 20, pvc_count: 20 },
-    { name: "busybox-2", workload_dir: "rdr/busybox/cephfs/app-busybox-2", pod_count: 5, pvc_count: 5 },
+    { name: "busybox-2", workload_dir: "rdr/busybox/cephfs/app-busybox-2", pod_count: 20, pvc_count: 4 },
   ]
 
   # dr_policy_name: PLACEHOLDER
