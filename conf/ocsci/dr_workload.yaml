@@ -30,4 +30,10 @@ ENV_DATA:
       dr_workload_app_pvc_selector: {'appname': 'busybox_app5'}, pod_count: 20, pvc_count: 20
     },
   ]
+
+  dr_workload_subscription_cephfs: [
+    { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/app-busybox-1", pod_count: 20, pvc_count: 20 },
+    { name: "busybox-2", workload_dir: "rdr/busybox/cephfs/app-busybox-2", pod_count: 20, pvc_count: 4 },
+  ]
+
   # dr_policy_name: PLACEHOLDER
