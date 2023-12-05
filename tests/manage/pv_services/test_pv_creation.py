@@ -11,7 +11,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions, ocp
 from ocs_ci.ocs.constants import TEMPLATE_PV_PVC_DIR
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.utility import templating, utils
 
 log = logging.getLogger(__name__)
@@ -85,8 +85,11 @@ def verify_pv_exist(pv_name):
     return True
 
 
+# @tier1
+# Test case is disabled.
+# The Recycle reclaim policy is deprecated in OpenShift Container Platform 4.
+# Dynamic provisioning is recommended for equivalent and better functionality.
 @green_squad
-@tier1
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )
