@@ -179,4 +179,3 @@ def test_workload_rbd_cephfs_minimal(
     """
     logger.info(workload_storageutilization_05p_rbd)
     logger.info(workload_storageutilization_05p_cephfs)
-

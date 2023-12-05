@@ -1,6 +1,8 @@
 import logging
 import pytest
+import time
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier3,
     tier4,
@@ -10,8 +12,16 @@ from ocs_ci.framework.testlib import (
     blue_squad,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.utility import prometheus
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    get_percent_used_capacity,
+    set_osd_op_complaint_time,
+    get_full_ratio_from_osd_dump,
+)
+from ocs_ci.ocs.fiojob import get_timeout
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import get_osd_pods
+from ocs_ci.utility import prometheus
 
 log = logging.getLogger(__name__)
 
@@ -116,6 +126,7 @@ def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
         time_min=pg_wait,
     )
 
+
 class TestCephOSDSlowOps(object):
     @pytest.fixture(scope="function")
     def setup(self, request, pod_factory, multi_pvc_factory):
@@ -209,7 +220,7 @@ class TestCephOSDSlowOps(object):
         storage ends - fail the test
         """
 
-        api = PrometheusAPI(threading_lock=threading_lock)
+        api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
         while get_percent_used_capacity() < self.full_osd_threshold:
             time_passed_sec = time.perf_counter() - self.start_workload_time
@@ -217,19 +228,17 @@ class TestCephOSDSlowOps(object):
                 pytest.fail("failed to fill the storage in calculated time")
 
             delay_time = 60
-            logger.info(f"sleep {delay_time}s")
+            log.info(f"sleep {delay_time}s")
             time.sleep(delay_time)
 
             alerts_response = api.get(
                 "alerts", payload={"silenced": False, "inhibited": False}
             )
             if not alerts_response.ok:
-                logger.error(
-                    f"got bad response from Prometheus: {alerts_response.text}"
-                )
+                log.error(f"got bad response from Prometheus: {alerts_response.text}")
                 continue
             prometheus_alerts = alerts_response.json()["data"]["alerts"]
-            logger.info(f"Prometheus Alerts: {prometheus_alerts}")
+            log.info(f"Prometheus Alerts: {prometheus_alerts}")
             for target_label, target_msg, target_states, target_severity in [
                 (
                     constants.ALERT_CEPHOSDSLOWOPS,
@@ -249,7 +258,7 @@ class TestCephOSDSlowOps(object):
                     )
                     self.test_pass = True
                 except AssertionError:
-                    logger.info(
+                    log.info(
                         "workload storage utilization job did not finish\n"
                         f"current utilization {round(get_percent_used_capacity(), 1)}p\n"
                         f"time passed since start workload: {round(time.perf_counter() - self.start_workload_time)}s\n"

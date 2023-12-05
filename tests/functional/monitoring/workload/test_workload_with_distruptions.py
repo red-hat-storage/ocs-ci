@@ -30,7 +30,6 @@ The original idea was to use fio verification feature, but testing showed that
 when this fails for some reason or gets stuck, it's hard to debug.
 """
 import logging
-import time
 import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
@@ -45,13 +44,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import fiojob
-from ocs_ci.ocs.cluster import (
-    CephCluster,
-    get_percent_used_capacity,
-    set_osd_op_complaint_time,
-    get_full_ratio_from_osd_dump,
-)
-from ocs_ci.ocs.fiojob import get_timeout
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 
 logger = logging.getLogger(__name__)
