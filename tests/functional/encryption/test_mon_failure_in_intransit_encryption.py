@@ -26,9 +26,6 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-4919")
 @green_squad
-@pytest.mark.skip(
-    reason="Skipping due to the issue https://github.com/red-hat-storage/ocs-ci/issues/8464"
-)
 class TestMonFailuresWithIntransitEncryption:
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):
@@ -61,7 +58,7 @@ class TestMonFailuresWithIntransitEncryption:
             8. Verify the in-transit encryption configuration after
             scaling up mons and restarting mgr pod.
         """
-
+        self.mons = []
         if not get_in_transit_encryption_config_state():
             if config.ENV_DATA.get("in_transit_encryption"):
                 pytest.fail(

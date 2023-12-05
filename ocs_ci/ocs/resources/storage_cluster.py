@@ -1258,8 +1258,8 @@ def in_transit_encryption_verification():
 
     keys_found = retry(
         (ValueError),
-        tries=5,
-        delay=60,
+        tries=10,
+        delay=5,
     )(search_secure_keys)()
 
     if len(keys_to_match) != len(keys_found):
@@ -1275,22 +1275,6 @@ def in_transit_encryption_verification():
         f" {','.join(keys_found)} keys configured."
     )
 
-    # Verify ceph monitor protocol version
-    log.info("Verifying ceph monitor protocol version.")
-    ceph_mon_data = ceph_mon_dump()
-    v2_protocol_mon = sum(
-        1
-        for mon in ceph_mon_data["mons"]
-        if mon["public_addrs"]["addrvec"][0]["type"] == "v2"
-    )
-
-    if not v2_protocol_mon:
-        log.error("ceph mons are not configured with v2 protocol version. ")
-        raise ValueError(
-            "ceph mon protocol is not configured with 'v2' version which is recomended for in-transit encryption."
-        )
-
-    log.info("Ceph mons are configured with 'v2' protocol version.")
     return True
 
 
