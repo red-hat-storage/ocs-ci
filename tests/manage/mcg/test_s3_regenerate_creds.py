@@ -1,11 +1,15 @@
 import logging
 
+from ocs_ci.framework.pytest_customization.marks import tier2, bugzilla, polarion_id
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
 
+@tier2
+@bugzilla("2246328")
+@polarion_id("OCS-5216")
 def test_s3_regenerate_creds(mcg_obj):
     """
     Test s3 regenerate credential
