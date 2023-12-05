@@ -253,7 +253,7 @@ managed_service_required = pytest.mark.skipif(
 )
 
 provider_client_ms_platform_required = pytest.mark.skipif(
-    not (config.ENV_DATA["platform"].lower() not in HCI_PC_OR_MS_PLATFORM),
+    (config.ENV_DATA["platform"].lower() not in HCI_PC_OR_MS_PLATFORM),
     reason="Test runs ONLY on cluster with managed service or HCI provider-client platform",
 )
 
