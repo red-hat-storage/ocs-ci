@@ -3031,7 +3031,7 @@ def storagecluster_independent_check():
     )
     if consumer_cluster_index is not None:
         # Switch back to consumer cluster context
-        config.switch_to_consumer(consumer_cluster_index)
+        config.switch_ctx(consumer_cluster_index)
     return ret_val
 
 
