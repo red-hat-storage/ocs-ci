@@ -421,7 +421,7 @@ class CNVInstaller(object):
             os_machine_type (str): The operating system machine architecture.
 
         Returns:
-        Tuple(io.BytesIO, str): Binary data of the downloaded archive and the virtctl download URL.
+            Tuple(io.BytesIO, str): Binary data of the downloaded archive and the virtctl download URL.
 
         Raises:
             exceptions.RequestFailed: If the download request fails.
