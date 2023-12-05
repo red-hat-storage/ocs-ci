@@ -773,7 +773,7 @@ def get_rook_version():
     return rook_version
 
 
-def setup_ceph_toolbox(force_setup=False):
+def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it
     behaves as noop.
@@ -783,6 +783,9 @@ def setup_ceph_toolbox(force_setup=False):
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
+    storage_cluster = (
+        storage_cluster if storage_cluster else constants.DEFAULT_STORAGE_CLUSTER
+    )
     if ocsci_config.ENV_DATA["mcg_only_deployment"]:
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
@@ -850,11 +853,12 @@ def setup_ceph_toolbox(force_setup=False):
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
-        run_cmd(
-            "oc patch ocsinitialization ocsinit -n openshift-storage --type "
+        cmd = (
+            f"oc patch storagecluster {storage_cluster} -n openshift-storage --type "
             'json --patch  \'[{ "op": "replace", "path": '
             '"/spec/enableCephTools", "value": true }]\''
         )
+        run_cmd(cmd)
         toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
         toolbox_pod.wait_for_resource(
             condition="Running",
