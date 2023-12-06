@@ -226,6 +226,17 @@ class BusyBox(DRWorkload):
 
         """
         image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
+
+        # Skipping drpc.yaml deletion since DRPC is automatically removed.
+        kustomization_yaml_file = os.path.join(
+            self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
+        )
+        kustomization_yaml_data = templating.load_yaml(kustomization_yaml_file)
+        kustomization_yaml_data["resources"].remove("drpc.yaml")
+        templating.dump_data_to_temp_yaml(
+            kustomization_yaml_data, kustomization_yaml_file
+        )
+
         try:
             config.switch_acm_ctx()
             run_cmd(
