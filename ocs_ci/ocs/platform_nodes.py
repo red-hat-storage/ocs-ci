@@ -3068,4 +3068,5 @@ class GCPNodes(NodesBase):
         """
         not_ready_nodes = get_nodes_in_statuses([constants.NODE_NOT_READY])
         node_names = [n.name for n in not_ready_nodes]
-        self.gcp.start_instances(node_names)
+        if node_names:
+            self.gcp.start_instances(node_names)

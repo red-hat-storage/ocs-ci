@@ -36,18 +36,21 @@ class TestPvcUserInterface(object):
                 "ReadWriteMany",
                 "2",
                 "Filesystem",
+                marks=pytest.mark.polarion_id("OCS-5210"),
             ),
             pytest.param(
                 constants.OCS_COMPONENTS_MAP["blockpools"],
                 "ReadWriteMany",
                 "3",
                 "Block",
+                marks=pytest.mark.polarion_id("OCS-5211"),
             ),
             pytest.param(
                 constants.OCS_COMPONENTS_MAP["cephfs"],
                 "ReadWriteOnce",
                 "10",
                 "Filesystem",
+                marks=pytest.mark.polarion_id("OCS-5212"),
             ),
             pytest.param(
                 *[
@@ -56,13 +59,14 @@ class TestPvcUserInterface(object):
                     "11",
                     "Block",
                 ],
-                marks=[skipif_ocs_version("<4.7")],
+                marks=[skipif_ocs_version("<4.7"), pytest.mark.polarion_id("OCS-5206")],
             ),
             pytest.param(
                 constants.OCS_COMPONENTS_MAP["blockpools"],
                 "ReadWriteOnce",
                 "13",
                 "Filesystem",
+                marks=pytest.mark.polarion_id("OCS-5207"),
             ),
         ],
     )
@@ -219,11 +223,13 @@ class TestPvcUserInterface(object):
                 constants.OCS_COMPONENTS_MAP["blockpools"],
                 constants.ACCESS_MODE_RWO,
                 constants.ACCESS_MODE_RWO,
+                marks=pytest.mark.polarion_id("OCS-5208"),
             ),
             pytest.param(
                 constants.OCS_COMPONENTS_MAP["cephfs"],
                 constants.ACCESS_MODE_RWX,
                 constants.ACCESS_MODE_RWO,
+                marks=pytest.mark.polarion_id("OCS-5209"),
             ),
         ],
     )

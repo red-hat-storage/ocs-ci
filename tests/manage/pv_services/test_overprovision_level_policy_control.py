@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_ocs_version,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_external_mode,
 )
 from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
@@ -45,6 +46,7 @@ def setup_sc(storageclass_factory_class):
 @bugzilla("2024545")
 @skipif_external_mode
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_ocs_version("<4.10")
 @pytest.mark.polarion_id("OCS-4472")
 class TestOverProvisionLevelPolicyControl(ManageTest):

@@ -43,7 +43,7 @@ def test_log_reader_writer_parallel(project, tmp_path):
     pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
     pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
     if (
-        config.ENV_DATA["platform"].lower() not in constants.MANAGED_SERVICE_PLATFORMS
+        config.ENV_DATA["platform"].lower() not in constants.HCI_PC_OR_MS_PLATFORM
     ) and storagecluster_independent_check():
         sc_name = get_default_storage_class_name(
             constants.OCS_COMPONENTS_MAP["cephfs"], external_mode=True

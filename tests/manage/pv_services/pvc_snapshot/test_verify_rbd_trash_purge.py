@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_external_mode,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.8")
 @pytest.mark.polarion_id("OCS-2595")
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_external_mode
 class TestVerifyRbdTrashPurge(ManageTest):
     """

@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     skipif_ibm_cloud,
     skipif_external_mode,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
@@ -23,10 +24,14 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
+    delete_pods,
+    get_pod_objs,
 )
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs import osd_operations
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +116,9 @@ class TestDiskFailures(ManageTest):
 
             logger.info("Clear crash warnings and osd removal leftovers")
             clear_crash_warning_and_osd_removal_leftovers()
+            logger.info("Deleting the ocs-osd-removal pods")
+            pod_names = get_pod_name_by_pattern("ocs-osd-removal-job-")
+            delete_pods(get_pod_objs(pod_names))
 
         request.addfinalizer(finalizer)
 
@@ -123,6 +131,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers = Sanity()
 
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
     @bugzilla("1825675")
@@ -171,6 +180,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers.health_check(tries=100)
 
     @skipif_managed_service
+    @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1086")
     @skipif_ibm_cloud

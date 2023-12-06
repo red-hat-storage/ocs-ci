@@ -180,6 +180,8 @@ CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
+REPLICATION_SOURCE = "ReplicationSource"
+REPLICATIONDESTINATION = "ReplicationDestination"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -262,7 +264,7 @@ CEPH_UPSTREAM_REPO = "https://github.com/ceph/ceph.git"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
-DEFAULT_CLUSTERNAME = "ocs-storagecluster"
+DEFAULT_CLUSTERNAME = DEFAULT_STORAGE_CLUSTER = "ocs-storagecluster"
 DEFAULT_CLUSTERNAME_EXTERNAL_MODE = "ocs-external-storagecluster"
 DEFAULT_BLOCKPOOL = f"{DEFAULT_CLUSTERNAME}-cephblockpool"
 METADATA_POOL = f"{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata"
@@ -312,8 +314,8 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS = (
 DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-rbdplugin-snapclass"
 )
-DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS = f"{DEFAULT_CLUSTERNAME}-cephfs"
-DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
+DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
+DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
@@ -1025,6 +1027,7 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_VSPHERE,
 ]
 
+HCI_PC_OR_MS_PLATFORM = MANAGED_SERVICE_PLATFORMS + HCI_PROVIDER_CLIENT_PLATFORMS
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
 
@@ -1530,6 +1533,8 @@ OCS_PROVISIONERS = [
     "openshift-storage.noobaa.io/obc",
     "topolvm.cybozu.com",
     "topolvm.io",
+    "openshift-storage-client.rbd.csi.ceph.com",
+    "openshift-storage-client.cephfs.csi.ceph.com",
 ]
 RBD_PROVISIONER = "openshift-storage.rbd.csi.ceph.com"
 

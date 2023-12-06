@@ -4356,7 +4356,7 @@ def switch_to_correct_cluster_at_setup(request):
         request (_pytest.fixtures.SubRequest'): The pytest request fixture
 
     """
-    from ocs_ci.ocs.cluster import is_managed_service_cluster
+    from ocs_ci.ocs.cluster import is_managed_service_cluster, is_hci_cluster
 
     cluster_type = get_pytest_fixture_value(request, "cluster_type")
     if not cluster_type:
@@ -4366,7 +4366,7 @@ def switch_to_correct_cluster_at_setup(request):
         )
         return
 
-    if not is_managed_service_cluster():
+    if not (is_managed_service_cluster() or is_hci_cluster()):
         if cluster_type == constants.NON_MS_CLUSTER_TYPE:
             log.info(
                 "The cluster is a non-MS cluster. Continue the test with the current cluster"

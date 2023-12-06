@@ -7,12 +7,17 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.dr_helpers import (
+    wait_for_replication_destinations_creation,
+    wait_for_replication_destinations_deletion,
+)
 from ocs_ci.helpers.dr_helpers_ui import (
     dr_submariner_validation_from_ui,
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
     verify_failover_relocate_status_ui,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -38,23 +43,34 @@ class TestFailover:
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["primary_cluster_down", "pvc_interface"],
         argvalues=[
             pytest.param(
-                False,
+                *[False, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
                 id="primary_up",
             ),
             pytest.param(
-                True,
+                *[True, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id(polarion_id_primary_down),
                 id="primary_down",
+            ),
+            pytest.param(
+                *[False, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-4729"),
+                id="primary_up_cephfs",
+            ),
+            pytest.param(
+                *[True, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-4726"),
+                id="primary_down_cephfs",
             ),
         ],
     )
     def test_failover(
         self,
         primary_cluster_down,
+        pvc_interface,
         setup_acm_ui,
         dr_workload,
         nodes_multicluster,
@@ -77,7 +93,9 @@ class TestFailover:
                 raise NotImplementedError
 
         acm_obj = AcmAddClusters()
-        rdr_workload = dr_workload(num_of_subscription=1)[0]
+        rdr_workload = dr_workload(num_of_subscription=1, pvc_interface=pvc_interface)[
+            0
+        ]
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             rdr_workload.workload_namespace
@@ -88,6 +106,14 @@ class TestFailover:
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             rdr_workload.workload_namespace
         )
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the creation of ReplicationDestination resources on secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            wait_for_replication_destinations_creation(
+                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+            )
+            config.switch_to_cluster_by_name(primary_cluster_name)
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace
@@ -158,9 +184,20 @@ class TestFailover:
             ceph_health_check()
         dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
 
-        dr_helpers.wait_for_mirroring_status_ok(
-            replaying_images=rdr_workload.workload_pvc_count
-        )
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            # Verify the deletion of ReplicationDestination resources on secondary cluster
+            wait_for_replication_destinations_deletion(rdr_workload.workload_namespace)
+            config.switch_to_cluster_by_name(primary_cluster_name)
+            # Verify the creation of ReplicationDestination resources on primary cluster(current secondary)
+            wait_for_replication_destinations_creation(
+                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+            )
+
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=rdr_workload.workload_pvc_count
+            )
 
         if config.RUN.get("rdr_failover_via_ui"):
             config.switch_acm_ctx()

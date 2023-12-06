@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_external_mode,
 )
 from ocs_ci.utility import version
@@ -37,6 +38,7 @@ def setup_sc(storageclass_factory_class):
 @pytest.mark.polarion_id("OCS-3778")
 @skipif_external_mode
 @skipif_managed_service
+@skipif_hci_provider_and_client
 class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
     """
     Test OverProvision Level Policy Control With Capacity.

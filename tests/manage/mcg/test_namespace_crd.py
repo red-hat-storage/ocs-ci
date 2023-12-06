@@ -22,6 +22,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier2,
     tier4c,
+    bugzilla,
 )
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -938,7 +939,10 @@ class TestNamespace(MCGTest):
     @pytest.mark.parametrize(
         argnames=["mcg_pod"],
         argvalues=[
-            pytest.param(*["noobaa-db"], marks=pytest.mark.polarion_id("OCS-2291")),
+            pytest.param(
+                *["noobaa-db"],
+                marks=[pytest.mark.polarion_id("OCS-2291"), bugzilla("2165907")],
+            ),
             pytest.param(*["noobaa-core"], marks=pytest.mark.polarion_id("OCS-2319")),
             pytest.param(
                 *["noobaa-operator"], marks=pytest.mark.polarion_id("OCS-2320")

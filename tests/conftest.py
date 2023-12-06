@@ -121,7 +121,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
-    ceph_health_check_base,
     get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
@@ -1617,21 +1616,13 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     or mcg_only_deployment
                     or not ceph_cluster_installed
                 ):
-                    ceph_health_retry = False
-                    for mark in node.iter_markers():
-                        if "ceph_health_retry" == mark.name:
-                            ceph_health_retry = True
-                    if ceph_health_retry:
-                        ceph_health_check(
-                            namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-                        )
-                        log.info(
-                            "Ceph health check passed at teardown. (After test "
-                            "marked with @ceph_health_retry. For such TC we allow more re-tries)"
-                        )
-                    else:
-                        ceph_health_check()
-                        log.info("Ceph health check passed at teardown")
+                    # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
+                    # "flip-flopping ceph health OK and warn because of:
+                    # HEALTH_WARN Reduced data availability: 2 pgs peering
+                    ceph_health_check(
+                        namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                    )
+                    log.info("Ceph health check passed at teardown!")
             except CephHealthException:
                 if not ocsci_config.RUN["skip_reason_test_found"]:
                     squad_name = None
@@ -1646,7 +1637,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check()
+                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
                 raise
 
     request.addfinalizer(finalizer)
@@ -1656,7 +1647,11 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
         ):
             log.info("Checking for Ceph Health OK ")
             try:
-                status = ceph_health_check_base()
+                status = ceph_health_check(
+                    namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                    tries=10,
+                    delay=15,
+                )
                 if status:
                     log.info("Ceph health check passed at setup")
                     return
@@ -4141,7 +4136,7 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
-            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS
+            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
         ):
             storageclass = (
                 storageclass
@@ -4153,7 +4148,7 @@ def snapshot_restore_factory_fixture(request):
             vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS
+            or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
         ):
             storageclass = (
                 storageclass
@@ -4325,6 +4320,9 @@ def nb_ensure_endpoint_count(request):
     """
     Validate and ensure the number of running noobaa endpoints
     """
+    # TODO: remove return once bug https://bugzilla.redhat.com/show_bug.cgi?id=2251741 is verified
+    # return since test cases are not dependant on endpoint count
+    return
     cls = request.cls
     min_ep_count = cls.MIN_ENDPOINT_COUNT
     max_ep_count = cls.MAX_ENDPOINT_COUNT
@@ -4454,10 +4452,10 @@ def pvc_clone_factory_fixture(request):
             pvc_obj.provisioner in constants.OCS_PROVISIONERS
         ), f"Unknown provisioner in PVC {pvc_obj.name}"
         no_interface = False
-        if pvc_obj.provisioner == "openshift-storage.rbd.csi.ceph.com":
+        if "rbd.csi.ceph.com" in pvc_obj.provisioner:
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             interface = constants.CEPHBLOCKPOOL
-        elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
+        elif "cephfs.csi.ceph.com" in pvc_obj.provisioner:
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
         elif pvc_obj.provisioner in [
@@ -4797,10 +4795,14 @@ def setup_acm_ui(request):
 
 
 def setup_acm_ui_fixture(request):
+    restore_ctx_index = ocsci_config.cur_index
+    ocsci_config.switch_acm_ctx()
     driver = login_to_acm()
 
     def finalizer():
         close_browser()
+        log.info("Switching back to the initial cluster context")
+        ocsci_config.switch_ctx(restore_ctx_index)
 
     request.addfinalizer(finalizer)
 
@@ -5966,9 +5968,7 @@ def switch_to_provider_for_test(request):
         and ocsci_config.multicluster
         and (
             current_cluster.ENV_DATA.get("platform", "").lower()
-            in constants.MANAGED_SERVICE_PLATFORMS
-            or current_cluster.ENV_DATA.get("platform", "").lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            in constants.HCI_PC_OR_MS_PLATFORM
         )
     ):
         for cluster in ocsci_config.clusters:
@@ -6258,7 +6258,7 @@ def create_scale_pods_and_pvcs_using_kube_job(request):
         if (
             ocsci_config.multicluster
             and ocsci_config.ENV_DATA.get("platform", "").lower()
-            in constants.MANAGED_SERVICE_PLATFORMS
+            in constants.HCI_PC_OR_MS_PLATFORM
         ):
             orig_index = ocsci_config.cur_index
 
@@ -6390,11 +6390,15 @@ def dr_workload(request):
     """
     instances = []
 
-    def factory(num_of_subscription=1, num_of_appset=0):
+    def factory(
+        num_of_subscription=1, num_of_appset=0, pvc_interface=constants.CEPHBLOCKPOOL
+    ):
         """
         Args:
             num_of_subscription (int): Number of Subscription type workload to be created
             num_of_appset (int): Number of ApplicationSet type workload to be created
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -6404,8 +6408,12 @@ def dr_workload(request):
 
         """
         total_pvc_count = 0
+        workload_key = "dr_workload_subscription"
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            workload_key = "dr_workload_subscription_cephfs"
+
         for index in range(num_of_subscription):
-            workload_details = ocsci_config.ENV_DATA["dr_workload_subscription"][index]
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -6430,7 +6438,10 @@ def dr_workload(request):
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
         if ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+            if pvc_interface != constants.CEPHFILESYSTEM:
+                dr_helpers.wait_for_mirroring_status_ok(
+                    replaying_images=total_pvc_count
+                )
         return instances
 
     def teardown():

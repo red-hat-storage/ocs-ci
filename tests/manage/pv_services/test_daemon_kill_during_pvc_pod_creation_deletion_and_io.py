@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     polarion_id,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_external_mode,
     ignore_leftover_label,
 )
@@ -43,6 +44,7 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4c
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_external_mode
 @ignore_leftover_label(constants.ROOK_CEPH_DETECT_VERSION_LABEL)
 class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):

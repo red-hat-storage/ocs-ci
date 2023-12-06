@@ -39,6 +39,7 @@ from ocs_ci.framework.testlib import (
     pre_upgrade,
     post_upgrade,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import fiojob
@@ -61,6 +62,7 @@ logger = logging.getLogger(__name__)
 @pre_upgrade
 @tier2
 @skipif_managed_service
+@skipif_hci_provider_and_client
 def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
     """
     Purpose of this test is to have checksum workload fixture executed.
@@ -77,6 +79,7 @@ def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
 @post_upgrade
 @tier2
 @skipif_managed_service
+@skipif_hci_provider_and_client
 def test_workload_with_checksum_verify(
     tmp_path,
     project,

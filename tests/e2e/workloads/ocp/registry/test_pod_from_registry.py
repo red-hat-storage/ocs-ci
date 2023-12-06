@@ -43,8 +43,6 @@ class TestRegistryImage(E2ETest):
             "claimName"
         ] = pvc_obj.name
         pod_obj = pod_factory(pvc=pvc_obj, custom_data=pod_dict)
-        pod_image = (
-            pod_obj.get().get("status").get("containerStatuses")[0].get("imageID")
-        )
+        pod_image = pod_obj.get().get("status").get("containerStatuses")[0].get("image")
         assert image_id == pod_image, f"pod uses different image {pod_image}"
         logger.info(f"pod uses {image_id}")

@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     bugzilla,
     skipif_managed_service,
+    runs_on_provider,
     skipif_ocs_version,
 )
 from ocs_ci.ocs import constants
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 @tier4c
 @pytest.mark.polarion_id("OCS-1052")
 @skipif_managed_service
+@runs_on_provider
 def test_ceph_manager_stopped(measure_stop_ceph_mgr, threading_lock):
     """
     Test that there is appropriate alert when ceph manager
@@ -50,6 +52,7 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr, threading_lock):
 @tier4c
 @pytest.mark.polarion_id("OCS-904")
 @skipif_managed_service
+@runs_on_provider
 def test_ceph_monitor_stopped(measure_stop_ceph_mon, threading_lock):
     """
     Test that there is appropriate alert related to ceph monitor quorum
@@ -92,6 +95,7 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon, threading_lock):
 @pytest.mark.polarion_id("OCS-2724")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
 @skipif_managed_service
+@runs_on_provider
 @skipif_ocs_version("<4.9")
 def test_ceph_mons_quorum_lost(measure_stop_ceph_mon, threading_lock):
     """
@@ -122,6 +126,7 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon, threading_lock):
 @tier4c
 @pytest.mark.polarion_id("OCS-900")
 @skipif_managed_service
+@runs_on_provider
 def test_ceph_osd_stopped(measure_stop_ceph_osd, threading_lock):
     """
     Test that there is appropriate alert related to situation when ceph osd

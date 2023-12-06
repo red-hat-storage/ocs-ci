@@ -773,7 +773,7 @@ def get_rook_version():
     return rook_version
 
 
-def setup_ceph_toolbox(force_setup=False):
+def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it
     behaves as noop.
@@ -783,6 +783,9 @@ def setup_ceph_toolbox(force_setup=False):
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
+    storage_cluster = (
+        storage_cluster if storage_cluster else constants.DEFAULT_STORAGE_CLUSTER
+    )
     if ocsci_config.ENV_DATA["mcg_only_deployment"]:
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
@@ -835,44 +838,6 @@ def setup_ceph_toolbox(force_setup=False):
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
             return
-
-        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1982721
-        # TODO: Remove workaround when bug 1982721 is fixed
-        # https://github.com/red-hat-storage/ocs-ci/issues/4585
-        if ocsci_config.ENV_DATA.get("is_multus_enabled"):
-            toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
-            toolbox["spec"]["template"]["spec"]["containers"][0][
-                "image"
-            ] = get_rook_version()
-            toolbox["metadata"]["name"] += "-multus"
-            # remove tini from multus tool box
-            if ocs_version >= version.VERSION_4_10:
-                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
-                    "/bin/bash"
-                ]
-                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
-                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
-                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
-
-            if ocsci_config.ENV_DATA["multus_create_public_net"]:
-                multus_net_name = ocsci_config.ENV_DATA["multus_public_net_name"]
-                multus_net_namespace = ocsci_config.ENV_DATA[
-                    "multus_public_net_namespace"
-                ]
-            elif ocsci_config.ENV_DATA["multus_create_cluster_net"]:
-                multus_net_name = ocsci_config.ENV_DATA["multus_cluster_net_name"]
-                multus_net_namespace = ocsci_config.ENV_DATA[
-                    "multus_cluster_net_namespace"
-                ]
-
-            toolbox["spec"]["template"]["metadata"]["annotations"] = {
-                "k8s.v1.cni.cncf.io/networks": f"{multus_net_namespace}/{multus_net_name}"
-            }
-            toolbox["spec"]["template"]["spec"]["hostNetwork"] = False
-            rook_toolbox = OCS(**toolbox)
-            rook_toolbox.create()
-            return
-
         if (
             ocsci_config.ENV_DATA.get("platform").lower()
             == constants.FUSIONAAS_PLATFORM
@@ -888,11 +853,12 @@ def setup_ceph_toolbox(force_setup=False):
         # for OCS >= 4.3 there is new toolbox pod deployment done here:
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
-        run_cmd(
-            "oc patch ocsinitialization ocsinit -n openshift-storage --type "
+        cmd = (
+            f"oc patch storagecluster {storage_cluster} -n openshift-storage --type "
             'json --patch  \'[{ "op": "replace", "path": '
             '"/spec/enableCephTools", "value": true }]\''
         )
+        run_cmd(cmd)
         toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
         toolbox_pod.wait_for_resource(
             condition="Running",

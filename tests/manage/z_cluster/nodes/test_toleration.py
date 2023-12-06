@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     ignore_leftovers,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @tier4c
 @ignore_leftovers
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @pytest.mark.polarion_id("OCS-2450")
 class TestTaintAndTolerations(E2ETest):
     """

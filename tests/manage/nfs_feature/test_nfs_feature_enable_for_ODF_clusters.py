@@ -18,6 +18,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     skipif_ocp_version,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     polarion_id,
@@ -40,6 +41,7 @@ ERRMSG = "Error in command"
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @polarion_id("OCS-4270")
@@ -73,6 +75,7 @@ class TestDefaultNfsDisabled(ManageTest):
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 class TestNfsEnable(ManageTest):
@@ -90,7 +93,7 @@ class TestNfsEnable(ManageTest):
         By default in our jenkins jobs we are creating one of our custom config file,
         so we can make sure
         ENV_DATA:
-            nfs_client_ip: "10.0.151.68"
+            nfs_client_ip: "10.xx.xxx.xx"
             nfs_client_user: "root"
             nfs_client_private_key: constants.SSH_PRIV_KEY
         these values are provided in all our automation runs in Jenkins.
@@ -98,7 +101,7 @@ class TestNfsEnable(ManageTest):
         But if someone will run locally, they will need to create custom config file and provide that via
         --ocsci-conf in order to run the external nfs consume tests. Example:
         ENV_DATA:
-            nfs_client_ip: "10.10.10.10"
+            nfs_client_ip: "10.xx.xxx.xx"
             nfs_client_user: "root"
             nfs_client_private_key: "<path to ssh private key>"
 

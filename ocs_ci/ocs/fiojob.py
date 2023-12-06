@@ -21,6 +21,7 @@ import pytest
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -323,10 +324,27 @@ def get_pool_name(fixture_name):
                 "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
             )
             ceph_pool_name = f"cephblockpool-storageconsumer-{cluster_id}"
+        elif (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+        ):
+            # Get pool name form storageclass
+            default_sc = default_storage_class(constants.CEPHBLOCKPOOL)
+            ceph_pool_name = default_sc.get()["parameters"]["pool"]
         else:
             ceph_pool_name = "ocs-storagecluster-cephblockpool"
     elif fixture_name.endswith("cephfs"):
-        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+        ):
+            # Get pool name form storageclass
+            default_sc = default_storage_class(constants.CEPHFILESYSTEM)
+            ceph_pool_name = default_sc.get()["parameters"]["pool"]
+        else:
+            ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
     else:
         raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
     return ceph_pool_name
