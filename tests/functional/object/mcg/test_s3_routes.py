@@ -144,18 +144,18 @@ class TestS3Routes:
         """
 
         def finalizer():
-            storagecluster_obj = ocp.OCP(
-                kind=constants.STORAGECLUSTER,
+            noobaa_ocp_obj = ocp.OCP(
+                kind="noobaa",
                 namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=constants.DEFAULT_CLUSTERNAME,
+                resource_name="noobaa",
             )
             try:
-                if storagecluster_obj.data["spec"]["multiCloudGateway"][
-                    "disableLoadBalancerService"
-                ]:
-                    lb_param = '[{"op": "remove", "path": "/spec/multiCloudGateway/disableLoadBalancerService"}]'
+                if noobaa_ocp_obj.data["spec"]["disableLoadBalancerService"]:
+                    lb_param = (
+                        '[{"op": "remove", "path": "/spec/disableLoadBalancerService"}]'
+                    )
                     logger.info("Revert disableLoadBalancerService")
-                    storagecluster_obj.patch(params=lb_param, format_type="json")
+                    noobaa_ocp_obj.patch(params=lb_param, format_type="json")
             except KeyError:
                 logger.info(
                     "disableLoadBalancerService param does not exist, no need to revert"
