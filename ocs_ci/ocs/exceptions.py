@@ -657,3 +657,7 @@ class VSLMNotFoundException(Exception):
 
 class OperationFailedToCompleteException(Exception):
     pass
+
+
+class HyperConvergedHealthException(Exception):
+    pass
