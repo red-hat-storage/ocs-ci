@@ -5506,7 +5506,7 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
 
     def mcg_account_factory_implementation(
         name,
-        default_resource="",
+        default_resource=constants.DEFAULT_NOOBAA_BACKINGSTORE,
         nsfs_account_config=False,
         uid=-1,
         gid=-1,
@@ -5537,6 +5537,10 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool)
 
         """
+        if uid == -1:
+            uid = random.randint(1000, 10000)
+        if gid == -1:
+            gid = random.randint(1000, 10000)
 
         # Build the mcg-cli command for creating an account
         cli_cmd = (
