@@ -175,16 +175,21 @@ def ocs_install_verification(
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
-    provider_cluster = (
-        managed_service and config.ENV_DATA["cluster_type"].lower() == "provider"
+    hci_cluster = (
+        config.ENV_DATA.get("platform") in constants.HCI_PROVIDER_CLIENT_PLATFORMS
     )
+    provider_cluster = (managed_service or hci_cluster) and config.ENV_DATA[
+        "cluster_type"
+    ].lower() == "provider"
     consumer_cluster = (
-        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
+        managed_service
+        and config.ENV_DATA["cluster_type"].lower() == constants.MS_CONSUMER_TYPE
+    )
+    client_cluster = (
+        hci_cluster and config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
-    external = config.DEPLOYMENT["external_mode"] or (
-        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
-    )
+    external = config.DEPLOYMENT["external_mode"] or consumer_cluster or client_cluster
     fusion_aas = config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
     fusion_aas_consumer = fusion_aas and consumer_cluster
     fusion_aas_provider = fusion_aas and provider_cluster
