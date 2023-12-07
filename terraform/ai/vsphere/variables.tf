@@ -58,6 +58,24 @@ variable "system_disk_size" {
   default = "120"
 }
 
+variable "base_domain" {
+  type        = string
+  default     = null
+  description = "Base DNS domain, where should be the cluster records created"
+}
+
+variable "api_ip" {
+  type        = string
+  default     = null
+  description = "API IP address, if not defined DNS record is not created"
+}
+
+variable "ingress_ip" {
+  type        = string
+  default     = null
+  description = "Ingress IP address, if not defined DNS record is not created"
+}
+
 ///////////
 // control-plane machine variables
 ///////////
