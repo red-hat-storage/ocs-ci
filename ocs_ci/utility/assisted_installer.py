@@ -125,10 +125,13 @@ class OpenShiftAPI(object):
             Response or dict: the response from the server (if json == True, parsed as json)
         """
         url = self.get_api_endpoint_url(endpoint)
+        logger.debug(f"Sending GET request to '{url}' with parameters: {params}")
         resp = requests.get(url, params=params, headers=self.headers)
+        logger.debug(f"Response: {resp.status_code} {resp.reason}")
         if not ignore_failure and not resp.ok:
             raise OpenShiftAPIResponseException(resp)
         if json:
+            logger.debug(f"Response JSON: {resp.json()}")
             return resp.json()
         return resp
 
@@ -146,10 +149,13 @@ class OpenShiftAPI(object):
             Response or dict: the response from the server (if json == True, parsed as json)
         """
         url = self.get_api_endpoint_url(endpoint)
+        logger.debug(f"Sending POST request to '{url}' with data: {data}")
         resp = requests.post(url, json=data, headers=self.headers)
+        logger.debug(f"Response: {resp.status_code} {resp.reason}")
         if not ignore_failure and not resp.ok:
             raise OpenShiftAPIResponseException(resp)
         if json:
+            logger.debug(f"Response JSON: {resp.json()}")
             return resp.json()
         return resp
 
@@ -167,10 +173,13 @@ class OpenShiftAPI(object):
             Response or dict: the response from the server (if json == True, parsed as json)
         """
         url = self.get_api_endpoint_url(endpoint)
+        logger.debug(f"Sending PATCH request to '{url}' with data: {data}")
         resp = requests.patch(url, json=data, headers=self.headers)
+        logger.debug(f"Response: {resp.status_code} {resp.reason}")
         if not ignore_failure and not resp.ok:
             raise OpenShiftAPIResponseException(resp)
         if json:
+            logger.debug(f"Response JSON: {resp.json()}")
             return resp.json()
         return resp
 
@@ -187,10 +196,13 @@ class OpenShiftAPI(object):
             Response or dict: the response from the server (if json == True, parsed as json)
         """
         url = self.get_api_endpoint_url(endpoint)
+        logger.debug(f"Sending DELETE request to '{url}'")
         resp = requests.delete(url, headers=self.headers)
+        logger.debug(f"Response: {resp.status_code} {resp.reason}")
         if not ignore_failure and not resp.ok:
             raise OpenShiftAPIResponseException(resp)
         if json:
+            logger.debug(f"Response JSON: {resp.json()}")
             return resp.json()
         return resp
 
