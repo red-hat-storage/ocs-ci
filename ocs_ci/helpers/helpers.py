@@ -3031,10 +3031,7 @@ def storagecluster_independent_check():
     )
     if consumer_cluster_index is not None:
         # Switch back to consumer cluster context
-        if config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER:
-            config.switch_to_provider(consumer_cluster_index)
-        else:
-            config.switch_to_consumer(consumer_cluster_index)
+        config.switch_to_consumer(consumer_cluster_index)
     return ret_val
 
 

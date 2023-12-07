@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     tier2,
     tier4a,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus, version
@@ -119,6 +120,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock)
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
+@runs_on_provider
 def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted, threading_lock):
     """
     Test that there are appropriate alerts when target bucket used of
