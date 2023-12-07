@@ -4067,11 +4067,10 @@ def get_cephfs_subvolumegroup():
         str: The name of cephfilesystemsubvolumegroup
 
     """
-    if config.ENV_DATA.get(
-        "platform", ""
-    ).lower() in constants.HCI_PC_OR_MS_PLATFORM and (
-        config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
-        or config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+    if (
+        config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
     ):
         subvolume_group = ocp.OCP(
             kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
@@ -4079,6 +4078,17 @@ def get_cephfs_subvolumegroup():
         )
         subvolume_group_obj = subvolume_group.get().get("items")[0]
         subvolume_group_name = subvolume_group_obj.get("metadata").get("name")
+    elif config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+        configmap_obj = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-configs")
+        json_config = ceph_csi_configmap.get("data").get("config.json")
+        json_config_list = json.loads(json_config)
+        for dict_item in json_config_list:
+            if "cephFS" in dict_item.keys():
+                subvolume_group_name = dict_item["cephFS"].get("subvolumeGroup")
     else:
         subvolume_group_name = "csi"
 
