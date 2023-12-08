@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     tier2,
     skipif_external_mode,
+    skipif_hci_provider_and_client,
 )
 
 log = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.3")
 @polarion_id("OCS-2130")
 @skipif_external_mode
+@skipif_hci_provider_and_client
 def test_verify_new_cbp_creation_not_blocked_by_invalid_cbp(teardown_factory):
     """
     Test to verify new ceph block pool can be created without deleting

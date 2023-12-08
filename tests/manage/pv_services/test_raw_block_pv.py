@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     acceptance,
     skipif_managed_service,
-    hci_provider_and_client_required,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs import constants, node
 from ocs_ci.helpers import helpers
@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
             marks=[
                 pytest.mark.polarion_id("OCS-750"),
                 skipif_managed_service,
-                hci_provider_and_client_required,
+                skipif_hci_provider_and_client,
             ],
         ),
     ],
