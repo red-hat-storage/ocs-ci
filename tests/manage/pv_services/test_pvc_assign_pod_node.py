@@ -95,7 +95,7 @@ class TestPvcAssignPodNode(ManageTest):
             config.ENV_DATA["platform"].lower()
             in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
-            timeout = 180
+            timeout = 300
         helpers.wait_for_resource_state(
             resource=pod_obj, state=constants.STATUS_RUNNING, timeout=timeout
         )
