@@ -83,9 +83,12 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
             test_file,
             minimal_time=60 * 9,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(stop_mgr, test_file)
+        measured_op = measure_operation(
+            stop_mgr, test_file, threading_lock=threading_lock
+        )
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
@@ -183,10 +186,13 @@ def measure_stop_ceph_mon(measurement_dir, create_mon_quorum_loss, threading_loc
             test_file,
             minimal_time=60 * 20,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
         schedule_nodes(worker_node_names)
     else:
-        measured_op = measure_operation(stop_mon, test_file)
+        measured_op = measure_operation(
+            stop_mon, test_file, threading_lock=threading_lock
+        )
 
     # expected minimal downtime of a mon inflicted by this fixture
     measured_op["min_downtime"] = run_time - (60 * 2)
@@ -273,9 +279,12 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
             test_file,
             minimal_time=60 * 19,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(stop_osd, test_file)
+        measured_op = measure_operation(
+            stop_osd, test_file, threading_lock=threading_lock
+        )
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
 
@@ -911,9 +920,12 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
             test_file,
             minimal_time=60 * 8,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(stop_rgw, test_file)
+        measured_op = measure_operation(
+            stop_rgw, test_filei, threading_lock=threading_lock
+        )
 
     logger.info("Return RGW pods")
     for rgw_deployment in rgw_deployments:
