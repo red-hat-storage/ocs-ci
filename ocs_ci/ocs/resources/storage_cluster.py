@@ -522,6 +522,7 @@ def ocs_install_verification(
         config.DEPLOYMENT.get("ui_deployment")
         or config.DEPLOYMENT["external_mode"]
         or managed_service
+        or hci_cluster
     ):
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
@@ -639,7 +640,7 @@ def ocs_install_verification(
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
     # TODO: update pvc validation for managed services
-    if not managed_service:
+    if not (managed_service or hci_cluster):
         log.info("Validate cluster on PVC")
         validate_cluster_on_pvc()
 
