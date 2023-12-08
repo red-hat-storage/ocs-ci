@@ -1520,7 +1520,7 @@ def set_deviceset_count(count):
     )
 
 
-def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_storage_cluster(namespace=None):
     """
     Get storage cluster name
 
@@ -1531,9 +1531,7 @@ def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
         storage cluster (obj) : Storage cluster object handler
 
     """
-    # In multicluster runs with provider and client
-    # we need to make sure the new config afther the context switch is used
-    if config.ENV_DATA.get("platform") in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+    if namespace is None:
         namespace = config.ENV_DATA["cluster_namespace"]
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
