@@ -56,3 +56,12 @@ compute_data_disks_count = "2"
 // The size of data disks for Compute VMs, in GB.
 // Default 256 GB.
 compute_data_disks_size = "256"
+
+// Base DNS domain, where should be the cluster records created
+// base_domain = "example.com"
+
+// API IP address, if not defined no DNS record is created
+// api_ip = "192.0.2.2"
+
+// Ingress IP address, if not defined no DNS record is created
+// ingress_ip = "192.0.2.3"

@@ -3,6 +3,7 @@ locals {
   control_planes = [for idx in range(var.control_plane_count) : "${var.cluster_id}-control-plane-${idx}"]
   compute_nodes  = [for idx in range(var.compute_count) : "${var.cluster_id}-compute-${idx}"]
   guest_id       = "rhel8_64Guest"
+  dns_zone_id    = one(data.aws_route53_zone.dns_zone[*].zone_id)
 }
 
 // configure connection to vSphere
@@ -35,6 +36,32 @@ data "vsphere_network" "network" {
   name                            = var.vm_network
   datacenter_id                   = data.vsphere_datacenter.dc.id
   distributed_virtual_switch_uuid = ""
+}
+
+// get DNS zone for creating API and Ingress A records
+data "aws_route53_zone" "dns_zone" {
+  count = var.base_domain != null ? 1 : 0
+  name  = var.base_domain
+}
+
+// create DNS A record for API (only if api_ip is defined)
+resource "aws_route53_record" "api_a_record" {
+  count   = var.api_ip != null ? 1 : 0
+  type    = "A"
+  ttl     = "60"
+  zone_id = local.dns_zone_id
+  name    = "api.${var.cluster_id}.${var.base_domain}"
+  records = [var.api_ip]
+}
+
+// create DNS A record for Ingress (only if ingress_ip is defined)
+resource "aws_route53_record" "ingress_a_record" {
+  count   = var.ingress_ip != null ? 1 : 0
+  type    = "A"
+  ttl     = "60"
+  zone_id = local.dns_zone_id
+  name    = "*.apps.${var.cluster_id}.${var.base_domain}"
+  records = [var.ingress_ip]
 }
 
 // create Resource Pool for VMs
