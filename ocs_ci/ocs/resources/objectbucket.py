@@ -357,9 +357,14 @@ class MCGCLIBucket(ObjectBucket):
     def internal_delete(self):
         """
         Deletes the bucket using the NooBaa CLI
+
+        Raises:
+            NotFoundError: In case the OBC was not found
+
         """
-        # TODO: Raise NotFoundError exception if bucket not found
-        self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
+        result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
+        if "deleting" and self.name not in result.stderr.lower():
+            raise NotFoundError(result)
 
     @property
     def internal_status(self):
@@ -409,6 +414,9 @@ class MCGS3Bucket(ObjectBucket):
     def internal_delete(self):
         """
         Deletes the bucket using the S3 API
+
+        Raises:
+            NotFoundError: In case the bucket was not found
         """
         try:
             response = self.s3client.get_bucket_versioning(Bucket=self.name)
@@ -456,6 +464,9 @@ class OCBucket(ObjectBucket):
     def internal_delete(self, verify=True):
         """
         Deletes the bucket using the OC CLI
+
+        Raises:
+            NotFoundError: In case the OBC was not found
         """
         try:
             OCP(kind="obc", namespace=self.namespace).delete(resource_name=self.name)
@@ -565,7 +576,6 @@ class MCGNamespaceBucket(ObjectBucket):
         """
         Deletes the bucket using the S3 API
         """
-        # TODO: Raise NotFoundError exception if bucket not found
         self.mcg.send_rpc_query("bucket_api", "delete_bucket", {"name": self.name})
 
     @property
