@@ -77,12 +77,12 @@ resource "vsphere_folder" "folder" {
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
-// upload discovery iso to vSphere data store to /iso directory
+// upload discovery iso to vSphere data store to /discovery-iso directory
 resource "vsphere_file" "discovery_iso" {
   datacenter         = var.vsphere_datacenter
   datastore          = var.vsphere_datastore
   source_file        = var.iso_image
-  destination_file   = "/iso/${var.cluster_id}-discovery.iso"
+  destination_file   = "/discovery-iso/${var.cluster_id}-discovery.iso"
   create_directories = true
 }
 
