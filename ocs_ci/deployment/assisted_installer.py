@@ -327,8 +327,7 @@ class AssistedInstallerCluster(object):
 
     def create_metadata_file(self):
         """
-        Create .openshift_install.log file containing URL to OpenShift console
-        It is used by our CI jobs to show the console URL in build description.
+        Create metadata.json file.
         """
         self.api.download_cluster_file(self.id, self.cluster_path, "metadata.json")
         logger.info("Created metadata.json file")
