@@ -924,7 +924,7 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
         )
     else:
         measured_op = measure_operation(
-            stop_rgw, test_filei, threading_lock=threading_lock
+            stop_rgw, test_file, threading_lock=threading_lock
         )
 
     logger.info("Return RGW pods")
