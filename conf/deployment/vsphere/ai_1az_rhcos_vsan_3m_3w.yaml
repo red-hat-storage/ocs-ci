@@ -7,9 +7,9 @@ ENV_DATA:
   deployment_type: 'ai'
   worker_replicas: 3
   master_replicas: 3
+  master_num_cpus: '16'
   worker_num_cpus: '16'
-  master_num_cpus: '4'
-  master_memory: '16384'
+  master_memory: '65536'
   compute_memory: '65536'
   extra_disks: 2
   fio_storageutilization_min_mbps: 10.0
