@@ -23,14 +23,42 @@ logger = logging.getLogger(__name__)
 
 
 class AssistedInstallerCluster(object):
-    def __init__(self, name, cluster_path, existing_cluster=False, **kwargs):
+    def __init__(
+        self,
+        name,
+        cluster_path,
+        existing_cluster=False,
+        openshift_version=None,
+        base_dns_domain=None,
+        api_vip=None,
+        ingress_vip=None,
+        ssh_public_key=None,
+        pull_secret=None,
+        cpu_architecture="x86_64",
+        high_availability_mode="Full",
+        image_type="minimal-iso",
+    ):
         """
         Args:
             name (str): Name of the OpenShift cluster.
             cluster_path (str): path to cluster dir
             existing_cluster (bool): controls if we want to create new cluster or load configuration from existing one
-            **kwargs: for new cluster, **kwargs are passed to set_cluster_configuration function
-                (see the description there)
+                Following parameters are mandatory, if we are creating new cluster.
+            openshift_version (str): Version of the OpenShift cluster. (Mandatory if existing_cluster is not True)
+            base_dns_domain (str): Base domain of the cluster. All DNS records must be sub-domains of this base and
+                include the cluster name. (Mandatory if existing_cluster is not True)
+            api_vip (str): The virtual IPs used to reach the OpenShift cluster's API.
+                (Mandatory if existing_cluster is not True)
+            ingress_vip (str): The virtual IPs used for cluster ingress traffic.
+                (Mandatory if existing_cluster is not True)
+            ssh_public_key (str): SSH public key for debugging OpenShift nodes.
+                (Mandatory if existing_cluster is not True)
+            pull_secret (str): original pull-secret
+                (Mandatory if existing_cluster is not True)
+            cpu_architecture (str): The CPU Architecture: x86_64, aarch64, arm64, ppc64le, s390x, multi
+                (default: x86_64)
+            high_availability_mode (str): High availability mode: Full or None (default: "Full")
+            image_type (str): Type of discovery image full-iso or minimal-iso (default: minimal-iso)
 
         """
         self.api = ai.AssistedInstallerAPI()
@@ -56,46 +84,30 @@ class AssistedInstallerCluster(object):
             )
         else:
             # set up configuration for new cluster
-            self.set_cluster_configuration(**kwargs)
-
-    def set_cluster_configuration(
-        self,
-        openshift_version,
-        base_dns_domain,
-        api_vip,
-        ingress_vip,
-        ssh_public_key,
-        pull_secret,
-        cpu_architecture="x86_64",
-        high_availability_mode="Full",
-        image_type="minimal-iso",
-    ):
-        """
-        Prepare configuration for new cluster
-
-        Args:
-            openshift_version (str): Version of the OpenShift cluster.
-            base_dns_domain (str): Base domain of the cluster. All DNS records must be sub-domains of this base and
-                include the cluster name.
-            api_vip (str): The virtual IPs used to reach the OpenShift cluster's API.
-            ingress_vip (str): The virtual IPs used for cluster ingress traffic.
-            ssh_public_key (str): SSH public key for debugging OpenShift nodes.
-            pull_secret (str): original pull-secret
-            cpu_architecture (str): The CPU Architecture: x86_64, aarch64, arm64, ppc64le, s390x, multi
-                (default: x86_64)
-            high_availability_mode (str): High availability mode: Full or None (default: "Full")
-            image_type (str): Type of discovery image full-iso or minimal-iso (default: minimal-iso)
-        """
-        self.openshift_version = openshift_version
-        self.base_dns_domain = base_dns_domain
-        self.api_vip = api_vip
-        self.ingress_vip = ingress_vip
-        # if ssh_public_key contains new line at the end, infrastructure creation fails with error SSH key is not valid
-        self.ssh_public_key = ssh_public_key.strip()
-        self.pull_secret = self.prepare_pull_secret(pull_secret)
-        self.cpu_architecture = cpu_architecture
-        self.high_availability_mode = high_availability_mode
-        self.image_type = image_type
+            if not (
+                openshift_version
+                and base_dns_domain
+                and api_vip
+                and ingress_vip
+                and ssh_public_key
+                and pull_secret
+            ):
+                raise TypeError(
+                    "When configuring new cluster (existing_cluster=False), "
+                    "all following arguments has to be set: "
+                    "openshift_version, base_dns_domain, api_vip,  ingress_vip, ssh_public_key and pull_secret"
+                )
+            self.openshift_version = openshift_version
+            self.base_dns_domain = base_dns_domain
+            self.api_vip = api_vip
+            self.ingress_vip = ingress_vip
+            # if ssh_public_key contains new line at the end, infrastructure creation
+            # fails with error SSH key is not valid
+            self.ssh_public_key = ssh_public_key.strip()
+            self.pull_secret = self.prepare_pull_secret(pull_secret)
+            self.cpu_architecture = cpu_architecture
+            self.high_availability_mode = high_availability_mode
+            self.image_type = image_type
 
     def load_existing_cluster_configuration(self):
         """
