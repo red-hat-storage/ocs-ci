@@ -626,8 +626,8 @@ class TestMonitoringBackedByOCS(E2ETest):
         and check ceph related metrics
         """
         # Check ceph metrics available
-        assert (
-            check_ceph_metrics_available()
+        assert check_ceph_metrics_available(
+            threading_lock=threading_lock
         ), "failed to get results for some metrics before Downscaling deployment mgr to 0"
 
         # Get pod mge name and mgr deployment
