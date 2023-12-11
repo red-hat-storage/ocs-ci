@@ -62,7 +62,7 @@ class OCPDeployment:
         Load pull secret file
 
         Returns:
-            dict: content of pull secret
+            str: content of pull secret
         """
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         with open(pull_secret_path, "r") as f:
