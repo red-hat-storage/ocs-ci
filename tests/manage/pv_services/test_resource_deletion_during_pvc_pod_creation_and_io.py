@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     ignore_leftover_label,
     skipif_external_mode,
+    ceph_health_retry,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 @green_squad
 @tier4
 @tier4c
+@ceph_health_retry
 @ignore_leftover_label(constants.drain_canary_pod_label)
 @pytest.mark.parametrize(
     argnames=["interface", "resource_to_delete"],
