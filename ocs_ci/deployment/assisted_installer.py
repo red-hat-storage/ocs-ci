@@ -322,10 +322,24 @@ class AssistedInstallerCluster(object):
         for sample in TimeoutSampler(
             timeout=3600, sleep=300, func=self.api.get_cluster, cluster_id=self.id
         ):
-            # TODO: add more information about cluster installation progress
-            logger.info(
-                f"Cluster installation status: {sample['status']} ({sample['status_info']})"
+            status_per_hosts = [
+                h["progress"]["installation_percentage"] for h in sample["hosts"]
+            ]
+            installation_percentage = round(
+                sum(status_per_hosts) / len(status_per_hosts), 0
             )
+            logger.info(
+                f"Cluster installation status: {sample['status']} ({sample['status_info']}, "
+                f"{installation_percentage}%)"
+            )
+            for host in sample["hosts"]:
+                logger.info(
+                    f"{host['requested_hostname']}: "
+                    f"{host['progress']['current_stage']} "
+                    f"({host['progress_stages'].index(host['progress']['current_stage']) + 1}/"
+                    f"{len(host['progress_stages'])})"
+                )
+
             if sample["status"] == "installed":
                 logger.info(
                     f"Cluster was successfully installed (status: {sample['status']} - {sample['status_info']})"
