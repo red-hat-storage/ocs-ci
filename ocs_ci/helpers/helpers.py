@@ -46,6 +46,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import convert_device_size
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -107,9 +108,10 @@ def wait_for_resource_state(resource, state, timeout=60):
     """
     if check_cluster_is_compact():
         timeout = 180
-    if (
-        resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
-        or resource.name == constants.DEFAULT_STORAGECLASS_RBD
+    if resource.name == get_default_storage_class_name(
+        constants.OCS_COMPONENTS_MAP["cephfs"]
+    ) or resource.name == get_default_storage_class_name(
+        constants.OCS_COMPONENTS_MAP["blockpools"]
     ):
         logger.info("Attempt to default default Secret or StorageClass")
         return
@@ -632,41 +634,21 @@ def default_storage_class(
     Returns:
         OCS: Existing StorageClass Instance
     """
-    external = config.DEPLOYMENT["external_mode"]
-    custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
-    if custom_storage_class:
-        from ocs_ci.ocs.resources.storage_cluster import (
-            get_storageclass_names_from_storagecluster_spec,
+
+    if interface_type in [
+        constants.CEPHBLOCKPOOL,
+        constants.OCS_COMPONENTS_MAP["blockpools"],
+    ]:
+        resource_name = get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["blockpools"]
         )
-
-        resources = get_storageclass_names_from_storagecluster_spec()
-
-    if interface_type == constants.CEPHBLOCKPOOL:
-        if custom_storage_class:
-            try:
-                resource_name = resources[constants.OCS_COMPONENTS_MAP["blockpools"]]
-            except KeyError:
-                logger.error(
-                    f"StorageCluster spec doesn't have the custom name for '{constants.CEPHBLOCKPOOL}' storageclass"
-                )
-        else:
-            if external:
-                resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
-            else:
-                resource_name = constants.DEFAULT_STORAGECLASS_RBD
-    elif interface_type == constants.CEPHFILESYSTEM:
-        if custom_storage_class:
-            try:
-                resource_name = resources[constants.OCS_COMPONENTS_MAP["cephfs"]]
-            except KeyError:
-                logger.error(
-                    f"StorageCluster spec doesn't have the custom name for '{constants.CEPHFILESYSTEM}' storageclass"
-                )
-        else:
-            if external:
-                resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
-            else:
-                resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+    elif interface_type in [
+        constants.CEPHFILESYSTEM,
+        constants.OCS_COMPONENTS_MAP["cephfs"],
+    ]:
+        resource_name = get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["cephfs"]
+        )
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
     base_sc.wait_for_resource(
         condition=resource_name,

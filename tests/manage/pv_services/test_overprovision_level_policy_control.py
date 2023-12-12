@@ -18,6 +18,7 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
     skipif_external_mode,
 )
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 log = logging.getLogger(__name__)
 
@@ -31,8 +32,10 @@ def setup_sc(storageclass_factory_class):
         interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
     )
     return {
-        constants.CEPHBLOCKPOOL_SC: None,
-        constants.CEPHFILESYSTEM_SC: None,
+        get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["blockpools"]
+        ): None,
+        get_default_storage_class_name(constants.OCS_COMPONENTS_MAP["cephfs"]): None,
         "sc-test-blk": sc_blk_obj,
         "sc-test-fs": sc_fs_obj,
     }
@@ -76,10 +79,14 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
-        argnames=["sc_name", "sc_type"],
+        argnames=["sc_interface", "sc_type"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL]),
-            pytest.param(*[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM]),
+            pytest.param(
+                *[constants.OCS_COMPONENTS_MAP["blockpools"], constants.CEPHBLOCKPOOL]
+            ),
+            pytest.param(
+                *[constants.OCS_COMPONENTS_MAP["cephfs"], constants.CEPHFILESYSTEM]
+            ),
             pytest.param(
                 *["sc-test-blk", constants.CEPHBLOCKPOOL],
                 marks=[skipif_ocs_version("<4.10")],
@@ -93,7 +100,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
     def test_over_provision_level_policy_control(
         self,
         setup_sc,
-        sc_name,
+        sc_interface,
         sc_type,
         teardown_project_factory,
         pvc_factory,
@@ -113,9 +120,18 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             9.Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]
 
         """
+        if sc_interface not in constants.OCS_COMPONENTS_MAP:
+            sc_name = sc_interface
+        else:
+            sc_name = get_default_storage_class_name(sc_interface)
+
         quota_names = {
-            constants.CEPHBLOCKPOOL_SC: "ocs-storagecluster-ceph-rbd-quota-sc-test",
-            constants.CEPHFILESYSTEM_SC: "ocs-storagecluster-cephfs-quota-sc-test",
+            get_default_storage_class_name(
+                constants.OCS_COMPONENTS_MAP["blockpools"]
+            ): "ocs-storagecluster-ceph-rbd-quota-sc-test",
+            get_default_storage_class_name(
+                constants.OCS_COMPONENTS_MAP["cephfs"]
+            ): "ocs-storagecluster-cephfs-quota-sc-test",
             "sc-test-blk": "sc-test-blk-quota-sc-test",
             "sc-test-fs": "sc-test-fs-quota-sc-test",
         }

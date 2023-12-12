@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
 )
 from ocs_ci.utility import version
+from ocs_ci.helpers.storageclass_helpers import get_default_storage_class_name
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +24,9 @@ def setup_sc(storageclass_factory_class):
         interface=constants.CEPHBLOCKPOOL, sc_name="sc-test-blk"
     )
     yield {
-        constants.CEPHBLOCKPOOL_SC: None,
+        get_default_storage_class_name(
+            constants.OCS_COMPONENTS_MAP["blockpools"]
+        ): None,
         "sc-test-blk": sc_blk_obj,
     }
 
@@ -65,15 +68,15 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
             6.Add again PVC with 51Gi capacity and verify that it is succeeeding.
         """
         quota_name = "storagequota"
-        sc_name = constants.CEPHBLOCKPOOL_SC
+        sc_name = constants.OCS_COMPONENTS_MAP["blockpools"]
         sc_type = constants.CEPHBLOCKPOOL
         policy_labels = {"storagequota": "storagequota"}
         quota_capacity = "100Gi"
 
         if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
-            overprovision_resourse_name = f"ocs-{constants.CEPHBLOCKPOOL_SC}"
+            overprovision_resourse_name = f"ocs-{sc_name}"
         else:
-            overprovision_resourse_name = constants.CEPHBLOCKPOOL_SC
+            overprovision_resourse_name = sc_name
 
         clear_overprovision_spec(ignore_errors=True)
         set_overprovision_policy(quota_capacity, quota_name, sc_name, policy_labels)

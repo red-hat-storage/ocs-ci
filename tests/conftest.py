@@ -1072,12 +1072,12 @@ def pvc_factory_fixture(request, project_factory):
             active_project = project
             if interface == constants.CEPHBLOCKPOOL:
                 storageclass = storageclass or helpers.default_storage_class(
-                    interface_type=interface
+                    constants.OCS_COMPONENTS_MAP["blockpools"]
                 )
                 active_rbd_storageclass = storageclass
             elif interface == constants.CEPHFILESYSTEM:
                 storageclass = storageclass or helpers.default_storage_class(
-                    interface_type=interface
+                    constants.OCS_COMPONENTS_MAP["cephfs"]
                 )
                 active_cephfs_storageclass = storageclass
 
