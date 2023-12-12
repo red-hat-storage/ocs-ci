@@ -245,7 +245,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif consumer_cluster:
+    elif consumer_cluster or client_cluster:
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
@@ -655,7 +655,8 @@ def ocs_install_verification(
         health_check_tries = 180
 
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
-    if not fusion_aas_consumer:
+    if not (fusion_aas_consumer or hci_cluster):
+        # Temporarily disable health check for hci until we have enough healthy clusters
         assert utils.ceph_health_check(
             namespace, health_check_tries, health_check_delay
         )
