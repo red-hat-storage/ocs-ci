@@ -756,6 +756,9 @@ def create_storage_class(
             sc_data["parameters"]["encryptionKMSID"] = (
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
+        else:
+            sc_data["parameters"]["encrypted"] = "false"
+
     elif interface_type == constants.CEPHFILESYSTEM:
         interface = constants.CEPHFS_INTERFACE
         sc_data["parameters"]["fsName"] = fs_name if fs_name else get_cephfs_name()
