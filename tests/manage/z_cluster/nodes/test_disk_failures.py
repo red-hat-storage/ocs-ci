@@ -23,10 +23,14 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
+    delete_pods,
+    get_pod_objs,
 )
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs import osd_operations
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +115,9 @@ class TestDiskFailures(ManageTest):
 
             logger.info("Clear crash warnings and osd removal leftovers")
             clear_crash_warning_and_osd_removal_leftovers()
+            logger.info("Deleting the ocs-osd-removal pods")
+            pod_names = get_pod_name_by_pattern("ocs-osd-removal-job-")
+            delete_pods(get_pod_objs(pod_names))
 
         request.addfinalizer(finalizer)
 
