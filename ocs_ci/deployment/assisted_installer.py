@@ -277,7 +277,7 @@ class AssistedInstallerCluster(object):
                             f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
                         )
         if failed_validations:
-            msg = f"Failed hosts validations: \n{failed_validations.join(os.linesep)}"
+            msg = f"Failed hosts validations: \n{os.linesep.join(failed_validations)}"
             logger.error(msg)
             raise HostValidationFailed(msg)
         logger.info("Host validations passed on all hosts.")
