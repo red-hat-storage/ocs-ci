@@ -17,6 +17,7 @@ import hcl2
 import yaml
 import re
 import shutil
+from pathlib import Path
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
@@ -1612,6 +1613,11 @@ class VSPHEREAI(VSPHEREBASE):
             Pre-Requisites for vSphere Assisted installer deployment
             """
             super(VSPHEREAI.OCPDeployment, self).deploy_prereq()
+
+            # create empty metadata.json file in cluster dir, to ensure, that
+            # destroy job will be properly triggered even when the deployment fails
+            # and metadata.json file will not be created
+            Path(os.path.join(self.cluster_path, "metadata.json")).touch()
 
             self.assign_api_ingress_ips()
 
