@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     bugzilla,
     skipif_external_mode,
+    runs_on_provider,
 )
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_osd_pods, get_osd_pod_id
 from ocs_ci.utility.utils import TimeoutSampler
@@ -18,6 +19,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 log = logging.getLogger(__name__)
 
 
+@runs_on_provider
 @brown_squad
 @tier2
 @bugzilla("1938049")
