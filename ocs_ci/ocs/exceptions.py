@@ -670,3 +670,11 @@ class OpenShiftAPIResponseException(Exception):
     def __str__(self):
         msg = f"{self.response.status_code} {self.response.reason} ({self.response.text.strip()})"
         return msg
+
+
+class HostValidationFailed(Exception):
+    pass
+
+
+class SameNameClusterAlreadyExistsException(Exception):
+    pass
