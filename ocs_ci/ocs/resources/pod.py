@@ -2255,36 +2255,18 @@ def list_of_nodes_running_pods(
     return list(set(pods_running_nodes))
 
 
-def get_osd_removal_pod_name(osd_id, timeout=60):
+def get_osd_removal_pod_name(timeout=60):
     """
     Get the osd removal pod name
 
     Args:
-        osd_id (int): The osd's id to get the osd removal pod name
         timeout (int): The time to wait for getting the osd removal pod name
 
     Returns:
         str: The osd removal pod name
 
     """
-    ocs_version_pattern_dict = {
-        "4.6": f"ocs-osd-removal-{osd_id}",
-        "4.7": "ocs-osd-removal-job",
-        "4.8": "ocs-osd-removal-",
-        "4.9": "ocs-osd-removal-job",
-        "4.10": "ocs-osd-removal-job",
-        "4.11": "ocs-osd-removal-job",
-        "4.12": "ocs-osd-removal-job",
-    }
-
-    ocs_version = config.ENV_DATA["ocs_version"]
-    pattern = ocs_version_pattern_dict.get(ocs_version)
-    if not pattern:
-        logger.warning(
-            f"ocs version {ocs_version} didn't match any of the known versions"
-        )
-        return None
-
+    pattern = "ocs-osd-removal-job"
     try:
         for osd_removal_pod_names in TimeoutSampler(
             timeout=timeout,
@@ -2409,7 +2391,7 @@ def verify_osd_removal_job_completed_successfully(osd_id):
 
     """
     logger.info("Getting the ocs-osd-removal pod name")
-    osd_removal_pod_name = get_osd_removal_pod_name(osd_id)
+    osd_removal_pod_name = get_osd_removal_pod_name()
     osd_removal_pod_obj = get_pod_obj(
         osd_removal_pod_name, namespace=config.ENV_DATA["cluster_namespace"]
     )
