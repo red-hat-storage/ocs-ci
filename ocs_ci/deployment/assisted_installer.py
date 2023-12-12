@@ -236,7 +236,7 @@ class AssistedInstallerCluster(object):
 
         # wait for discovered nodes in cluster definition
         for sample in TimeoutSampler(
-            timeout=3600, sleep=300, func=self.api.get_cluster_hosts, cluster_id=self.id
+            timeout=1200, sleep=120, func=self.api.get_cluster_hosts, cluster_id=self.id
         ):
             logger.debug(f"Discovered {len(sample)} nodes: {[n['id'] for n in sample]}")
             if expected_nodes == len(sample):
@@ -248,8 +248,8 @@ class AssistedInstallerCluster(object):
 
         # wait for discovered nodes in Infrastructure Environment definition
         for sample in TimeoutSampler(
-            timeout=3600,
-            sleep=300,
+            timeout=1200,
+            sleep=120,
             func=self.api.get_infra_env_hosts,
             infra_env_id=self.infra_id,
         ):
