@@ -327,7 +327,7 @@ class AssistedInstallerCluster(object):
                 for h in sample["hosts"]
             ]
             installation_percentage = round(
-                sum(status_per_hosts) / len(status_per_hosts), 0
+                sum(status_per_hosts) / len(status_per_hosts)
             )
             logger.info(
                 f"Cluster installation status: {sample['status']} ({sample['status_info']}, "
