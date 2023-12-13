@@ -278,7 +278,7 @@ class AssistedInstallerCluster(object):
                         )
         if failed_validations:
             msg = f"Failed hosts validations: \n{os.linesep.join(failed_validations)}"
-            logger.error(msg)
+            logger.debug(msg)
             raise HostValidationFailed(msg)
         logger.info("Host validations passed on all hosts.")
 
@@ -323,7 +323,8 @@ class AssistedInstallerCluster(object):
             timeout=3600, sleep=300, func=self.api.get_cluster, cluster_id=self.id
         ):
             status_per_hosts = [
-                h["progress"]["installation_percentage"] for h in sample["hosts"]
+                h.get("progress", {}).get("installation_percentage", 0)
+                for h in sample["hosts"]
             ]
             installation_percentage = round(
                 sum(status_per_hosts) / len(status_per_hosts), 0
@@ -333,12 +334,15 @@ class AssistedInstallerCluster(object):
                 f"{installation_percentage}%)"
             )
             for host in sample["hosts"]:
-                logger.info(
-                    f"{host['requested_hostname']}: "
-                    f"{host['progress']['current_stage']} "
-                    f"({host['progress_stages'].index(host['progress']['current_stage']) + 1}/"
-                    f"{len(host['progress_stages'])})"
-                )
+                try:
+                    logger.info(
+                        f"{host['requested_hostname']}: "
+                        f"{host['progress']['current_stage']} "
+                        f"({host['progress_stages'].index(host['progress']['current_stage']) + 1}/"
+                        f"{len(host['progress_stages'])})"
+                    )
+                except KeyError:
+                    pass
 
             if sample["status"] == "installed":
                 logger.info(
