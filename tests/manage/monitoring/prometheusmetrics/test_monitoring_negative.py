@@ -169,6 +169,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd, threading_lock):
 
 @blue_squad
 @tier3
+@skipif_external_mode
 @bugzilla("2203795")
 @pytest.mark.polarion_id("OCS-2734")
 @skipif_managed_service
