@@ -157,7 +157,7 @@ class AcmAddClusters(AcmPageNavigator):
             if s.MULTICLUSTER["multicluster_index"] != primary_index
         ][0]
         # submariner catalogsource creation
-        if config.ENV_DATA["submariner_release_type"] == "unreleased":
+        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
             submariner_downstream_unreleased = templating.load_yaml(
                 constants.SUBMARINER_DOWNSTREAM_UNRELEASED
             )
