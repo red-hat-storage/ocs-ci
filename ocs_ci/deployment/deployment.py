@@ -994,6 +994,7 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
                 logger.info("Creating secret for IBM Cloud Object Storage")
                 with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
