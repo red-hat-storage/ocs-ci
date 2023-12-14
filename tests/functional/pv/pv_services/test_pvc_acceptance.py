@@ -783,10 +783,10 @@ class PvcAcceptance:
         logger.info("Check expected failure event message in oc describe command")
         if failure_str in ocs_obj.describe():
             logger.info(
-                f"Failure string {failure_str} is present in oc describe" f" command"
+                f"Failure string {failure_str} is present in oc describe command"
             )
             return True
         else:
             raise UnexpectedBehaviour(
-                f"Failure string {failure_str} is not found in oc describe" f" command"
+                f"Failure string {failure_str} is not found in oc describe command"
             )
