@@ -20,7 +20,6 @@
 #   - the original test_pvc_expansion performs expansion on 5 PVCs (2 cephfs, 3 rbd)
 #   - some of the configuration of PVCs and maybe also PODs is/might be different
 #
-# ## not implemented ###############
 # tests/functional/pv/pv_services/test_pvc_delete_verify_size_is_returned_to_backendpool.py
 #     test_pvc_delete_and_verify_size_is_returned_to_backend_pool
 
@@ -208,6 +207,8 @@ class TestPvcAcceptance(ManageTest):
         for test_variant in test_variants:
             test_variant.check_pod_running_on_selected_node()
 
+        PvcAcceptance.fetch_used_size_before_io()
+
         for test_variant in test_variants:
             test_variant.run_io_on_first_pod()
 
@@ -221,6 +222,8 @@ class TestPvcAcceptance(ManageTest):
         for test_variant in test_variants:
             if test_variant.access_mode == constants.ACCESS_MODE_RWX:
                 test_variant.get_iops_from_second_pod()
+
+        PvcAcceptance.fetch_used_size_after_io()
 
         for test_variant in test_variants:
             if test_variant.access_mode == constants.ACCESS_MODE_RWO:
@@ -293,6 +296,8 @@ class TestPvcAcceptance(ManageTest):
             if test_variant.reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
                 test_variant.wait_for_pv_delete()
 
+        PvcAcceptance.fetch_used_size_after_deletion()
+
     def verify_access_token_notin_odf_pod_logs(self):
         """
         This function will verify logs of kube-rbac-proxy container in
@@ -314,6 +319,7 @@ class TestPvcAcceptance(ManageTest):
 
 class PvcAcceptance:
     cbp_name = helpers.default_ceph_block_pool()
+    used_before_io = None
 
     def log_execution(f):
         @functools.wraps(f)
@@ -681,7 +687,9 @@ class PvcAcceptance:
         if self.pv_obj:
             logger.info(f"Deleting PV {self.pv_obj.name}")
             helpers.wait_for_resource_state(self.pv_obj, constants.STATUS_RELEASED)
-            self.pv_obj.delete()
+            # self.pv_obj.delete()
+            patch_param = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+            self.pv_obj.ocp.patch(resource_name=self.pv_obj.name, params=patch_param)
 
     @log_execution
     def wait_for_pv_delete(self):
@@ -790,3 +798,30 @@ class PvcAcceptance:
             raise UnexpectedBehaviour(
                 f"Failure string {failure_str} is not found in oc describe command"
             )
+
+    @classmethod
+    def fetch_used_size_before_io(cls):
+        """
+        get used size on the backend pool
+        """
+        cls.used_before_io = helpers.fetch_used_size(cls.cbp_name)
+        logger.info(f"Used before IO {cls.used_before_io}")
+
+    @classmethod
+    def fetch_used_size_after_io(cls):
+        """
+        get used size on the backend pool
+        """
+        used_after_io = helpers.fetch_used_size(cls.cbp_name)
+        logger.info(f"Used space after IO {used_after_io}")
+
+    @classmethod
+    def fetch_used_size_after_deletion(cls):
+        """
+        get used size on the backend pool
+        """
+        # the original threshold in fetch_used_size is 1.5 Gb which seems to be not sufficient in this test,
+        # probably because the duration of this cumulative test is longer and there are more data written
+        # to the storage outside of the scope of this test, that is the reason for the `+ 1` in the exp_val
+        used_after_io = helpers.fetch_used_size(cls.cbp_name, cls.used_before_io + 1)
+        logger.info(f"Used space after deleting PVC {used_after_io}")
