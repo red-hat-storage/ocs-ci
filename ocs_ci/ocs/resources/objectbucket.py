@@ -209,11 +209,11 @@ class ObjectBucket(ABC):
             self.internal_delete()
         except NotFoundError:
             logger.warning(f"{self.name} was not found, or already deleted.")
-            return True
+        except TimeoutError:
+            logger.warning(f"{self.name} deletion timed out. Verifying deletion.")
+            verify = True
         if verify:
             self.verify_deletion()
-        else:
-            return True
 
     @property
     def status(self):
@@ -471,7 +471,8 @@ class OCBucket(ObjectBucket):
         try:
             OCP(kind="obc", namespace=self.namespace).delete(resource_name=self.name)
         except CommandFailed as e:
-            raise NotFoundError(e)
+            if "NotFound" or "not found" in str(e):
+                raise NotFoundError(e)
 
     @property
     def internal_status(self):
