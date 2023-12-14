@@ -1,27 +1,27 @@
 # ## implemented ###################
-# tests/manage/pv_services/test_dynamic_pvc_accessmodes_with_reclaim_policies.py::TestDynamicPvc
+# tests/functional/pv/pv_services/test_dynamic_pvc_accessmodes_with_reclaim_policies.py::TestDynamicPvc
 #     test_rwo_dynamic_pvc[CephBlockPool-Retain]
 #     test_rwo_dynamic_pvc[CephBlockPool-Delete]
 #     test_rwo_dynamic_pvc[CephFileSystem-Retain]
 #     test_rwo_dynamic_pvc[CephFileSystem-Delete]
 #     test_rwx_dynamic_pvc[CephFileSystem-Retain]
 #     test_rwx_dynamic_pvc[CephFileSystem-Delete]
-# tests/manage/pv_services/test_pvc_assign_pod_node.py::TestPvcAssignPodNode
+# tests/functional/pv/pv_services/test_pvc_assign_pod_node.py::TestPvcAssignPodNode
 #     test_rwo_pvc_assign_pod_node[CephBlockPool]
 #     test_rwo_pvc_assign_pod_node[CephFileSystem]
 #     test_rwx_pvc_assign_pod_node[CephBlockPool]
 #     test_rwx_pvc_assign_pod_node[CephFileSystem]
-# tests/manage/pv_services/test_raw_block_pv.py::TestRawBlockPV
+# tests/functional/pv/pv_services/test_raw_block_pv.py::TestRawBlockPV
 #     test_raw_block_pv[Delete]
 #     test_raw_block_pv[Retain]
 #
 # ## partially implemented/some parameters are different
-# tests/manage/pv_services/pvc_resize/test_pvc_expansion.py::TestPvcExpand::test_pvc_expansion
+# tests/functional/pv/pvc_resize/test_pvc_expansion.py::TestPvcExpand::test_pvc_expansion
 #   - the original test_pvc_expansion performs expansion on 5 PVCs (2 cephfs, 3 rbd)
 #   - some of the configuration of PVCs and maybe also PODs is/might be different
 #
 # ## not implemented ###############
-# tests/manage/pv_services/test_pvc_delete_verify_size_is_returned_to_backendpool.py
+# tests/functional/pv/pv_services/test_pvc_delete_verify_size_is_returned_to_backendpool.py
 #     test_pvc_delete_and_verify_size_is_returned_to_backend_pool
 
 # 1. Create PVCs according to this table:
