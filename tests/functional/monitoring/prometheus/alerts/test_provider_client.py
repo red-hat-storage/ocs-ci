@@ -38,7 +38,9 @@ def test_change_client_ocs_version_and_stop_heartbeat(
     alerts = measure_change_client_ocs_version_and_stop_heartbeat.get(
         "prometheus_alerts"
     )
-    client_name = measure_change_client_ocs_version_and_stop_heartbeat.get("metadata").get("client_name")
+    client_name = measure_change_client_ocs_version_and_stop_heartbeat.get(
+        "metadata"
+    ).get("client_name")
     target_alerts = [
         {
             "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
@@ -70,7 +72,9 @@ def test_change_client_ocs_version_and_stop_heartbeat(
         )
         api.check_alert_cleared(
             label=target_alert["label"],
-            measure_end_time=measure_change_client_ocs_version_and_stop_heartbeat.get("stop"),
+            measure_end_time=measure_change_client_ocs_version_and_stop_heartbeat.get(
+                "stop"
+            ),
             time_min=300,
         )
 
