@@ -175,16 +175,21 @@ def ocs_install_verification(
     managed_service = (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
     )
-    provider_cluster = (
-        managed_service and config.ENV_DATA["cluster_type"].lower() == "provider"
+    hci_cluster = (
+        config.ENV_DATA.get("platform") in constants.HCI_PROVIDER_CLIENT_PLATFORMS
     )
+    provider_cluster = (managed_service or hci_cluster) and config.ENV_DATA[
+        "cluster_type"
+    ].lower() == "provider"
     consumer_cluster = (
-        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
+        managed_service
+        and config.ENV_DATA["cluster_type"].lower() == constants.MS_CONSUMER_TYPE
+    )
+    client_cluster = (
+        hci_cluster and config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
-    external = config.DEPLOYMENT["external_mode"] or (
-        managed_service and config.ENV_DATA["cluster_type"].lower() == "consumer"
-    )
+    external = config.DEPLOYMENT["external_mode"] or consumer_cluster or client_cluster
     fusion_aas = config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
     fusion_aas_consumer = fusion_aas and consumer_cluster
     fusion_aas_provider = fusion_aas and provider_cluster
@@ -240,7 +245,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif consumer_cluster:
+    elif consumer_cluster or client_cluster:
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
@@ -517,6 +522,7 @@ def ocs_install_verification(
         config.DEPLOYMENT.get("ui_deployment")
         or config.DEPLOYMENT["external_mode"]
         or managed_service
+        or hci_cluster
     ):
         log.info(
             "Verifying ceph osd tree output and checking for device set PVC names "
@@ -634,7 +640,7 @@ def ocs_install_verification(
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
     # TODO: update pvc validation for managed services
-    if not managed_service:
+    if not (managed_service or hci_cluster):
         log.info("Validate cluster on PVC")
         validate_cluster_on_pvc()
 
@@ -649,7 +655,8 @@ def ocs_install_verification(
         health_check_tries = 180
 
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
-    if not fusion_aas_consumer:
+    if not (fusion_aas_consumer or hci_cluster):
+        # Temporarily disable health check for hci until we have enough healthy clusters
         assert utils.ceph_health_check(
             namespace, health_check_tries, health_check_delay
         )
@@ -783,15 +790,15 @@ def verify_ocs_csv(ocs_registry_image=None):
             properly.
 
     """
-    managed_service = (
-        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    hci_managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
     )
     log.info("verifying ocs csv")
     # Verify if OCS CSV has proper version.
     ocs_csv = get_ocs_csv()
     csv_version = ocs_csv.data["spec"]["version"]
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if not managed_service:
+    if not hci_managed_service:
         log.info(f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}")
         assert (
             f"{ocs_version}" in csv_version
@@ -823,8 +830,8 @@ def verify_storage_system():
     """
     Verify storage system status
     """
-    managed_service = (
-        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    hci_managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
     )
     live_deployment = config.DEPLOYMENT.get("live_deployment")
     ocp_version = version.get_semantic_ocp_version_from_config()
@@ -855,7 +862,7 @@ def verify_storage_system():
                 "Because of the BZ 2075422, we are skipping storage system validation after upgrade"
             )
             return
-    if ocs_version >= version.VERSION_4_9 and not managed_service:
+    if ocs_version >= version.VERSION_4_9 and not hci_managed_service:
         log.info("Verifying storage system status")
         storage_system = OCP(
             kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
@@ -1019,15 +1026,15 @@ def verify_noobaa_endpoint_count():
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
     disable_noobaa = config.COMPONENTS["disable_noobaa"]
-    managed_service = (
-        config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
+    hci_managed_service = (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
     )
     max_eps = (
         constants.MAX_NB_ENDPOINT_COUNT if ocs_version >= version.VERSION_4_6 else 1
     )
     if config.ENV_DATA.get("platform") == constants.IBM_POWER_PLATFORM:
         max_eps = 1
-    if not (disable_noobaa or managed_service):
+    if not (disable_noobaa or hci_managed_service):
         nb_ep_pods = get_pods_having_label(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -1515,7 +1522,7 @@ def set_deviceset_count(count):
     )
 
 
-def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_storage_cluster(namespace=None):
     """
     Get storage cluster name
 
@@ -1526,6 +1533,8 @@ def get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"]):
         storage cluster (obj) : Storage cluster object handler
 
     """
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
 
