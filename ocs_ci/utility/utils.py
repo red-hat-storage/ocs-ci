@@ -5041,3 +5041,16 @@ def sum_of_two_storage_sizes(storage_size1, storage_size2, convert_size=1024):
     size = size1 + size2
     new_storage_size = f"{size}{unit}"
     return new_storage_size
+    
+
+def is_z_stream_upgrade():
+    """
+    Check whether this is a z-stream upgrade scenario
+
+    Returns:
+        bool: True if its a z-stream upgrade else False
+
+    """
+    return config.UPGRADE.get("pre_upgrade_ocs_version", "") == config.UPGRADE.get(
+        "upgrade_ocs_version", ""
+    )
