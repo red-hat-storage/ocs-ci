@@ -1,6 +1,13 @@
 """
 A module for all StorageClient functionalities and abstractions.
 """
+import logging
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs import ocp
+
+log = logging.getLogger(__name__)
 
 
 class StorageClient:
@@ -8,7 +15,7 @@ class StorageClient:
     Base StorageClient class
     """
 
-    def __init__(self, client_context = None):
+    def __init__(self, client_context=None):
         """
         Args:
             client_context (int): index of cluster context. This is needed for
@@ -17,8 +24,8 @@ class StorageClient:
         """
         self.client_context = client_context
         if self.client_context:
-            self.heartbeat_cronjob = get_heartbeat_cronjob()
-            self.original_context = ocsci_config.cluster_ctx
+            self.heartbeat_cronjob = self.get_heartbeat_cronjob()
+            self.original_context = config.cluster_ctx
         else:
             self.heartbeat_cronjob = None
             self.original_context = None
@@ -49,7 +56,7 @@ class StorageClient:
         Suspend status reporter cron job.
         """
         self._switch_client_cluster()
-        patch_param = f'{{"spec": {{"suspend": "true"}}}}'
+        patch_param = '{{"spec": {{"suspend": "true"}}}}'
         self.heartbeat_cronjob.patch(resource_name=self.heartbeat_cronjo.name, params=patch_param)
         self._switch_original_cluster()
 
@@ -58,7 +65,7 @@ class StorageClient:
         Resume status reporter cron job.
         """
         self._switch_client_cluster()
-        patch_param = f'{{"spec": {{"suspend": "false"}}}}'
+        patch_param = '{{"spec": {{"suspend": "false"}}}}'
         self.heartbeat_cronjob.patch(resource_name=self.heartbeat_cronjo.name, params=patch_param)
         self._switch_original_cluster()
 

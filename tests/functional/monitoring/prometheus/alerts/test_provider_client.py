@@ -1,11 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     tier4c,
-    skipif_managed_service,
     runs_on_provider,
     hci_provider_and_client_required,
 )
@@ -40,14 +38,17 @@ def test_change_client_ocs_version_and_stop_heartbeat(
     alerts = measure_change_client_ocs_version_and_stop_heartbeat.get(
         "prometheus_alerts"
     )
+    client_name = measure_change_client_ocs_version_and_stop_heartbeat.get("metadata").get("client_name")
     target_alerts = [
         {
             "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
-            "msg": "Storage Client ({client_name}) heartbeat missed for more than 120 (s). Lossy network connectivity might exist",
+            "msg": "Storage Client ({client_name}) heartbeat missed for more than 120 (s). "
+            "Lossy network connectivity might exist",
         },
         {
             "label": constants.ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION,
-            "msg": f"Storage Client Operator ({client_name}) differs by more than 1 minor version. Client configuration may be incompatible and unsupported",
+            "msg": f"Storage Client Operator ({client_name}) differs by more "
+            "than 1 minor version. Client configuration may be incompatible and unsupported",
         },
     ]
     states = ["firing"]
@@ -68,8 +69,8 @@ def test_change_client_ocs_version_and_stop_heartbeat(
             severity="warning",
         )
         api.check_alert_cleared(
-            label=target_label,
-            measure_end_time=measure_stop_rgw.get("stop"),
+            label=target_alert["label"],
+            measure_end_time=measure_change_client_ocs_version_and_stop_heartbeat.get("stop"),
             time_min=300,
         )
 

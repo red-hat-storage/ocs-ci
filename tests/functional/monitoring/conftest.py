@@ -24,7 +24,7 @@ from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
 from ocs_ci.utility.pagerduty import get_pagerduty_service_id
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, run_cmd
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -1156,8 +1156,8 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     original_cluster = config.cluster_ctx
     logger.info(f"Provider cluster key: {original_cluster}")
     logger.info("Switch to client cluster")
-    ocsci_config.switch_to_consumer()
-    client_cluster = ocsci_config.cluster_ctx
+    config.switch_to_consumer()
+    client_cluster = config.cluster_ctx
     logger.info(f"Client cluster key: {client_cluster}")
     cluster_id = run_cmd(
         "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
@@ -1180,7 +1180,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         logger.info(f"Switch to original cluster ({original_cluster})")
-        ocsci_config.switch_ctx(original_cluster)
+        config.switch_ctx(original_cluster)
         return
 
     def teardown():
@@ -1188,10 +1188,10 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         nonlocal original_cluster
         nonlocal client_cluster
         logger.info(f"Switch to client cluster ({client_cluster})")
-        ocsci_config.switch_ctx(client_cluster)
+        config.switch_ctx(client_cluster)
         client.resume_heartbeat()
         logger.info(f"Switch to original cluster ({original_cluster})")
-        ocsci_config.switch_ctx(original_cluster)
+        config.switch_ctx(original_cluster)
 
     request.addfinalizer(teardown)
 
