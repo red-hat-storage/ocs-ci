@@ -4689,3 +4689,15 @@ def exec_nb_db_query(query):
         output = output[2:-1]
 
     return output
+
+def is_z_stream_upgrade():
+    """
+    Check whether this is a z-stream upgrade scenario
+
+    Returns:
+        bool: True if its a z-stream upgrade else False
+
+    """
+    return config.UPGRADE.get("pre_upgrade_ocs_version", "") == config.UPGRADE.get(
+        "upgrade_ocs_version", ""
+    )
