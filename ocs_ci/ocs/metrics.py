@@ -352,3 +352,10 @@ def get_missing_metrics(
                 logger.error(f"failed to get results for {metric}")
                 metrics_without_results.append(metric)
     return metrics_without_results
+
+# hci metrics available via OCS monitoring
+hci_metrics = (
+    "ocs_storage_client_last_heartbeat",
+    "ocs_storage_provider_operator_version",
+    "ocs_storage_client_operator_version",
+)
