@@ -742,6 +742,7 @@ def create_storage_class(
     sc_data = templating.load_yaml(yamls[interface_type])
 
     if interface_type == constants.CEPHBLOCKPOOL:
+        sc_data["parameters"]["encrypted"] = "false"
         interface = constants.RBD_INTERFACE
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
@@ -756,8 +757,6 @@ def create_storage_class(
             sc_data["parameters"]["encryptionKMSID"] = (
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
-        else:
-            sc_data["parameters"]["encrypted"] = "false"
 
     elif interface_type == constants.CEPHFILESYSTEM:
         interface = constants.CEPHFS_INTERFACE
