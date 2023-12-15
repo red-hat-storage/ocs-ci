@@ -241,3 +241,31 @@ class DRHubUpgrade(DRUpgrade):
         # validate csv odr-hub-operator.v4.13.5-rhodf VERSION, PHASE
         # validate pod/ramen-hub-operator-
         super().validate_upgrade()
+
+
+class DRClusterOperatorUpgrade(DRUpgrade):
+    """
+    A class to handle DR Cluster operator upgrades
+
+    """
+
+    def __init__(self):
+        super.__init__()
+        self.operator_name = defaults.DR_CLUSTER_OPERATOR_NAME
+        self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION
+
+    def run_upgrade(self):
+        self.pod_name_pattern = "ramen-dr-cluster-operator"
+        self.collect_data()
+        assert (
+            self.pre_upgrade_data["pod_status"] == "Running"
+        ), "ramen-dr-operator pod is not in Running status"
+        super().run_upgrade()
+        self.upgrade_phase = "post-upgrade"
+        self.collect_data()
+        self.validate_upgrade()
+
+    def validate_upgrade(self):
+        # validate csv odr-cluster-operator.v4.13.5-rhodf VERSION, PHASE
+        # validate pod/ramen-dr-cluster-operator-
+        return super().validate_upgrade()

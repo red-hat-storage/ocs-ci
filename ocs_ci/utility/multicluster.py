@@ -109,6 +109,7 @@ class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         self.zone_role_map = dict()
         self.all_mdr_roles = MDR_ROLES
 
+    def config_init(self):
         self.generate_zone_ranks()
         self.generate_role_ranks()
         self.generate_config_index_map()
@@ -116,8 +117,8 @@ class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         self.index_to_role = {
             index: role for role, index in self.roles_to_config_index_map.items()
         }
-        self.generate_role_to_param_tuple_map()
         self.generate_zone_role_map()
+        self.generate_role_to_param_tuple_map()
 
     def generate_config_index_map(self):
         """
@@ -125,7 +126,7 @@ class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         ex: {"ActiveACM": 0, "PassiveACM": 2, "PrimaryODF": 1, "SecondaryODF": 3}
 
         """
-        for cluster in ocsci_config:
+        for cluster in ocsci_config.clusters:
             cluster_index = cluster.MULTICLUSTER["multicluster_index"]
             if cluster_index == get_active_acm_index():
                 self.roles_to_config_index_map["ActiveACM"] = cluster_index
