@@ -755,7 +755,7 @@ def ocs_install_verification(
         verify_storageclassclaims()
         verify_storageclient(
             storageclient_name=constants.STORAGECLIENT,
-            namespace=OCS_CLIENT_NAMESPACE,
+            namespace=constants.OCS_CLIENT_NAMESPACE,
             verify_sc=False,
         )
 

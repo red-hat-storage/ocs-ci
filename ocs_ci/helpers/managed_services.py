@@ -267,7 +267,8 @@ def verify_storageclient(
         provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
         endpoint_actual = get_storage_provider_endpoint(provider_name)
         assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
-            f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
+            "The value of storageProviderEndpoint is not correct "
+            f"in the storageclient {storageclient['metadata']['name']}."
             f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
             f"Value in the provider cluster {provider_name} is {endpoint_actual}"
         )
