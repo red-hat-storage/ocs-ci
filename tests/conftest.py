@@ -362,6 +362,7 @@ def pytest_generate_tests(metafunc):
         upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
         roles = upgrade_parametrizer.get_roles(metafunc)
         if roles:
+            upgrade_parametrizer.config_init()
             params = upgrade_parametrizer.generate_pytest_parameters(metafunc, roles)
             for marker in metafunc.definition.iter_markers():
                 if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
@@ -474,7 +475,7 @@ def pytest_collection_modifyitems(session, config, items):
                 )
                 items.remove(item)
     # If multicluster upgrade scenario
-    if ocsci_config.multicluster and ocsci_config["UPGRADE"].get("upgrade", ""):
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", True):
         for item in items:
             if (
                 list(
