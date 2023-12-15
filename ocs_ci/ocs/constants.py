@@ -1707,6 +1707,9 @@ MCO_SUBSCRIPTION = "odf-multicluster-orchestrator"
 DR_HUB_OPERATOR_SUBSCRIPTION = (
     "odr-hub-operator-stable-PLACEHOLDER-redhat-operators-openshift-marketplace"
 )
+DR_CLUSTER_OPERATOR_SUBSCRIPTION = (
+    "odr-cluster-operator-stable-PLACEHOLDER-redhat-operators-openshift-marketplace"
+)
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
