@@ -262,17 +262,18 @@ def verify_storageclient(
         if storageclient_name
         else storageclient_obj.get()["items"][0]
     )
-    storageclient_name = storageclient["metadata"]["name"]
-    provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
-    endpoint_actual = get_storage_provider_endpoint(provider_name)
-    assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
-        f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
-        f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
-        f"Value in the provider cluster {provider_name} is {endpoint_actual}"
-    )
-    log.info(
-        f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
-    )
+    if config.ENV_DATA.get("platform") not in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+        storageclient_name = storageclient["metadata"]["name"]
+        provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
+        endpoint_actual = get_storage_provider_endpoint(provider_name)
+        assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
+            f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
+            f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
+            f"Value in the provider cluster {provider_name} is {endpoint_actual}"
+        )
+        log.info(
+            f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
+        )
 
     # Verify storageclient status
     assert storageclient["status"]["phase"] == "Connected"

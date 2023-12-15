@@ -234,6 +234,7 @@ END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 RAM = "rss"
 VIRT = "vms"
+OCS_CLIENT_NAMESPACE = "ocs-client"
 
 # cluster types
 MS_CONSUMER_TYPE = "consumer"

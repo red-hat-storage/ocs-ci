@@ -20,6 +20,7 @@ from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
     verify_faas_resources,
+    verify_storageclient,
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
@@ -752,6 +753,11 @@ def ocs_install_verification(
         validate_serviceexport()
     if client_cluster:
         verify_storageclassclaims()
+        verify_storageclient(
+            storageclient_name=constants.STORAGECLIENT,
+            namespace=OCS_CLIENT_NAMESPACE,
+            verify_sc=False,
+        )
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
