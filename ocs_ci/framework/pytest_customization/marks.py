@@ -40,7 +40,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
-from ocs_ci.utility.utils import load_auth_config
+from ocs_ci.utility.utils import is_z_stream_upgrade, load_auth_config
 
 
 # tier marks
@@ -129,6 +129,9 @@ ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
 mco_upgrade = compose(order_mco_upgrade, pytest.mark.mco_upgrade)
 # dr hub operator
 dr_hub_upgrade = compose(order_dr_hub_upgrade, pytest.mark.dr_hub_upgrade)
+dr_cluster_operator_upgrade = compose(
+    order_dr_cluster_operator_upgrade, pytest.mark.dr_cluster_operator_upgrade
+)
 # acm operator
 acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
@@ -186,6 +189,13 @@ skip_inconsistent = pytest.mark.skip(
 skipif_more_than_three_workers = pytest.mark.skipif(
     config.ENV_DATA["worker_replicas"] > 3,
     reason="This test cannot run on setup having more than three worker nodes",
+)
+
+# Skip if we are running z-stream upgrades
+# Useful marker for DR upgrade cases
+skipif_z_stream_upgrade = pytest.mark.skipif(
+    is_z_stream_upgrade(),
+    reason="This is z-stream upgrade and this component upgrade should have been taken care by other components",
 )
 
 # Skipif marks
