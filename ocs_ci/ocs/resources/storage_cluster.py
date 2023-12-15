@@ -750,6 +750,8 @@ def ocs_install_verification(
         and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
     ):
         validate_serviceexport()
+    if client_cluster:
+        verify_storageclassclaims()
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
