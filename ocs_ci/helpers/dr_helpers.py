@@ -666,7 +666,7 @@ def wait_for_all_resources_deletion(
 
     if not (
         config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
-        and "cephs" in namespace
+        and "cephfs" in namespace
     ):
         logger.info("Waiting for all PVCs to be deleted")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
