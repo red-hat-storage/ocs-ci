@@ -677,7 +677,7 @@ def wait_for_all_resources_deletion(
             )
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        if "cephs" not in namespace:
+        if "cephfs" not in namespace:
             logger.info("Waiting for all PVs to be deleted")
             sample = TimeoutSampler(
                 timeout=timeout,
