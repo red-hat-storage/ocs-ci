@@ -126,30 +126,32 @@ class TestDefaultBackingstoreOverride(MCGTest):
         awscli_pod_session,
         test_directory_setup,
     ):
+        """
+        1. Create a target bucket
+        2. Set a bucketclass replication policy to the target bucket on the default bucket class
+        3. Override the default noobaa backingstore
+        4. Create a source OBC under the default bucketclass
+        5. Upload objects to the source bucket and verify they are replicated to the target bucket
+
+        """
         # 1. Create a target bucket
-        target_bucketclass_dict = (
-            {
-                "interface": "OC",
-                "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-            },
-        )
+        target_bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+        }
         target_bucket = bucket_factory(bucketclass=target_bucketclass_dict)[0]
 
         # 2. Set a bucketclass replication policy to the target bucket on the default bucket class
         replication_policy = {
             "rules": [
-                {"rule_id": uuid4.hex(), "destination_bucket": target_bucket.name}
+                {"rule_id": uuid4().hex, "destination_bucket": target_bucket.name}
             ]
         }
         replication_policy_patch_dict = {
-            "spec": {
-                "additionalConfig": {
-                    "replicationPolicy": json.dumps(replication_policy)
-                }
-            }
+            "spec": {"replicationPolicy": json.dumps(replication_policy)}
         }
         OCP(
-            kind="obc",
+            kind=constants.BUCKETCLASS,
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
         ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
@@ -157,8 +159,8 @@ class TestDefaultBackingstoreOverride(MCGTest):
         # 3. Override the default noobaa backingstore
         override_default_backingstore()
 
-        # 4. Create the source bucket using the new default backingstore
-        source_bucket = bucket_factory()[0]
+        # 4. Create a source OBC using the new default backingstore
+        source_bucket = bucket_factory(interface="OC")[0]
 
         # 5. Upload objects to the source bucket and verify they are replicated to the target bucket
         write_random_test_objects_to_bucket(
@@ -172,5 +174,4 @@ class TestDefaultBackingstoreOverride(MCGTest):
             mcg_obj_session,
             source_bucket.name,
             target_bucket.name,
-            timeout=self.TIMEOUT,
         ), f"Objects in {source_bucket.name} and {target_bucket.name} dont match"
