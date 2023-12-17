@@ -10,6 +10,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
     red_squad,
+    mcg,
+    rgw,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -80,6 +82,7 @@ def file_setup(request):
     return zip_filename
 
 
+@mcg
 @red_squad
 @skipif_managed_service
 class TestBucketIO(MCGTest):
@@ -371,6 +374,7 @@ class TestBucketIO(MCGTest):
 
         return pods
 
+    @rgw
     @vsphere_platform_required
     @tier2
     @pytest.mark.polarion_id("OCS-2040")

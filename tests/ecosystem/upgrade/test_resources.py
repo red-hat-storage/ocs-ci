@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     red_squad,
     brown_squad,
+    mcg,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 
 @skipif_aws_creds_are_missing
 @post_upgrade
+@mcg
 @brown_squad
 @pytest.mark.polarion_id("OCS-2220")
 def test_storage_pods_running(multiregion_mirror_setup_session):
@@ -132,6 +134,7 @@ def test_pod_log_after_upgrade():
 @post_upgrade
 @bugzilla("1973179")
 @pytest.mark.polarion_id("OCS-2666")
+@mcg
 @red_squad
 def test_noobaa_service_mon_after_ocs_upgrade():
     """

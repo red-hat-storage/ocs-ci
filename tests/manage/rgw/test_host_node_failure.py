@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import red_squad
+from ocs_ci.framework.pytest_customization.marks import red_squad, rgw
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -33,6 +33,7 @@ from ocs_ci.utility.utils import ceph_health_check
 log = logging.getLogger(__name__)
 
 
+@rgw
 @red_squad
 @tier4b
 @ignore_leftovers
@@ -57,7 +58,6 @@ class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
         self.sanity_helpers = Sanity()
 
     def create_obc_creation(self, bucket_factory, mcg_obj, key):
-
         # Create a bucket then read & write
         bucket_name = bucket_factory(amount=1, interface="OC", timeout=120)[0].name
         obj_data = "A random string data"

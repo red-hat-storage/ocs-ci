@@ -14,12 +14,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     vsphere_platform_required,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 class TestNoobaaDbNFSMount:
     @pytest.fixture()
@@ -56,7 +58,6 @@ class TestNoobaaDbNFSMount:
 
     @pytest.fixture()
     def mount_noobaa_db_pod(self, request):
-
         # scale down noobaa db stateful set
         helpers.modify_statefulset_replica_count(
             constants.NOOBAA_DB_STATEFULSET, replica_count=0

@@ -36,6 +36,8 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     red_squad,
+    mcg,
+    rgw,
 )
 from ocs_ci.ocs import constants, bucket_utils
 from ocs_ci.ocs.cluster import CephCluster
@@ -47,6 +49,7 @@ from ocs_ci.ocs.resources.bucket_policy import HttpResponseParser
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @skipif_managed_service
 @skipif_aws_creds_are_missing
@@ -67,7 +70,10 @@ class TestNamespace(MCGTest):
         argvalues=[
             pytest.param(("oc", {"aws": [(1, DEFAULT_REGION)]})),
             pytest.param(("oc", {"azure": [(1, None)]})),
-            pytest.param(("oc", {"rgw": [(1, None)]}), marks=on_prem_platform_required),
+            pytest.param(
+                ("oc", {"rgw": [(1, None)]}),
+                marks=[on_prem_platform_required, rgw],
+            ),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -119,6 +125,7 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     on_prem_platform_required,
+                    rgw,
                     pytest.mark.polarion_id("OCS-2407"),
                 ],
             ),
@@ -172,6 +179,7 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier2,
                     on_prem_platform_required,
+                    rgw,
                     pytest.mark.polarion_id("OCS-2417"),
                 ],
             ),
@@ -343,6 +351,7 @@ class TestNamespace(MCGTest):
     @tier1
     @pytest.mark.polarion_id("OCS-2258")
     @on_prem_platform_required
+    @rgw
     def test_distribution_of_objects_in_ns_bucket_crd(
         self,
         mcg_obj,
@@ -857,6 +866,7 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
     @on_prem_platform_required
+    @rgw
     def test_create_ns_bucket_from_utilized_resources_crd(
         self,
         mcg_obj,

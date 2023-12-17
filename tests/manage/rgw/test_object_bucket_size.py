@@ -10,6 +10,8 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
+    mcg,
+    rgw,
     skipif_mcg_only,
     skipif_managed_service,
 )
@@ -58,6 +60,8 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
         )
 
 
+@rgw
+@mcg
 @red_squad
 @skipif_managed_service
 @skipif_ocs_version("<4.7")
