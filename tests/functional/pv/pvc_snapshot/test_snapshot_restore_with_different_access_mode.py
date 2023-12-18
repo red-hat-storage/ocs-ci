@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     polarion_id,
     skipif_ocp_version,
+    bugzilla,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @polarion_id("OCS-2410")
+@bugzilla("2249601")
 class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
     """
     Tests to verify PVC snapshot restore with access mode different than
@@ -57,6 +59,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                 constants.VOLUME_MODE_FILESYSTEM: [
                     constants.ACCESS_MODE_RWX,
                     constants.ACCESS_MODE_RWO,
+                    constants.ACCESS_MODE_ROX,
                 ]
             },
         }
@@ -197,22 +200,24 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
 
         # Verify md5sum
         for pod_obj in restore_pod_objs:
-            file_name_pod = (
-                file_name
-                if (
-                    pod_obj.pvc.data["spec"]["volumeMode"]
-                    == constants.VOLUME_MODE_FILESYSTEM
+            if pod_obj.pvc.get_pvc_access_mode != constants.ACCESS_MODE_ROX:
+                file_name_pod = (
+                    file_name
+                    if (
+                        pod_obj.pvc.data["spec"]["volumeMode"]
+                        == constants.VOLUME_MODE_FILESYSTEM
+                    )
+                    else pod_obj.get_storage_path(storage_type="block")
                 )
-                else pod_obj.get_storage_path(storage_type="block")
-            )
-            pod.verify_data_integrity(
-                pod_obj,
-                file_name_pod,
-                pod_obj.pvc.md5sum,
-                pod_obj.pvc.data["spec"]["volumeMode"] == constants.VOLUME_MODE_BLOCK,
-            )
-            log.info(
-                f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
-                "matches the original md5sum"
-            )
+                pod.verify_data_integrity(
+                    pod_obj,
+                    file_name_pod,
+                    pod_obj.pvc.md5sum,
+                    pod_obj.pvc.data["spec"]["volumeMode"]
+                    == constants.VOLUME_MODE_BLOCK,
+                )
+                log.info(
+                    f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
+                    "matches the original md5sum"
+                )
         log.info("Data integrity check passed on all pods")
