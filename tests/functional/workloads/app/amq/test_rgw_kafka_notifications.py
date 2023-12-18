@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     on_prem_platform_required,
     bugzilla,
     skipif_external_mode,
+    rgw,
 )
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.amq import AMQ
@@ -29,6 +30,7 @@ from ocs_ci.utility.utils import exec_cmd, run_cmd, clone_notify
 log = logging.getLogger(__name__)
 
 
+@rgw
 @magenta_squad
 @tier1
 @bugzilla("2209616")
@@ -52,7 +54,6 @@ class TestRGWAndKafkaNotifications(E2ETest):
         ) = self.kafkadrop_svc = self.kafkadrop_route = None
 
         def teardown():
-
             if self.kafka_topic:
                 self.kafka_topic.delete()
             if self.kafkadrop_pod:

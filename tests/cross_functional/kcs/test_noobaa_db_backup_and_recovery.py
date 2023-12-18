@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import warp
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, mcg, rgw
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.pod import (
 log = logging.getLogger(__name__)
 
 
+@mcg
 @magenta_squad
 @tier3
 @ignore_leftovers
@@ -40,6 +41,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         """
         self.sanity_helpers = Sanity()
 
+    @rgw
     @pytest.mark.polarion_id("OCS-2605")
     @pytest.mark.bugzilla("1924047")
     @skipif_ocs_version("<4.6")
@@ -86,7 +88,6 @@ class TestNoobaaBackupAndRecovery(E2ETest):
 
     @pytest.fixture()
     def warps3(self, request):
-
         warps3 = warp.Warp()
         warps3.create_resource_warp(replicas=4, multi_client=True)
 
