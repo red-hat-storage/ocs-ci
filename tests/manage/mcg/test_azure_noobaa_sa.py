@@ -39,7 +39,9 @@ class TestNoobaaStorageAccount:
 
         """
         azure_depl = AZUREIPI()
-        token = azure_depl.azure_util.credentials.token["access_token"]
+        tkn = azure_depl.azure_util.credentials.get_token(
+            "https://management.azure.com/.default"
+        )
         secret_ocp_obj = OCP(
             kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -53,7 +55,7 @@ class TestNoobaaStorageAccount:
         subscription_id = base64.b64decode(
             creds_secret_obj.get("data").get("azure_subscription_id")
         ).decode("utf-8")
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"Authorization": f"Bearer {tkn.token}"}
         url = (
             f"https://management.azure.com/subscriptions/{subscription_id}/"
             f"resourceGroups/{resource_group_name}/providers/Microsoft.Storage/"
