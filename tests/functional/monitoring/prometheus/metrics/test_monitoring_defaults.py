@@ -15,7 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     bugzilla,
     runs_on_provider,
-    hci_provider_and_client_required
+    hci_provider_and_client_required,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
