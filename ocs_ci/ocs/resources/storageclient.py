@@ -57,7 +57,9 @@ class StorageClient:
         """
         self._switch_client_cluster()
         patch_param = '{{"spec": {{"suspend": "true"}}}}'
-        self.heartbeat_cronjob.patch(resource_name=self.heartbeat_cronjo.name, params=patch_param)
+        self.heartbeat_cronjob.patch(
+            resource_name=self.heartbeat_cronjo.name, params=patch_param
+        )
         self._switch_original_cluster()
 
     def resume_heartbeat(self):
@@ -66,7 +68,9 @@ class StorageClient:
         """
         self._switch_client_cluster()
         patch_param = '{{"spec": {{"suspend": "false"}}}}'
-        self.heartbeat_cronjob.patch(resource_name=self.heartbeat_cronjo.name, params=patch_param)
+        self.heartbeat_cronjob.patch(
+            resource_name=self.heartbeat_cronjo.name, params=patch_param
+        )
         self._switch_original_cluster()
 
     def get_heartbeat_cronjob(self):
@@ -75,8 +79,15 @@ class StorageClient:
             object: status reporter cronjob OCP object
 
         """
-        cronjobs_obj = ocp.OCP(kind=constants.CRONJOB, namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"])
-        cronjob = [ocp.OCP(**job) for job in cronjobs_obj.get().get("items") if job.name.endswith("status-reporter")][0]
+        cronjobs_obj = ocp.OCP(
+            kind=constants.CRONJOB,
+            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+        )
+        cronjob = [
+            ocp.OCP(**job)
+            for job in cronjobs_obj.get().get("items")
+            if job.name.endswith("status-reporter")
+        ][0]
         return cronjob
 
     def _switch_original_cluster(self):

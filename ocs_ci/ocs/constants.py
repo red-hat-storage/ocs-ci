@@ -980,7 +980,9 @@ ALERT_KUBEHPAREPLICASMISMATCH = "KubeHpaReplicasMismatch"
 ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP = "KubePersistentVolumeInodesFillingUp"
 ALERT_CEPHOSDSLOWOPS = "CephOSDSlowOps"
 ALERT_STORAGECLIENTHEARTBEATMISSED = "StorageClientHeartbeatMissed"
-ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = "StorageClientIncompatibleOperatorVersion"
+ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = (
+    "StorageClientIncompatibleOperatorVersion"
+)
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
