@@ -5,6 +5,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     on_prem_platform_required,
     black_squad,
+    mcg,
+    rgw,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -31,6 +33,7 @@ from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @black_squad
 class TestStoreUserInterface(object):
     """
@@ -126,6 +129,7 @@ class TestStoreUserInterface(object):
         ), f"resource kind='{kind}' name='{store_name}' preserved on cluster after deletion"
 
 
+@mcg
 @black_squad
 @ui
 @skipif_ui_not_support("bucketclass")
@@ -294,7 +298,7 @@ class TestObcUserInterface(object):
                     "three_dots",
                     True,
                 ],
-                marks=pytest.mark.polarion_id("OCS-4698"),
+                marks=[pytest.mark.polarion_id("OCS-4698"), mcg],
             ),
             pytest.param(
                 *[
@@ -303,7 +307,7 @@ class TestObcUserInterface(object):
                     "Actions",
                     True,
                 ],
-                marks=pytest.mark.polarion_id("OCS-2542"),
+                marks=[pytest.mark.polarion_id("OCS-2542"), mcg],
             ),
             pytest.param(
                 *[
@@ -312,7 +316,11 @@ class TestObcUserInterface(object):
                     "three_dots",
                     True,
                 ],
-                marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
+                marks=[
+                    pytest.mark.polarion_id("OCS-4845"),
+                    on_prem_platform_required,
+                    rgw,
+                ],
             ),
         ],
     )
