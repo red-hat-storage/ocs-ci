@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
     ManageTest,
-    tier3,
+    tier2,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.performance_lib import run_oc_command
@@ -23,9 +23,9 @@ ERRMSG = "Error in command"
 
 
 @magenta_squad
-@tier3
-@skipif_ocp_version("<4.13")
-@skipif_ocs_version("<4.13")
+@tier2
+@skipif_ocp_version("<4.15")
+@skipif_ocs_version("<4.15")
 class TestCRRsourcesValidation(ManageTest):
     """
     Test that check that csi addons resources are not editable after creation
