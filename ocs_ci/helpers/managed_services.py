@@ -352,6 +352,21 @@ def verify_storageclient_storageclass_claims(storageclient):
         log.info(f"Verified Storageclassclaim and Storageclass {sc_claim.name}")
 
 
+def verify_storageconsumers():
+    """
+    Verify that all storage consumers are in Ready state
+    """
+    sconsumer_ocp = OCP(
+        kind=constants.STORAGECONSUMER, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    sconsumers = sconsumer_ocp.get()["items"]
+    for sconsumer in sconsumers:
+        log.info(f"Verifying state of storageconsumer {sconsumer['metadata']['name']}")
+        assert (
+            sconsumer["status"]["state"] == constants.STATUS_READY
+        ), f"State is {sconsumer['status']['state']}. It should be Ready"
+
+
 def verify_pods_in_managed_fusion_namespace():
     """
     Verify the status of pods in the namespace managed-fusion

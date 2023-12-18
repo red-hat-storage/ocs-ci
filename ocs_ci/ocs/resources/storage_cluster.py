@@ -21,6 +21,7 @@ from ocs_ci.helpers.managed_services import (
     get_ocs_osd_deployer_version,
     verify_faas_resources,
     verify_storageclient,
+    verify_storageconsumers,
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
@@ -753,6 +754,7 @@ def ocs_install_verification(
         validate_serviceexport()
     if provider_cluster:
         verify_provider_resources()
+        verify_storageconsumers()
     if client_cluster:
         verify_storageclassclaims()
         verify_storageclient(
