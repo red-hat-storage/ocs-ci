@@ -751,6 +751,8 @@ def ocs_install_verification(
         and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
     ):
         validate_serviceexport()
+    if provider_cluster:
+        verify_provider_resources()
     if client_cluster:
         verify_storageclassclaims()
         verify_storageclient(
@@ -1984,7 +1986,8 @@ def verify_provider_resources():
         "hostNetwork"
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
-    assert verify_worker_nodes_security_groups()
+    if config.ENV_DATA.get("platform") in constants.constants.MANAGED_SERVICE_PLATFORMS:
+        assert verify_worker_nodes_security_groups()
 
 
 def verify_consumer_resources():
