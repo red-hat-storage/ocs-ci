@@ -9,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     tier1,
     ManageTest,
-    acceptance,
     skipif_managed_service,
     skipif_hci_provider_and_client,
 )
@@ -23,7 +22,6 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier1
-@acceptance
 @pytest.mark.parametrize(
     argnames=["reclaim_policy"],
     argvalues=[
@@ -128,7 +126,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,200)}M",
+                    size=f"{random.randint(10, 200)}M",
                     invalidate=0,
                 )
             for pod in pvc_gb_pods:
@@ -136,7 +134,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(1,5)}G",
+                    size=f"{random.randint(1, 5)}G",
                     invalidate=0,
                 )
             for pod in pvc_tb_pods:
@@ -144,7 +142,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,15)}G",
+                    size=f"{random.randint(10, 15)}G",
                     invalidate=0,
                 )
 

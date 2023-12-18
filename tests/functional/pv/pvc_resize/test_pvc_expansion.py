@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
-    acceptance,
     skipif_upgraded_from,
 )
 from ocs_ci.helpers import helpers
@@ -147,7 +146,7 @@ class TestPvcExpand(ManageTest):
 
             # Split file size and write from two pods if access mode is RWX
             size = (
-                f"{int(file_size/2)}G"
+                f"{int(file_size / 2)}G"
                 if (pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX)
                 else f"{file_size}G"
             )
@@ -175,7 +174,6 @@ class TestPvcExpand(ManageTest):
             )
             log.info(f"Verified {io_phase} IO on pod {pod_obj.name}.")
 
-    @acceptance
     @pytest.mark.polarion_id("OCS-2219")
     def test_pvc_expansion(self):
         """

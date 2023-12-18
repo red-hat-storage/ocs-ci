@@ -6,7 +6,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
-    acceptance,
     skipif_managed_service,
     skipif_hci_provider_and_client,
 )
@@ -82,7 +81,6 @@ class TestDynamicPvc(ManageTest):
                 f"Failure string {failure_str} is not found in oc describe" f" command"
             )
 
-    @acceptance
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface_type", "reclaim_policy"],
@@ -239,7 +237,6 @@ class TestDynamicPvc(ManageTest):
             pod_obj=pod_obj2, file_name=file_name, original_md5sum=md5sum_pod1_data
         )
 
-    @acceptance
     @tier1
     @pytest.mark.bugzilla("1750916")
     @pytest.mark.bugzilla("1751866")

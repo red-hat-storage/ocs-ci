@@ -8,7 +8,6 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
-    acceptance,
     bugzilla,
 )
 from ocs_ci.ocs import constants
@@ -49,7 +48,6 @@ class TestPvcAssignPodNode(ManageTest):
             error_msg in pod_log
         ), f"Logs should not contain the error message '{error_msg}'"
 
-    @acceptance
     @bugzilla("2136852")
     @tier1
     @pytest.mark.parametrize(
@@ -117,7 +115,6 @@ class TestPvcAssignPodNode(ManageTest):
         ]:
             self.verify_access_token_notin_odf_pod_logs()
 
-    @acceptance
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface"],
