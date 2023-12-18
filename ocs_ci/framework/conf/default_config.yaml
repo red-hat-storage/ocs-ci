@@ -299,6 +299,7 @@ FLEXY:
 EXTERNAL_MODE:
   admin_keyring:
     key: PLACE_HOLDER
+  run_as_user: "client.healthchecker"
 
 
 # This section is related to ui testing with selenium
