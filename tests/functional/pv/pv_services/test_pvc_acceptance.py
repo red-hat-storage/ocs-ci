@@ -318,7 +318,7 @@ class TestPvcAcceptance(ManageTest):
 
 
 class PvcAcceptance:
-    cbp_name = helpers.default_ceph_block_pool()
+    cbp_name = None
     used_before_io = None
 
     def log_execution(f):
@@ -364,6 +364,7 @@ class PvcAcceptance:
                 skip_expansion (bool): skip PVC resize part of test
 
         """
+        PvcAcceptance.cbp_name = helpers.default_ceph_block_pool()
         self.pvc_factory = pvc_factory
         self.pod_factory = pod_factory
         self.storageclass_factory = storageclass_factory
