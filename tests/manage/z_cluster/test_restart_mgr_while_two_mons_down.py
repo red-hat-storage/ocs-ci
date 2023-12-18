@@ -51,9 +51,13 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
         """
 
         def finalizer():
+            if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+                current_cluster = config.cluster_ctx
+                config.switch_to_provider()
             for mon_scale in self.mons_scale:
                 self.oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon_scale}")
             wait_for_pods_to_be_running(timeout=600)
+            config.switch_ctx(current_cluster)
 
         request.addfinalizer(finalizer)
 
@@ -81,6 +85,9 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
         oc get pod -l app=rook-ceph-mgr
 
         """
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+            current_cluster = config.cluster_ctx
+            config.switch_to_provider()
         self.oc = ocp.OCP(
             kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -119,6 +126,9 @@ class TestRestartMgrWhileTwoMonsDown(ManageTest):
                 resource_count=1,
                 timeout=100,
             ), f"Mgr pod did'nt move to Running state after 100 seconds, index={index}"
+
+        if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+            config.switch_ctx(current_cluster)
 
         log.info("Creating Resources using sanity helpers")
         self.sanity_helpers.create_resources(
