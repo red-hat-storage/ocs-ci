@@ -1991,7 +1991,7 @@ def verify_provider_resources():
         "hostNetwork"
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
-    if config.ENV_DATA.get("platform") in constants.constants.MANAGED_SERVICE_PLATFORMS:
+    if config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS:
         assert verify_worker_nodes_security_groups()
 
 
