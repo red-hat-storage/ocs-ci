@@ -48,6 +48,10 @@ class TestPvcAssignPodNode(ManageTest):
             error_msg in pod_log
         ), f"Logs should not contain the error message '{error_msg}'"
 
+    # this test was also part of acceptance test suite, where it was replaced by
+    # tests/functional/pv/pv_services/test_pvc_acceptance.py
+    # if you need to change this test, please review also the test_pvc_acceptance
+    # and update accordingly if needed
     @bugzilla("2136852")
     @tier1
     @pytest.mark.parametrize(
@@ -115,6 +119,10 @@ class TestPvcAssignPodNode(ManageTest):
         ]:
             self.verify_access_token_notin_odf_pod_logs()
 
+    # this test was also part of acceptance test suite, where it was replaced by
+    # tests/functional/pv/pv_services/test_pvc_acceptance.py
+    # if you need to change this test, please review also the test_pvc_acceptance
+    # and update accordingly if needed
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface"],

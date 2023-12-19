@@ -174,6 +174,10 @@ class TestPvcExpand(ManageTest):
             )
             log.info(f"Verified {io_phase} IO on pod {pod_obj.name}.")
 
+    # this test was also part of acceptance test suite, where it was replaced by
+    # tests/functional/pv/pv_services/test_pvc_acceptance.py
+    # if you need to change this test, please review also the test_pvc_acceptance
+    # and update accordingly if needed
     @pytest.mark.polarion_id("OCS-2219")
     def test_pvc_expansion(self):
         """

@@ -56,6 +56,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     Testing after pvc deletion the size is returned to backendpool
     """
 
+    # this test was also part of acceptance test suite, where it was replaced by
+    # tests/functional/pv/pv_services/test_pvc_acceptance.py
+    # if you need to change this test, please review also the test_pvc_acceptance
+    # and update accordingly if needed
     @tier1
     def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(
         self, pause_and_resume_cluster_load, pvc_factory, pod_factory

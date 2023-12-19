@@ -20,6 +20,10 @@ from ocs_ci.utility.utils import convert_device_size
 log = logging.getLogger(__name__)
 
 
+# this test was also part of acceptance test suite, where it was replaced by
+# tests/functional/pv/pv_services/test_pvc_acceptance.py
+# if you need to change this test, please review also the test_pvc_acceptance
+# and update accordingly if needed
 @green_squad
 @tier1
 @pytest.mark.parametrize(

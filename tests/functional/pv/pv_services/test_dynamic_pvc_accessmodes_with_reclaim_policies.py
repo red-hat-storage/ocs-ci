@@ -81,6 +81,10 @@ class TestDynamicPvc(ManageTest):
                 f"Failure string {failure_str} is not found in oc describe" f" command"
             )
 
+    # this test was also part of acceptance test suite, where it was replaced by
+    # tests/functional/pv/pv_services/test_pvc_acceptance.py
+    # if you need to change this test, please review also the test_pvc_acceptance
+    # and update accordingly if needed
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface_type", "reclaim_policy"],
@@ -237,6 +241,10 @@ class TestDynamicPvc(ManageTest):
             pod_obj=pod_obj2, file_name=file_name, original_md5sum=md5sum_pod1_data
         )
 
+    # this test was also part of acceptance test suite, where it was replaced by
+    # tests/functional/pv/pv_services/test_pvc_acceptance.py
+    # if you need to change this test, please review also the test_pvc_acceptance
+    # and update accordingly if needed
     @tier1
     @pytest.mark.bugzilla("1750916")
     @pytest.mark.bugzilla("1751866")
