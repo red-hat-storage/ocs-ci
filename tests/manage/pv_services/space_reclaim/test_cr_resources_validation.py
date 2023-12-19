@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from tempfile import NamedTemporaryFile
-from ocs_ci.framework.pytest_customization.marks import bugzilla, magenta_squad
+from ocs_ci.framework.pytest_customization.marks import bugzilla, grey_squad
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     skipif_ocs_version,
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
-@magenta_squad
+@grey_squad
 @tier2
 @skipif_ocp_version("<4.15")
 @skipif_ocs_version("<4.15")
