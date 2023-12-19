@@ -1980,6 +1980,7 @@ def verify_provider_resources():
     cephcluster = OCP(
         kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
     )
+    cephcluster._has_phase = True
     log.info("Waiting for Cephcluster to be Ready")
     cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
     cephcluster_yaml = cephcluster.get().get("items")[0]
