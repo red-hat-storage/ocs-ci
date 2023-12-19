@@ -197,7 +197,7 @@ def ocs_install_verification(
     fusion_aas_provider = fusion_aas and provider_cluster
 
     # Basic Verification for cluster
-    if not fusion_aas_consumer:
+    if not fusion_aas_consumer or client_cluster:
         basic_verification(ocs_registry_image)
 
     # Verify pods in running state and proper counts
