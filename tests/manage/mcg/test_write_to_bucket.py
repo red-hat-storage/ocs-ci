@@ -11,7 +11,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skip_inconsistent,
     red_squad,
     mcg,
-    rgw,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -374,7 +373,6 @@ class TestBucketIO(MCGTest):
 
         return pods
 
-    @rgw
     @vsphere_platform_required
     @tier2
     @pytest.mark.polarion_id("OCS-2040")

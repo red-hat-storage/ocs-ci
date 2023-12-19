@@ -37,7 +37,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     red_squad,
     mcg,
-    rgw,
 )
 from ocs_ci.ocs import constants, bucket_utils
 from ocs_ci.ocs.cluster import CephCluster
@@ -72,7 +71,7 @@ class TestNamespace(MCGTest):
             pytest.param(("oc", {"azure": [(1, None)]})),
             pytest.param(
                 ("oc", {"rgw": [(1, None)]}),
-                marks=[on_prem_platform_required, rgw],
+                marks=on_prem_platform_required,
             ),
         ],
         # A test ID list for describing the parametrized tests
@@ -125,7 +124,6 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     on_prem_platform_required,
-                    rgw,
                     pytest.mark.polarion_id("OCS-2407"),
                 ],
             ),
@@ -179,7 +177,6 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier2,
                     on_prem_platform_required,
-                    rgw,
                     pytest.mark.polarion_id("OCS-2417"),
                 ],
             ),
@@ -351,7 +348,6 @@ class TestNamespace(MCGTest):
     @tier1
     @pytest.mark.polarion_id("OCS-2258")
     @on_prem_platform_required
-    @rgw
     def test_distribution_of_objects_in_ns_bucket_crd(
         self,
         mcg_obj,
@@ -866,7 +862,6 @@ class TestNamespace(MCGTest):
     @pytest.mark.polarion_id("OCS-2290")
     @tier2
     @on_prem_platform_required
-    @rgw
     def test_create_ns_bucket_from_utilized_resources_crd(
         self,
         mcg_obj,

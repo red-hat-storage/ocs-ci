@@ -6,7 +6,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     on_prem_platform_required,
     black_squad,
     mcg,
-    rgw,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -316,11 +315,7 @@ class TestObcUserInterface(object):
                     "three_dots",
                     True,
                 ],
-                marks=[
-                    pytest.mark.polarion_id("OCS-4845"),
-                    on_prem_platform_required,
-                    rgw,
-                ],
+                marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
             ),
         ],
     )

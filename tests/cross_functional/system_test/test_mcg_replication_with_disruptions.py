@@ -15,7 +15,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     magenta_squad,
     mcg,
-    rgw,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
@@ -36,7 +35,6 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 logger = logging.getLogger(__name__)
 
 
-@rgw
 @mcg
 @magenta_squad
 @system_test

@@ -16,7 +16,6 @@ from ocs_ci.framework.testlib import (
     skipif_mcg_only,
     red_squad,
     mcg,
-    rgw,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -87,7 +86,6 @@ class TestMCGResourcesDisruptions(MCGTest):
         )
         self.cl_obj.wait_for_noobaa_health_ok()
 
-    @rgw
     @tier4c
     @skipif_ocs_version("<4.5")
     @on_prem_platform_required

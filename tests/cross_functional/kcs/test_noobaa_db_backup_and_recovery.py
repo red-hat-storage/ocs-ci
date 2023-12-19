@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import warp
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, mcg, rgw
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, mcg
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -41,7 +41,6 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         """
         self.sanity_helpers = Sanity()
 
-    @rgw
     @pytest.mark.polarion_id("OCS-2605")
     @pytest.mark.bugzilla("1924047")
     @skipif_ocs_version("<4.6")
