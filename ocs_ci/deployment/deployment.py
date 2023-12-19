@@ -552,6 +552,9 @@ class Deployment(object):
         if (
             config.DEPLOYMENT.get("cnv_deployment")
             and not config.ENV_DATA["skip_ocs_deployment"]
+            and (not config.multicluster
+                 or (config.multicluster and not config.MULTICLUSTER['acm_cluster']
+                and config.MULTICLUSTER['multicluster_mode'] == 'metro-dr'))
         ):
             CNVInstaller().deploy_cnv()
 
