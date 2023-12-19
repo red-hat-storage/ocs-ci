@@ -288,9 +288,10 @@ def ocs_install_verification(
                 not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
                 or managed_service
                 or disable_rgw
+                or hci_cluster
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service):
+        if "noobaa" in label and (disable_noobaa or managed_service or hci_cluster):
             continue
         if "mds" in label and disable_cephfs:
             continue
@@ -681,7 +682,7 @@ def ocs_install_verification(
             if config.ENV_DATA.get("VAULT_CA_ONLY", None):
                 verify_kms_ca_only()
 
-    if not fusion_aas_consumer:
+    if not fusion_aas_consumer or client_cluster:
         storage_cluster_obj = get_storage_cluster()
         is_flexible_scaling = (
             storage_cluster_obj.get()["items"][0]
