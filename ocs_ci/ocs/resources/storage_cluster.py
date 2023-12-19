@@ -1978,7 +1978,9 @@ def verify_provider_resources():
 
     # Verify that cephcluster is Ready and hostNetworking is True
     cephcluster = OCP(
-        kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+        kind="CephCluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_CLUSTER_NAME,
     )
     cephcluster._has_phase = True
     log.info("Waiting for Cephcluster to be Ready")
