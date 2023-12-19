@@ -635,7 +635,7 @@ class ArchitectureNotSupported(Exception):
     pass
 
 
-class MissingSquadDecoratorError(Exception):
+class MissingDecoratorError(Exception):
     pass
 
 
