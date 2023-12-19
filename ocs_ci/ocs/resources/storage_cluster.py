@@ -1985,7 +1985,7 @@ def verify_provider_resources():
     cephcluster._has_phase = True
     log.info("Waiting for Cephcluster to be Ready")
     cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
-    cephcluster_yaml = cephcluster.get().get("items")[0]
+    cephcluster_yaml = cephcluster.get()
     log.info("Verifying that cephcluster's hostNetworking is True")
     assert cephcluster_yaml["spec"]["network"][
         "hostNetwork"
