@@ -896,6 +896,19 @@ def verify_storage_cluster():
     storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
     # verify storage cluster version
+    if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
+        verify_storage_cluster_version(storage_cluster)
+
+
+def verify_storage_cluster_version(storage_cluster):
+    """
+    Verifies the storage cluster version
+
+    Args:
+        storage_cluster (obj): storage cluster object
+
+    """
+    # verify storage cluster version
     if config.RUN["cli_params"].get("deploy") and not config.UPGRADE.get(
         "upgrade_ocs_version"
     ):
