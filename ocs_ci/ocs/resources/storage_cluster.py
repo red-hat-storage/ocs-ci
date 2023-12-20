@@ -231,7 +231,6 @@ def ocs_install_verification(
     )
     resources_dict = {
         nb_db_label: 1,
-        constants.OPERATOR_LABEL: 1,
         constants.NOOBAA_OPERATOR_POD_LABEL: 1,
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
@@ -247,6 +246,7 @@ def ocs_install_verification(
         resources_dict.update(
             {
                 constants.OCS_OPERATOR_LABEL: 1,
+                constants.OPERATOR_LABEL: 1,
             }
         )
 
