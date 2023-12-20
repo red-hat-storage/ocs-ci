@@ -208,9 +208,13 @@ def verify_test_decorators_requirements(items):
                     "Ignoring test case %s as it has a marker in the ignore list",
                     item.name,
                 )
+
+            # Verify tests are decorated with the correct squad owner
             elif not any(["_squad" in marker for marker in item_markers]):
                 log.debug("%s is missing a squad owner marker", item.name)
                 items_without_squad_marker.update({item.name: item.fspath.strpath})
+
+            # Verify red squad tests are decorated with either @mcg or @rgw
             elif (
                 "red_squad" in item_markers
                 and "mcg" not in item_markers
