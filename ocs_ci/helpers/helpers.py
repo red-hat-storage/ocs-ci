@@ -4345,3 +4345,44 @@ def get_s3_credentials_from_secret(secret_name):
     secret_key = base64.b64decode(base64_secret_key).decode("utf-8")
 
     return access_key, secret_key
+
+
+def verify_pvc_size(pod_obj, expected_size):
+    """Verify PVC size is as expected or not.
+
+    Args:
+        pod_obj : Pod Object
+        expected_size : Expected size of PVC
+    Returns:
+        bool: True if expected size is matched with the PVC attached to pod. else False
+    """
+    # Wait for 240 seconds to reflect the change on pod
+    logger.info(f"Checking pod {pod_obj.name} to verify the change.")
+
+    for df_out in TimeoutSampler(240, 3, pod_obj.exec_cmd_on_pod, command="df -kh"):
+        if not df_out:
+            continue
+        df_out = df_out.split()
+
+        if not df_out:
+            logger.error("Could not find expanded volume size.")
+            return False
+
+        new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
+        if (
+            expected_size - 0.5 <= float(new_size_mount[:-1]) <= expected_size
+            and new_size_mount[-1] == "G"
+        ):
+            logger.info(
+                f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
+                f"is reflected on pod {pod_obj.name}"
+            )
+            return True
+
+        logger.info(
+            f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
+            f" on pod {pod_obj.name}. New size on mount is not "
+            f"{expected_size}G as expected, but {new_size_mount}. "
+            f"Checking again."
+        )
+    return False

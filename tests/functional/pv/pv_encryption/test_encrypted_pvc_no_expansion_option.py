@@ -56,7 +56,7 @@ else:
 @skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
-class TestEncryptedPVCWithAllowVolumeExpansionFalse(ManageTest):
+class TestEncryptedPVCNOExpansionOption(ManageTest):
     """
     Test Encrypted Volume Expansion
 
@@ -82,7 +82,7 @@ class TestEncryptedPVCWithAllowVolumeExpansionFalse(ManageTest):
         argnames=argnames,
         argvalues=argvalues,
     )
-    def test_encrypted_pvc_expansion_with_allow_volume_expansion_false(
+    def test_encrypted_pvc_no_expansion_option(
         self,
         setup,
         kms_provider,

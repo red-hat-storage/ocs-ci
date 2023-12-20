@@ -13,8 +13,8 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     config,
 )
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import verify_pvc_size
 
 
 log = logging.getLogger(__name__)
@@ -76,44 +76,6 @@ class TestEncryptedVolumeExpansion(ManageTest):
         log.info("Setting up csi-kms-connection-details configmap")
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
-
-    def verify_pvc_size(self, pod_obj, expected_size):
-        """Verify PVC size is as expected or not.
-
-        Args:
-            pod_obj : Pod Object
-            expected_size : Expected size of PVC
-        """
-        # Wait for 240 seconds to reflect the change on pod
-        log.info(f"Checking pod {pod_obj.name} to verify the change.")
-
-        for df_out in TimeoutSampler(240, 3, pod_obj.exec_cmd_on_pod, command="df -kh"):
-            if not df_out:
-                continue
-            df_out = df_out.split()
-
-            if not df_out:
-                log.error("Could not find expanded volume size.")
-                return False
-
-            new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
-            if (
-                expected_size - 0.5 <= float(new_size_mount[:-1]) <= expected_size
-                and new_size_mount[-1] == "G"
-            ):
-                log.info(
-                    f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
-                    f"is reflected on pod {pod_obj.name}"
-                )
-                return True
-
-            log.info(
-                f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
-                f" on pod {pod_obj.name}. New size on mount is not "
-                f"{expected_size}G as expected, but {new_size_mount}. "
-                f"Checking again."
-            )
-        return False
 
     @tier1
     @pytest.mark.parametrize(
@@ -178,7 +140,9 @@ class TestEncryptedVolumeExpansion(ManageTest):
         log.info(f"Expanding size of PVC {pvc_obj.name} to {new_size}G")
         pvc_obj.resize_pvc(new_size, True)
 
-        assert self.verify_pvc_size(pod_obj, new_size)
+        assert verify_pvc_size(
+            pod_obj, new_size
+        ), f"Expected pvc size {new_size}G is not matched with the attached PVC on pod {pod_obj.name}"
 
     @tier1
     @pytest.mark.polarion_id("OCS-5391")
@@ -237,4 +201,6 @@ class TestEncryptedVolumeExpansion(ManageTest):
         new_size = pvc_size + 5
         log.info(f"Expanding size of PVC {pvc_obj.name} to {new_size}G")
         pvc_obj.resize_pvc(new_size, True)
-        assert self.verify_pvc_size(pod_obj, new_size)
+        assert verify_pvc_size(
+            pod_obj, new_size
+        ), f"Expected pvc size {new_size}G is not matched with the attached PVC on pod {pod_obj.name}"
