@@ -179,7 +179,7 @@ class TestFIOBenchmark(PASTest):
         # To make sure the number of App pods will not be more then 50, in case
         # of large data set, changing the size of the file each pod will work on
         if self.total_data_set > 500:
-            self.filesize = int(ceph_capacity * 0.0415)
+            self.filesize = int(ceph_capacity * 0.01)
             self.crd_data["spec"]["workload"]["args"][
                 "filesize"
             ] = f"{self.filesize}GiB"
