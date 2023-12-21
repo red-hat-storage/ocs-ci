@@ -9,6 +9,7 @@ from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     patch_replication_policy_to_bucket,
+    mcg,
 )
 from ocs_ci.ocs import scale_noobaa_lib
 
@@ -28,6 +29,7 @@ def s3bench(request):
     return s3bench
 
 
+@mcg
 @orange_squad
 @scale
 @skipif_ocs_version("<4.9")
