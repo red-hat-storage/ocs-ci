@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 @bugzilla("2223959")
 @skipif_external_mode
 @skipif_ocs_version("<4.14")
-@pytest.mark.polarion_id("OCS-XXXX")
+@pytest.mark.polarion_id("OCS-5404")
 class TestRookCephOsdFlapping(ManageTest):
     """
     Test Rook Ceph OSD Flapping
@@ -47,7 +47,7 @@ class TestRookCephOsdFlapping(ManageTest):
         1.Get osd id
         2.Mark an osd down manually 6 times
         3.Verify osd is down with "csph -s" command ["1 osds down"]
-        4.Verify osd log contain "osd_max_markdown_count 5 in last" string
+        4.Verify osd log contains "The OSD pod will sleep for 24 hours." string
         5.Reset osd pod [oc delete pod]
         6.Verify ceph status is OK
         """
