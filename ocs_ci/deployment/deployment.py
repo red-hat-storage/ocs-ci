@@ -141,6 +141,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
+from ocs_ci.deployment.cnv import CNVInstaller
 
 logger = logging.getLogger(__name__)
 
@@ -548,6 +549,8 @@ class Deployment(object):
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
+        if config.DEPLOYMENT.get("cnv_deployment"):
+            CNVInstaller().deploy_cnv()
 
     def get_rdr_conf(self):
         """

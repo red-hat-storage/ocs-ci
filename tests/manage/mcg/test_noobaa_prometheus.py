@@ -40,7 +40,12 @@ class TestNoobaaaPrometheus:
     @bugzilla("2168010")
     @polarion_id("OCS-4928")
     def test_bucket_used_bytes_metric(
-        self, bucket_factory, test_directory_setup, awscli_pod_session, mcg_obj_session
+        self,
+        bucket_factory,
+        test_directory_setup,
+        awscli_pod_session,
+        mcg_obj_session,
+        threading_lock,
     ):
         """
         This test checks if the Noobaa_bucket_used_bytes prometheus metrics
@@ -61,7 +66,7 @@ class TestNoobaaaPrometheus:
         )
 
         try:
-            value = int(get_bucket_used_bytes_metric(bucket_name))
+            value = int(get_bucket_used_bytes_metric(bucket_name, threading_lock))
             assert value == (
                 bytes_size_in_mb * bytes_in_mb * amount_of_objs
             ), f"Byte size didnt match with actuall bytes were uploaded to the bucket {bucket_name}"

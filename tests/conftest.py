@@ -1116,7 +1116,7 @@ def pvc_factory_fixture(request, project_factory):
                 instance.ocp.wait_for_delete(instance.name)
 
         # Wait for PVs to delete
-        # If they have ReclaimPolicy set to Retain then delete them manually
+        # If they have ReclaimPolicy set to Retain then change to Delete
         for pv_obj in pv_objs:
             if (
                 pv_obj.data.get("spec", {}).get("persistentVolumeReclaimPolicy")
@@ -1124,10 +1124,10 @@ def pvc_factory_fixture(request, project_factory):
                 and pv_obj is not None
             ):
                 helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
-                pv_obj.delete()
-                pv_obj.ocp.wait_for_delete(pv_obj.name)
-            else:
-                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+                patch_param = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+                pv_obj.ocp.patch(resource_name=pv_obj.name, params=patch_param)
+
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     request.addfinalizer(finalizer)
     return factory
@@ -4452,10 +4452,10 @@ def pvc_clone_factory_fixture(request):
             pvc_obj.provisioner in constants.OCS_PROVISIONERS
         ), f"Unknown provisioner in PVC {pvc_obj.name}"
         no_interface = False
-        if pvc_obj.provisioner == "openshift-storage.rbd.csi.ceph.com":
+        if "rbd.csi.ceph.com" in pvc_obj.provisioner:
             clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
             interface = constants.CEPHBLOCKPOOL
-        elif pvc_obj.provisioner == "openshift-storage.cephfs.csi.ceph.com":
+        elif "cephfs.csi.ceph.com" in pvc_obj.provisioner:
             clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             interface = constants.CEPHFILESYSTEM
         elif pvc_obj.provisioner in [
@@ -5506,7 +5506,7 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
 
     def mcg_account_factory_implementation(
         name,
-        default_resource="",
+        default_resource=constants.DEFAULT_NOOBAA_BACKINGSTORE,
         nsfs_account_config=False,
         uid=-1,
         gid=-1,
@@ -5537,6 +5537,10 @@ def mcg_account_factory_fixture(request, mcg_obj_session):
             ssl (bool)
 
         """
+        if uid == -1:
+            uid = random.randint(1000, 10000)
+        if gid == -1:
+            gid = random.randint(1000, 10000)
 
         # Build the mcg-cli command for creating an account
         cli_cmd = (
@@ -6390,11 +6394,15 @@ def dr_workload(request):
     """
     instances = []
 
-    def factory(num_of_subscription=1, num_of_appset=0):
+    def factory(
+        num_of_subscription=1, num_of_appset=0, pvc_interface=constants.CEPHBLOCKPOOL
+    ):
         """
         Args:
             num_of_subscription (int): Number of Subscription type workload to be created
             num_of_appset (int): Number of ApplicationSet type workload to be created
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -6404,8 +6412,12 @@ def dr_workload(request):
 
         """
         total_pvc_count = 0
+        workload_key = "dr_workload_subscription"
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            workload_key = "dr_workload_subscription_cephfs"
+
         for index in range(num_of_subscription):
-            workload_details = ocsci_config.ENV_DATA["dr_workload_subscription"][index]
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -6430,7 +6442,10 @@ def dr_workload(request):
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
         if ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+            if pvc_interface != constants.CEPHFILESYSTEM:
+                dr_helpers.wait_for_mirroring_status_ok(
+                    replaying_images=total_pvc_count
+                )
         return instances
 
     def teardown():

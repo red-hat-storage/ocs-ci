@@ -5,6 +5,9 @@ compute:
     platform:
       gcp:
         type: {{ worker_instance_type }}
+{% if worker_secure_boot %}
+        secureBoot: {{ worker_secure_boot }}
+{% endif %}
 {% if worker_availability_zones %}
         zones:
 {% for zone in worker_availability_zones %}
@@ -17,6 +20,9 @@ controlPlane:
   platform:
     gcp:
       type: {{ master_instance_type }}
+{% if master_secure_boot %}
+      secureBoot: {{ master_secure_boot }}
+{% endif %}
 {% if master_availability_zones %}
       zones:
 {% for zone in master_availability_zones %}
@@ -42,4 +48,8 @@ platform:
   gcp:
     projectID: {{ gcp_project_id }}
     region: {{ region }}
+{% if machine_secure_boot %}
+    defaultMachinePlatform:
+      secureBoot: {{ machine_secure_boot }}
+{% endif %}
 pullSecret: ''

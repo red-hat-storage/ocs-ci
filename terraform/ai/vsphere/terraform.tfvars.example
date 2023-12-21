@@ -1,0 +1,67 @@
+// ID identifying the cluster to create. Use your username so that resources
+// created can be tracked back to you.
+cluster_id = "example-cluster"
+
+// Name (URL) of the vSphere server.
+vsphere_server = "VSPHERE_SERVER_URL"
+
+// User on the vSphere server.
+vsphere_user = "VSPHERE_USER"
+
+// Password of the user on the vSphere server.
+vsphere_password = "VSPHERE_PASSWORD"
+
+// Name of the vSphere cluster.
+vsphere_cluster = "Cluster-1"
+
+// Name of the vSphere data center.
+vsphere_datacenter = "DatacenterName"
+
+// Name of the vSphere data store.
+vsphere_datastore = "vsanDatastore"
+
+// Name of the publicly accessible network for cluster ingress and access.
+vm_network = "VM Network"
+
+// Local path to the Assisted Installer discovery iso.
+iso_image = "/path/to/discovery.iso"
+
+// The size of system disk for both Control plane and Compute VMs, in GB.
+// Default 120 GB.
+system_disk_size = "120"
+
+// The number of control plane VMs to create. Default is 3.
+control_plane_count = "3"
+
+// The number of cores for Control plane VMs. Default is 4.
+control_plane_num_cpus = "4"
+
+// Control plane VMs memory size, in MB.
+// Default is 16384 (16 GB)
+control_plane_memory = "16384"
+
+// The number of Compute VMs to create. Default is 3.
+compute_count = "3"
+
+// The number of cores for Compute VMs. Default is 16.
+compute_num_cpus = "16"
+
+// Compute VMs memory size, in MB.
+// Default is 65536 (64 GB)
+compute_memory = "65536"
+
+// The number of data disks for Compute VMs. Default is 2.
+compute_data_disks_count = "2"
+
+// The size of data disks for Compute VMs, in GB.
+// Default 256 GB.
+compute_data_disks_size = "256"
+
+// Base DNS domain, where should be the cluster records created
+// base_domain = "example.com"
+
+// API IP address, if not defined no DNS record is created
+// api_ip = "192.0.2.2"
+
+// Ingress IP address, if not defined no DNS record is created
+// ingress_ip = "192.0.2.3"

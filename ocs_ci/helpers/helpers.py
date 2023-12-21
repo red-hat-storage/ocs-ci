@@ -742,6 +742,7 @@ def create_storage_class(
     sc_data = templating.load_yaml(yamls[interface_type])
 
     if interface_type == constants.CEPHBLOCKPOOL:
+        sc_data["parameters"]["encrypted"] = "false"
         interface = constants.RBD_INTERFACE
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
@@ -756,6 +757,7 @@ def create_storage_class(
             sc_data["parameters"]["encryptionKMSID"] = (
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
+
     elif interface_type == constants.CEPHFILESYSTEM:
         interface = constants.CEPHFS_INTERFACE
         sc_data["parameters"]["fsName"] = fs_name if fs_name else get_cephfs_name()
@@ -3031,7 +3033,7 @@ def storagecluster_independent_check():
     )
     if consumer_cluster_index is not None:
         # Switch back to consumer cluster context
-        config.switch_to_consumer(consumer_cluster_index)
+        config.switch_ctx(consumer_cluster_index)
     return ret_val
 
 
@@ -4331,3 +4333,17 @@ def verify_storagecluster_nodetopology():
     for node_obj in ocs_node_objs:
         ocs_node_names.append(node_obj.name)
     return ocs_node_names.sort() == nodes_storage_cluster.sort()
+
+
+def get_s3_credentials_from_secret(secret_name):
+    ocp_secret_obj = OCP(kind="secret", namespace=config.ENV_DATA["cluster_namespace"])
+
+    secret = ocp_secret_obj.get(resource_name=secret_name)
+
+    base64_access_key = secret["data"]["AWS_ACCESS_KEY_ID"]
+    base64_secret_key = secret["data"]["AWS_SECRET_ACCESS_KEY"]
+
+    access_key = base64.b64decode(base64_access_key).decode("utf-8")
+    secret_key = base64.b64decode(base64_secret_key).decode("utf-8")
+
+    return access_key, secret_key

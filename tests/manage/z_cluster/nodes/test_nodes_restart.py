@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes, wait_for_nodes_status
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 @brown_squad
 @ignore_leftovers
 @skipif_managed_service
+@skipif_hci_provider_and_client
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
@@ -110,7 +112,8 @@ class TestNodesRestart(ManageTest):
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
-        retry(CommandFailed, tries=3, delay=20, backoff=1)(
+
+        retry(CommandFailed, tries=8, delay=40, backoff=1)(
             self.sanity_helpers.create_resources
         )(pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory)
 

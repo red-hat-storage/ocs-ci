@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud_managed,
     skipif_ocs_version,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     tier4a,
     ignore_leftovers,
 )
@@ -68,6 +69,7 @@ def teardown_depl_busybox(request):
 @black_squad
 @skipif_ibm_cloud_managed
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_external_mode
 @skipif_ocs_version("<4.13")
 class TestODFTopology(object):

@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_bm,
     brown_squad,
 )
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 @skipif_bm
 @skipif_external_mode
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @pytest.mark.polarion_id("OCS-2594")
 class TestAddNodeCrashCollector(ManageTest):
     """

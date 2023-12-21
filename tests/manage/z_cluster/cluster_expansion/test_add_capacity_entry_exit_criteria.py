@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_bm,
     skipif_external_mode,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.helpers import cluster_exp_helpers
 from ocs_ci.ocs import constants
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 @skipif_bm
 @skipif_external_mode
 @skipif_managed_service
+@skipif_hci_provider_and_client
 class TestAddCapacity(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(self):

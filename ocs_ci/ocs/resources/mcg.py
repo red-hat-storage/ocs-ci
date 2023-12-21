@@ -128,30 +128,11 @@ class MCG:
         ) + "/rpc"
         self.region = config.ENV_DATA["region"]
 
-        creds_secret_name = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("accounts")
-            .get("admin")
-            .get("secretRef")
-            .get("name")
-        )
-        secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
-        creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
-
-        self.access_key_id = base64.b64decode(
-            creds_secret_obj.get("data").get("AWS_ACCESS_KEY_ID")
-        ).decode("utf-8")
-        self.access_key = base64.b64decode(
-            creds_secret_obj.get("data").get("AWS_SECRET_ACCESS_KEY")
-        ).decode("utf-8")
-
-        self.noobaa_user = base64.b64decode(
-            creds_secret_obj.get("data").get("email")
-        ).decode("utf-8")
-        self.noobaa_password = base64.b64decode(
-            creds_secret_obj.get("data").get("password")
-        ).decode("utf-8")
+        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
+        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
+        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
+        self.noobaa_user = admin_credentials["email"]
+        self.noobaa_password = admin_credentials["password"]
 
         self.noobaa_token = self.retrieve_nb_token()
 
@@ -181,7 +162,7 @@ class MCG:
                 aws_secret_access_key=self.aws_access_key,
             )
 
-    def retrieve_nb_token(self):
+    def retrieve_nb_token(self, timeout=300, sleep=30):
         """
         Try to retrieve a NB RPC token and decode its JSON
 
@@ -211,7 +192,7 @@ class MCG:
                 return None
 
         try:
-            for token in TimeoutSampler(300, 30, internal_retrieval_logic):
+            for token in TimeoutSampler(timeout, sleep, internal_retrieval_logic):
                 if token:
                     return token
         except TimeoutExpiredError:
@@ -748,7 +729,7 @@ class MCG:
                 f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
             )
 
-    def check_if_mirroring_is_done(self, bucket_name, timeout=140):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=300):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
@@ -757,12 +738,12 @@ class MCG:
             bucket_name: The name of the bucket that should be checked
             timeout: timeout in seconds to check if mirroring
 
-        Returns:
-            bool: Whether mirroring finished successfully
+        Raises:
+            AssertionError: In case mirroring is not done in defined time.
 
         """
 
-        def _check_mirroring():
+        def _get_mirroring_percentage():
             results = []
             obj_list = (
                 self.send_rpc_query(
@@ -799,21 +780,29 @@ class MCG:
                         results.append(True)
                     else:
                         results.append(False)
+            current_percentage = (results.count(True) / len(results)) * 100
+            return current_percentage
 
-            return all(results)
-
-        try:
-            for mirroring_is_complete in TimeoutSampler(timeout, 5, _check_mirroring):
-                if mirroring_is_complete:
-                    logger.info("All objects mirrored successfully.")
-                    return True
-                else:
-                    logger.info("Waiting for the mirroring process to finish...")
-        except TimeoutExpiredError:
-            logger.error(
-                "The mirroring process did not complete within the time limit."
-            )
-            assert False
+        mirror_percentage = _get_mirroring_percentage()
+        logger.info(f"{mirror_percentage}% mirroring is done.")
+        previous_percentage = 0
+        while mirror_percentage < 100:
+            previous_percentage = mirror_percentage
+            try:
+                for mirror_percentage in TimeoutSampler(
+                    timeout, 5, _get_mirroring_percentage
+                ):
+                    if previous_percentage == mirror_percentage:
+                        logger.warning("The mirroring process is stuck.")
+                    else:
+                        break
+            except TimeoutExpiredError:
+                logger.error(
+                    f"The mirroring process is stuck from last {timeout} seconds."
+                )
+                assert False
+            mirror_percentage = _get_mirroring_percentage()
+        logger.info("All objects mirrored successfully.")
 
     def check_backingstore_state(self, backingstore_name, desired_state, timeout=600):
         """
@@ -1047,3 +1036,75 @@ class MCG:
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
         wait_for_resource_state(self.core_pod, constants.STATUS_RUNNING)
+
+    def get_noobaa_admin_credentials_from_secret(self):
+        """
+        Get the NooBaa admin credentials from the OCP secret
+
+        Returns:
+            credentials_dict (dict): Dictionary containing the following keys:
+                AWS_ACCESS_KEY_ID (str): NooBaa admin S3 access key ID
+                AWS_SECRET_ACCESS_KEY (str): NooBaa admin S3 secret access key
+                email (str): NooBaa admin user email
+                password (str): NooBaa admin user password
+
+        """
+
+        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
+
+        creds_secret_name = (
+            get_noobaa.get("items")[0]
+            .get("status")
+            .get("accounts")
+            .get("admin")
+            .get("secretRef")
+            .get("name")
+        )
+
+        secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
+        creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
+
+        credentials_dict = {}
+
+        credentials_dict["AWS_ACCESS_KEY_ID"] = base64.b64decode(
+            creds_secret_obj.get("data").get("AWS_ACCESS_KEY_ID")
+        ).decode("utf-8")
+
+        credentials_dict["AWS_SECRET_ACCESS_KEY"] = base64.b64decode(
+            creds_secret_obj.get("data").get("AWS_SECRET_ACCESS_KEY")
+        ).decode("utf-8")
+
+        credentials_dict["email"] = base64.b64decode(
+            creds_secret_obj.get("data").get("email")
+        ).decode("utf-8")
+
+        credentials_dict["password"] = base64.b64decode(
+            creds_secret_obj.get("data").get("password")
+        ).decode("utf-8")
+
+        return credentials_dict
+
+    def reset_admin_pw(self, new_password):
+        """
+        Reset the NooBaa admin password
+
+        Args:
+            new_password (str): New password to set for the NooBaa admin user
+
+        """
+        logger.info("Resetting the noobaa-admin password")
+
+        cmd = "".join(
+            (
+                f"account passwd {self.noobaa_user}",
+                f" --old-password {self.noobaa_password}",
+                f" --new-password {new_password}",
+                f" --retype-new-password {new_password}",
+            )
+        )
+
+        self.exec_mcg_cmd(cmd)
+        self.noobaa_password = new_password
+
+        logger.info("Waiting a bit for the change to propogate through the system...")
+        sleep(15)

@@ -657,3 +657,24 @@ class VSLMNotFoundException(Exception):
 
 class OperationFailedToCompleteException(Exception):
     pass
+
+
+class HyperConvergedHealthException(Exception):
+    pass
+
+
+class OpenShiftAPIResponseException(Exception):
+    def __init__(self, response):
+        self.response = response
+
+    def __str__(self):
+        msg = f"{self.response.status_code} {self.response.reason} ({self.response.text.strip()})"
+        return msg
+
+
+class HostValidationFailed(Exception):
+    pass
+
+
+class SameNameClusterAlreadyExistsException(Exception):
+    pass

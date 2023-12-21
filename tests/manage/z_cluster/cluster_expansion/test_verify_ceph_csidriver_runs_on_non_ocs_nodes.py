@@ -5,6 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_flexy_deployment,
     skipif_managed_service,
+    skipif_hci_provider_and_client,
     skipif_multus_enabled,
     brown_squad,
 )
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # https://github.com/red-hat-storage/ocs-ci/issues/4802
 @skipif_flexy_deployment
 @skipif_managed_service
+@skipif_hci_provider_and_client
 @skipif_multus_enabled
 @tier2
 @pytest.mark.polarion_id("OCS-2490")

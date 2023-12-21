@@ -29,6 +29,7 @@ TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER = os.path.join(TEMPLATE_DIR, "cert-manager"
 TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
+TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -180,6 +181,8 @@ CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
+REPLICATION_SOURCE = "ReplicationSource"
+REPLICATIONDESTINATION = "ReplicationDestination"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -262,7 +265,7 @@ CEPH_UPSTREAM_REPO = "https://github.com/ceph/ceph.git"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
-DEFAULT_CLUSTERNAME = "ocs-storagecluster"
+DEFAULT_CLUSTERNAME = DEFAULT_STORAGE_CLUSTER = "ocs-storagecluster"
 DEFAULT_CLUSTERNAME_EXTERNAL_MODE = "ocs-external-storagecluster"
 DEFAULT_BLOCKPOOL = f"{DEFAULT_CLUSTERNAME}-cephblockpool"
 METADATA_POOL = f"{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata"
@@ -314,6 +317,21 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 )
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
+
+# CNV constants
+CNV_NAMESPACE = "openshift-cnv"
+CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
+HYPERCONVERGED = "HyperConverged"
+KUBEVIRT_HCO_PREFIX = "kubevirt-hyperconverged-operator"
+KUBEVIRT_HYPERCONVERGED = "kubevirt-hyperconverged"
+CNV_SELECTOR = "operators.coreos.com/kubevirt-hyperconverged.openshift-cnv"
+
+# Virtctl constants
+VIRTCTL = "virtctl"
+VIRTCTL_CLI_DOWNLOADS = f"{VIRTCTL}-clidownloads-kubevirt-hyperconverged"
+CONSOLECLIDOWNLOAD = "ConsoleCLIDownload"
+AMD_64 = "amd64"
+
 
 # encoded value of 'admin'
 ADMIN_USER = "admin"
@@ -708,6 +726,21 @@ OCS_OPERATOR_CSV_YAML = "ocs-operator.clusterserviceversion.yaml"
 
 TEMPLATE_IMAGE_CONTENT_SOURCE_POLICY_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "imageContentSourcePolicy-template.yaml"
+)
+
+# CNV deployment yamls
+CNV_CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_CNV, "catalog-source.yaml"
+)
+
+CNV_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "namespace.yaml")
+
+CNV_OPERATORGROUP_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "operatorgroup.yaml")
+
+CNV_SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "subscription.yaml")
+
+CNV_HYPERCONVERGED_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_CNV, "hyperconverged.yaml"
 )
 
 # Multus Networks
