@@ -549,10 +549,7 @@ class Deployment(object):
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
-        if (
-            config.DEPLOYMENT.get("cnv_deployment")
-            and not config.ENV_DATA["skip_ocs_deployment"]
-        ):
+        if config.DEPLOYMENT.get("cnv_deployment"):
             CNVInstaller().deploy_cnv()
 
     def get_rdr_conf(self):
