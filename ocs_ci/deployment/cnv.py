@@ -100,8 +100,12 @@ class CNVInstaller(object):
         """
         operatorgroup_yaml_file = templating.load_yaml(CNV_OPERATORGROUP_YAML)
         operatorgroup_yaml = OCS(**operatorgroup_yaml_file)
-        operatorgroup_yaml.create()
-        logger.info("CNV OperatorGroup created successfully")
+        try:
+            operatorgroup_yaml.create()
+            logger.info("CNV OperatorGroup created successfully")
+        except exceptions.CommandFailed as ef:
+            if "kubevirt-hyperconverged-group already exists" in str(ef):
+                logger.info("kubevirt-hyperconverged-group already exists")
 
     def create_cnv_subscription(self):
         """
