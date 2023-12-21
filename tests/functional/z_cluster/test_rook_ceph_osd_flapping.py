@@ -36,7 +36,7 @@ class TestRookCephOsdFlapping(ManageTest):
     def teardown(self, request):
         def finalizer():
             self.osd_pod_obj.delete()
-            ceph_health_check()
+            ceph_health_check(tries=40, delay=30)
 
         request.addfinalizer(finalizer)
 
@@ -48,7 +48,7 @@ class TestRookCephOsdFlapping(ManageTest):
         2.Mark an osd down manually 6 times
         3.Verify osd is down with "csph -s" command ["1 osds down"]
         4.Verify osd log contain "osd_max_markdown_count 5 in last" string
-        5.Reset osd pod
+        5.Reset osd pod [oc delete pod]
         6.Verify ceph status is OK
         """
         log.info("Get One OSD ID")
@@ -63,11 +63,11 @@ class TestRookCephOsdFlapping(ManageTest):
 
         log.info(f"Verify osd {osd_pod_id} is down")
         sample = TimeoutSampler(
-            timeout=10,
-            sleep=1,
+            timeout=100,
+            sleep=5,
             func=self.verify_output_ceph_tool_pod,
-            command="ceph -s",
-            expected_strings="1 osds down",
+            command="ceph health",
+            expected_string="1 osds down",
         )
         if not sample.wait_for_func_status(result=True):
             raise ValueError("OSD DEBUG Log does not exist")
@@ -96,5 +96,7 @@ class TestRookCephOsdFlapping(ManageTest):
 
         """
         ct_pod = pod.get_ceph_tools_pod()
-        output_ceph_command = ct_pod.exec_ceph_cmd(command)
+        output_ceph_command = ct_pod.exec_ceph_cmd(
+            ceph_cmd=command, out_yaml_format=False
+        )
         return expected_string in output_ceph_command
