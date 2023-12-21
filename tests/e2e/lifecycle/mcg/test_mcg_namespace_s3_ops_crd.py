@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     red_squad,
     mcg,
-    rgw,
 )
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -152,7 +151,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
                 },
-                marks=[on_prem_platform_required, rgw],
+                marks=on_prem_platform_required,
             ),
             pytest.param(
                 {
@@ -566,7 +565,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
                         "namespacestore_dict": {"rgw": [(1, None)]},
                     },
                 },
-                marks=[on_prem_platform_required, rgw],
+                marks=on_prem_platform_required,
             ),
             pytest.param(
                 {
