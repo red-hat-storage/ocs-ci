@@ -336,6 +336,21 @@ CONSOLECLIDOWNLOAD = "ConsoleCLIDownload"
 AMD_64 = "amd64"
 
 
+# CNV constants
+CNV_NAMESPACE = "openshift-cnv"
+CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
+HYPERCONVERGED = "HyperConverged"
+KUBEVIRT_HCO_PREFIX = "kubevirt-hyperconverged-operator"
+KUBEVIRT_HYPERCONVERGED = "kubevirt-hyperconverged"
+CNV_SELECTOR = "operators.coreos.com/kubevirt-hyperconverged.openshift-cnv"
+
+# Virtctl constants
+VIRTCTL = "virtctl"
+VIRTCTL_CLI_DOWNLOADS = f"{VIRTCTL}-clidownloads-kubevirt-hyperconverged"
+CONSOLECLIDOWNLOAD = "ConsoleCLIDownload"
+AMD_64 = "amd64"
+
+
 # encoded value of 'admin'
 ADMIN_USER = "admin"
 GB = 1024**3
