@@ -2,14 +2,13 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import orange_squad
+from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     patch_replication_policy_to_bucket,
-    mcg,
 )
 from ocs_ci.ocs import scale_noobaa_lib
 
