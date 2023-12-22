@@ -1,5 +1,5 @@
 """
-A module for all StorageClient functionalities and abstractions.
+A module for all StorageConsumer functionalities and abstractions.
 """
 import logging
 
@@ -10,20 +10,27 @@ from ocs_ci.ocs import ocp
 log = logging.getLogger(__name__)
 
 
-class StorageClient:
+class StorageConsumer:
     """
-    Base StorageClient class
+    Base StorageConsumer class
     """
 
-    def __init__(self, client_context=None):
+    def __init__(self, consumer_name, consumer_context=None):
         """
         Args:
-            client_context (int): index of cluster context. This is needed for
-                client operations executed on client
+            consumer_name (string): name of the StorageConsumer resource
+            consumer_context (int): index of cluster context. This is needed for
+                consumer operations executed on consumer
                 (e.g. manipulation of heartbeat cronjob)
         """
-        self.client_context = client_context
-        if self.client_context:
+        self.consumer_context = consumer_context
+        self.name = consumer_name
+        self.ocp = ocp.OCP(
+            resource_name=self.name,
+            kind=constants.STORAGECONSUMER,
+            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+        )
+        if self.consumer_context:
             self.heartbeat_cronjob = self.get_heartbeat_cronjob()
             self.original_context = config.cluster_ctx
         else:
@@ -32,30 +39,36 @@ class StorageClient:
 
     def get_ocs_version(self):
         """
-        Get ocs version from storageclient resource.
+        Get ocs version from storageconsumer resource.
 
         Returns:
-            string: client ocs version
+            string: consumer ocs version
 
         """
-        pass
+        return (
+            self.ocp.get(resource_name=self.name)
+            .get("status")
+            .get("client")
+            .get("operatorVersion")
+        )
 
     def set_ocs_version(self, version):
         """
-        Update ocs client version in storageclient resource. This change assumes
+        Update ocs consumer version in storageconsumer resource. This change assumes
         that the hearthbeat is stopped so that the version is not overwritten by it.
 
         Args:
             version (str): OCS version to be set
 
         """
-        pass
+        patch_param = f'{{"status": {{"client": {{"operatorVersion": {version}}}}}}}'
+        self.ocp.patch(resource_name=self.name, params=patch_param, subresource="status")
 
     def stop_heartbeat(self):
         """
         Suspend status reporter cron job.
         """
-        self._switch_client_cluster()
+        self._switch_consumer_cluster()
         patch_param = '{{"spec": {{"suspend": "true"}}}}'
         self.heartbeat_cronjob.patch(
             resource_name=self.heartbeat_cronjo.name, params=patch_param
@@ -66,7 +79,7 @@ class StorageClient:
         """
         Resume status reporter cron job.
         """
-        self._switch_client_cluster()
+        self._switch_consumer_cluster()
         patch_param = '{{"spec": {{"suspend": "false"}}}}'
         self.heartbeat_cronjob.patch(
             resource_name=self.heartbeat_cronjo.name, params=patch_param
@@ -97,9 +110,9 @@ class StorageClient:
         config.switch_ctx(self.original_context)
         log.info(f"Switched to original cluster with index {self.original_context}")
 
-    def _switch_client_cluster(self):
+    def _switch_consumer_cluster(self):
         """
-        Switch context to client cluster.
+        Switch context to consumer cluster.
         """
-        config.switch_ctx(self.client_context)
-        log.info(f"Switched to client cluster with index {self.original_cluster}")
+        config.switch_ctx(self.consumer_context)
+        log.info(f"Switched to consumer cluster with index {self.original_cluster}")

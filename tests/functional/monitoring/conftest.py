@@ -18,7 +18,7 @@ from ocs_ci.ocs.node import (
     schedule_nodes,
 )
 from ocs_ci.ocs import rados_utils
-from ocs_ci.ocs.resources import deployment, pod, storageclient
+from ocs_ci.ocs.resources import deployment, pod, storageconsumer
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
@@ -1151,7 +1151,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
 
     """
 
-    current_version = storageclient.get_ocs_version()
+    current_version = storageconsumer.get_ocs_version()
     logger.info(f"Reported client version: {current_version}")
     original_cluster = config.cluster_ctx
     logger.info(f"Provider cluster key: {original_cluster}")
@@ -1163,7 +1163,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
     )
     client_name = f"storageconsumer-{cluster_id}"
-    client = storageclient.StorageClient()
+    client = storageconsumer.StorageConsumer()
 
     def change_client_version():
         """
