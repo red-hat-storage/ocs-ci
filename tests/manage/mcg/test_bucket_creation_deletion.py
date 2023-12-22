@@ -13,7 +13,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
 )
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
+from ocs_ci.ocs.bucket_utils import sync_object_directory
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_operator_pods
@@ -159,6 +160,7 @@ class TestBucketCreationAndDeletion(MCGTest):
         amount,
         interface,
         bucketclass_dict,
+        awscli_pod_session,
     ):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
@@ -166,6 +168,7 @@ class TestBucketCreationAndDeletion(MCGTest):
         """
         buckets = bucket_factory(amount, interface, bucketclass=bucketclass_dict)
 
+        # verifying  bz2179271 for only one parameter
         if amount == 3 and interface == "OC":
             unexpected_log = 'malformed BucketHost "s3.openshift-storage.svc": malformed subdomain name "s3"'
             rook_op_pod = get_operator_pods()
@@ -173,6 +176,22 @@ class TestBucketCreationAndDeletion(MCGTest):
             assert not (
                 unexpected_log in pod_log
             ), f"Bucket notification errors found {unexpected_log}"
+
+        # cover acceptance for basic write file to bucket test
+        if amount == 3 and interface == "S3":
+            bucketname = buckets[0].name
+            full_object_path = f"s3://{bucketname}"
+            downloaded_files = awscli_pod_session.exec_cmd_on_pod(
+                f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
+            ).split(" ")
+            # Write all downloaded objects to the new bucket
+            sync_object_directory(
+                awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+            )
+
+            assert set(downloaded_files).issubset(
+                obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+            )
 
         if amount not in [100, 1000] or interface != "CLI":
             for bucket in buckets:
