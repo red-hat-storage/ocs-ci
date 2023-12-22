@@ -406,7 +406,7 @@ class TestGracefulNodesShutdown(E2ETest):
             " Noobaa caching,Object expiration,"
             "MCG NSFS,RGW kafka notification"
         )
-        setup_mcg_bg_features(skip_any_features=["caching", "nsfs", "rgw kafka"])
+        setup_mcg_bg_features(skip_any_features=["caching", "nsfs", "rgw kafka", "replication"])
 
         # check OSD status after graceful node shutdown
         worker_nodes = get_nodes(node_type="worker")
