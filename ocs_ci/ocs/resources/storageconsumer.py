@@ -62,7 +62,9 @@ class StorageConsumer:
 
         """
         patch_param = f'{{"status": {{"client": {{"operatorVersion": {version}}}}}}}'
-        self.ocp.patch(resource_name=self.name, params=patch_param, subresource="status")
+        self.ocp.patch(
+            resource_name=self.name, params=patch_param, subresource="status"
+        )
 
     def stop_heartbeat(self):
         """
