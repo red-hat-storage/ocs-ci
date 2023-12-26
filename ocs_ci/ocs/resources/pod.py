@@ -2347,7 +2347,7 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
     pods_not_running = list()
     for pod in pod_objs:
         status = pod.status()
-        if status != "Running":
+        if status != constants.STATUS_RUNNING:
             pods_not_running.append(pod)
 
     return pods_not_running
@@ -3513,10 +3513,7 @@ def wait_for_pods_deletion(
     """
 
     def _check_if_pod_deleted(label, namespace):
-        if len(get_pods_having_label(label, namespace)) == 0:
-            return True
-        else:
-            return False
+        return len(get_pods_having_label(label, namespace)) == 0
 
     sampler = TimeoutSampler(
         timeout=timeout,

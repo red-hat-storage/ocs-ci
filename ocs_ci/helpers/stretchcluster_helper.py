@@ -27,7 +27,6 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
         pods_not_running (List): A list of Pod objects that are not in Running state
 
     """
-
     # try to scale down and scale up the deployment/sts
     # if any of the mentioned errors are found
     error_messages = [
@@ -52,7 +51,6 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
     job_name = constants.LOGREADER_CEPHFS_NAME
 
     for pod in pods_not_running:
-
         # get the labels from the pod data
         labels = str(pod.get_labels())
 
@@ -77,10 +75,8 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
         # if any of the above mentioned error messages are present in the
         # describe outpout we scaled down respective deployment/job/statefulset
         if check_errors_regex(desc_out, error_messages):
-
-            if pod.status() == "ContainerStatusUnknown":
+            if pod.status() == constants.STATUS_CONTAINER_STATUS_UNKNOWN:
                 pod.delete()
-
             if (
                 constants.LOGWRITER_CEPHFS_LABEL.split("=")[1] in labels
                 and constants.LOGWRITER_CEPHFS_LABEL not in scaled_down

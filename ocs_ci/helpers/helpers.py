@@ -2823,6 +2823,7 @@ def modify_deployment_replica_count(
     Args:
         deployment_name (str): Name of deployment
         replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deployment exists
 
     Returns:
         bool: True in case if changes are applied. False otherwise
@@ -2836,6 +2837,18 @@ def modify_deployment_replica_count(
 def modify_job_parallelism_count(
     job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
 ):
+    """
+    Function to modify Job instances count,
+
+    Args:
+        job_name (str): Name of job
+        count (int): instances count to be changed to
+        namespace (str): namespace where the job is running
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
     ocp_obj = ocp.OCP(kind=constants.JOB, namespace=namespace)
     params = f'{{"spec": {{"parallelism": {count}}}}}'
     return ocp_obj.patch(resource_name=job_name, params=params)

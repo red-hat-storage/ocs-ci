@@ -28,7 +28,10 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
 )
 from ocs_ci.utility.retry import retry
-from ocs_ci.framework.pytest_customization.marks import stretch_cluster, turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    stretch_cluster,
+    turquoise_squad,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +41,8 @@ log = logging.getLogger(__name__)
 class TestZoneShutdowns:
 
     zones = constants.ZONES_LABELS
+    # We dont want to select arbiter zone randomly for the shutdown/crash
+    # because its not valid test scenario
     zones.remove("arbiter")
 
     @pytest.fixture()
@@ -113,16 +118,17 @@ class TestZoneShutdowns:
                 marks=[
                     pytest.mark.bugzilla("2121452"),
                     pytest.mark.bugzilla("2113062"),
+                    pytest.mark.polarion_id("OCS-5088"),
                 ],
             ),
-            pytest.param(1, True, 5),
+            pytest.param(1, True, 5, marks=[pytest.mark.polarion_id("OCS-5064")]),
         ],
         ids=[
             "Normal-Shutdown",
             "Immediate-Shutdown",
         ],
     )
-    def test_shutdowns(
+    def test_zone_shutdowns(
         self,
         init_sanity,
         iteration,
@@ -245,7 +251,7 @@ class TestZoneShutdowns:
                 sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
                 sc_obj.get_logwriter_reader_pods(
                     label=constants.LOGREADER_CEPHFS_LABEL,
-                    statuses=["Running", "Completed"],
+                    statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
                 )
                 sc_obj.get_logwriter_reader_pods(
                     label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
@@ -329,7 +335,7 @@ class TestZoneShutdowns:
     @pytest.mark.parametrize(
         argnames="iteration, delay",
         argvalues=[
-            pytest.param(1, 5),
+            pytest.param(1, 5, marks=[pytest.mark.polarion_id("OCS-5062")]),
         ],
     )
     def test_zone_crashes(
