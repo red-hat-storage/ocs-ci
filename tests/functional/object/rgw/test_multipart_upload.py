@@ -13,7 +13,7 @@ from ocs_ci.ocs.bucket_utils import (
     upload_parts,
     list_uploaded_parts,
     complete_multipart_upload,
-    sync_object_directory,
+    download_objects_using_s3cmd,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
 
@@ -107,7 +107,10 @@ class TestS3MultipartUpload(ManageTest):
         logger.info(
             "Downloading the completed multipart object from the RGW bucket to the awscli pod"
         )
-        sync_object_directory(awscli_pod_session, object_path, res_dir, bucket)
+        awscli_pod_session.exec_sh_cmd_on_pod(command="apk add s3cmd")
+        download_objects_using_s3cmd(
+            awscli_pod_session, object_path + "/" + key, res_dir, bucket
+        )
         assert verify_s3_object_integrity(
             original_object_path=f"{origin_dir}/{key}",
             result_object_path=f"{res_dir}/{key}",
