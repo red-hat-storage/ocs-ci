@@ -11,6 +11,7 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     get_pod_node,
 )
+from ocs_ci.framework.pytest_customization.marks import bugzilla
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def setup_nb_endpoint():
     return nb_endpoint_dep_data
 
 
+@bugzilla("2109101")
 def test_nb_endpoint_topology_spread_constraints(setup_nb_endpoint):
 
     nb_endpoint_dep_data = setup_nb_endpoint
@@ -55,7 +57,10 @@ def test_nb_endpoint_topology_spread_constraints(setup_nb_endpoint):
 
     nb_endpoint_pods = [
         Pod(**pod)
-        for pod in get_pods_having_label(label=constants.NOOBAA_ENDPOINT_POD_LABEL)
+        for pod in get_pods_having_label(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
     ]
     zone_label = None
     for pod in nb_endpoint_pods:
