@@ -5,6 +5,7 @@ import random
 
 
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import brown_squad
@@ -69,9 +70,10 @@ class TestRookCephOsdFlapping(ManageTest):
         sample = TimeoutSampler(
             timeout=300,
             sleep=5,
-            func=self.verify_output_ceph_tool_pod,
-            command="ceph health",
-            expected_string="1 osds down",
+            func=run_cmd_verify_cli_output,
+            cmd="ceph health",
+            cephtool_cmd=True,
+            expected_output_lst=["1 osds down"],
         )
         if not sample.wait_for_func_status(result=True):
             raise ValueError(f"OSD {osd_pod_id} is not down after 300 sec")
@@ -87,20 +89,3 @@ class TestRookCephOsdFlapping(ManageTest):
         assert (
             expected_string in osd_pod_log
         ), f"The expected log {expected_string} is not found in osd log"
-
-    def verify_output_ceph_tool_pod(self, command, expected_string):
-        """
-        Veify
-        Args:
-            command (str): the command we run in ceph tool pod
-            expected_string (str): the expected string in the output
-
-        Returns:
-            bool: True if the output contain the expected_string otherwise False
-
-        """
-        ct_pod = pod.get_ceph_tools_pod()
-        output_ceph_command = ct_pod.exec_ceph_cmd(
-            ceph_cmd=command, out_yaml_format=False
-        )
-        return expected_string in output_ceph_command
