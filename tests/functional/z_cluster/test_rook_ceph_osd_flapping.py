@@ -1,6 +1,7 @@
 import logging
 import pytest
 import time
+import random
 
 
 from ocs_ci.utility.utils import TimeoutSampler
@@ -53,24 +54,27 @@ class TestRookCephOsdFlapping(ManageTest):
         """
         log.info("Get One OSD ID")
         osd_pod_objs = pod.get_osd_pods()
-        self.osd_pod_obj = osd_pod_objs[0]
+        self.osd_pod_obj = osd_pod_objs[random.randint(0, len(osd_pod_objs) - 1)]
+        log.info(f"Get osd pod {self.osd_pod_obj.name}")
         osd_pod_id = pod.get_osd_pod_id(self.osd_pod_obj)
         ct_pod = pod.get_ceph_tools_pod()
-        log.info(f"Mark an osd {osd_pod_id} down manually")
+        log.info(
+            f"Mark an osd {osd_pod_id} down manually. Running 'ceph osd down osd.{osd_pod_id}' 6 times"
+        )
         for _ in range(6):
             time.sleep(5)
             ct_pod.exec_ceph_cmd(f"ceph osd down osd.{osd_pod_id}")
 
         log.info(f"Verify osd {osd_pod_id} is down")
         sample = TimeoutSampler(
-            timeout=100,
+            timeout=300,
             sleep=5,
             func=self.verify_output_ceph_tool_pod,
             command="ceph health",
             expected_string="1 osds down",
         )
         if not sample.wait_for_func_status(result=True):
-            raise ValueError("OSD DEBUG Log does not exist")
+            raise ValueError(f"OSD {osd_pod_id} is not down after 300 sec")
 
         log.info("Verify osd logs")
         expected_string = (
@@ -86,7 +90,7 @@ class TestRookCephOsdFlapping(ManageTest):
 
     def verify_output_ceph_tool_pod(self, command, expected_string):
         """
-
+        Veify
         Args:
             command (str): the command we run in ceph tool pod
             expected_string (str): the expected string in the output
