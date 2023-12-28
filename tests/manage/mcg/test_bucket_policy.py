@@ -895,7 +895,7 @@ class TestS3BucketPolicy(MCGTest):
         # Setting Get(read) policy action for all users(public)
         bucket_policy_generated = gen_bucket_policy(
             sid="PublicRead",
-            user_list=["*"],
+            user_list="*",
             actions_list=["GetObject"],
             resources_list=[f"{s3_bucket[0].name}/{'*'}"],
             effect="Allow",
