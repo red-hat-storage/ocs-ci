@@ -755,7 +755,7 @@ def ocs_install_verification(
 
     # check that noobaa root secrets are not public
     assert (
-        check_if_mcg_root_secret_public()
+        check_if_mcg_root_secret_public() is False
     ), "Seems like MCG root secrets are public, please check"
     log.info("Noobaa root secrets are not public")
 

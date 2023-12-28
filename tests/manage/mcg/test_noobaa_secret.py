@@ -340,6 +340,7 @@ class TestNoobaaSecrets:
 @red_squad
 @bugzilla("2219522")
 @polarion_id("OCS-5205")
+@tier2
 def test_noobaa_root_secret():
     """
     This test verifies if the noobaa root secret is publicly
@@ -348,6 +349,6 @@ def test_noobaa_root_secret():
     """
 
     assert (
-        check_if_mcg_root_secret_public()
+        check_if_mcg_root_secret_public() is False
     ), "Seems like MCG root secrets are exposed publicly, please check"
     logger.info("MCG root secrets are not exposed to public")

@@ -1,6 +1,11 @@
 import logging
 
-from ocs_ci.framework.pytest_customization.marks import tier2, bugzilla, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    bugzilla,
+    polarion_id,
+    red_squad,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 
@@ -8,22 +13,23 @@ logger = logging.getLogger(__name__)
 
 
 @tier2
+@red_squad
 @bugzilla("2246328")
 @polarion_id("OCS-5216")
-def test_s3_regenerate_creds(mcg_obj):
+def test_s3_regenerate_creds(mcg_obj, project_factory):
     """
     Test s3 regenerate credential
 
     """
 
     # create a custom namespace
-    proj_name = "reg_project"
-    logger.info(f"Creating project {proj_name}")
-    ocp_obj = OCP(kind="obc", namespace=proj_name)
-    ocp_obj.new_project(proj_name)
+    proj_name = "reg-project"
+    logger.info(f"Creating the project {proj_name}")
+    project_factory(project_name=proj_name)
 
     # create obc in that namespace
-    obc_name = "reg_obc"
+    ocp_obj = OCP(kind="obc", namespace=proj_name)
+    obc_name = "reg-obc"
     logger.info(f"Creating OBC {obc_name}")
     mcg_obj.exec_mcg_cmd(
         cmd=f"obc create {obc_name} --app-namespace {proj_name}",
