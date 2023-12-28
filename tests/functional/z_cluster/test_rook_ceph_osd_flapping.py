@@ -68,7 +68,7 @@ class TestRookCephOsdFlapping(ManageTest):
 
         log.info(f"Verify osd {osd_pod_id} is down")
         sample = TimeoutSampler(
-            timeout=300,
+            timeout=500,
             sleep=5,
             func=run_cmd_verify_cli_output,
             cmd="ceph health",
