@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 import tempfile
 
 import boto3
+import botocore
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
@@ -429,8 +430,12 @@ class MCGS3Bucket(ObjectBucket):
             else:
                 self.s3resource.Bucket(self.name).objects.all().delete()
             self.s3resource.Bucket(self.name).delete()
-        except boto3.errorfactory.NoSuchKey as e:
-            raise NotFoundError(e)
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchBucket":
+                logger.info(f"Bucket {self.name} doesn't exist")
+                raise NotFoundError(e)
+            else:
+                raise e
 
     @property
     def internal_status(self):
