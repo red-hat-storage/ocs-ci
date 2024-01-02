@@ -19,11 +19,13 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     ignore_leftovers,
     config,
+    runs_on_provider,
 )
 
 log = logging.getLogger(__name__)
 
 
+@runs_on_provider
 @brown_squad
 @tier2
 @ignore_leftovers
