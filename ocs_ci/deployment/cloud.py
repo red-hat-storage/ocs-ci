@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.deployment import get_cluster_prefix
-from ocs_ci.utility.ibmcloud import label_worker_nodes_region
+from ocs_ci.utility.ibmcloud import label_nodes_region
 from ocs_ci.utility.utils import get_cluster_name, run_cmd
 
 logger = logging.getLogger(__name__)
@@ -120,4 +120,4 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     logger.error(ex)
             raise e
         self.test_cluster()
-        label_worker_nodes_region()
+        label_nodes_region()
