@@ -1,8 +1,3 @@
-// get  vSAN Default Storage Policy id
-data "vsphere_storage_policy" "vsan_default_storage_policy" {
-  name = "vSAN Default Storage Policy"
-}
-
 resource "vsphere_virtual_machine" "vm" {
   name                        = var.vmname
   resource_pool_id            = var.resource_pool_id
@@ -15,7 +10,7 @@ resource "vsphere_virtual_machine" "vm" {
   nested_hv_enabled           = var.nested_hv_enabled
   wait_for_guest_net_timeout  = "0"
   wait_for_guest_net_routable = "false"
-  storage_policy_id           = data.vsphere_storage_policy.vsan_default_storage_policy.id
+  storage_policy_id           = var.storage_policy_id
 
   network_interface {
     network_id = var.network_id
@@ -25,7 +20,7 @@ resource "vsphere_virtual_machine" "vm" {
     label            = "disk0"
     size             = 120
     thin_provisioned = true
-    storage_policy_id           = data.vsphere_storage_policy.vsan_default_storage_policy.id
+    storage_policy_id           = var.storage_policy_id
   }
 
   # creates variable number of data disks for VM
@@ -36,7 +31,7 @@ resource "vsphere_virtual_machine" "vm" {
       unit_number      = disk.value
       size             = 256
       thin_provisioned = true
-      storage_policy_id           = data.vsphere_storage_policy.vsan_default_storage_policy.id
+      storage_policy_id           = var.storage_policy_id
     }
   }
 

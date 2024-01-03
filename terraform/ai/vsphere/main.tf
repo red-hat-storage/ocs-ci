@@ -31,6 +31,11 @@ data "vsphere_datastore" "datastore" {
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
+// get vSphere storage policy
+data "vsphere_storage_policy" "storage_policy" {
+  name = var.vsphere_storage_policy
+}
+
 // get vSphere Network
 data "vsphere_network" "network" {
   name                            = var.vm_network
@@ -99,6 +104,7 @@ module "control_plane_vm" {
   num_cpus          = var.control_plane_num_cpus
   memory            = var.control_plane_memory
   system_disk_size  = var.system_disk_size
+  storage_policy_id = data.vsphere_storage_policy.storage_policy.id
   iso_image         = vsphere_file.discovery_iso.destination_file
   nested_hv_enabled = true
 }
@@ -118,6 +124,7 @@ module "compute_vm" {
   system_disk_size  = var.system_disk_size
   data_disks_count  = var.compute_data_disks_count
   data_disks_size   = var.compute_data_disks_size
+  storage_policy_id = data.vsphere_storage_policy.storage_policy.id
   iso_image         = vsphere_file.discovery_iso.destination_file
   nested_hv_enabled = true
 }

@@ -1751,6 +1751,10 @@ class VSPHEREAI(VSPHEREBASE):
                     "device_size", defaults.DEVICE_SIZE
                 ),
             }
+            if config.ENV_DATA.get("vsphere_storage_policy"):
+                tfvars["vsphere_storage_policy"] = config.ENV_DATA[
+                    "vsphere_storage_policy"
+                ]
             with open(self.terraform_vars_file, "w") as tf_var_file:
                 json.dump(tfvars, tf_var_file, indent=4)
 

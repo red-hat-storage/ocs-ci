@@ -34,6 +34,13 @@ variable "vsphere_datastore" {
   default     = ""
   description = "This is the name of the vSphere data store."
 }
+
+variable "vsphere_storage_policy" {
+  type        = string
+  default     = "vSAN Default Storage Policy"
+  description = "This is the name of storage policy."
+}
+
 variable "vm_network" {
   type        = string
   description = "This is the name of the publicly accessible network for cluster ingress and access."

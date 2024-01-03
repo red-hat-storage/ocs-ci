@@ -53,3 +53,7 @@ variable "nested_hv_enabled" {
   type    = bool
   default = false
 }
+
+variable "storage_policy_id" {
+  type = string
+}
