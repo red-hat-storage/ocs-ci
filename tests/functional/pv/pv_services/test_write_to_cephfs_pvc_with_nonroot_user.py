@@ -1,7 +1,9 @@
 import logging
+import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_pod
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla, polarion_id
 from ocs_ci.ocs.resources.pod import run_io_in_bg
@@ -14,6 +16,10 @@ log = logging.getLogger(__name__)
 @green_squad
 @bugzilla("2176354")
 @polarion_id("OCS-5139")
+@pytest.mark.skipif(
+    config.DEPLOYMENT.get("external_mode") is True,
+    reason="Skip on External mode cluster due to https://github.com/red-hat-storage/ocs-ci/issues/8872",
+)
 class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
     """
     Test to write to cephfs PVC with nonRoot and fsGroup permissions
