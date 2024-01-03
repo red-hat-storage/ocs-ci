@@ -24,7 +24,7 @@ from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
 from ocs_ci.utility.pagerduty import get_pagerduty_service_id
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, exec_cmd
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -1159,7 +1159,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     config.switch_to_consumer()
     client_cluster = config.cluster_ctx
     logger.info(f"Client cluster key: {client_cluster}")
-    cluster_id = run_cmd(
+    cluster_id = exec_cmd(
         "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
     )
     client_name = f"storageconsumer-{cluster_id}"
@@ -1176,7 +1176,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         # run_time of operation
         run_time = 60 * 3
         client.stop_heartbeat()
-        client.change_ocs_version()
+        client.set_ocs_version("4.13.0")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         logger.info(f"Switch to original cluster ({original_cluster})")

@@ -32,10 +32,10 @@ class StorageConsumer:
         )
         if self.consumer_context:
             self.heartbeat_cronjob = self.get_heartbeat_cronjob()
-            self.original_context = config.cluster_ctx
+            self.provider_context = config.cluster_ctx
         else:
             self.heartbeat_cronjob = None
-            self.original_context = None
+            self.provider_context = None
 
     def get_ocs_version(self):
         """
@@ -75,7 +75,7 @@ class StorageConsumer:
         self.heartbeat_cronjob.patch(
             resource_name=self.heartbeat_cronjo.name, params=patch_param
         )
-        self._switch_original_cluster()
+        self._switch_provider_cluster()
 
     def resume_heartbeat(self):
         """
@@ -86,7 +86,7 @@ class StorageConsumer:
         self.heartbeat_cronjob.patch(
             resource_name=self.heartbeat_cronjo.name, params=patch_param
         )
-        self._switch_original_cluster()
+        self._switch_provider_cluster()
 
     def get_heartbeat_cronjob(self):
         """
@@ -105,16 +105,16 @@ class StorageConsumer:
         ][0]
         return cronjob
 
-    def _switch_original_cluster(self):
+    def _switch_provider_cluster(self):
         """
-        Switch context to original cluster.
+        Switch context to provider cluster.
         """
-        config.switch_ctx(self.original_context)
-        log.info(f"Switched to original cluster with index {self.original_context}")
+        config.switch_ctx(self.provider_context)
+        log.info(f"Switched to provider cluster with index {self.provider_context}")
 
     def _switch_consumer_cluster(self):
         """
         Switch context to consumer cluster.
         """
         config.switch_ctx(self.consumer_context)
-        log.info(f"Switched to consumer cluster with index {self.original_cluster}")
+        log.info(f"Switched to consumer cluster with index {self.provider_cluster}")
