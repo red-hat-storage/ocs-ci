@@ -75,7 +75,7 @@ class TestNSFSObjectIntegrity(MCGTest):
             pattern="nsfs-test-obj-",
             s3_creds=nsfs_obj.s3_creds,
             result_pod=nsfs_obj.interface_pod,
-            result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+            result_pod_path=nsfs_obj.mounted_bucket_path,
         )
 
     @pytest.mark.polarion_id("OCS-3737")
@@ -118,7 +118,7 @@ class TestNSFSObjectIntegrity(MCGTest):
                 pattern="nsfs-test-obj-",
                 s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
-                result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_pod_path=nsfs_obj.mounted_bucket_path,
             )
         except Exception as e:
             assert "AccessDenied" in str(
