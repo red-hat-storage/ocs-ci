@@ -1006,7 +1006,7 @@ class TestS3BucketPolicy(MCGTest):
             "GetObjectLegalHold",
         ]
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list="*",
             actions_list=actions_list,
             resources_list=[obc_obj.bucket_name],
         )
@@ -1031,13 +1031,13 @@ class TestS3BucketPolicy(MCGTest):
         bucket_policy = json.loads(bucket_policy)
 
         # Find the missing bucket policies
-        bucket_policies = bucket_policy["statement"][0]["action"]
+        bucket_policies = bucket_policy["Statement"][0]["Action"]
         bucket_policies = [
             action.split("s3:", 1)[1]
             for action in bucket_policies
             if action.startswith("s3:")
         ]
-        actions_list = [action.lower() for action in actions_list]
+        actions_list = [action for action in actions_list]
         missing_policies = [
             action for action in actions_list if action not in bucket_policies
         ]
