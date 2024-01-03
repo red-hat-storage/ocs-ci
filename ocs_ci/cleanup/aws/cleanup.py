@@ -178,7 +178,7 @@ def get_clusters(
                     logger.info(
                         f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
                         f"(id: {instance.id}) running time is {running_time} hours while the allowed"
-                        f" running time for it is {allowed_running_time/3600} hours"
+                        f" running time for it is {allowed_running_time / 3600} hours"
                     )
                     if running_time.total_seconds() > allowed_running_time:
                         return True
@@ -383,7 +383,7 @@ def aws_cleanup():
             logger.info(
                 "Adding special rule for prefix '%s' with hours %s", prefix, hours
             )
-            prefixes_hours_to_spare.update({prefix: hours})
+            prefixes_hours_to_spare = {**{prefix: hours}, **prefixes_hours_to_spare}
 
     time_to_delete = args.hours * 60 * 60 if args.hours else None
     region = defaults.AWS_REGION if not args.region else args.region
