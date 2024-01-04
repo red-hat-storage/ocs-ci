@@ -1150,9 +1150,6 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
             the client version
 
     """
-
-    current_version = storageconsumer.get_ocs_version()
-    logger.info(f"Reported client version: {current_version}")
     original_cluster = config.cluster_ctx
     logger.info(f"Provider cluster key: {original_cluster}")
     logger.info("Switch to client cluster")
@@ -1164,6 +1161,8 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     )
     client_name = f"storageconsumer-{cluster_id}"
     client = storageconsumer.StorageConsumer()
+    current_version = client.get_ocs_version()
+    logger.info(f"Reported client version: {current_version}")
 
     def change_client_version():
         """
