@@ -1160,7 +1160,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
     )
     client_name = f"storageconsumer-{cluster_id}"
-    client = storageconsumer.StorageConsumer()
+    client = storageconsumer.StorageConsumer(client_name)
     current_version = client.get_ocs_version()
     logger.info(f"Reported client version: {current_version}")
 
