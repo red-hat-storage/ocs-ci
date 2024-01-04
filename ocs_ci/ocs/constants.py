@@ -30,6 +30,7 @@ TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
+TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -808,6 +809,21 @@ CNV_VM_STANDALONE_PVC_PVC_YAML = os.path.join(
 CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
     TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
 )
+
+METALLB = "metallb-operator"
+METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
+METALLB_WEBHOOK_PREFIX = "metallb-operator-webhook-server"
+METALLB_DEFAULT_NAMESPACE = "metallb-system"
+METALLB_CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "metallb-source.yaml"
+)
+METALLB_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "operator-group.yaml"
+)
+METALLB_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "subscription.yaml"
+)
+
 
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")
