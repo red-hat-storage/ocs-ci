@@ -32,7 +32,9 @@ class StorageConsumer:
         )
         if self.consumer_context:
             self.heartbeat_cronjob = self.get_heartbeat_cronjob()
-            self.provider_context = config.cluster_ctx
+            self.provider_context = config.cluster_ctx.MULTICLUSTER[
+                "multicluster_index"
+            ]
         else:
             self.heartbeat_cronjob = None
             self.provider_context = None

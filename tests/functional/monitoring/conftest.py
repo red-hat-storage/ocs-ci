@@ -1150,11 +1150,11 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
             the client version
 
     """
-    original_cluster = config.cluster_ctx
+    original_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     logger.info(f"Provider cluster key: {original_cluster}")
     logger.info("Switch to client cluster")
     config.switch_to_consumer()
-    client_cluster = config.cluster_ctx
+    client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     logger.info(f"Client cluster key: {client_cluster}")
     cluster_id = exec_cmd(
         "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
