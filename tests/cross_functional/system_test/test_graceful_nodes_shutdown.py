@@ -48,6 +48,9 @@ class TestGracefulNodesShutdown(E2ETest):
 
     @pytest.fixture(autouse=True)
     def checks(self):
+        """
+        Fixture to verify cluster is with FIPS and hugepages enabled
+        """
         try:
             check_fips_enabled()
         except Exception as e:
@@ -150,15 +153,19 @@ class TestGracefulNodesShutdown(E2ETest):
         snapshot_factory,
     ):
         """
-        non encrypted pvc (ne_pvc)
-        create + clone + snapshot
-        non-encrypted block/fs pvc
+        Creates non encrypted fs pvc,clone of pvc and snapshot
+        Args:
+            pod_factory : Fixture to create new PODs
+            pvc_factory: pod_factory : Fixture to create new PVCs
+            pvc_clone_factory :Fixture to create a clone from PVC
+            snapshot_factory: Fixture to create a VolumeSnapshot ofPVC
+
         Returns:
-            pvc object
-            pod object
-            file_name
-            origin md5sum
-            snapshot
+            pvc_object: PVC objects for which snapshots are to be created.
+            pod_object: POD objects attached to the PVCs
+            file_name(str) : Name of the file on which FIO is performed.
+            origin md5sum(hex) : md5sum of data present in file
+            snap_obj: The object of snapshot created from pvc.
         """
         logger.info("Adding non encrypted pvc")
         pvc_obj = pvc_factory(
@@ -200,13 +207,23 @@ class TestGracefulNodesShutdown(E2ETest):
         snapshot_factory=None,
     ):
         """
-        encrypted block/fs pvc
+        This function creates encrypted block/fs pvc, clone of pvc and snapshot
+
+        Args:
+            pvc_type: Type of pvc used to create pvc
+            pv_encryption_kms_setup_factory: Fixture used to create encrypted pvc
+            pod_factory : Fixture to create new PODs
+            pvc_factory:  Fixture to create new PVCs
+            pvc_clone_factory :Fixture to create a clone from PVC
+            snapshot_factory: Fixture to create a VolumeSnapshot ofPVC
+
         Returns:
-            pvc object
-            pod object
-            file_name
-            origin md5sum
-            snapshot
+            pvc_object: PVC objects for which snapshots are to be created.
+            pod_object: POD objects attached to the PVCs
+            file_name(str) : Name of the file on which FIO is performed.
+            origin md5sum(hex) : md5sum of data present in file
+            encrypt_snap_obj: The object of snapshot created from encrypted pvc.
+
         """
 
         logger.info(f"Adding encrypted {pvc_type} pvc")
@@ -249,8 +266,8 @@ class TestGracefulNodesShutdown(E2ETest):
 
     def validate_snapshot_restore(self, snapshot_restore_factory):
         """
-        Verifies the snapshot restore works fine
-        Raises: If failed restore snapshot
+        Verifies the snapshot restore works fine as well as PVC expansion
+        is possible on the restored snapshot
         """
         logger.info("Creating snapshot restore for non-encrypted pvcs after reboot")
         ne_restored_pvc = snapshot_restore_factory(
@@ -287,7 +304,8 @@ class TestGracefulNodesShutdown(E2ETest):
     def validate_data_integrity(self):
         """
         Verifies the md5sum values of files are OK
-        Raises: If there is a mismatch in md5sum value or None
+        Raises:
+            AssertionError: If there is a mismatch in md5sum value or None
         """
         logger.info("Compare bucket object after reboot")
         for idx, bucket_name in enumerate(self.bucket_names_list):
@@ -406,7 +424,9 @@ class TestGracefulNodesShutdown(E2ETest):
             " Noobaa caching,Object expiration,"
             "MCG NSFS,RGW kafka notification"
         )
-        setup_mcg_bg_features(skip_any_features=["caching", "nsfs", "rgw kafka", "replication"])
+        setup_mcg_bg_features(
+            skip_any_features=["caching", "nsfs", "rgw kafka", "replication"]
+        )
 
         # check OSD status after graceful node shutdown
         worker_nodes = get_nodes(node_type="worker")
@@ -415,7 +435,7 @@ class TestGracefulNodesShutdown(E2ETest):
         logger.info("Gracefully Shutting down worker & master nodes")
         nodes.stop_nodes(nodes=worker_nodes, force=False)
         nodes.stop_nodes(nodes=master_nodes, force=False)
-        time.sleep(1800)
+        time.sleep(300)
         logger.info("Starting worker & master nodes")
         nodes.start_nodes(nodes=worker_nodes)
         nodes.start_nodes(nodes=master_nodes)
