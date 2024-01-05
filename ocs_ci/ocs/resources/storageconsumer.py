@@ -4,8 +4,8 @@ A module for all StorageConsumer functionalities and abstractions.
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.ocs import OCS
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class StorageConsumer:
         """
         self._switch_consumer_cluster()
         patch_param = '{{"spec": {{"suspend": "true"}}}}'
-        self.heartbeat_cronjob.patch(
+        self.heartbeat_cronjob.ocp.patch(
             resource_name=self.heartbeat_cronjo.name, params=patch_param
         )
         self._switch_provider_cluster()
@@ -85,7 +85,7 @@ class StorageConsumer:
         """
         self._switch_consumer_cluster()
         patch_param = '{{"spec": {{"suspend": "false"}}}}'
-        self.heartbeat_cronjob.patch(
+        self.heartbeat_cronjob.ocp.patch(
             resource_name=self.heartbeat_cronjo.name, params=patch_param
         )
         self._switch_provider_cluster()
@@ -93,7 +93,7 @@ class StorageConsumer:
     def get_heartbeat_cronjob(self):
         """
         Returns:
-            object: status reporter cronjob OCP object
+            object: status reporter cronjob OCS object
 
         """
         self._switch_consumer_cluster()
@@ -102,7 +102,7 @@ class StorageConsumer:
             namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
         )
         cronjob = [
-            ocp.OCP(**job)
+            OCS(**job)
             for job in cronjobs_obj.get().get("items")
             if job["metadata"]["name"].endswith("status-reporter")
         ][0]
