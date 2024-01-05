@@ -73,7 +73,7 @@ class StorageConsumer:
         Suspend status reporter cron job.
         """
         self._switch_consumer_cluster()
-        patch_param = '{{"spec": {{"suspend": "true"}}}}'
+        patch_param = '{"spec": {"suspend": true}}'
         self.heartbeat_cronjob.ocp.patch(
             resource_name=self.heartbeat_cronjob.name, params=patch_param
         )
@@ -84,7 +84,7 @@ class StorageConsumer:
         Resume status reporter cron job.
         """
         self._switch_consumer_cluster()
-        patch_param = '{{"spec": {{"suspend": "false"}}}}'
+        patch_param = '{"spec": {"suspend": false}}'
         self.heartbeat_cronjob.ocp.patch(
             resource_name=self.heartbeat_cronjob.name, params=patch_param
         )
