@@ -823,6 +823,12 @@ METALLB_OPERATOR_GROUP_YAML = os.path.join(
 METALLB_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_METALLB, "subscription.yaml"
 )
+METALLB_IPADDRESSPOOL_PATH = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "ipaddresspool.yaml"
+)
+METALLB_L2_ADVERTISEMENT_PATH = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "l2advertisement.yaml"
+)
 
 
 # Multus Networks

@@ -2447,6 +2447,13 @@ def assign_ips(num_of_vips):
     """
     Assign IPs to hosts
 
+    We have to pass similar config while deploying Provider/Client mode cluster
+
+    #   ENV_DATA:
+    #       # MS cluster on custom secondary-2 subnet
+    #       subnet_type: 'secondary_mcidr2'
+    #       machine_cidr: '10.206.16.0/23'
+
     Args:
         num_of_vips (int): Number of IPs to assign
 
