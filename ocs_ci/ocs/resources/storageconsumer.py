@@ -31,13 +31,13 @@ class StorageConsumer:
             namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
         )
         if self.consumer_context:
-            self.heartbeat_cronjob = self.get_heartbeat_cronjob()
             self.provider_context = config.cluster_ctx.MULTICLUSTER[
                 "multicluster_index"
             ]
+            self.heartbeat_cronjob = self.get_heartbeat_cronjob()
         else:
-            self.heartbeat_cronjob = None
             self.provider_context = None
+            self.heartbeat_cronjob = None
 
     def get_ocs_version(self):
         """
