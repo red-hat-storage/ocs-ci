@@ -1158,7 +1158,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     logger.info(f"Client cluster key: {client_cluster}")
     cluster_id = exec_cmd(
         "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-    )
+    ).stdout.decode("utf-8")
     client_name = f"storageconsumer-{cluster_id}"
     logger.info(f"Switch to original cluster ({original_cluster})")
     config.switch_ctx(original_cluster)
