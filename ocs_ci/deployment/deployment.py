@@ -548,6 +548,12 @@ class Deployment(object):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
             create_dummy_zone_labels()
+        ibmcloud_ipi = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "ipi"
+        )
+        if ibmcloud_ipi:
+            ibmcloud.label_nodes_region()
 
     def label_and_taint_nodes(self):
         """
@@ -934,6 +940,7 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
                 logger.info("Creating secret for IBM Cloud Object Storage")
                 with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
