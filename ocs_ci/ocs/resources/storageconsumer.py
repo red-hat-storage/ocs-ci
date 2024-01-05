@@ -64,11 +64,21 @@ class StorageConsumer:
             version (str): OCS version to be set
 
         """
-        cmd = {
-            f"""oc patch StorageConsumer {self.name} --type='json' -p='[{{"op": "replace", """
-            f""""path": "/status/client/operatorVersion", "value":"{version}"}}]' """
-            """--subresource status"""
-        }
+        cmd = [
+            "oc",
+            "patch",
+            "StorageConsumer",
+            self.name,
+            "--type",
+            "json",
+            '-p=\'[{{"op":',
+            '"replace",',
+            '"path":',
+            '"/status/client/operatorVersion",',
+            f'"value":"{version}"}}]' + "'",
+            "--subresource",
+            "status",
+        ]
         exec_cmd(cmd)
 
     def stop_heartbeat(self):
