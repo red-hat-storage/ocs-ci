@@ -439,7 +439,7 @@ class OCP(object):
         params = "'" + f"{params}" + "'"
         command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params}"
         if subresource:
-            command = f" --subresource {subresource}"
+            command += f" --subresource {subresource}"
         if format_type:
             command += f" --type {format_type}"
         log.info(f"Command: {command}")

@@ -6,6 +6,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility.utils import exec_cmd
 
 log = logging.getLogger(__name__)
 
@@ -63,10 +64,12 @@ class StorageConsumer:
             version (str): OCS version to be set
 
         """
-        patch_param = f'{{"status": {{"client": {{"operatorVersion": {version}}}}}}}'
-        self.ocp.patch(
-            resource_name=self.name, params=patch_param, subresource="status"
-        )
+        cmd = {
+            f"""oc patch StorageConsumer {self.name} --type='json' -p='[{{"op": "replace", """
+            f""""path": "/status/client/operatorVersion", "value":"{version}"}}]' """
+            """--subresource status"""
+        }
+        exec_cmd(cmd)
 
     def stop_heartbeat(self):
         """
