@@ -75,7 +75,7 @@ class StorageConsumer:
         self._switch_consumer_cluster()
         patch_param = '{{"spec": {{"suspend": "true"}}}}'
         self.heartbeat_cronjob.ocp.patch(
-            resource_name=self.heartbeat_cronjo.name, params=patch_param
+            resource_name=self.heartbeat_cronjob.name, params=patch_param
         )
         self._switch_provider_cluster()
 
@@ -86,7 +86,7 @@ class StorageConsumer:
         self._switch_consumer_cluster()
         patch_param = '{{"spec": {{"suspend": "false"}}}}'
         self.heartbeat_cronjob.ocp.patch(
-            resource_name=self.heartbeat_cronjo.name, params=patch_param
+            resource_name=self.heartbeat_cronjob.name, params=patch_param
         )
         self._switch_provider_cluster()
 
