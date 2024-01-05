@@ -44,7 +44,7 @@ def test_change_client_ocs_version_and_stop_heartbeat(
     target_alerts = [
         {
             "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
-            "msg": "Storage Client ({client_name}) heartbeat missed for more than 120 (s). "
+            "msg": f"Storage Client ({client_name}) heartbeat missed for more than 120 (s). "
             "Lossy network connectivity might exist",
         },
         {
