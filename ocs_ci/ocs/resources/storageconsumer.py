@@ -96,6 +96,7 @@ class StorageConsumer:
             object: status reporter cronjob OCP object
 
         """
+        self._switch_consumer_cluster()
         cronjobs_obj = ocp.OCP(
             kind=constants.CRONJOB,
             namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
@@ -103,8 +104,9 @@ class StorageConsumer:
         cronjob = [
             ocp.OCP(**job)
             for job in cronjobs_obj.get().get("items")
-            if job.name.endswith("status-reporter")
+            if job["metadata"]["name"].endswith("status-reporter")
         ][0]
+        self._switch_provider_cluster()
         return cronjob
 
     def _switch_provider_cluster(self):
@@ -119,4 +121,4 @@ class StorageConsumer:
         Switch context to consumer cluster.
         """
         config.switch_ctx(self.consumer_context)
-        log.info(f"Switched to consumer cluster with index {self.provider_cluster}")
+        log.info(f"Switched to consumer cluster with index {self.consumer_context}")
