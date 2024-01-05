@@ -71,15 +71,14 @@ class StorageConsumer:
             self.name,
             "--type",
             "json",
-            '-p=\'[{{"op":',
-            '"replace",',
-            '"path":',
-            '"/status/client/operatorVersion",',
-            f'"value":"{version}"}}]' + "'",
+            "-p="
+            + "'"
+            + f'[{{"op": "replace", "path": "/status/client/operatorVersion", "value":"{version}"}}]'
+            + "'",
             "--subresource",
             "status",
         ]
-        exec_cmd(cmd)
+        exec_cmd(" ".join(cmd))
 
     def stop_heartbeat(self):
         """
