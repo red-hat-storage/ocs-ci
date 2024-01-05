@@ -185,6 +185,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                     node_name=next(nodes_iter),
                     pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.data["spec"]["volumeMode"] == "Block",
+                    pvc_read_only_mode=True,
                 )
                 log.info(
                     f"Attaching the PVC {pvc_obj.name} to pod "
