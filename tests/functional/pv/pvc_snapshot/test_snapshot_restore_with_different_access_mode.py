@@ -178,6 +178,9 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
             for _ in range(
                 int(pvc_obj.get_pvc_access_mode != constants.ACCESS_MODE_RWX), 2
             ):
+                pvc_read_only_mode = None
+                if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_ROX:
+                    pvc_read_only_mode = True
                 restore_pod_obj = pod_factory(
                     interface=pvc_obj.interface,
                     pvc=pvc_obj,
@@ -185,7 +188,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                     node_name=next(nodes_iter),
                     pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.data["spec"]["volumeMode"] == "Block",
-                    pvc_read_only_mode=True,
+                    pvc_read_only_mode=pvc_read_only_mode,
                 )
                 log.info(
                     f"Attaching the PVC {pvc_obj.name} to pod "
