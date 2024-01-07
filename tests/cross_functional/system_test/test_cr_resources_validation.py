@@ -195,7 +195,7 @@ class TestCRRsourcesValidation(ManageTest):
 
     def test_network_fence_not_editable(self):
         """
-        Test case to check that some properties of network fence object are not editable once object is created
+        Test case to check that some properties of network fence object are not editable once the object is created
         """
 
         non_editable_patches = {  # dictionary: patch_name --> patch
