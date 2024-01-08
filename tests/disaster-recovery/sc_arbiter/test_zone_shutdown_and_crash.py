@@ -29,16 +29,16 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
-    stretch_cluster,
+    tier1,
     turquoise_squad,
 )
 
 log = logging.getLogger(__name__)
 
 
-@stretch_cluster
+@tier1
 @turquoise_squad
-class TestZoneShutdowns:
+class TestZoneShutdownsAndCrashes:
 
     zones = constants.ZONES_LABELS
     # We dont want to select arbiter zone randomly for the shutdown/crash

@@ -3,7 +3,7 @@ import logging
 import time
 import ocpnetsplit
 
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad, stretch_cluster
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad, tier1
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_workload_pods_post_recovery,
     recover_from_ceph_stuck,
@@ -27,8 +27,8 @@ from ocs_ci.ocs.resources.pod import (
 logger = logging.getLogger(__name__)
 
 
+@tier1
 @turquoise_squad
-@stretch_cluster
 class TestNetSplit:
     @pytest.fixture()
     def init_sanity(self, request):
