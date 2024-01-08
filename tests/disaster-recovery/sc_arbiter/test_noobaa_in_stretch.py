@@ -11,7 +11,12 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     get_pod_node,
 )
-from ocs_ci.framework.pytest_customization.marks import bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    polarion_id,
+    tier3,
+    red_squad,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +41,10 @@ def setup_nb_endpoint():
     return nb_endpoint_dep_data
 
 
+@tier3
+@red_squad
 @bugzilla("2109101")
+@polarion_id("OCS-5406")
 def test_nb_endpoint_topology_spread_constraints(setup_nb_endpoint):
 
     nb_endpoint_dep_data = setup_nb_endpoint
