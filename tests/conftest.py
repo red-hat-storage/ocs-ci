@@ -6598,6 +6598,34 @@ def dr_workload(request):
     ):
         """
         Args:
+            num_of_subscription (int): Number of Subscription type workload to be created on each cluster
+            num_of_appset (int): Number of ApplicationSet type workload to be created on each cluster
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default.
+            switch_ctx (int): The cluster index by the cluster name
+            appset_model (str): Appset Gitops deployment now supports "pull" model starting ACM 2.10 which is now the
+                default selection in addition to "push" model.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            instances (list): objects of appset workload class
+
+        """
+    instances = []
+    ctx = []
+
+    def factory(
+        num_of_subscription=1,
+        num_of_appset=0,
+        appset_model="pull",
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        switch_ctx=None,
+    ):
+        """
+        Args:
             num_of_subscription (int): Number of Subscription type workload to be created
             num_of_appset (int): Number of ApplicationSet type workload to be created
             appset_model (str): GitOps ApplicationSet deployment model. Valid values include "pull" or "push".

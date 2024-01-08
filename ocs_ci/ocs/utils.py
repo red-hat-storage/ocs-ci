@@ -1624,7 +1624,7 @@ def get_primary_cluster_config():
     Get the primary cluster config object in a DR scenario
 
     Return:
-        framework.config: primary cluster config obhect from config.clusters
+        framework.config: primary cluster config object from config.clusters
 
     """
     for cluster in ocsci_config.clusters:

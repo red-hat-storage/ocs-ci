@@ -13,6 +13,7 @@ from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
+from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.helpers import (
     create_project,
     create_unique_resource_name,
@@ -78,6 +79,11 @@ class BusyBox(DRWorkload):
         self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster") or (
             get_primary_cluster_config().ENV_DATA["cluster_name"]
         )
+        self.preferred_secondary_cluster = [
+            cluster
+            for cluster in dr_helpers.get_all_drclusters()
+            if cluster != self.preferred_primary_cluster
+        ][0]
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
@@ -98,14 +104,42 @@ class BusyBox(DRWorkload):
                 self.workload_subscription_dir, self.workload_name, "placement.yaml"
             )
             self.workload_pvc_selector = kwargs.get("workload_pvc_selector")
+        self.channel_yaml_file = os.path.join(
+            self.workload_subscription_dir, "channel.yaml"
+        )
+        self.git_repo_kustomization_yaml_file = os.path.join(
+            self.workload_subscription_dir, "kustomization.yaml"
+        )
+        self.git_repo_namespace_yaml_file = os.path.join(
+            self.workload_subscription_dir, "namespace.yaml"
+        )
+        self.drpc_yaml_file = os.path.join(
+            self.workload_subscription_dir, self.workload_name, "drpc.yaml"
+        )
+        self.namespace_yaml_file = os.path.join(
+            self.workload_subscription_dir, self.workload_name, "namespace.yaml"
+        )
+        self.workload_kustomization_yaml_file = os.path.join(
+            self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
+        )
+        self.subscription_yaml_file = os.path.join(
+            self.workload_subscription_dir, self.workload_name, "subscription.yaml"
+        )
+        self.placementrule_yaml_file = os.path.join(
+            self.workload_subscription_dir, self.workload_name, "placementrule.yaml"
+        )
 
-    def deploy_workload(self):
+    def deploy_workload(self, primary_cluster=None, secondary_cluster=None):
         """
-        Deployment specific to busybox workload
+        Deployment specific to busybox workload on both primary and secondary clusters
+
+        Args:
+            bool: True if apps needs to be deployed on primary cluster
+            bool: True if apps needs to be deployed on secondary cluster
 
         """
         self._deploy_prereqs()
-        self.workload_namespace = self._get_workload_namespace()
+        workload_namespaces = []
 
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -145,15 +179,40 @@ class BusyBox(DRWorkload):
                 templating.dump_data_to_temp_yaml(
                     drpc_yaml_data, self.drcp_data_yaml.name
                 )
+        # By default it deploys apps on primary cluster if not set to false
+        clusters = []
+        if primary_cluster:
+            clusters = [self.preferred_primary_cluster]
+        if secondary_cluster:
+            clusters = [self.preferred_secondary_cluster]
+        if primary_cluster and secondary_cluster:
+            clusters = [
+                self.preferred_primary_cluster,
+                self.preferred_secondary_cluster,
+            ]
 
-        # TODO
-        # drpc_yaml_file needs to be committed back to the repo
-        # because ACM would refetch from repo directly
+        for cluster in clusters:
+            # load workload-repo namespace.yaml
+            workload_ns_yaml_data = templating.load_yaml(self.namespace_yaml_file)
+            workload_ns_yaml_data["metadata"][
+                "name"
+            ] = helpers.create_unique_resource_name(
+                resource_type="namespace", resource_description="busybox-workloads"
+            )
+            templating.dump_data_to_temp_yaml(
+                workload_ns_yaml_data, self.namespace_yaml_file
+            )
 
-        # load channel.yaml
-        channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
-        channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
-        templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
+            # load placementrule
+            placementrule_yaml_data = templating.load_yaml(self.placementrule_yaml_file)
+            placementrule_yaml_data["metadata"][
+                "name"
+            ] = helpers.create_unique_resource_name(
+                resource_type="placementrule", resource_description="busybox"
+            )
+            templating.dump_data_to_temp_yaml(
+                placementrule_yaml_data, self.placementrule_yaml_file
+            )
 
         # Create the resources on Hub cluster
         config.switch_acm_ctx()
@@ -162,7 +221,91 @@ class BusyBox(DRWorkload):
         if self.is_placement:
             self.add_annotation_to_placement()
             run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
-        self.verify_workload_deployment()
+
+            # load drpc.yaml
+            drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
+            drpc_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="drpc", resource_description="busybox"
+            )
+            drpc_yaml_data["spec"]["placementRef"]["name"] = placementrule_yaml_data[
+                "metadata"
+            ]["name"]
+            drpc_yaml_data["spec"]["preferredCluster"] = cluster
+            drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+            templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
+
+            # TODO
+            # drpc_yaml_file needs to be committed back to the repo
+            # because ACM would refetch from repo directly
+
+            # load channel.yaml
+            channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
+            channel_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="channel", resource_description="ramen-gitops"
+            )
+            channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
+            templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
+
+            # load git-repo namespace.yaml
+            git_ns_yaml_data = templating.load_yaml(self.git_repo_namespace_yaml_file)
+            git_ns_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="namespace", resource_description="ramen-busybox"
+            )
+            templating.dump_data_to_temp_yaml(
+                git_ns_yaml_data, self.git_repo_namespace_yaml_file
+            )
+
+            # load subscription.yaml
+            subscription_yaml_data = templating.load_yaml(self.subscription_yaml_file)
+            subscription_yaml_data["metadata"][
+                "name"
+            ] = helpers.create_unique_resource_name(
+                resource_type="subscription", resource_description="busybox"
+            )
+            subscription_yaml_data["spec"]["channel"] = (
+                git_ns_yaml_data["metadata"]["name"]
+                + "/"
+                + channel_yaml_data["metadata"]["name"]
+            )
+            subscription_yaml_data["spec"]["placement"]["placementRef"][
+                "name"
+            ] = placementrule_yaml_data["metadata"]["name"]
+            templating.dump_data_to_temp_yaml(
+                subscription_yaml_data, self.subscription_yaml_file
+            )
+
+            # load workload kustomization.yaml
+            workload_kustomization_yaml_data = templating.load_yaml(
+                self.workload_kustomization_yaml_file
+            )
+            workload_kustomization_yaml_data["namespace"] = workload_ns_yaml_data[
+                "metadata"
+            ]["name"]
+            templating.dump_data_to_temp_yaml(
+                workload_kustomization_yaml_data, self.workload_kustomization_yaml_file
+            )
+
+            # load git repo kustomization.yaml
+            git_kustomization_yaml_data = templating.load_yaml(
+                self.git_repo_kustomization_yaml_file
+            )
+            git_kustomization_yaml_data["namespace"] = git_ns_yaml_data["metadata"][
+                "name"
+            ]
+            templating.dump_data_to_temp_yaml(
+                git_kustomization_yaml_data, self.git_repo_kustomization_yaml_file
+            )
+
+            workload_namespaces.append(self._get_workload_namespace())
+
+            # Create the resources on Hub cluster
+            config.switch_acm_ctx()
+            run_cmd(f"oc create -k {self.workload_subscription_dir}")
+            run_cmd(
+                f"oc create -k {self.workload_subscription_dir}/{self.workload_name}"
+            )
+
+            self.verify_workload_deployment(cluster)
 
     def _deploy_prereqs(self):
         """
@@ -181,11 +324,7 @@ class BusyBox(DRWorkload):
         Get the workload namespace
 
         """
-        namespace_yaml_file = os.path.join(
-            os.path.join(self.workload_subscription_dir, self.workload_name),
-            "namespace.yaml",
-        )
-        namespace_yaml_data = templating.load_yaml(namespace_yaml_file)
+        namespace_yaml_data = templating.load_yaml(self.namespace_yaml_file)
         return namespace_yaml_data["metadata"]["name"]
 
     def add_annotation_to_placement(self):
@@ -204,12 +343,22 @@ class BusyBox(DRWorkload):
             annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
         )
 
-    def verify_workload_deployment(self):
+    def _get_ramen_namespace(self):
+        """ """
+        git_ramen_yaml_data = templating.load_yaml(self.git_repo_namespace_yaml_file)
+        return git_ramen_yaml_data["metadata"]["name"]
+
+    def verify_workload_deployment(self, cluster=None):
         """
         Verify busybox workload
 
         """
-        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        self.workload_namespace = self._get_workload_namespace()
+        if cluster is None:
+            cluster = self.preferred_primary_cluster
+        else:
+            cluster = cluster
+        config.switch_to_cluster_by_name(cluster)
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
@@ -228,6 +377,9 @@ class BusyBox(DRWorkload):
         backend_volumes = dr_helpers.get_backend_volumes_for_pvcs(
             self.workload_namespace
         )
+        ramen_ns = self._get_ramen_namespace()
+        self.workload_namespace = self._get_workload_namespace()
+        image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
 
         # Skipping drpc.yaml deletion since DRPC is automatically removed.
         kustomization_yaml_file = os.path.join(
@@ -243,7 +395,7 @@ class BusyBox(DRWorkload):
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             run_cmd(
-                f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
+                f"oc delete -k {self.workload_subscription_dir}/{self.workload_name} -n {self.workload_namespace}"
             )
 
             for cluster in get_non_acm_cluster_config():
@@ -272,7 +424,7 @@ class BusyBox(DRWorkload):
 
         finally:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            run_cmd(f"oc delete -k {self.workload_subscription_dir}")
+            run_cmd(f"oc delete -k {self.workload_subscription_dir} -n {ramen_ns}")
 
 
 class BusyBox_AppSet(DRWorkload):

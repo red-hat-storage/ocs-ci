@@ -891,6 +891,22 @@ def get_all_drpolicy():
     return drpolicy_list
 
 
+def get_all_drclusters():
+    """
+    Get all DRClusters
+
+    Returns:
+        list: List of all DRClusters
+    """
+    config.switch_acm_ctx()
+    drclusters_obj = ocp.OCP(kind="DRCluster")
+    drclusters = []
+    for cluster in drclusters_obj.get().get("items"):
+        drclusters.append(cluster.get("metadata").get("name"))
+    logger.info(f"The DRClusters are {drclusters}")
+    return drclusters
+
+
 def get_managed_cluster_node_ips():
     """
     Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
