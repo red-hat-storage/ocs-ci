@@ -6425,26 +6425,36 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
 @pytest.fixture()
 def dr_workload(request):
     """
-    Setup Busybox workload for RDR setup
+    Setup Busybox workload for RDR and MDR setups
 
     """
-    instances = []
+    appset_instances = []
+    primary_cluster_instances = []
+    secondary_cluster_instances = []
 
     def factory(
-        num_of_subscription=1, num_of_appset=0, pvc_interface=constants.CEPHBLOCKPOOL
+        num_of_subscription=1,
+        num_of_appset=0,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        primary_cluster=None,
+        secondary_cluster=None,
     ):
         """
         Args:
-            num_of_subscription (int): Number of Subscription type workload to be created
-            num_of_appset (int): Number of ApplicationSet type workload to be created
+            num_of_subscription (int): Number of Subscription type workload to be created on each cluster
+            num_of_appset (int): Number of ApplicationSet type workload to be created on each cluster
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
-                This decides whether a RBD based or CephFS based resource is created. RBD is default.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default
+            primary_cluster (bool): True if apps to be deployed on primary cluster, false otherwise
+            secondary_cluster (bool): True if apps to be deployed on secondary cluster, false otherwise
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
 
         Returns:
-            list: objects of workload class.
+            instances (list): objects of appset workload class
+            primary_cluster_instances (list): objects of subscription workload class on primary
+            secondary_cluster_instances (list): objects of subscription workload class on secondary
 
         """
         total_pvc_count = 0
@@ -6452,16 +6462,35 @@ def dr_workload(request):
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_subscription_cephfs"
 
-        for index in range(num_of_subscription):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
-            workload = BusyBox(
-                workload_dir=workload_details["workload_dir"],
-                workload_pod_count=workload_details["pod_count"],
-                workload_pvc_count=workload_details["pvc_count"],
-            )
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+        if primary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                primary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(
+                    primary_cluster=primary_cluster, secondary_cluster=None
+                )
+
+        if secondary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                secondary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(
+                    primary_cluster=None, secondary_cluster=secondary_cluster
+                )
 
         for index in range(num_of_appset):
             workload_details = ocsci_config.ENV_DATA["dr_workload_appset"][index]
@@ -6474,28 +6503,35 @@ def dr_workload(request):
                 ],
                 workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
             )
-            instances.append(workload)
+            appset_instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
+
         if ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
             if pvc_interface != constants.CEPHFILESYSTEM:
                 dr_helpers.wait_for_mirroring_status_ok(
                     replaying_images=total_pvc_count
                 )
-        return instances
+        return appset_instances, primary_cluster_instances, secondary_cluster_instances
 
     def teardown():
         failed_to_delete = False
-        for instance in instances:
-            try:
-                instance.delete_workload(force=True)
-            except ResourceNotDeleted:
-                failed_to_delete = True
+        workloads = [
+            primary_cluster_instances,
+            secondary_cluster_instances,
+            appset_instances,
+        ]
+        for workload in workloads:
+            for instance in workload:
+                try:
+                    instance.delete_workload(force=True)
+                except ResourceNotDeleted:
+                    failed_to_delete = True
 
-        if failed_to_delete:
-            raise ResourceNotDeleted(
-                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
-            )
+                if failed_to_delete:
+                    raise ResourceNotDeleted(
+                        "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
+                    )
 
     request.addfinalizer(teardown)
     return factory
