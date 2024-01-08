@@ -2393,9 +2393,9 @@ def mcg_obj_client(request):
         object: An MCG resource
         int: client cluster context
     """
-    original_cluster = ocsci_config.cluster_ctx
+    original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     ocsci_config.switch_to_consumer()
-    client_cluster = ocsci_config.cluster_ctx
+    client_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     log.info(f"Switched to client with index {client_cluster}")
     mcg_obj = mcg_obj_fixture(request)
     ocsci_config.switch_ctx(original_cluster)
@@ -2444,9 +2444,9 @@ def awscli_pod_client(request):
         Object: Object representing an aws cli pod
         int: client cluster context
     """
-    original_cluster = ocsci_config.cluster_ctx
+    original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     ocsci_config.switch_to_consumer()
-    client_cluster = ocsci_config.cluster_ctx
+    client_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     log.info(f"Switched to client with index {client_cluster}")
     awscli_pods = get_pods_having_label(
         constants.S3CLI_LABEL, ocsci_config.ENV_DATA["cluster_namespace"]

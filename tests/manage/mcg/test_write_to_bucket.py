@@ -457,7 +457,7 @@ class TestBucketIO(MCGTest):
         # downloads them to the pod
         bucketname = bucket_factory()[0].name
 
-        original_cluster = config.cluster_ctx
+        original_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
         mcg_obj, client_cluster = mcg_obj_client
         config.switch_ctx(client_cluster)
         awscli_pod, _ = awscli_pod_client
