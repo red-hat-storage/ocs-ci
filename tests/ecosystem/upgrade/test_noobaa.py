@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
+    mcg,
 )
 from ocs_ci.ocs.constants import BS_OPTIMAL
 from ocs_ci.ocs.bucket_utils import (
@@ -30,6 +31,7 @@ DOWNLOADED_OBJS = []
 @skipif_managed_service
 @aws_platform_required
 @pre_upgrade
+@mcg
 @red_squad
 def test_fill_bucket(
     mcg_obj_session, awscli_pod_session, multiregion_mirror_setup_session
@@ -86,6 +88,7 @@ def test_fill_bucket(
 @aws_platform_required
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
+@mcg
 @red_squad
 def test_noobaa_postupgrade(
     mcg_obj_session, awscli_pod_session, multiregion_mirror_setup_session
@@ -133,6 +136,7 @@ def test_noobaa_postupgrade(
 @skipif_managed_service
 @bugzilla("1820974")
 @pre_upgrade
+@mcg
 @red_squad
 def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
     """
@@ -147,6 +151,7 @@ def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
 @bugzilla("1820974")
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2181")
+@mcg
 @red_squad
 def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
     """
@@ -158,6 +163,7 @@ def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
 
 @pre_upgrade
 @skipif_managed_service
+@mcg
 @red_squad
 def test_start_upgrade_mcg_io(mcg_workload_job):
     """
@@ -173,6 +179,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
 @skipif_managed_service
 @pytest.mark.polarion_id("OCS-2207")
 @bugzilla("1874243")
+@mcg
 @red_squad
 def test_upgrade_mcg_io(mcg_workload_job):
     """

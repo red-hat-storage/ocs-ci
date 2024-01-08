@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_disconnected_cluster,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
@@ -36,7 +37,6 @@ def cleanup(request):
     instances = []
 
     def factory(resource_obj):
-
         if isinstance(resource_obj, list):
             instances.extend(resource_obj)
         else:
@@ -59,6 +59,7 @@ def cleanup(request):
     return factory
 
 
+@mcg
 @red_squad
 @tier2
 @skipif_ocs_version("<4.11")

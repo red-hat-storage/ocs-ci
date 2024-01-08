@@ -8,6 +8,8 @@ from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.framework.pytest_customization.marks import (
     on_prem_platform_required,
     orange_squad,
+    mcg,
+    rgw,
 )
 
 log = logging.getLogger(__name__)
@@ -45,12 +47,14 @@ class TestScaleOCBCreation(E2ETest):
                 *["noobaa-core", constants.NOOBAA_SC],
                 marks=[
                     pytest.mark.polarion_id("OCS-2645"),
+                    mcg,
                 ],
             ),
             pytest.param(
                 *["noobaa-db", constants.NOOBAA_SC],
                 marks=[
                     pytest.mark.polarion_id("OCS-2646"),
+                    mcg,
                 ],
             ),
             pytest.param(
@@ -58,6 +62,7 @@ class TestScaleOCBCreation(E2ETest):
                 marks=[
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-2647"),
+                    rgw,
                 ],
             ),
             pytest.param(
@@ -65,6 +70,7 @@ class TestScaleOCBCreation(E2ETest):
                 marks=[
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-2648"),
+                    rgw,
                 ],
             ),
         ],
