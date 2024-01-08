@@ -2434,3 +2434,6 @@ OPERATION_STOP = "stop"
 OPERATION_START = "start"
 OPERATION_RESTART = "restart"
 OPERATION_TERMINATE = "terminate"
+
+# HCI Bare Metal platform
+HCI_BAREMETAL_DEFAULT_REGION = "us-east"
