@@ -3,6 +3,7 @@ Tests for Namespace resources and buckets by using RPC calls only.
 Most of these tests are valid only for OCS version lesser than 4.7
 because in later versions are for Namespace bucket creation used CRDs.
 """
+
 import logging
 
 import pytest
@@ -18,7 +19,11 @@ from ocs_ci.framework.testlib import (
     tier4a,
 )
 from ocs_ci.ocs.bucket_utils import sync_object_directory, verify_s3_object_integrity
-from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_aws_creds_are_missing,
+    red_squad,
+    mcg,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -27,6 +32,8 @@ from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
+@mcg
+@red_squad
 @skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")

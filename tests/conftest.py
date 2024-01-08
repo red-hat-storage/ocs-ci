@@ -45,6 +45,7 @@ from ocs_ci.ocs.exceptions import (
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
     ResourceNotDeleted,
+    MissingDecoratorError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -181,7 +182,68 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-def pytest_collection_modifyitems(session, items):
+def verify_test_decorators_requirements(items):
+    """
+    Verify that all tests collected are decorated with a squad marker
+
+    Args:
+        items: list of collected tests
+
+    """
+    items_without_squad_marker = {}
+    red_no_mcg_or_rgw_items = {}
+    for item in items:
+        base_dir = os.path.join(constants.TOP_DIR, "tests")
+        ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
+        if item.fspath.strpath.startswith(base_dir):
+            item_markers = [marker.name for marker in item.iter_markers()]
+            if any(marker in item_markers for marker in ignored_markers):
+                log.debug(
+                    "Ignoring test case %s as it has a marker in the ignore list",
+                    item.name,
+                )
+
+            # Verify tests are decorated with the correct squad owner
+            elif not any(["_squad" in marker for marker in item_markers]):
+                log.debug("%s is missing a squad owner marker", item.name)
+                items_without_squad_marker.update({item.name: item.fspath.strpath})
+
+            # Verify red squad tests are decorated with either @mcg or @rgw
+            elif (
+                "red_squad" in item_markers
+                and "mcg" not in item_markers
+                and "rgw" not in item_markers
+            ):
+                log.debug("%s is a red_squad test without @mcg or @rgw", item.name)
+                red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
+
+    err_msg = ""
+    if items_without_squad_marker:
+        err_msg += f"""
+Missing squad decorator for the following test items: {json.dumps(items_without_squad_marker, indent=4)}
+
+Tests are required to be decorated with their squad owner. Please add the tests respective owner.
+
+For example:
+
+    @magenta_squad
+    def test_name():
+
+Test owner marks can be imported from `ocs_ci.framework.pytest_customization.marks`
+
+            """
+    if red_no_mcg_or_rgw_items:
+        err_msg += f"""
+The following tests are missing either the @mcg or @rgw decorators: {json.dumps(red_no_mcg_or_rgw_items, indent=4)}
+
+Red squad tests are required to be decorated with either @mcg or @rgw. Please add either depending on the tests's focus.
+
+                """
+    if err_msg:
+        raise MissingDecoratorError(err_msg)
+
+
+def pytest_collection_modifyitems(session, pytest_config, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
@@ -195,6 +257,9 @@ def pytest_collection_modifyitems(session, items):
     teardown = config.RUN["cli_params"].get("teardown")
     deploy = config.RUN["cli_params"].get("deploy")
     skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+
+    if pytest_config.option.collectonly:
+        verify_test_decorators_requirements(items)
 
     # Add squad markers to each test item based on filepath
     for item in items:
@@ -1114,9 +1179,11 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment_config or deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=constants.DEPLOYMENTCONFIG
-                if deployment_config
-                else constants.DEPLOYMENT,
+                kind=(
+                    constants.DEPLOYMENTCONFIG
+                    if deployment_config
+                    else constants.DEPLOYMENT
+                ),
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)

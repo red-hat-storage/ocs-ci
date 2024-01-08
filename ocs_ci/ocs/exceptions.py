@@ -635,5 +635,21 @@ class ReturnedEmptyResponseException(Exception):
     pass
 
 
+class MissingDecoratorError(Exception):
+    pass
+
+
+class PDBNotCreatedException(Exception):
+    pass
+
+
+class UnableUpgradeConnectionException(Exception):
+    pass
+
+
+class NoThreadingLockUsedError(Exception):
+    pass
+
+
 class VSLMNotFoundException(Exception):
     pass
