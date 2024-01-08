@@ -35,6 +35,7 @@ extensions = [
     "sphinx.ext.coverage",
     "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
+    "myst_parser",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -71,12 +72,6 @@ html_static_path = ["_static"]
 
 # https://github.com/readthedocs/readthedocs.org/issues/2569
 master_doc = "index"
-
-# Add support for MD files:
-# https://www.sphinx-doc.org/en/1.6/markdown.html
-source_parsers = {
-    ".md": "recommonmark.parser.CommonMarkParser",
-}
 source_suffix = [".rst", ".md"]
 
 

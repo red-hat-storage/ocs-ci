@@ -1,4 +1,4 @@
-## How to use alternative mirrors/repositories for OCP installer/client download
+# How to use alternative mirrors/repositories for OCP installer/client download
 
 By default, we pull the OCP installer and client from `https://openshift-release-artifacts.apps.ci.l2s4.p1.openshiftapps.com/`.
 Using a combination of the OCP version and OS type we construct the full path to the
