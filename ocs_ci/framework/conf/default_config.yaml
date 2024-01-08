@@ -136,6 +136,7 @@ REPORTING:
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
   rp_client_log_level: "ERROR"
+  log_path_message: ""
 
 # This is the default information about environment.
 ENV_DATA:

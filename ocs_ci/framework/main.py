@@ -103,6 +103,9 @@ def process_ocsci_conf(arguments):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--ocsci-conf", action="append", default=[])
     parser.add_argument(
+        "--run-id", type=int, help="Number representing unique ID of the execution."
+    )
+    parser.add_argument(
         "--ocs-version",
         action="store",
         choices=[
@@ -167,8 +170,10 @@ def process_ocsci_conf(arguments):
         load_config(args.ocsci_conf)
     if args.flexy_env_file:
         framework.config.ENV_DATA["flexy_env_file"] = args.flexy_env_file
-
-    framework.config.RUN["run_id"] = int(time.time())
+    if not args.run_id:
+        framework.config.RUN["run_id"] = int(time.time())
+    else:
+        framework.config.RUN["run_id"] = args.run_id
     bin_dir = framework.config.RUN.get("bin_dir")
     if bin_dir:
         framework.config.RUN["bin_dir"] = os.path.abspath(
@@ -282,8 +287,6 @@ def main(argv=None):
     init_ocsci_conf(arguments)
     for i in range(framework.config.nclusters):
         framework.config.switch_ctx(i)
-        pytest_logs_dir = utils.ocsci_log_path()
-        utils.create_directory_path(framework.config.RUN["log_dir"])
     arguments.extend(
         [
             "-p",
@@ -292,8 +295,6 @@ def main(argv=None):
             "ocs_ci.framework.pytest_customization.marks",
             "-p",
             "ocs_ci.framework.pytest_customization.reports",
-            "--logger-logsdir",
-            pytest_logs_dir,
         ]
     )
     return pytest.main(arguments)

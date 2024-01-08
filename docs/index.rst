@@ -21,6 +21,7 @@ and functionality using AWS and other supported platforms.
    getting_started.md
    supported_platforms.md
    usage.md
+   logging.md
    upgrade.md
    results.md
    writing_tests.md

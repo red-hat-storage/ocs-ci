@@ -1,6 +1,10 @@
+import logging
 import os
 import pytest
-import logging
+from typing import List
+
+from _pytest.reports import BaseReport
+from _pytest.logging import _LiveLoggingStreamHandler
 from py.xml import html
 from ocs_ci.utility.utils import (
     dump_config_to_file,
@@ -10,9 +14,60 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
+from ocs_ci.utility.logging import (
+    file_logger,
+    console_logger,
+    CustomLoggerFilter,
+    OCSLogFormatter,
+    separator,
+)
 
 
 log = logging.getLogger(__name__)
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """
+    This function is taken and updated from pytest to write to logger instead of
+    console output, to have also same failure/errors summary in the log file.
+    """
+    report_lines = ["\n"]
+
+    def summary_failures(terminalreporter, config, report_lines):
+        if config.option.tbstyle != "no":
+            reports: List[BaseReport] = terminalreporter.getreports("failed")
+            if not reports:
+                return
+            report_lines.append(separator("=", "FAILURES"))
+            for rep in reports:
+                msg = terminalreporter._getfailureheadline(rep)
+                report_lines.append(separator("_", msg))
+                report_lines.append(rep.longreprtext)
+                # add teardown secneario log message
+                rep.when = "teardown"
+
+    def summary_errors(terminalreporter, config, report_lines):
+        if config.option.tbstyle != "no":
+            reports: List[BaseReport] = terminalreporter.getreports("error")
+            if not reports:
+                return
+            report_lines.append(separator("=", "ERRORS"))
+            for rep in terminalreporter.stats["error"]:
+                msg = terminalreporter._getfailureheadline(rep)
+                if rep.when == "collect":
+                    msg = "ERROR collecting " + msg
+                else:
+                    msg = f"ERROR at {rep.when} of {msg}"
+                report_lines.append(separator("_", msg))
+                report_lines.append(rep.longreprtext)
+
+    summary_errors(terminalreporter, config, report_lines)
+    summary_failures(terminalreporter, config, report_lines)
+    console_logger.info(separator("-", "LOGS INFO"))
+    log_path_message = ocsci_config.REPORTING.get("log_path_message")
+    if log_path_message:
+        console_logger.info(log_path_message)
+    file_logger.info("\n".join(report_lines))
 
 
 @pytest.mark.optionalhook
@@ -77,6 +132,11 @@ def pytest_sessionstart(session):
     Prepare results dict
     """
     session.results = dict()
+    handlers = logging.getLogger().handlers
+    for handler in handlers:
+        if isinstance(handler, _LiveLoggingStreamHandler):
+            custom_filter = CustomLoggerFilter()
+            handler.addFilter(custom_filter)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -174,3 +234,41 @@ def pytest_report_teststatus(report, config):
         GV.TIMEREPORT_DICT[report.nodeid]["total"] = round(
             GV.TIMEREPORT_DICT[report.nodeid]["total"] + teardown_duration, 2
         )
+
+
+def pytest_logger_config(logger_config):
+    logger_config.add_loggers([""], stdout_level="info")
+    logger_config.set_log_option_default("")
+    logger_config.split_by_outcome()
+    logger_config.set_formatter_class(OCSLogFormatter)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    test_name = f"TEST NAME: {item.name}"
+    console_logger.info(f"\n{separator(symbol_='-', val=test_name)}")
+    info_text = f"SETUP for {item.name}"
+    console_logger.info(f"{separator(symbol_='-', val=info_text)}")
+
+
+def pytest_fixture_setup(fixturedef, request):
+    console_logger.info(
+        f"Executing {fixturedef.scope} scope fixture: {fixturedef.argname}"
+    )
+
+
+def pytest_fixture_post_finalizer(fixturedef, request):
+    if fixturedef.scope != "session":
+        console_logger.info(
+            f"Finished finalizer from {fixturedef.scope} scope fixture: {fixturedef.argname}"
+        )
+
+
+def pytest_runtest_call(item):
+    info_text = f"CALL for {item.name}"
+    console_logger.info(f"{separator(symbol_='-', val=info_text)}")
+
+
+def pytest_runtest_teardown(item):
+    info_text = f"TEARDOWN for {item.name}"
+    console_logger.info(f"{separator(symbol_='-', val=info_text)}")
