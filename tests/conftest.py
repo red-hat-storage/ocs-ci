@@ -36,7 +36,7 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
 )
-from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet
+from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -6512,6 +6512,81 @@ def dr_workload(request):
             raise ResourceNotDeleted(
                 "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
             )
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def cnv_dr_workload(request):
+    """
+    Deploys CNV based workload for DR setup
+
+    """
+    instances = []
+
+    def factory(
+        num_of_vm_subscription=1,
+        num_of_vm_appset=0,
+    ):
+        """
+        Args:
+            num_of_vm_subscription (int): Number of Subscription type workload to be created
+            num_of_vm_appset (int): Number of  ApplicationSet type workload to be created
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class.
+
+        """
+        total_pvc_count = 0
+
+        for index in range(num_of_vm_subscription):
+            workload_details = ocsci_config.ENV_DATA["dr_cnv_workload_sub"][index]
+            workload = CnvWorkload(
+                workload_type=constants.SUBSCRIPTION,
+                workload_dir=workload_details["workload_dir"],
+                vm_name=workload_details["vm_name"],
+                workload_name=workload_details["name"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        for index in range(num_of_vm_appset):
+            workload_details = ocsci_config.ENV_DATA["dr_cnv_workload_appset"][index]
+            workload = CnvWorkload(
+                workload_type=constants.APPLICATION_SET,
+                workload_dir=workload_details["workload_dir"],
+                vm_name=workload_details["vm_name"],
+                workload_name=workload_details["name"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        return instances
+
+    def teardown():
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
     request.addfinalizer(teardown)
     return factory

@@ -688,6 +688,25 @@ def wait_for_all_resources_deletion(
             sample.wait_for_func_value(0)
 
 
+def wait_for_cnv_workload(
+    vm_name, namespace, phase=constants.STATUS_RUNNING, timeout=600
+):
+    """
+    Wait for VM to reach a phase
+
+    Args:
+        vm_name (str): Name of the VM
+        namespace (str): Namespace of the vm workload
+        phase (str): Phase of the vm resource to wait for. example: Running, Stopped
+        timeout (int): time in seconds to wait for resource deletion
+
+    """
+    logger.info(f"Wait for VMs to reach {phase} state")
+    vm_obj = ocp.OCP(kind="vmi", resource_name=vm_name, namespace=namespace)
+    vm_obj._has_phase = True
+    vm_obj.wait_for_phase(phase=constants.STATUS_RUNNING, timeout=timeout)
+
+
 def wait_for_replication_destinations_creation(rep_dest_count, namespace, timeout=900):
     """
     Wait for ReplicationDestination resources to be created
