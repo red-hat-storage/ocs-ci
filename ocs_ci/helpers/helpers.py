@@ -4397,3 +4397,24 @@ def verify_pvc_size(pod_obj, expected_size):
             f"Checking again."
         )
     return False
+
+
+def check_selinux_relabeling(pod_obj):
+    """
+    Check SeLinux Relabeling is set to false.
+
+    Args:
+        pod_obj (Pod object): App pod
+
+    """
+    # Get the node on which pod is running
+    node_name = pod.get_pod_node(pod_obj=pod_obj).name
+
+    # Check SeLinux Relabeling is set to false
+    logger.info("checking for crictl logs")
+    oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    cmd1 = "crictl inspect $(crictl ps --name perf -q)"
+    output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
+    key = '"selinuxRelabel": false'
+    assert key in output, f"{key} is not present in inspect logs"
+    logger.info(f"{key} is present in inspect logs of application pod running node")

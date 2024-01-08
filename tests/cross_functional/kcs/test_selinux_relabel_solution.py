@@ -8,6 +8,7 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import check_selinux_relabeling
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.exceptions import PodNotCreated, CommandFailed
@@ -190,27 +191,6 @@ class TestSelinuxrelabel(E2ETest):
 
         return None
 
-    def check_selinux_relabeling(self, pod_obj):
-        """
-        Check SeLinux Relabeling is set to false.
-
-        Args:
-            pod_obj (Pod object): App pod
-
-        """
-        # Get the node on which application pod is running
-        self.pod_obj = self.get_app_pod_obj()
-        node_name = res_pod.get_pod_node(pod_obj=pod_obj).name
-
-        # Check SeLinux Relabeling is set to false
-        log.info("checking for crictl logs")
-        oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
-        cmd1 = "crictl inspect $(crictl ps --name perf -q)"
-        output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
-        key = '"selinuxRelabel": false'
-        assert key in output, f"{key} is not present in inspect logs"
-        log.info(f"{key} is present in inspect logs of application pod running node")
-
     def get_random_files(self, pod_obj):
         """
         Get random files list.
@@ -328,7 +308,7 @@ class TestSelinuxrelabel(E2ETest):
         ), f"Pod {self.pod_obj.name} didn't reach to running state"
 
         # Check SeLinux Relabeling is set to false
-        self.check_selinux_relabeling(pod_obj=self.pod_obj)
+        check_selinux_relabeling(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
 
         # Restart pod after applying fix
@@ -456,5 +436,5 @@ class TestSelinuxrelabel(E2ETest):
         ), f"Data integrity failed after for PVC: {self.pvc_obj.name}"
 
         # Check SeLinux Relabeling is set to false
-        self.check_selinux_relabeling(pod_obj=self.pod_obj)
+        check_selinux_relabeling(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is skipped for the pvc {self.pvc_obj.name}")
