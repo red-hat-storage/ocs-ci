@@ -67,6 +67,8 @@ class CephCluster(object):
     This class has depiction of ceph cluster. Contains references to
     pod objects which represents ceph cluster entities.
 
+    Parameters
+    ----------
     Attributes:
         pods (list) : A list of  ceph cluster related pods
         cluster_name (str): Name of ceph cluster

@@ -1,7 +1,7 @@
 :orphan:
 
 =========================
- Common Usecases and FAQ
+ Common Use cases and FAQ
 =========================
 
 This directory contains doc files with description of common use cases or

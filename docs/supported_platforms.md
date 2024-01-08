@@ -1,4 +1,7 @@
-# Supported platforms
+.. _supported-platform:
+
+Supported platforms
+=====================
 
 ## AWS
 
@@ -23,14 +26,15 @@ TODO document this platform
 File `osServicePrincipal.json` in `~/.azure/` directory with proper credentials
 is required. The file looks like this:
 
-```json
-{
-  "subscriptionId": "...",
-  "clientId": "...",
-  "clientSecret": "...",
-  "tenantId": "..."
-}
-```
+.. code-block:: json
+
+    {
+      "subscriptionId": "...",
+      "clientId": "...",
+      "clientSecret": "...",
+      "tenantId": "..."
+    }
+
 
 To deploy ocs-ci cluster on Azure platform using one of OCS QE subscriptions,
 you need to specify one deployment config file from `conf/deployment/azure/`
@@ -57,6 +61,7 @@ For IPI deployments, please see the IPI section below.
   * infrastructure-service
   * kubernetes-service
 * Provide credential config file + credential config file described bellow to
+
 `run-ci` command via `--ocsci-conf` parameters.
 
 ### Supported providers
@@ -67,11 +72,13 @@ For IPI deployments, please see the IPI section below.
 
 ### Configuration files
 
-* `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml` - this file can be used for deployment
-  on IBM Cloud - this config is for VPC gen 2 provider.
+* `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster.yaml`
+    - this file can be used for deployment on IBM Cloud
+    - this config is for VPC gen 2 provider.
 
-* `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster_without_cos.yaml` - this file can be used for deployment
-  on IBM Cloud - this config is for VPC gen 2 provider without COS secret created.
+* `conf/deployment/ibmcloud/ibm_cloud_vpc_cluster_without_cos.yaml`
+    - this file can be used for deployment on IBM Cloud
+    - this config is for VPC gen 2 provider without COS secret created.
 
 You will need to create also credential file with secret data which should
 never be shared publicly in this repository.
@@ -80,22 +87,23 @@ All needed values are mentioned as placeholders and commented out in
 
 But an example is pasted also here:
 
-```yaml
-# This is the basic config for IBM cloud usage
----
-ENV_DATA:
-  vpc_id: VPC ID PLACEHOLDER
-  subnet_id: SUBNET ID PLACEHOLDER
-  cos_instance: COS INSTANCE PLACEHOLDER
-AUTH:
-  ibmcloud:
-    api_key: IBM CLOUD API KEY PLACEHOLDER
-    account_id: ACCOUNT ID PLACEHOLDER
-    ibm_cos_access_key_id: KEY PLACEHOLDER
-    ibm_cos_secret_access_key: SECRET PLACEHOLDER
-DEPLOYMENT:
-  ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
-```
+.. code-block:: yaml
+
+    # This is the basic config for IBM cloud usage
+    ---
+    ENV_DATA:
+      vpc_id: VPC ID PLACEHOLDER
+      subnet_id: SUBNET ID PLACEHOLDER
+      cos_instance: COS INSTANCE PLACEHOLDER
+    AUTH:
+      ibmcloud:
+        api_key: IBM CLOUD API KEY PLACEHOLDER
+        account_id: ACCOUNT ID PLACEHOLDER
+        ibm_cos_access_key_id: KEY PLACEHOLDER
+        ibm_cos_secret_access_key: SECRET PLACEHOLDER
+    DEPLOYMENT:
+      ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
+
 
 ### How to get API key
 
@@ -109,16 +117,16 @@ Command:
 
 You should get this info as output where you can get the key:
 
-```
-Please preserve the API key! It cannot be retrieved after it's created.
+.. code-block:: console
 
-ID            ApiKey-ID
-Name          my-api-key
-Description
-Created At    2020-10-19T15:05+0000
-API Key       OUR_KEY
-Locked        false
-```
+    Please preserve the API key! It cannot be retrieved after it's created.
+    ID            ApiKey-ID
+    Name          my-api-key
+    Description
+    Created At    2020-10-19T15:05+0000
+    API Key       OUR_KEY
+    Locked        false
+
 
 ### How to get COS keys
 
@@ -137,12 +145,13 @@ IPI deployments to IBM Cloud are supported for ODF versions >= 4.10.
 2. ibmcloud ipi config file (e.g. `conf/deployment/ibmcloud/ipi_3az_rhcos_3m_3w.yaml`)
 3. ibmcloud account data. This data should appear as follows in the ocsci config:
 
-```
-#AUTH:
-#  ibmcloud:
-#    account_id: ACCOUNT ID PLACEHOLDER
-#    api_key: IBM CLOUD API KEY PLACEHOLDER
-```
+.. code-block:: yaml
+
+    #AUTH:
+    #  ibmcloud:
+    #    account_id: ACCOUNT ID PLACEHOLDER
+    #    api_key: IBM CLOUD API KEY PLACEHOLDER
+
 
 #### Managed
 
@@ -220,25 +229,27 @@ This platform supports deployment of OCP cluster + OCS cluster on top of it.
 ### Requirements
 
 * Provide config file + credential config file described bellow to
+
 `run-ci` command via `--ocsci-conf` parameters.
 
 ### Configuration files
 
-* `conf/ocsci/openshift_dedicated.yaml` - this file can be used for deployment
-    on Openshift Dedicated.
+* `conf/ocsci/openshift_dedicated.yaml`
+    - this file can be used for deployment on Openshift Dedicated.
 
 You will need to create also credential file with secret data which should
 never be shared publicly in this repository.
 All needed values are mentioned as placeholders and commented out in
 `conf/ocsci/openshift_dedicated.yaml` and also mentioned below.
 
-```yaml
-# This is the basic config for Openshift Dedicated usage
----
-AUTH:
- openshiftdedicated:
-   token: OCM TOKEN KEY PLACEHOLDER
-```
+.. code-block:: yaml
+
+    # This is the basic config for Openshift Dedicated usage
+    ---
+    AUTH:
+     openshiftdedicated:
+       token: OCM TOKEN KEY PLACEHOLDER
+
 
 ### Deployment types
 
@@ -259,6 +270,7 @@ This platform supports deployment of OCP cluster + OCS cluster on top of it.
 ### Requirements
 
 * Provide config file + credential config file described bellow to
+
 `run-ci` command via `--ocsci-conf` parameters.
 
 ### Configuration files
@@ -270,14 +282,15 @@ never be shared publicly in this repository.
 All needed values are mentioned as placeholders and commented out in
 `conf/ocsci/rosa.yaml` and also mentioned below.
 
-```yaml
-# This is the basic config for OCM, user needs to login to OCM before ROSA can
-# be used
----
-AUTH:
- openshiftdedicated:
-   token: OCM TOKEN KEY PLACEHOLDER
-```
+.. code-block:: yaml
+
+    # This is the basic config for OCM, user needs to login to OCM before ROSA can
+    # be used
+
+    AUTH:
+     openshiftdedicated:
+       token: OCM TOKEN KEY PLACEHOLDER
+
 
 ### Deployment types
 

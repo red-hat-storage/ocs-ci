@@ -1,4 +1,7 @@
-# Tracking of workarounds
+.. _workarounds:
+
+Tracking of workarounds
+=========================
 
 By *a workaround* we mean any change in test or other qe code which overcomes a
 bug in the product we are testing. Sometimes it's necessary to overcome a

@@ -1,6 +1,9 @@
-# Code review/contribution best practices in OCS-CI
+.. _code-review:
 
-**Lets use the following guidelines for Code Reviews and contribution:**
+Code review/contribution best practices in OCS-CI
+=================================================
+
+**Let's use the following guidelines for Code Reviews and contribution:**
 
 * Create own fork of the repository and submit PR from your fork.
 * If a github issue describing the changes you are making does not exist be sure to
@@ -31,7 +34,7 @@
 * Request review from a few of project maintainers or related folks.
     Currently we are using the CODEOWNERS file which should auto assign
     [top level reviewers](https://github.com/orgs/red-hat-storage/teams/top-level-reviewers/members).
-     If you feel ownership of some package/module, please add yourself to this
+    If you feel ownership of some package/module, please add yourself to this
     file [CODEOWNERS](https://github.com/red-hat-storage/ocs-ci/tree/master/.github/CODEOWNERS) following conventions from
     comments or [documentation](https://help.github.com/en/articles/about-code-owners).
 * Thumbs up, LGTM indicates that change looks OK, but change needs to be

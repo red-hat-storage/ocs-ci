@@ -1,4 +1,7 @@
+.. _results:
+
 # Results
+=========
 
 ## Report Portal
 

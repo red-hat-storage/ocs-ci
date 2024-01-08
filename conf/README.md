@@ -1,4 +1,7 @@
-# Config directory
+.. _conf-readme:
+
+Config directory
+==================
 
 In this directory we store all the configuration for cluster and OCSCI config
 files.
@@ -354,9 +357,10 @@ Configurations specific to disable/enable OCS components
 
 ## Example of accessing config/default data
 
-```python
-from ocs_ci.framework import config
-from ocs_ci.ocs import defaults
+.. code-block:: python
+
+    from ocs_ci.framework import config
+    from ocs_ci.ocs import defaults
 
 # From you code you can access those data like
 
@@ -366,7 +370,7 @@ function_that_uses_namespace(namespace=config.ENV_DATA['cluster_namespace'])
 
 # Defaults data you can access like in this example:
 print(f"Printing some default data like API version: {defaults.API_VERSION}")
-```
+
 
 ## Priority of loading configs:
 

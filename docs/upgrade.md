@@ -1,4 +1,7 @@
-# Upgrade
+.. _upgrade:
+
+Upgrade
+=========
 
 Upgrade can be performed to the:
 
@@ -37,22 +40,24 @@ decorator used by `pytest-ordering` plugin to properly order the tests.
 
 To execute the upgrade you can use this command:
 
-```bash
-run-ci tests/
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir \
-    -m upgrade
-```
+.. code-block:: console
+
+    run-ci tests/
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir \
+        -m upgrade
+
 
 If you would like to trigger also pre/post upgrade tests run with following
 markers:
 
-```bash
-run-ci tests/
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir \
-    -m 'pre_upgrade or upgrade or post_upgrade'
-```
+.. code-block:: console
+
+    run-ci tests/
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir \
+        -m 'pre_upgrade or upgrade or post_upgrade'
+
 
 In the case you would like to upgrade just to the one following DS build and not
 to the latest one, please pass `conf/ocsci/upgrade_to_next_build.yaml`
@@ -68,30 +73,33 @@ For upgrade between versions like 4.2 to 4.3 you need to:
 
 Example:
 
-```bash
-run-ci tests/
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir \
-    -m 'pre_upgrade or upgrade or post_upgrade' --ocs-version 4.2 --upgrade-ocs-version 4.3
-```
+.. code-block:: console
+
+    run-ci tests/
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir \
+        -m 'pre_upgrade or upgrade or post_upgrade' --ocs-version 4.2 --upgrade-ocs-version 4.3
+
 
 Upgrade to specific build via config file:
 
-```yaml
-UPGRADE:
-  upgrade_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.3"
-```
+.. code-block:: yaml
+
+    UPGRADE:
+      upgrade_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.3"
+
 
 Upgrade to specific build via cli option:
 
-```bash
-run-ci tests/
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir \
-    -m 'pre_upgrade or upgrade or post_upgrade' --ocs-version 4.2 --upgrade-ocs-version 4.3 \
-    --upgrade-ocs-registry-image 'quay.io/rhceph-dev/ocs-olm-operator:latest-4.3'
+.. code-block:: console
 
-```
+    run-ci tests/
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir \
+        -m 'pre_upgrade or upgrade or post_upgrade' --ocs-version 4.2 --upgrade-ocs-version 4.3 \
+        --upgrade-ocs-registry-image 'quay.io/rhceph-dev/ocs-olm-operator:latest-4.3'
+
+
 
 ## Live upgrade
 

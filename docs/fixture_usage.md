@@ -1,4 +1,7 @@
-# Guidelines for fixtures usage in OCS-CI
+.. _fixture_usage:
+
+Guidelines for fixtures usage in OCS-CI
+=========================================
 
 ## Basic information
 

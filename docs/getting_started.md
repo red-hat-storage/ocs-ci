@@ -1,6 +1,7 @@
+.. _getting-started:
 
-
-# Getting Started
+Getting Started
+=================
 
 ## Prerequisites
 
@@ -31,11 +32,12 @@ Along with AWS UPI prerequisites we need following
 1. openshift-dev.pem needs to be available to ocs-ci
 2. provide authentication credentials for mirror.openshift.com in `auth.yaml`:
 
-```yaml
-mirror_openshift:
-  user: "USERNAME"
-  password: "PASSWORD"
-```
+.. code-block:: yaml
+
+    mirror_openshift:
+      user: "USERNAME"
+      password: "PASSWORD"
+
 
 #### vSphere UPI
 For vSphere UPI deployments, RHCOS templates must be present on Cluster in Datacenter
@@ -95,15 +97,16 @@ necessary dependencies
 WA : `pip install setuptools==65.5.0`
 
 Expected Error:
-```
-  from . import ccompiler
-  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/ccompiler.py", line 20, in <module>
-    from numpy.distutils import log
-  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/log.py", line 4, in <module>
-    from distutils.log import Log as old_Log
-  ImportError: cannot import name 'Log' from 'distutils.log' /
-    (ocs-ci/venv/lib/python3.8/site-packages/setuptools/_distutils/log.py)
-```
+.. code-block:: python
+
+    from . import ccompiler
+      File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/ccompiler.py", line 20, in <module>
+        from numpy.distutils import log
+      File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/log.py", line 4, in <module>
+        from distutils.log import Log as old_Log
+      ImportError: cannot import name 'Log' from 'distutils.log' /
+        (ocs-ci/venv/lib/python3.8/site-packages/setuptools/_distutils/log.py)
+
 5. Install requirements with `pip install -r requirements.txt`
 6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
 
@@ -164,6 +167,7 @@ to obtain credentials for this brew registry you will need to do the following:
    `~/.docker/config.json`. Grab the auth section for `brew.registry.redhat.com`, it
    will look something like this
 
+.. code-block:: json
 
     "brew.registry.redhat.io" : {
       "auth" : "TOKEN"
@@ -184,9 +188,10 @@ need to add yet another registry auth to the auths section of your pull-secret.
 Ask people on ocs-qe mailing list or chat room if you don't know where to find
 the TOKEN.
 
-```json
-{"quay.io/rhceph-dev": { "auth": "TOKEN"}}
-```
+.. code-block:: json
+
+    {"quay.io/rhceph-dev": { "auth": "TOKEN"}}
+
 
 ### SSH key
 
@@ -235,10 +240,11 @@ or chat room if you don't know where to find the access token.
 
 To enable ocs-ci to use this token, add the following to your `auth.yaml`:
 
-```yaml
-quay:
-  access_token: 'YOUR_TOKEN'
-```
+.. code-block:: yaml
+
+    quay:
+      access_token: 'YOUR_TOKEN'
+
 
 #### GitHub
 
@@ -249,11 +255,11 @@ To avoid API rate limit exceeded errors, you can provide github authentication
 credentials (username and token) obtained on [Personal access tokens](https://github.com/settings/tokens)
 page (Settings -> Developer settings -> Personal access tokens).
 
-```yaml
-github:
-  username: "GITHUB_USERNAME"
-  token: "GITHUB_TOKEN"
-```
+.. code-block:: yaml
+
+    github:
+      username: "GITHUB_USERNAME"
+      token: "GITHUB_TOKEN"
 
 ## Tests
 

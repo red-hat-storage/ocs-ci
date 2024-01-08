@@ -1,4 +1,7 @@
-# Stable Branch
+.. _stable-branch:
+
+Stable Branch
+===============
 
 ## Overview
 The OCS-CI team has adopted the use of a stable branch for ocs-ci. The intention
@@ -8,7 +11,7 @@ to our stable branch and can be used for production testing or any other testing
 requires the use of our stable branch.
 
 The initial proposal, discussion, and implementation details can be found in a
-[shared google doc](https://docs.google.com/document/d/15rqGVDEWFTFsg6FOOBeWUYYrwBa9wi0rZtdfOYi_-zg/edit).
+[shared google doc](https://docs.google.com/document/d/1qY8t5cSIeLauGFkc5JrBTj0fcryxxCxPeYJsltT7W_8/edit).
 Note this document is only available to Red Hat internal accounts.
 
 ## Definition of Stable

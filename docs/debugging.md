@@ -1,4 +1,7 @@
-# Debugging
+.. _debugging:
+
+Debugging
+===========
 
 In this document you will find useful information for the debugging.
 
@@ -17,6 +20,7 @@ more details.
     ```
 
     > openshift-ssh-bastion is used by default
+
 1) run the following command for deploy bastion pod:
 
     ```console

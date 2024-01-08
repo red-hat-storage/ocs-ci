@@ -1,4 +1,7 @@
-# Coding guidelines for OCS-CI project
+.. _coding-guidelines:
+
+Coding guidelines for OCS-CI project
+======================================
 
 Let's follow the following guidelines for the Core Libraries and Test Scripts
 
@@ -16,7 +19,7 @@ Let's follow the following guidelines for the Core Libraries and Test Scripts
     reside in utils and/or should be carefully reviewed to check if
     they can actually be methods.
 * test_scripts will reside in the `tests/` folder under the correct subsection
- and will follow [pytest](https://docs.pytest.org/en/latest/) conventions.
+    and will follow [pytest](https://docs.pytest.org/en/latest/) conventions.
 * Do not use backslashes in the code for line breaker!
 * Line length should be maximum 79 characters!
 * Try to follow this convention for brackets and indentation like in example
@@ -30,75 +33,80 @@ Let's follow the following guidelines for the Core Libraries and Test Scripts
   black will take any action on the code (if reformatting is necessary) then the PR check
   will fail.
 
-```python
-def function(
-    parameter1, parameter2, parameter3, parameter4, parameter5, parameter6,
-    parameter7='Default value of param7'
-):
-    print(
-        "Hello, I am long string which can be easily split like this"
-        "without using backslashes!"
-    )
-    my_dict = {
-        'key1': "Value is long and it looks better to have new line here",
-        'another_key': 'Another value',  # please keep comma at the end!
-    }
-    if value >= 10:
-        print("Doing something here")
-        my_list = [
-            variable for variable in range(100) if variable % 2 == 0 if
-            variable % 5 == 0
-        ]
+.. code-block:: python
 
-        # If line can fit in 79 chares do it as one liner (No need to split)!
-        my_list_fit_one_line = [x for x in range(10)]
-```
+    def function(
+        parameter1, parameter2, parameter3, parameter4, parameter5, parameter6,
+        parameter7='Default value of param7'
+    ):
+        print(
+            "Hello, I am long string which can be easily split like this"
+            "without using backslashes!"
+        )
+        my_dict = {
+            'key1': "Value is long and it looks better to have new line here",
+            'another_key': 'Another value',  # please keep comma at the end!
+        }
+        if value >= 10:
+            print("Doing something here")
+            my_list = [
+                variable for variable in range(100) if variable % 2 == 0 if
+                variable % 5 == 0
+            ]
+
+            # If line can fit in 79 chares do it as one liner (No need to split)!
+            my_list_fit_one_line = [x for x in range(10)]
+
 
 * **String formatting**: use new style of string formatting:
 
-```python
-print("These are new style of Python formatting:")
-"My string {}".format("value")
-"My string {var_name}".format(var_name="value")
-f"This is the best and preferred way {var_name}"  # from Python 3.6
+.. code-block:: python
 
-print("This is old style of formatting and should be avoided:")
-"My string %s" % variable
-```
+    print("These are new style of Python formatting:")
+    "My string {}".format("value")
+    "My string {var_name}".format(var_name="value")
+    f"This is the best and preferred way {var_name}"  # from Python 3.6
+
+    print("This is old style of formatting and should be avoided:")
+    "My string %s" % variable
+
 
 * **Docstring**:
 * Use capital letters properly
 * Every docstring should describing easily what the function/class/etc. do
-* The description should be as follow:
-```python
-def my_example(arg1, arg2=10):
-    """
-    This function is for showing how a proper docstring should
-    look like
+* The description should be as follows:
 
-    Args:
-        arg1 (<type of argument>): Description of what this argument is and if
-            the line is too long we will indent according to this (4 spaces)
-        arg2 (int): This argument is an integer (default: 10)
+.. code-block:: python
 
-    Raises:
-        ExampleException: you get it
+    def my_example(arg1, arg2=10):
+        """
+        This function is for showing how a proper docstring should
+        look like
 
-    Returns:
-        bool: description of when returns False and when True.
-            But this can also return anything else like int, str, list, etc.
+        Args:
+            arg1 (<type of argument>): Description of what this argument is and if
+                the line is too long we will indent according to this (4 spaces)
+            arg2 (int): This argument is an integer (default: 10)
 
-    """
-    pass
-```
+        Raises:
+            ExampleException: you get it
+
+        Returns:
+            bool: description of when returns False and when True.
+                But this can also return anything else like int, str, list, etc.
+
+        """
+        pass
+
 
 * **Logging**: let the logger format log message for you:
 
-```python
-logger.info("My message %s", variable)  # No usage of % after string!
-# This is still under consideration. We can set the style of logger
-# format to use {} instead %s which is possible from Python 3.2.
-```
+.. code-block:: python
+
+    logger.info("My message %s", variable)  # No usage of % after string!
+    # This is still under consideration. We can set the style of logger
+    # format to use {} instead %s which is possible from Python 3.2.
+
 
 Here is the [Python documentation](https://docs.python.org/3/howto/logging-cookbook.html#use-of-alternative-formatting-styles)
 for Logger Styles.

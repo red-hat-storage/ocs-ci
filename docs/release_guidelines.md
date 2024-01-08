@@ -1,4 +1,7 @@
-# OCS-CI Release Branches
+.. _release-guidelines:
+
+OCS-CI Release Branches
+=========================
 
 ## Goals
 

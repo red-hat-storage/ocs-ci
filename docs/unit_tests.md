@@ -1,4 +1,7 @@
-# Unit tests
+.. _unit-tests:
+
+Unit tests
+============
 
 We're in the process of writing unit tests for the ocs-ci python modules,
 including our pytest plugins.

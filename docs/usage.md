@@ -1,4 +1,7 @@
-# Usage
+.. _usage:
+
+Usage
+=======
 
 For full usage run: `run-ci --help`
 
@@ -15,18 +18,22 @@ get information on various image version deployed by ocs-ci
   This should be used only when your cluster-dir is accidentally deleted
   `ci-cleanup [-h] --cluster CLUSTER`
   CLUSTER points to cluster tag eg: mycluster-ocs-ci-jlgzn , without additional
-   -master or -worker. This can be found by logging into AWS, Selecting the VM
-   and clicking on Tags.
+  -master or -worker. This can be found by logging into AWS, Selecting the VM
+  and clicking on Tags.
 
 ## vSphere
   This should be used only when your cluster-dir is accidentally deleted
-  ```bash
-  vsphere-cleanup [-h] --cluster-name CLUSTER_NAME --ocsci-conf VSPHERE_CONF
-  ```
+
+  .. code-block:: console
+
+      vsphere-cleanup [-h] --cluster-name CLUSTER_NAME --ocsci-conf VSPHERE_CONF
+
   e.g:
 
-  `vsphere-cleanup --cluster-name mycluster-oct12
-                   --ocsci-conf ~/vSphere-DC-CP_VC1.yaml`
+  .. code-block:: console
+
+      vsphere-cleanup --cluster-name mycluster-oct12
+                       --ocsci-conf ~/vSphere-DC-CP_VC1.yaml
 
 # usage to shutdown AWS nodes when nodes are not in use
   Following cli can be used when you want to shutdown the cluster
@@ -82,7 +89,7 @@ to the pytest.
 
 ### Subcommand:
 * `multicluster <int>` - to be used if multiple clusters needs to be handled by ocs-ci, this subcommand is useful in the
-   DR scenario where multiple cluster contexts needs to be handled by the framework. For more information on the usage check examples section and `run-ci multicluster --help`.
+DR scenario where multiple cluster contexts needs to be handled by the framework. For more information on the usage check examples section and `run-ci multicluster --help`.
 
 
 ### Additional arguments:
@@ -96,6 +103,7 @@ to the pytest.
 * `--ocp-version` - OCP version to be used for deployment. This version will
     be used for load file from conf/ocp_version/ocp-VERSION-config.yaml.
     You can use for example those values:
+
   * `4.2`: for nightly 4.2 OCP build
   * `4.2-ga`: for latest GAed 4.2 OCP build from stable channel
   * `4.2-ga-minus1`: for latest GAed 4.2 build (stable channel) - 1
@@ -131,11 +139,13 @@ to the pytest.
   create configuration file for `pytest_marker_bugzilla` plugin. See the
   [plugin documentation](https://github.com/eanxgeek/pytest_marker_bugzilla)
   or example of `/etc/bugzilla.cfg` file:
-  ```bash
-  [DEFAULT]
-  bugzilla_url = https://bugzilla.redhat.com/xmlrpc.cgi
-  bugzilla_api_key = <API_KEY>
-  ```
+
+.. code-block:: console
+
+      [DEFAULT]
+      bugzilla_url = https://bugzilla.redhat.com/xmlrpc.cgi
+      bugzilla_api_key = <API_KEY>
+
 * `--collect-logs` - to collect OCS logs for failed test cases.
 * `--collect-logs-on-success-run` - Collect must gather logs at the end of the
    execution (also when no failure in the tests)
@@ -172,16 +182,17 @@ that can be used to access an existing cluster.
 
 If you would like to deploy new cluster you can run following command:
 
-```bash
-run-ci -m deployment \
-    --ocsci-conf conf/path_to_config_to_be_used.yaml \
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir \
-    --deploy \
-    tests/
-```
+.. code-block:: console
 
-Of course you can omit `--cluster-name` if you would like to use default
+    run-ci -m deployment \
+        --ocsci-conf conf/path_to_config_to_be_used.yaml \
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir \
+        --deploy \
+        tests/
+
+
+Of course, you can omit `--cluster-name` if you would like to use default
 values.
 
 > **_NOTE:_** You need to specify `tests/` directory as a test path even for
@@ -208,12 +219,14 @@ Change the [vsphere_upi_vars.yaml.example](https://github.com/red-hat-storage/oc
 Check for vsphere_upi_vars.yaml.skeleton(../conf/ocsci/vsphere_upi_vars.yaml.skeleton) for more options.
 
 After filling all the required parameters, run the following command:
-```bash
-run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/ \
-    --deploy
-```
+
+.. code-block:: console
+
+    run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir tests/ \
+        --deploy
+
 
 #### Deployment via UI
 
@@ -225,51 +238,56 @@ At the moment, UI deployment is possible for the following platforms:
 
 #### Running tests on deployed environment
 
-```bash
-run-ci -m "tier1 and manage" \
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/
- ```
+.. code-block:: console
+
+    run-ci -m "tier1 and manage" \
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir tests/
+
 
 #### Running tests on deployed environment and sending reports
 
 If you would like to send the test run results to email you can run
 following command:
-```bash
 
-run-ci tests/ \
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir \
-    --html=report.html --self-contained-html \
-    --email=<emailid>
- ```
+.. code-block:: console
+
+    run-ci tests/ \
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir \
+        --html=report.html --self-contained-html \
+        --email=<emailid>
+
 
 If you want to send reports to multiple email ID's, use comma separated
 email ID's like below
-```bash
 
-run-ci tests/ \
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir \
-    --html=report.html --self-contained-html \
-    --email=<emailid1>,<emailid2>,<emailid3>
- ```
+.. code-block:: console
+
+    run-ci tests/ \
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir \
+        --html=report.html --self-contained-html \
+        --email=<emailid1>,<emailid2>,<emailid3>
+
 
 
 #### Running tests on multicluster environment
 
 If you would like to run multicluster environment tests and deployments, use `multicluster` subcommand for run-ci.
 ###### example 1:
-```bash
-run-ci multicluster 2 \
-    tests/ -m tier1 \
-    --cluster1 \
-    --cluster-name test_cluster1 --cluster-path test_cluster1_path \
-    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
-    --cluster2 \
-    --cluster-name test_cluster2 --cluster-path test_cluster2_path \
-    --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
-```
+
+.. code-block:: console
+
+    run-ci multicluster 2 \
+        tests/ -m tier1 \
+        --cluster1 \
+        --cluster-name test_cluster1 --cluster-path test_cluster1_path \
+        --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
+        --cluster2 \
+        --cluster-name test_cluster2 --cluster-path test_cluster2_path \
+        --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
+
 `multicluster` cluster subcommand is slightly different from usual CLI used in run-ci.
 `multicluster` subcommand should be followed by an integer which indicates how many clusters we want to handle with this run, which
 will be followed by common arguments like pytest directory path, pytest markers, `deploy`, `teardown` etc. All the common options should appear before
@@ -280,15 +298,17 @@ as arguments of `cluster1`.
 
 ###### example 2:
 Passing common arguments to cluster:
-```bash
-run-ci multicluster 2 \
-    tests/ -m tier1 --ocsci-conf common-conf.yaml \
-    --cluster1 --cluster-name test_cluster1 --cluster-path test_cluster1_path \
-    --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
-    --cluster2 \
-    --cluster-name test_cluster2 --cluster-path test_cluster2_path \
-    --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
-```
+
+.. code-block:: console
+
+    run-ci multicluster 2 \
+        tests/ -m tier1 --ocsci-conf common-conf.yaml \
+        --cluster1 --cluster-name test_cluster1 --cluster-path test_cluster1_path \
+        --ocsci-conf /path/to/cluster1_conf1 --ocsci-conf /path/to/cluster1_conf2 \
+        --cluster2 \
+        --cluster-name test_cluster2 --cluster-path test_cluster2_path \
+        --ocsci-conf /path/to/cluster2_conf1 --ocsci-conf /path/to/cluster2_conf2
+
 In the above example `common-conf.yaml` configuration will be applied on both the clusters.
 
 
@@ -304,9 +324,10 @@ the test execution, append the `--log-cluster-utilization` argument to the `run-
 #### Destroy of cluster
 
 If you would like to destroy existing cluster you can run following command:
-```bash
-run-ci -m deployment \
-    --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/ \
-    --teardown
- ```
+
+.. code-block:: console
+
+    run-ci -m deployment \
+        --cluster-name kerberos_ID-ocs-deployment \
+        --cluster-path /home/my_user/my-ocs-dir tests/ \
+        --teardown

@@ -1,4 +1,7 @@
-# Using ocs-ci to deploy OCP cluster without default OCS installation
+.. _deployment-without-ocs:
+
+Using ocs-ci to deploy OCP cluster without default OCS installation
+=====================================================================
 
 When you need to perform OCS installation manually (eg. to verify installation
 docs or to use not yet automated deployment options), but still would like to

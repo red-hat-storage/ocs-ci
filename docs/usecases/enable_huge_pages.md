@@ -1,4 +1,7 @@
-# ENABLE HUGE PAGES
+.. _enable-huge-pages:
+
+ENABLE HUGE PAGES
+=================
 
 If you need to enable Huge Pages please use this config file:
 

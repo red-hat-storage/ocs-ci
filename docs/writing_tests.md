@@ -1,4 +1,7 @@
-# Writing tests
+.. _writing-test:
+
+Writing tests
+===============
 
 In this documentation we will inform you about basic structure where implement
 code and some structure and objects you can use.
@@ -22,20 +25,23 @@ can import directly from `ocsci.testlib` module with this statement:
 You can mark test with specific bugzilla decorator as you can see in following
 example:
 :
-```python
-import pytest
 
-from ocs_ci.framework.testlib import bugzilla, ManageTest
+.. code-block:: python
 
-@bugzilla('1726266')
-class TestPvCreation(ManageTest):
-    pass
+    import pytest
+
+    from ocs_ci.framework.testlib import bugzilla, ManageTest
+
+    @bugzilla('1726266')
+    class TestPvCreation(ManageTest):
+        pass
 
 
 # or you can directly use pytest.mark like:
-@pytest.mark.bugzilla('bugzilla_id')  # where bugzilla_id can be e.g. 1726266
-    pass
-```
+.. code-block:: python
+
+    @pytest.mark.bugzilla('bugzilla_id')  # where bugzilla_id can be e.g. 1726266
+        pass
 
 For more details what else is possible with `pytest_marker_bugzilla` plugin
 look at the
@@ -48,20 +54,24 @@ You can skip a test which is not applicable for specific ocs version using
 ```@skipif_ocs_version([expression1, expression2, ...])``` decorator.
 
 example:
-```python
-from ocs_ci.framework.testlib import skipif_ocs_version
 
-@skipif_ocs_version(['>4.1','<4.3'])
-def test_fio_workload():
-    pass
-```
+.. code-block:: python
+
+    from ocs_ci.framework.testlib import skipif_ocs_version
+
+    @skipif_ocs_version(['>4.1','<4.3'])
+    def test_fio_workload():
+        pass
+
 
 You can also specify a single expression in a string like:
-```python
-@skipif_ocs_version('<4.3')
-def test_fio_workload():
-    pass
-```
+
+.. code-block:: python
+
+    @skipif_ocs_version('<4.3')
+    def test_fio_workload():
+        pass
+
 
 ## Base test classes for teams
 
@@ -79,7 +89,7 @@ to separate them into their own modules.
 
 If your test requires one of these you can easily import it.
 If you intend to implement a new one (generally if more than one test will
-utilize it), please consider whether or not that value might change between
+utilize it), please consider whether that value might change between
 different test executions. If it's something like a filepath (unchanging),
 it's probably a constant. If tests may overwrite the value, it's most likely a
 default.
@@ -95,5 +105,5 @@ It's documented [here](./fixture_usage.md).
 
 ## Other notes
 
-Of course you can import in one line both team base class and marker with
+Of course, you can import in one line both team base class and marker with
 statement: `from ocsci.testlib import manage, tier1`
