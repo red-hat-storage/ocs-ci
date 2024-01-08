@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     azure_platform_required,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -18,6 +19,7 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @tier1
 @azure_platform_required

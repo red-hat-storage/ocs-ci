@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_mcg_only,
     red_squad,
+    mcg,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -32,6 +33,7 @@ def setup(request):
     request.cls.cl_obj = cluster.CephCluster()
 
 
+@mcg
 @red_squad
 @ignore_leftovers()
 @skipif_mcg_only

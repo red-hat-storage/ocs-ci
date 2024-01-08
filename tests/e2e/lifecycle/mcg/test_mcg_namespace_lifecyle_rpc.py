@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     skipif_managed_service,
     red_squad,
+    mcg,
 )
 from ocs_ci.framework.testlib import E2ETest, tier2, skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import (
@@ -49,6 +50,7 @@ def setup_base_objects(awscli_pod, origin_dir, amount=2):
         )
 
 
+@mcg
 @red_squad
 @skipif_managed_service
 @skipif_aws_creds_are_missing

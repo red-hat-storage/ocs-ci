@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_managed_service,
     red_squad,
+    mcg,
 )
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -108,6 +109,7 @@ def multipart_setup(pod_obj, origin_dir, result_dir):
     return mpu_key, origin_dir, result_dir, parts
 
 
+@mcg
 @red_squad
 @pytest.mark.polarion_id("OCS-2296")
 @skipif_managed_service

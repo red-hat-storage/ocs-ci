@@ -6,7 +6,7 @@ import csv
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import orange_squad
+from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import ocsci_log_path
@@ -23,10 +23,10 @@ def teardown(request):
     request.addfinalizer(finalizer)
 
 
+@mcg
 @orange_squad
 @scale
 class TestScaleOBCStartTime(E2ETest):
-
     namespace = config.ENV_DATA["cluster_namespace"]
     scale_obc_count = 10
     scale_obc_count_io = 2

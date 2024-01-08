@@ -36,6 +36,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs import constants, bucket_utils
 from ocs_ci.ocs.cluster import CephCluster
@@ -47,6 +48,7 @@ from ocs_ci.ocs.resources.bucket_policy import HttpResponseParser
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @skipif_managed_service
 @skipif_aws_creds_are_missing
@@ -67,7 +69,10 @@ class TestNamespace(MCGTest):
         argvalues=[
             pytest.param(("oc", {"aws": [(1, DEFAULT_REGION)]})),
             pytest.param(("oc", {"azure": [(1, None)]})),
-            pytest.param(("oc", {"rgw": [(1, None)]}), marks=on_prem_platform_required),
+            pytest.param(
+                ("oc", {"rgw": [(1, None)]}),
+                marks=on_prem_platform_required,
+            ),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>

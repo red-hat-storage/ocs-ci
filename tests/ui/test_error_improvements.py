@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     bugzilla,
     skipif_ocs_version,
+    mcg,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_ocs_version("<4.13")
 class TestErrorMessageImprovements(ManageTest):
+    @mcg
     @bugzilla("2193109")
     @polarion_id("OCS-4865")
     def test_backing_store_creation_rules(self, setup_ui_class):
@@ -36,6 +38,7 @@ class TestErrorMessageImprovements(ManageTest):
         backing_store_tab.proceed_resource_creation()
         backing_store_tab.check_error_messages()
 
+    @mcg
     @bugzilla("2193109")
     @polarion_id("OCS-4867")
     def test_obc_creation_rules(self, setup_ui_class):
@@ -52,6 +55,7 @@ class TestErrorMessageImprovements(ManageTest):
         object_bucket_claim_create_tab.proceed_resource_creation()
         object_bucket_claim_create_tab.check_error_messages()
 
+    @mcg
     @bugzilla("2193109")
     @polarion_id("OCS-4869")
     def test_bucket_class_creation_rules(self, setup_ui_class):
@@ -69,6 +73,7 @@ class TestErrorMessageImprovements(ManageTest):
         bucket_class_create_tab.proceed_resource_creation()
         bucket_class_create_tab.check_error_messages()
 
+    @mcg
     @bugzilla("2193109")
     @polarion_id("OCS-4871")
     def test_namespace_store_creation_rules(
