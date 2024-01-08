@@ -312,7 +312,9 @@ class StretchCluster(OCS):
             Bool: True if no data corruption else False
 
         """
-        self.get_logwriter_reader_pods(label, statuses=["Running", "Completed"])
+        self.get_logwriter_reader_pods(
+            label, statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+        )
         for pod in self.workload_map[label][0]:
             if label == constants.LOGREADER_CEPHFS_LABEL:
                 read_logs = get_pod_logs(pod_name=pod.name, namespace=namespace)
