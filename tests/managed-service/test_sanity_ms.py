@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     libtest,
     ManageTest,
-    managed_service_required,
+    provider_client_ms_platform_required,
 )
 
 log = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 @yellow_squad
 @libtest
-@managed_service_required
+@provider_client_ms_platform_required
 class TestSanityManagedServiceWithDefaultParams(ManageTest):
     """
     Test the usage of the 'SanityManagedService' class when using the default params
@@ -66,7 +66,7 @@ class TestSanityManagedServiceWithDefaultParams(ManageTest):
 
 @yellow_squad
 @libtest
-@managed_service_required
+@provider_client_ms_platform_required
 class TestSanityManagedServiceWithOptionalParams(ManageTest):
     """
     Test the usage of the 'SanityManagedService' class when passing optional params
