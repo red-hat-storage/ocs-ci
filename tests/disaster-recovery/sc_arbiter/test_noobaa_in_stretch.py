@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier3,
     red_squad,
+    mcg,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ def setup_nb_endpoint():
 
 
 @tier3
+@mcg
 @red_squad
 @bugzilla("2109101")
 @polarion_id("OCS-5406")
