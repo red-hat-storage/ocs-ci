@@ -102,6 +102,16 @@ variable "control_plane_num_cpus" {
   default = "4"
 }
 
+variable "control_plane_data_disks_count" {
+  type    = string
+  default = "2"
+}
+
+variable "control_plane_data_disks_size" {
+  type    = string
+  default = "256"
+}
+
 //////////
 // compute machine variables
 //////////

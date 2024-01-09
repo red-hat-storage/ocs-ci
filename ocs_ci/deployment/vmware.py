@@ -1746,6 +1746,12 @@ class VSPHEREAI(VSPHEREBASE):
                 "control_plane_num_cpus": config.ENV_DATA["master_num_cpus"],
                 "compute_num_cpus": config.ENV_DATA["worker_num_cpus"],
                 "system_disk_size": constants.VM_ROOT_DISK_SIZE,
+                "control_plane_data_disks_count": config.ENV_DATA.get(
+                    "control_plane_extra_disks", 0
+                ),
+                "control_plane_data_disks_size": config.ENV_DATA.get(
+                    "device_size", defaults.DEVICE_SIZE
+                ),
                 "compute_data_disks_count": config.ENV_DATA["extra_disks"],
                 "compute_data_disks_size": config.ENV_DATA.get(
                     "device_size", defaults.DEVICE_SIZE

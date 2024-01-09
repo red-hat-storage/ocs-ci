@@ -104,6 +104,8 @@ module "control_plane_vm" {
   num_cpus          = var.control_plane_num_cpus
   memory            = var.control_plane_memory
   system_disk_size  = var.system_disk_size
+  data_disks_count  = var.control_plane_data_disks_count
+  data_disks_size   = var.control_plane_data_disks_size
   storage_policy_id = data.vsphere_storage_policy.storage_policy.id
   iso_image         = vsphere_file.discovery_iso.destination_file
   nested_hv_enabled = true
