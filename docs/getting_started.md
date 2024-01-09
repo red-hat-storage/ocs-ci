@@ -20,12 +20,12 @@
    `libxml/xmlreader.h` (they are on Fedora, RHEL or CentOS provided by
    packages `libcurl-devel` and `libxml2-devel` respectively).
 
-#### AWS UPI
+### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments
 
 1. Install the `jq`, `yq` (v4.12.1+), and `awscli` system packages.
 
-##### AWS UPI with RHEL workers
+#### AWS UPI with RHEL workers
 Along with AWS UPI prerequisites we need following
 
 1. openshift-dev.pem needs to be available to ocs-ci
@@ -37,7 +37,7 @@ mirror_openshift:
   password: "PASSWORD"
 ```
 
-#### vSphere UPI
+### vSphere UPI
 For vSphere UPI deployments, RHCOS templates must be present on Cluster in Datacenter
 
 Till OCP version 4.9, download RHCOS templates from [here](https://raw.githubusercontent.com/openshift/installer/release-4.9/data/data/rhcos.json)
@@ -53,14 +53,14 @@ For GA'ed version, download RHCOS templates from [here](https://mirror.openshift
 
 Follow this [procedure](https://docs.vmware.com/en/VMware-vSphere/7.0/com.vmware.vsphere.vm_admin.doc/GUID-17BEDA21-43F6-41F4-8FB2-E01D275FE9B4.html) to deploy ova/ovf template in vCenter.
 
-#### vSphere IPI
+### vSphere IPI
 Since vSphere IPI deployment require access to vCenter, we must add vCenter’s trusted root CA certificates to the
 system trust before installing an OCP cluster
 
 Follow this [procedure](https://docs.openshift.com/container-platform/4.7/installing/installing_vsphere/installing-vsphere-installer-provisioned.html#installation-adding-vcenter-root-certificates_installing-vsphere-installer-provisioned)
 to add vCenter’s trusted root CA certificates.
 
-##### Mac OSX Users
+### Mac OSX Users
 The system `sed` package is not compatible with the script used to install AWS
 UPI. To resolve this issue, you must install `gnu-sed`. You can do this with brew.
 
