@@ -5,6 +5,7 @@ import random
 
 
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     clear_crash_warning_and_osd_removal_leftovers,
@@ -42,7 +43,10 @@ class TestRookCephOsdFlapping(ManageTest):
     def teardown(self, request):
         def finalizer():
             self.osd_pod_obj.delete()
-            ceph_health_check(tries=2, delay=2)
+            try:
+                ceph_health_check(tries=2, delay=2)
+            except CephHealthException as e:
+                log.info(f"Ceph health exception received: {e}")
             clear_crash_warning_and_osd_removal_leftovers()
             ceph_health_check(tries=40, delay=30)
 
