@@ -179,11 +179,11 @@ class HsBench(object):
         """
         Validate if workload was running on the app-pod
 
-        Raise:
+        Raises:
             UnexpectedBehaviour: if result.csv file doesn't contain output data.
 
         """
-        cmd = f"cp {self.pod_obj.name}:/go/{result} " f"{self.hsbench_dir}/{result}"
+        cmd = f"cp {self.pod_obj.name}:/go/{result} {self.hsbench_dir}/{result}"  # noqa: E231
         self.ocp_obj.exec_oc_cmd(
             command=cmd,
             out_yaml_format=False,
@@ -202,10 +202,12 @@ class HsBench(object):
         Validate S3 objects using 'radosgw-admin' on single bucket
         Validate objects in buckets after completed upgrade
 
-        Agr:
+        Args:
             upgrade (str): Upgrade status
-        Raise:
-            UnexpectedBehaviour: If objects pre-upgrade and post-upgrade are not identical.
+
+        Raises:
+            UnexpectedBehaviour: If objects pre-upgrade and post-upgrade are
+                not identical.
 
         """
         for i in range(self.num_bucket):
@@ -255,7 +257,7 @@ class HsBench(object):
         """
         Validate PUT, GET, LIST objects from previous hsbench operation
 
-        Agr:
+        Args:
             result (str): Result file name
             num_objs (str): Number of objects to validate
             put (Boolean): Validate PUT operation
@@ -306,7 +308,7 @@ class HsBench(object):
         """
         Delete objects in a bucket
 
-        Agr:
+        Args:
             bucket_name (str): Name of bucket
 
         """
@@ -329,7 +331,7 @@ class HsBench(object):
         """
         Delete bucket
 
-        Agr:
+        Args:
             bucket_name (str): Name of bucket
 
         """
