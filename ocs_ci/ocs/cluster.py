@@ -67,8 +67,10 @@ class CephCluster(object):
     This class has depiction of ceph cluster. Contains references to
     pod objects which represents ceph cluster entities.
 
+    Parameters
+    ----------
     Attributes:
-        pods (list) : A list of  ceph cluster related pods
+        pods (list): A list of ceph cluster related pods
         cluster_name (str): Name of ceph cluster
         namespace (str): openshift Namespace where this cluster lives
     """
@@ -2127,7 +2129,7 @@ def change_ceph_backfillfull_ratio(backfillfull_ratio):
         backfillfull_ratio (int): backfillfull_ratio
 
     """
-    ceph_cmd = f"ceph osd set-backfillfull-ratio {str(float(backfillfull_ratio/100))}"
+    ceph_cmd = f"ceph osd set-backfillfull-ratio {str(float(backfillfull_ratio / 100))}"
     ct_pod = pod.get_ceph_tools_pod()
     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
@@ -2140,7 +2142,7 @@ def change_ceph_full_ratio(full_ratio):
         full_ratio (int): backfillfull_ratio
 
     """
-    ceph_cmd = f"ceph osd set-full-ratio {str(float(full_ratio/100))}"
+    ceph_cmd = f"ceph osd set-full-ratio {str(float(full_ratio / 100))}"
     ct_pod = pod.get_ceph_tools_pod()
     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
