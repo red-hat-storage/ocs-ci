@@ -5,7 +5,10 @@ import random
 
 
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.helpers.helpers import (
+    run_cmd_verify_cli_output,
+    clear_crash_warning_and_osd_removal_leftovers,
+)
 from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import brown_squad
@@ -38,6 +41,8 @@ class TestRookCephOsdFlapping(ManageTest):
     def teardown(self, request):
         def finalizer():
             self.osd_pod_obj.delete()
+            ceph_health_check(tries=2, delay=2)
+            clear_crash_warning_and_osd_removal_leftovers()
             ceph_health_check(tries=40, delay=30)
 
         request.addfinalizer(finalizer)
