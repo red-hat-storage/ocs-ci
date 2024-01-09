@@ -79,7 +79,8 @@ class CephCluster(object):
         after cluster deployment. However its harmless to do anywhere.
         """
         if config.ENV_DATA["mcg_only_deployment"] or (
-            config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+            config.ENV_DATA.get("platform")
+            in [constants.FUSIONAAS_PLATFORM] + constants.HCI_PROVIDER_CLIENT_PLATFORMS
             and config.ENV_DATA["cluster_type"].lower() == "consumer"
         ):
             return
