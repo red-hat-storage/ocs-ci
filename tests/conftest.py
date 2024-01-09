@@ -6018,6 +6018,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         sc_rbd=None,
         sc_cephfs=None,
         pod_dict_path=None,
+        project=None,
     ):
         """
         Args:
@@ -6080,11 +6081,13 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             status=constants.STATUS_BOUND,
             num_of_pvc=num_of_rbd_pvc,
             timeout=180,
+            project=project,
         )
         for pvc_obj in pvcs_rbd:
             pvc_obj.interface = constants.CEPHBLOCKPOOL
 
-        project = pvcs_rbd[0].project if pvcs_rbd else None
+        if project is None:
+            project = pvcs_rbd[0].project if pvcs_rbd else None
 
         pvcs_cephfs = multi_pvc_factory(
             interface=constants.CEPHFILESYSTEM,
