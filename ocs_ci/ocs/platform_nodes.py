@@ -92,6 +92,7 @@ class PlatformNodesFactory:
             "rosa": AWSNodes,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
+            "hci_baremetal": BaremetalNodes,
         }
 
     def get_nodes_platform(self):
