@@ -31,12 +31,14 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     turquoise_squad,
+    stretchcluster_required,
 )
 
 log = logging.getLogger(__name__)
 
 
 @tier1
+@stretchcluster_required
 @turquoise_squad
 class TestZoneShutdownsAndCrashes:
 
