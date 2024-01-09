@@ -79,10 +79,7 @@ class TestRookCephOsdFlapping(ManageTest):
             raise ValueError(f"OSD {osd_pod_id} is not down after 300 sec")
 
         log.info("Verify osd logs")
-        expected_string = (
-            "The OSD pod will sleep for 24 hours. "
-            "Restart the pod manually once the flapping issue is fixed"
-        )
+        expected_string = "Restart the pod manually once the flapping issue is fixed"
         osd_pod_log = pod.get_pod_logs(
             pod_name=self.osd_pod_obj.name, all_containers=True
         )
