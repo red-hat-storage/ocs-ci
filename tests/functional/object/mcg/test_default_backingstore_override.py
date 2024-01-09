@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     skipif_aws_creds_are_missing,
     ignore_leftovers,
+    mcg,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
@@ -26,6 +27,7 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @ignore_leftovers  # needed for the upgrade TCs
 class TestDefaultBackingstoreOverride(MCGTest):
