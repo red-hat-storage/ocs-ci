@@ -168,7 +168,7 @@ that can be used to access an existing cluster.
 > In case you lost your cluster dir, the destroy can be done with
 > `ci-cleanup` cli that should be invoked with cluster-tag from AWS.
 
-#### Deployment of cluster
+### Deployment of cluster
 
 If you would like to deploy new cluster you can run following command:
 
@@ -193,7 +193,7 @@ repository](https://github.com/red-hat-storage/ocs-ci/tree/master/bin). These to
 code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
 
-##### Deployment configurations
+#### Deployment configurations
 
 - *encryption at REST* - to enable encryption at REST use this configuration file:
     conf/ocsci/encryption_at_rest.yaml
@@ -259,7 +259,8 @@ run-ci tests/ \
 #### Running tests on multicluster environment
 
 If you would like to run multicluster environment tests and deployments, use `multicluster` subcommand for run-ci.
-###### example 1:
+
+##### example 1:
 ```bash
 run-ci multicluster 2 \
     tests/ -m tier1 \
@@ -278,7 +279,7 @@ Towards the end of CLI, user needs to pass individual cluster specific arguments
 Cluster specific options will be passed within `--cluster<n>` argument boundary i.e. anything starting from `--cluster1` and before `--cluster2` will be considered
 as arguments of `cluster1`.
 
-###### example 2:
+##### example 2:
 Passing common arguments to cluster:
 ```bash
 run-ci multicluster 2 \
