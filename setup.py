@@ -17,12 +17,9 @@ setup(
     python_requires=">=3.9.18",
     install_requires=[
         "apache-libcloud==3.1.0",
-        "cryptography==41.0.5",
+        "cryptography==41.0.6",
         "docopt==0.6.2",
-        # https://pypi.org/project/gevent/ the latest version resolves problem for Mac M1 chips
-        # This issue is caused by a program attempting to load an x86_64-only library from a native arm64 process.
-        # More https://stackoverflow.com/questions/71443345/gevent-cant-be-installed-on-m1-mac-using-poetry
-        "gevent==21.12.0",
+        "gevent==23.9.1",
         "reportportal-client==3.2.3",
         "requests==2.32.3",
         "paramiko==3.4.0",
@@ -55,7 +52,7 @@ setup(
         "pandas==1.5.2",
         "tabulate==0.9.0",
         "python-ipmi==0.4.2",
-        "scipy==1.8.1",
+        "scipy==1.10.0",
         "PrettyTable==0.7.2",
         "azure-common==1.1.25",
         "azure-mgmt-compute==12.0.0",
@@ -67,7 +64,7 @@ setup(
         "python-cinderclient==7.1.0",
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
-        "GitPython==3.1.30",
+        "GitPython==3.1.41",
         "selenium==3.141.0",
         "webdriver-manager==4.0.2",
         # greenlet 1.0.0 is broken on ppc64le
@@ -99,6 +96,7 @@ setup(
         "google-crc32c==1.5.0",
         "google-resumable-media==2.4.1",
         "googleapis-common-protos==1.59.0",
+        "urllib3==1.26.18",
     ],
     entry_points={
         "console_scripts": [
