@@ -81,7 +81,7 @@ class CephCluster(object):
         if config.ENV_DATA["mcg_only_deployment"] or (
             config.ENV_DATA.get("platform")
             in [constants.FUSIONAAS_PLATFORM] + constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            and config.ENV_DATA["cluster_type"].lower() == "consumer"
+            and config.ENV_DATA["cluster_type"].lower() in ["consumer", "hci_client"]
         ):
             return
         # cluster_name is name of cluster in rook of type CephCluster
