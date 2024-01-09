@@ -4478,4 +4478,5 @@ def verify_log_exist_in_pod_logs(
         container=container,
         all_containers=all_containers_flag,
     )
+    logging.info(f"logs osd:{pod_logs}")
     return expected_log in pod_logs
