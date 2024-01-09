@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     bugzilla,
     runs_on_provider,
+    hci_provider_and_client_required,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
@@ -257,3 +258,23 @@ def test_monitoring_reporting_ok_when_idle(workload_idle, threading_lock):
     assert mon_validation, mon_msg
     osds_msg = "ceph_osd_{up,in} metrics should indicate no OSD issues"
     assert all(osd_validations), osds_msg
+
+
+@blue_squad
+@tier1
+@runs_on_provider
+@hci_provider_and_client_required
+@pytest.mark.polarion_id("OCS-5204")
+def test_hci_metrics_available(threading_lock):
+    """
+    HCI metrics should be provided via OCP Prometheus.
+    """
+    prometheus = PrometheusAPI(threading_lock=threading_lock)
+    list_of_metrics_without_results = metrics.get_missing_metrics(
+        prometheus, metrics.hci_metrics
+    )
+    msg = (
+        "OCS Monitoring should provide some value(s) for tested hci metrics, "
+        "so that the list of metrics without results is empty."
+    )
+    assert list_of_metrics_without_results == [], msg
