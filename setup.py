@@ -25,7 +25,7 @@ setup(
         "gevent==21.12.0",
         "reportportal-client==3.2.3",
         "requests==2.25.0",
-        "paramiko==2.11.0",
+        "paramiko==3.4.0",
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
         "openshift==0.11.2",
