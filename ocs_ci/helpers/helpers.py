@@ -4449,3 +4449,33 @@ def check_selinux_relabeling(pod_obj):
     key = '"selinuxRelabel": false'
     assert key in output, f"{key} is not present in inspect logs"
     logger.info(f"{key} is present in inspect logs of application pod running node")
+
+
+def verify_log_exist_in_pod_logs(
+    pod_name,
+    expected_log,
+    container=None,
+    namespace=config.ENV_DATA["cluster_namespace"],
+    all_containers_flag=True,
+):
+    """
+    Verify log exist in pod logs.
+
+    Args:
+        pod_name (str): Name of the pod
+        expected_log:
+        container (str): Name of the container
+        namespace (str): Namespace of the pod
+        all_containers_flag (bool): fetch logs from all containers of the resource
+
+    Returns:
+        bool: return True if log exist otherwise False
+
+    """
+    pod_logs = pod.get_pod_logs(
+        pod_name,
+        namespace=namespace,
+        container=container,
+        all_containers=all_containers_flag,
+    )
+    return expected_log in pod_logs

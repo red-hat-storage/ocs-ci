@@ -8,6 +8,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     clear_crash_warning_and_osd_removal_leftovers,
+    verify_log_exist_in_pod_logs,
 )
 from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources import pod
@@ -83,11 +84,17 @@ class TestRookCephOsdFlapping(ManageTest):
         if not sample.wait_for_func_status(result=True):
             raise ValueError(f"OSD {osd_pod_id} is not down after 300 sec")
 
-        log.info("Verify osd logs")
-        expected_string = "Restart the pod manually once the flapping issue is fixed"
-        osd_pod_log = pod.get_pod_logs(
-            pod_name=self.osd_pod_obj.name, all_containers=True
+        expected_log = "Restart the pod manually once the flapping issue is fixed"
+        log.info(f"Verify log {expected_log} exist in osd pod logs")
+        sample = TimeoutSampler(
+            timeout=60,
+            sleep=5,
+            func=verify_log_exist_in_pod_logs,
+            pod_name=self.osd_pod_obj.name,
+            expected_log=expected_log,
         )
-        assert (
-            expected_string in osd_pod_log
-        ), f"The expected log {expected_string} is not found in osd log"
+
+        if not sample.wait_for_func_status(result=True):
+            raise ValueError(
+                f"The expected log '{expected_log}' does not exist in {self.osd_pod_obj.name} pod"
+            )
