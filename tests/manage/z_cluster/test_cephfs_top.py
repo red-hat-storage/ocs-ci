@@ -10,7 +10,7 @@ from subprocess import run, CalledProcessError
 log = logging.getLogger(__name__)
 
 
-@bugzilla(2067168)
+@bugzilla("2067168")
 class TestCephfsTop(ManageTest):
     """
     Check cephfs-top output
