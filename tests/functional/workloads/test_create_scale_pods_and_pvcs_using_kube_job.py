@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ms_consumer_required,
     skipif_bm,
     magenta_squad,
+    hci_provider_and_client_required,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -246,5 +247,138 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
         log.info(
             "The scale pods and PVCs using a kube job with MS consumers "
+            "created and deleted successfully"
+        )
+
+
+@magenta_squad
+@tier1
+@ignore_leftovers
+@hci_provider_and_client_required
+class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
+    """
+    Test create scale pods and PVCs using a kube job with HCI clients
+    """
+
+    def setup(self):
+        self.orig_index = None
+        self.scale_count = min(constants.SCALE_PVC_ROUND_UP_VALUE)
+        self.pvc_per_pod_count = 5
+        self.expected_pod_num = int(self.scale_count / self.pvc_per_pod_count)
+        self.client_i_per_fio_scale = {}
+
+    def check_scale_pods_and_pvcs_created_on_clients(self):
+        for client_i, fio_scale in self.client_i_per_fio_scale.items():
+            config.switch_ctx(client_i)
+            c_name = config.ENV_DATA.get("cluster_name")
+            ocp_pvc = OCP(kind=constants.PVC, namespace=fio_scale.namespace)
+            ocp_pvc.wait_for_resource(
+                timeout=30,
+                condition=constants.STATUS_BOUND,
+                resource_count=self.scale_count,
+            )
+            log.info(f"All the PVCs were created successfully on the client {c_name}")
+
+            ocp_pod = OCP(kind=constants.POD, namespace=fio_scale.namespace)
+            ocp_pod.wait_for_resource(
+                timeout=30,
+                condition=constants.STATUS_COMPLETED,
+                resource_count=self.expected_pod_num,
+            )
+            log.info(f"All the pods were created successfully on the client {c_name}")
+
+        log.info("All the pods and PVCs were created successfully on the clients")
+
+    def check_pods_and_pvcs_deleted_on_clients(self):
+        for client_i, fio_scale in self.client_i_per_fio_scale.items():
+            config.switch_ctx(client_i)
+            c_name = config.ENV_DATA.get("cluster_name")
+
+            pvc_objs = get_all_pvcs(fio_scale.namespace)["items"]
+            assert not pvc_objs, "There are still remaining PVCs"
+            log.info(f"All the PVCs deleted successfully on the client {c_name}")
+
+            pod_objs = get_all_pods(fio_scale.namespace)
+            assert not pod_objs, "There are still remaining pods"
+            log.info(f"All the pods deleted successfully on the client {c_name}")
+
+        log.info("All the pods and PVCs were deleted successfully on the clients")
+
+    def test_create_scale_pods_and_pvcs_with_hci_clients(
+        self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+    ):
+        """
+        Test create scale pods and PVCs using a kube job with HCI clients
+        """
+        self.orig_index = config.cur_index
+        self.client_i_per_fio_scale = (
+            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(
+                scale_count=self.scale_count,
+                pvc_per_pod_count=self.pvc_per_pod_count,
+            )
+        )
+        assert config.cur_index == self.orig_index, "The current index has changed"
+
+        config.switch_to_provider()
+        time_to_wait_for_io_running = 120
+        log.info(
+            f"Wait {time_to_wait_for_io_running} seconds for checking "
+            f"that the IO running as expected"
+        )
+        sleep(time_to_wait_for_io_running)
+        ceph_health_check()
+
+        log.info("Checking the Ceph Health on the clients")
+        client_indexes = config.get_consumer_indexes_list()
+        for i in client_indexes:
+            config.switch_ctx(i)
+            ceph_health_check()
+
+        self.check_scale_pods_and_pvcs_created_on_clients()
+        log.info(
+            "The scale pods and PVCs using a kube job with HCI clients created successfully"
+        )
+
+    def test_create_and_delete_scale_pods_and_pvcs_with_hci_clients(
+        self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+    ):
+        """
+        Test create and delete scale pods and PVCs using a kube job with HCI clients
+        """
+        self.orig_index = config.cur_index
+        self.client_i_per_fio_scale = (
+            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(
+                scale_count=self.scale_count,
+                pvc_per_pod_count=self.pvc_per_pod_count,
+            )
+        )
+        assert config.cur_index == self.orig_index, "The current index has changed"
+
+        config.switch_to_provider()
+        time_to_wait_for_io_running = 120
+        log.info(
+            f"Wait {time_to_wait_for_io_running} seconds for checking "
+            f"that the IO running as expected"
+        )
+        sleep(time_to_wait_for_io_running)
+        ceph_health_check()
+
+        self.check_scale_pods_and_pvcs_created_on_clients()
+
+        log.info("Clean up the pods and PVCs from all clients")
+        for client_i, fio_scale in self.client_i_per_fio_scale.items():
+            config.switch_ctx(client_i)
+            fio_scale.cleanup()
+
+        self.check_pods_and_pvcs_deleted_on_clients()
+
+        log.info("Checking the Ceph Health on the clients")
+        client_indexes = config.get_consumer_indexes_list()
+        for i in client_indexes:
+            config.switch_ctx(i)
+            ceph_health_check()
+
+        log.info(
+            "The scale pods and PVCs using a kube job with MS clients "
             "created and deleted successfully"
         )
