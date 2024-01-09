@@ -35,7 +35,7 @@ class TestSanityManagedServiceWithDefaultParams(ManageTest):
         )
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, nodes):
+    def teardown(self, request):
         """
         Make sure the original index is equal to the current index
         """
@@ -93,7 +93,7 @@ class TestSanityManagedServiceWithOptionalParams(ManageTest):
         )
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, nodes):
+    def teardown(self, request):
         """
         Make sure the original index is equal to the current index
         """
