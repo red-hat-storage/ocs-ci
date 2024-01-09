@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
+    runs_on_provider,
 )
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
@@ -26,6 +27,7 @@ from ocs_ci.ocs.resources.pod import (
 log = logging.getLogger(__name__)
 
 
+@runs_on_provider
 @brown_squad
 @tier2
 @skipif_external_mode
