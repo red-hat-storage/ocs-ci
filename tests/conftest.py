@@ -1193,6 +1193,7 @@ def pod_factory_fixture(request, pvc_factory):
         command_args=None,
         subpath=None,
         deployment=False,
+        pvc_read_only_mode=None,
     ):
         """
         Args:
@@ -1247,6 +1248,7 @@ def pod_factory_fixture(request, pvc_factory):
                 command_args=command_args,
                 subpath=subpath,
                 deployment=deployment,
+                pvc_read_only_mode=pvc_read_only_mode,
             )
             assert pod_obj, "Failed to create pod"
 
