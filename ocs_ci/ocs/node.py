@@ -1684,14 +1684,15 @@ def verify_all_nodes_created():
                 for node_list in TimeoutSampler(
                     timeout=wait_time, sleep=60, func=get_all_nodes
                 ):
-                    if len(node_list) == expected_num_nodes:
+                    existing_num_nodes = len(node_list)
+                    if existing_num_nodes == expected_num_nodes:
                         log.info(
                             f"All {expected_num_nodes} nodes are created successfully."
                         )
                         break
                     else:
                         log.warning(
-                            f"waiting for {expected_num_nodes} nodes to create but found {len(node_list)} nodes"
+                            f"waiting for {expected_num_nodes} nodes to create but found {existing_num_nodes} nodes"
                         )
             except TimeoutExpiredError:
                 log.error(f"Expected {expected_num_nodes} nodes are not created")
