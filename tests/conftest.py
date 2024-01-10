@@ -6827,6 +6827,11 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
 
 @pytest.fixture()
 def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
+    """
+    Fixture to create RWX cephfs volume
+
+    """
+
     def factory(project_name):
         return pvc_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -6838,9 +6843,32 @@ def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
     return factory
 
 
+@pytest.fixture(scope="session")
+def setup_stretch_cluster_project(request, project_factory_session):
+    """
+    Session scoped fixture for creating stretch cluster project
+
+    """
+    return project_factory_session(constants.STRETCH_CLUSTER_NAMESPACE)
+
+
 @pytest.fixture()
 def logwriter_workload_factory(request, teardown_factory):
+    """
+    Fixture to create logwriter deployment
+
+    """
+
     def factory(pvc, logwriter_path):
+        """
+        Args:
+            pvc (PVC): PVC object
+            logwriter_path (str): String representing logwriter yaml path
+
+        Returns:
+            OCS object: Lgwriter deployment object
+
+        """
         dc_data = templating.load_yaml(logwriter_path)
         dc_data["metadata"]["namespace"] = pvc.namespace
         dc_data["spec"]["replicas"] = 4
@@ -6876,6 +6904,17 @@ def logwriter_workload_factory(request, teardown_factory):
 @pytest.fixture()
 def logreader_workload_factory(request, teardown_factory):
     def factory(pvc, logreader_path, duration=30):
+        """
+        Args:
+            pvc (PVC): PVC object
+            logreader_path (str): String representing logreader yaml path
+            duration (int): Time in minutes, representing read duration
+
+        Retuns:
+            OCS object: Logreader job object
+
+        """
+
         job_data = templating.load_yaml(logreader_path)
         job_data["metadata"]["namespace"] = pvc.namespace
         job_data["spec"]["completions"] = 4
@@ -6913,42 +6952,68 @@ def logreader_workload_factory(request, teardown_factory):
 @pytest.fixture()
 def setup_logwriter_cephfs_workload_factory(
     request,
-    project_factory,
+    setup_stretch_cluster_project,
     pvc_factory,
     logwriter_cephfs_many_pvc_factory,
     logwriter_workload_factory,
     logreader_workload_factory,
 ):
-    logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
-    logreader_path = constants.LOGWRITER_CEPHFS_READER
-    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
-    pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
-    logwriter_workload = logwriter_workload_factory(
-        pvc=pvc, logwriter_path=logwriter_path
-    )
-    logreader_workload = logreader_workload_factory(
-        pvc=pvc, logreader_path=logreader_path
-    )
+    """
+    This fixture will create the RWX cephfs volume and call the logwriter, logreader fixture to do
+    complete setup
 
-    return logwriter_workload, logreader_workload
+    """
+
+    def factory(read_duration=30):
+        """
+        Args:
+            read_duration (int): Time duration in minutes
+
+        Returns:
+             OCS objects: Representing both logwriter and logreader objects
+
+        """
+        logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
+        logreader_path = constants.LOGWRITER_CEPHFS_READER
+        pvc = logwriter_cephfs_many_pvc_factory(
+            project_name=setup_stretch_cluster_project
+        )
+        logwriter_workload = logwriter_workload_factory(
+            pvc=pvc, logwriter_path=logwriter_path
+        )
+        logreader_workload = logreader_workload_factory(
+            pvc=pvc, logreader_path=logreader_path, duration=read_duration
+        )
+        return logwriter_workload, logreader_workload
+
+    return factory
 
 
 @pytest.fixture()
-def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_factory):
+def setup_logwriter_rbd_workload_factory(
+    request, setup_stretch_cluster_project, teardown_factory
+):
+    """
+    This fixture will create the RWO RBD volume, create logwriter sts using that volume
+
+    Returns:
+        OCS object: Logwriter sts object
+
+    """
+
     logwriter_sts_path = constants.LOGWRITER_STS_PATH
-    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
     sts_data = templating.load_yaml(logwriter_sts_path)
-    sts_data["metadata"]["namespace"] = project.namespace
+    sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
     logwriter_sts = helpers.create_resource(**sts_data)
     teardown_factory(logwriter_sts)
     logwriter_sts_pods = [
         pod["metadata"]["name"]
         for pod in get_pods_having_label(
-            label="app=logwriter-rbd", namespace=project.namespace
+            label="app=logwriter-rbd", namespace=setup_stretch_cluster_project.namespace
         )
     ]
     wait_for_pods_to_be_running(
-        namespace=project.namespace, pod_names=logwriter_sts_pods
+        namespace=setup_stretch_cluster_project.namespace, pod_names=logwriter_sts_pods
     )
 
     return logwriter_sts
@@ -6974,3 +7039,15 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
         )
 
     return factory
+
+
+@pytest.fixture()
+def reset_conn_score():
+    """
+    This is a fixture that will reset the connections scores for
+    each mon's
+
+    """
+    from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+
+    return StretchCluster().reset_conn_score()

@@ -678,3 +678,7 @@ class HostValidationFailed(Exception):
 
 class SameNameClusterAlreadyExistsException(Exception):
     pass
+
+
+class NoRunningCephToolBoxException(Exception):
+    pass
