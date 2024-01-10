@@ -266,6 +266,7 @@ def ocs_install_verification(
                 constants.MGR_APP_LABEL: 1,
                 constants.MDS_APP_LABEL: 2,
                 constants.RGW_APP_LABEL: rgw_count,
+                constants.EXPORTER_APP_LABEL: number_of_worker_nodes,
             }
         )
 
