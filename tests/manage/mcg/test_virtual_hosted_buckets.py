@@ -11,20 +11,20 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
-    mcg,
     polarion_id,
     red_squad,
     tier2,
+    mcg,
 )
 
 logger = logging.getLogger(__name__)
 
 
 @tier2
+@mcg
 @bugzilla("2183092")
 @polarion_id("OCS-5217")
 @red_squad
-@mcg
 class TestVirtualHostedBuckets:
     @pytest.fixture()
     def s3cmd_setup(self, awscli_pod_session):
