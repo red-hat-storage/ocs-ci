@@ -195,7 +195,7 @@ class TestObjectExpiration:
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
-            skip_any_features=["nsfs", "rgw kafka", "caching", "replication"],
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
 
         expiration_days = 1

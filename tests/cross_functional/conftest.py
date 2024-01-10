@@ -818,11 +818,13 @@ def setup_mcg_replication_feature_buckets(request, bucket_factory):
                 all_buckets[index].name,
                 "basic-replication-rule-1",
                 all_buckets[index + 1].name,
+                prefix="bidi_1",
             )
             patch_replication_policy_to_bucket(
                 all_buckets[index + 1].name,
                 "basic-replication-rule-2",
                 all_buckets[index].name,
+                prefix="bidi_2",
             )
 
             index += 2
