@@ -1,0 +1,18 @@
+apiVersion: ocs.openshift.io/v1
+kind: StorageProfile
+metadata:
+  name: ssd-storageprofile
+  namespace: openshift-storage
+spec:
+  blockPoolConfiguration:
+    parameters:
+      pg_autoscale_mode: "off"
+      pg_num: "128"
+      pgp_num: "128"
+      targetSizeRatio: "0.49"
+  sharedFilesystemConfiguration:
+    parameters:
+      pg_autoscale_mode: "off"
+      pg_num: "512"
+      pgp_num: "512"
+  deviceClass: ssd
