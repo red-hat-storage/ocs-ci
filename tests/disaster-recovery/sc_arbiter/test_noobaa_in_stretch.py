@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     red_squad,
     mcg,
+    stretchcluster_required,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def setup_nb_endpoint():
 @tier3
 @mcg
 @red_squad
+@stretchcluster_required
 @bugzilla("2109101")
 @polarion_id("OCS-5406")
 def test_nb_endpoint_topology_spread_constraints(setup_nb_endpoint):

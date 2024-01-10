@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     red_squad,
     rgw,
+    stretchcluster_required,
 )
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 @tier3
 @rgw
 @red_squad
+@stretchcluster_required
 @bugzilla("2209098")
 @polarion_id("OCS-5407")
 def test_rgw_svc_annotations():
