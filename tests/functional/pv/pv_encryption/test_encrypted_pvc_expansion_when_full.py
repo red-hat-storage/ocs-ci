@@ -63,7 +63,7 @@ else:
 @skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
-class TestPvcExpansionWhenFull(ManageTest):
+class TestEncryptedPvcExpansionWhenFull(ManageTest):
     """
     Tests to verify encrypted PVC expansion when the PVC is 100% utilized.
     Verify utilization alert will stop firing after volume expansion.
@@ -114,7 +114,7 @@ class TestPvcExpansionWhenFull(ManageTest):
             project=self.proj_obj,
         )
 
-    def test_pvc_expansion_when_full(self, threading_lock):
+    def test_encrypted_pvc_expansion_when_full(self, threading_lock):
         """
         Verify PVC expansion when the encrypted PVC is 100% utilized.
 
