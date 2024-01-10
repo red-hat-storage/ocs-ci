@@ -672,7 +672,7 @@ class CnvWorkload(DRWorkload):
 
     def delete_workload(self, force=False):
         """
-        Delete cnv workload
+        Deletes cnv workload
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly

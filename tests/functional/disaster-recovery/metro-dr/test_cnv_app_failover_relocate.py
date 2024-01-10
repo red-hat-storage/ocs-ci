@@ -83,7 +83,6 @@ class TestCnvApplicationMDR:
         fail-over/relocate between managed clusters.
 
         """
-
         # Create CNV applications(appset+sub)
         cnv_workloads = cnv_dr_workload(num_of_vm_subscription=1, num_of_vm_appset=1)
         self.wl_namespace = cnv_workloads[0].workload_namespace
