@@ -31,7 +31,9 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     NotFoundError,
     TimeoutException,
+    NoRunningCephToolBoxException,
 )
+
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
@@ -708,13 +710,14 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
+def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
     """
     Get the Ceph tools pod
 
     Args:
         skip_creating_pod (bool): True if user doesn't want to create new tool box
             if it doesn't exist
+        wait (bool): True if you want to wait for the tool pods to be Running
         namespace: Namespace of OCS
 
     Returns:
@@ -752,27 +755,68 @@ def get_ceph_tools_pod(skip_creating_pod=False, namespace=None):
     if not (ct_pod_items or skip_creating_pod):
         # setup ceph_toolbox pod if the cluster has been setup by some other CI
         setup_ceph_toolbox()
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    def _get_tools_pod_objs():
+        """
+        Method to get the Running ceph tool box pod objects
+
+        Returns:
+            List: of pod objects
+
+        """
         ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=namespace,
             selector=constants.TOOL_APP_LABEL,
+            cluster_kubeconfig=cluster_kubeconfig,
         )
         ct_pod_items = ocp_pod_obj.data["items"]
+        logger.info(
+            f"These are the ceph tool box pods: {[pod.get('metadata').get('name') for pod in ct_pod_items]}"
+        )
+        if not (ct_pod_items or skip_creating_pod):
+            # setup ceph_toolbox pod if the cluster has been setup by some other CI
+            setup_ceph_toolbox()
+            ocp_pod_obj = OCP(
+                kind=constants.POD,
+                namespace=namespace,
+                selector=constants.TOOL_APP_LABEL,
+            )
+            ct_pod_items = ocp_pod_obj.data["items"]
 
-    if not ct_pod_items:
-        raise CephToolBoxNotFoundException
+        if not ct_pod_items:
+            raise CephToolBoxNotFoundException
 
-    # In the case of node failure, the CT pod will be recreated with the old
-    # one in status Terminated. Therefore, need to filter out the Terminated pod
-    running_ct_pods = list()
-    for pod in ct_pod_items:
-        if (
-            ocp_pod_obj.get_resource_status(pod.get("metadata").get("name"))
-            == constants.STATUS_RUNNING
-        ):
-            running_ct_pods.append(pod)
+        # In the case of node failure, the CT pod will be recreated with the old
+        # one in status Terminated. Therefore, need to filter out the Terminated pod
 
-    assert running_ct_pods, "No running Ceph tools pod found"
+        # Update the OCP pod object without the selector
+        ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=namespace,
+        )
+        running_ct_pods = list()
+        for pod in ct_pod_items:
+            pod_status = ocp_pod_obj.get_resource_status(
+                pod.get("metadata").get("name")
+            )
+            logger.info(f"Pod name: {pod.get('metadata').get('name')}")
+            logger.info(f"Pod status: {pod_status}")
+            if pod_status == constants.STATUS_RUNNING:
+                running_ct_pods.append(pod)
+
+        if not running_ct_pods:
+            raise NoRunningCephToolBoxException
+        return running_ct_pods
+
+    if wait:
+        running_ct_pods = retry(NoRunningCephToolBoxException, tries=10, delay=5)(
+            _get_tools_pod_objs
+        )()
+    else:
+        running_ct_pods = _get_tools_pod_objs()
+
     ceph_pod = Pod(**running_ct_pods[0])
     ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
 
@@ -1466,7 +1510,7 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
     return used_percentage
 
 
-def get_pods_having_label(label, namespace, cluster_config=None):
+def get_pods_having_label(label, namespace, cluster_config=None, statuses=None):
     """
     Fetches pod resources with given label in given namespace
 
@@ -1475,13 +1519,18 @@ def get_pods_having_label(label, namespace, cluster_config=None):
         namespace (str): Namespace in which to be looked up
         cluster_config (MultiClusterConfig): In case of multicluster, this object will hold
             specif cluster config
-
+        statuses (list): List of pod statuses. Fetch only pods in any of the status mentioned
+            in the statuses list
     Return:
         list: of pods info
 
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
+    if statuses:
+        for pod in pods:
+            if pod["status"]["phase"] not in statuses:
+                pods.remove(pod)
     return pods
 
 
@@ -2272,6 +2321,32 @@ def get_running_state_pods(namespace=config.ENV_DATA["cluster_namespace"]):
             running_pods_object.append(pod)
 
     return running_pods_object
+
+
+def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get all the non-running pods in a given namespace
+    and give selector
+
+    Returns:
+        List: all the pods that are not Running
+
+    """
+
+    if selector is not None:
+        pod_objs = [
+            Pod(**pod_info) for pod_info in get_pods_having_label(selector, namespace)
+        ]
+    else:
+        pod_objs = get_all_pods(namespace)
+
+    pods_not_running = list()
+    for pod in pod_objs:
+        status = pod.status()
+        if status != constants.STATUS_RUNNING:
+            pods_not_running.append(pod)
+
+    return pods_not_running
 
 
 def wait_for_pods_to_be_running(
@@ -3390,3 +3465,57 @@ def get_mon_pod_by_pvc_name(pvc_name: str):
         .get("items")[0]
     )
     return Pod(**mon_pod_ocp)
+
+
+def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+    """
+    Get debug pods created for the nodes in debug
+
+    Args:
+        debug_nodes (list): List of nodes in debug mode
+        namespace (str): By default 'openshift-storage' namespace
+
+    Returns:
+        List: of Pod objects
+
+    """
+    debug_pods = []
+    for node_name in debug_nodes:
+        debug_pods.extend(
+            get_pod_obj(pod, namespace=namespace)
+            for pod in get_pod_name_by_pattern(
+                f"{node_name}-debug", namespace=namespace
+            )
+        )
+
+    return debug_pods
+
+
+def wait_for_pods_deletion(
+    label, timeout=120, sleep=5, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
+    """
+    Wait for the pods with particular label to be deleted
+    until the given timeout
+
+    Args:
+        label (str): Pod label
+        timeout (int): Timeout
+        namespace (str): Namespace in which pods are running
+
+    Raises:
+        TimeoutExpiredError
+
+    """
+
+    def _check_if_pod_deleted(label, namespace):
+        return len(get_pods_having_label(label, namespace)) == 0
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=_check_if_pod_deleted,
+        label=label,
+        namespace=namespace,
+    )
+    sampler.wait_for_func_status(True)
