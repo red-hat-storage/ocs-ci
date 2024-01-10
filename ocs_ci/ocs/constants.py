@@ -197,6 +197,7 @@ WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
 REPLICATION_SOURCE = "ReplicationSource"
 REPLICATIONDESTINATION = "ReplicationDestination"
+INGRESSCONTROLLER = "ingresscontroller"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -818,6 +819,12 @@ MULTUS_CLUSTER_NET_YAML = os.path.join(
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
+
+# Provider-Client yamls
+MACHINE_CONFIG = os.path.join(TEMPLATE_DIR, "machine_config")
+STORAGE_PROFILES = os.path.join(TEMPLATE_DIR, "storage_profile")
+STORAGE_CLUSTER = os.path.join(TEMPLATE_DIR, "storage_cluster")
+STORAGE_CLASSCLAIM = os.path.join(TEMPLATE_DIR, "storageclassclaim")
 
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml")
