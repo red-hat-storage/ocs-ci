@@ -509,9 +509,6 @@ class CnvWorkload(DRWorkload):
         self.dr_policy_name = kwargs.get(
             "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
         ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
-        self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster") or (
-            get_primary_cluster_config().ENV_DATA["cluster_name"]
-        )
         self.preferred_primary_cluster = config.ENV_DATA.get(
             "preferred_primary_cluster"
         ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
@@ -606,7 +603,7 @@ class CnvWorkload(DRWorkload):
         placement_obj = ocp.OCP(
             kind=constants.PLACEMENT_KIND,
             resource_name=self.cnv_workload_placement_name,
-            namespace="openshift-gitops"
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE
             if self.workload_type == constants.APPLICATION_SET
             else self.workload_namespace,
         )
@@ -691,6 +688,14 @@ class CnvWorkload(DRWorkload):
                     namespace=self.workload_namespace,
                     check_replication_resources_state=False,
                 )
+                log.info(f"Verify VM: {self.vm_name} is deletion")
+                vm_obj = ocp.OCP(
+                    kind=constants.VIRTUAL_MACHINE_INSTANCES,
+                    resource_name=self.vm_name,
+                    namespace=self.workload_namespace,
+                )
+                vm_obj.wait_for_delete(timeout=300)
+
         except (
             TimeoutExpired,
             TimeoutExpiredError,

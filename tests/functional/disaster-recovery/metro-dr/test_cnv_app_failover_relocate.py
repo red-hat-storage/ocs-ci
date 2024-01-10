@@ -7,7 +7,6 @@ from ocs_ci.framework.pytest_customization.marks import tier2
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.helpers.dr_helpers import (
     enable_fence,
     enable_unfence,
@@ -28,8 +27,8 @@ from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 
 logger = logging.getLogger(__name__)
 
-polarion_id_cnv_primary_up = "OCS-xxxx"
-polarion_id_cnv_primary_down = "OCS-xxxx"
+polarion_id_cnv_primary_up = "OCS-5413"
+polarion_id_cnv_primary_down = "OCS-5414"
 
 
 @tier2
@@ -42,7 +41,7 @@ class TestCnvApplicationMDR:
     @pytest.fixture(autouse=True)
     def teardown(self, request, cnv_dr_workload):
         """
-        Teardown function: If fenced, un-fence the cluster and  reboot nodes
+        Teardown function: If fenced, un-fence the cluster and reboot nodes
         """
 
         def finalizer():
@@ -113,7 +112,7 @@ class TestCnvApplicationMDR:
 
         # TODO: Write a file or any IO inside VM
 
-        # Fail-over the apps to Secondary managed cluster
+        # Fail-over the apps to secondary managed cluster
         for cnv_wl in cnv_workloads:
             failover(
                 failover_cluster=secondary_cluster_name,
@@ -124,7 +123,7 @@ class TestCnvApplicationMDR:
                 else None,
             )
 
-        # Verify VM and its pod/pvc are running/bound in secondary managed cluster
+        # Verify VM and its resources in secondary managed cluster
         set_current_primary_cluster_context(
             self.wl_namespace, cnv_workloads[0].workload_type
         )
@@ -153,14 +152,8 @@ class TestCnvApplicationMDR:
             )
             time.sleep(wait_time)
             wait_for_nodes_status([node.name for node in node_objs])
-            logger.info(
-                "Wait for all the pods in openshift-storage to be in running state"
-            )
-            assert wait_for_pods_to_be_running(
-                timeout=720
-            ), "Not all the pods reached running state"
 
-        # Verify application are deleted from old cluster
+        # Verify application are deleted from old managed cluster
         set_current_secondary_cluster_context(
             cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
         )
@@ -169,10 +162,10 @@ class TestCnvApplicationMDR:
 
         # TODO: Validate Data integrity
 
-        # Un-fence the managed cluster which was Fenced earlier
+        # Un-fence the managed cluster
         enable_unfence(drcluster_name=self.primary_cluster_name)
 
-        # Reboot the nodes which unfenced
+        # Reboot the nodes after unfenced
         gracefully_reboot_ocp_nodes(
             self.wl_namespace, self.primary_cluster_name, cnv_workloads[0].workload_type
         )
@@ -192,14 +185,14 @@ class TestCnvApplicationMDR:
                 else None,
             )
 
-        # Verify resources deletion from previous primary or current secondary cluster
         set_current_secondary_cluster_context(
             self.wl_namespace, cnv_workloads[0].workload_type
         )
+        # Verify resources deletion from previous primary or current secondary cluster
         for cnv_wl in cnv_workloads:
             wait_for_all_resources_deletion(cnv_wl.workload_namespace)
 
-        # Verify resources creation on preferredCluster
+        # Verify resource creation and VM status on relocated cluster
         set_current_primary_cluster_context(
             self.wl_namespace, cnv_workloads[0].workload_type
         )

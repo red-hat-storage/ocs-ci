@@ -701,8 +701,12 @@ def wait_for_cnv_workload(
         timeout (int): time in seconds to wait for resource deletion
 
     """
-    logger.info(f"Wait for VMs to reach {phase} state")
-    vm_obj = ocp.OCP(kind="vmi", resource_name=vm_name, namespace=namespace)
+    logger.info(f"Wait for VM: {vm_name} to reach {phase} state")
+    vm_obj = ocp.OCP(
+        kind=constants.VIRTUAL_MACHINE_INSTANCES,
+        resource_name=vm_name,
+        namespace=namespace,
+    )
     vm_obj._has_phase = True
     vm_obj.wait_for_phase(phase=constants.STATUS_RUNNING, timeout=timeout)
 

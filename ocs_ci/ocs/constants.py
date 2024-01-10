@@ -2360,6 +2360,9 @@ GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 APPLICATION_ARGOCD = "applications.argoproj.io"
 PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
 
+# CNV
+VIRTUAL_MACHINE_INSTANCES = "vmi"
+
 # Stretch cluster
 STRETCH_CLUSTER_NAMESPACE = "sc-project"
 
