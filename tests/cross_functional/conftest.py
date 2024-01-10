@@ -6,6 +6,7 @@ import boto3
 import pytest
 
 
+from ocs_ci.utility import version
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from ocs_ci.framework import config
@@ -141,17 +142,21 @@ def noobaa_db_backup_and_recovery_locally(
             kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
         )
         secrets = [
-            "noobaa-root-master-key",
             "noobaa-admin",
             "noobaa-operator",
             "noobaa-db",
             "noobaa-server",
             "noobaa-endpoints",
         ]
-        if is_kms_enabled():
-            secrets = [
-                secret for secret in secrets if secret != "noobaa-root-master-key"
-            ]
+        if (
+            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14
+            and not is_kms_enabled()
+        ):
+            secrets.extend(
+                ["noobaa-root-master-key-backend", "noobaa-root-master-key-volume"]
+            )
+        elif not is_kms_enabled():
+            secrets.append("noobaa-root-master-key")
         secrets_yaml = [
             ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
         ]
