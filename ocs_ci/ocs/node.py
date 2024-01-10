@@ -105,6 +105,22 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     return typed_nodes
 
 
+def get_nodes_having_label(label):
+    """
+    Gets nodes with particular label
+
+    Args:
+        label (str): Label
+
+    Return:
+        Dict: Representing nodes info
+
+    """
+    ocp_node_obj = OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get("items")
+    return nodes
+
+
 def get_all_nodes():
     """
     Gets the all nodes in cluster

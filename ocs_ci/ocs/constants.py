@@ -101,6 +101,7 @@ STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
+STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -2230,6 +2231,8 @@ ARBITER_ZONE = "a"
 DATA_ZONE_1 = "b"
 DATA_ZONE_2 = "c"
 
+ZONES_LABELS = ["data-1", "data-2", "arbiter"]
+
 NETSPLIT_DATA_1_DATA_2 = f"{DATA_ZONE_1}{DATA_ZONE_2}"
 NETSPLIT_ARBITER_DATA_1 = f"{ARBITER_ZONE}{DATA_ZONE_1}"
 NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
@@ -2238,3 +2241,57 @@ NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
 NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
     f"{ARBITER_ZONE}{DATA_ZONE_1}-{DATA_ZONE_1}{DATA_ZONE_2}"
 )
+
+# Logwriter workload labels
+LOGWRITER_CEPHFS_LABEL = "app=logwriter-cephfs"
+LOGREADER_CEPHFS_LABEL = "app=logreader-cephfs"
+LOGWRITER_RBD_LABEL = "app=logwriter-rbd"
+
+# Logwriter workload names
+LOGWRITER_CEPHFS_NAME = "logwriter-cephfs"
+LOGWRITER_RBD_NAME = "logwriter-rbd"
+LOGREADER_CEPHFS_NAME = "logreader-cephfs"
+
+# prometheus metrics queries
+PVC_NAMESPACES_BY_USED = (
+    "sum by (namespace, persistentvolumeclaim) "
+    "(kubelet_volume_stats_used_bytes{namespace='${namespace}'} * "
+    "on (namespace, persistentvolumeclaim) "
+    "group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * on (storageclass) "
+    "group_left(provisioner) kube_storageclass_info "
+    "{provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))"
+)
+STORAGE_CLASSES_BY_USED = (
+    "sum(topk by (namespace,persistentvolumeclaim) (1, kubelet_volume_stats_used_bytes) * "
+    "on (namespace,persistentvolumeclaim) group_left(storageclass, provisioner) (kube_persistentvolumeclaim_info * "
+    "on (storageclass) group_left(provisioner) "
+    "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'})) "
+    "by (storageclass, provisioner)"
+)
+PODS_BY_USED = (
+    "sum by(namespace,pod) (((max by(namespace,persistentvolumeclaim) (kubelet_volume_stats_used_bytes)) * "
+    "on (namespace,persistentvolumeclaim) group_right() ((kube_running_pod_ready*0+1) * "
+    "on(namespace, pod)  group_right() kube_pod_spec_volumes_persistentvolumeclaims_info)) * "
+    "on(namespace,persistentvolumeclaim) group_left(provisioner) (kube_persistentvolumeclaim_info * "
+    "on (storageclass)  group_left(provisioner) "
+    "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))"
+)
+
+
+# NOOBAA MISC
+NOOBAA_REGIONS_CODE_URL = (
+    "https://github.com/noobaa/noobaa-operator/blob/master/pkg/util/util.go#L1108"
+)
+AWS_REGIONS_DOC_URL = "https://docs.aws.amazon.com/general/latest/gr/rande.html"
+
+# dir of template for html reports
+HTML_REPORT_TEMPLATE_DIR = "ocs_ci/templates/html_reports/"
+
+
+# Google Cloud platform
+GCP_PROJECT_ODF_QE = "odf-qe"
+# Operation names
+OPERATION_STOP = "stop"
+OPERATION_START = "start"
+OPERATION_RESTART = "restart"
+OPERATION_TERMINATE = "terminate"

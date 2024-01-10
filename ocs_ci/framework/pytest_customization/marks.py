@@ -170,6 +170,11 @@ skipif_mcg_only = pytest.mark.skipif(
     reason="This test cannot run on MCG-Only deployments",
 )
 
+stretchcluster_required = pytest.mark.skipif(
+    config.ENV_DATA.get("arbiter_deployment") is not True,
+    reason="Test runs only on Stretch cluster with arbiter deployments",
+)
+
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(config.RUN["google_api_secret"])),
     reason="Google API credentials don't exist",
