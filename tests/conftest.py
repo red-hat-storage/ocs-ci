@@ -819,6 +819,7 @@ def storageclass_factory_fixture(
         encryption_kms_id=None,
         volume_binding_mode="Immediate",
         allow_volume_expansion=True,
+        kernelMountOptions=None,
     ):
         """
         Args:
@@ -842,7 +843,8 @@ def storageclass_factory_fixture(
                     csi-kms-connection-details configmap
             volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending
                 till pod attachment.
-            allow_volume_expansion (bool)= True to Allows volume expansion
+            allow_volume_expansion (bool): True to Allows volume expansion
+            kernelMountOptions (str): Mount option for security context
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -880,6 +882,7 @@ def storageclass_factory_fixture(
                 encryption_kms_id=encryption_kms_id,
                 volume_binding_mode=volume_binding_mode,
                 allow_volume_expansion=allow_volume_expansion,
+                kernelMountOptions=kernelMountOptions,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret

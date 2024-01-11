@@ -708,6 +708,7 @@ def create_storage_class(
     fs_name=None,
     volume_binding_mode="Immediate",
     allow_volume_expansion=True,
+    kernelMountOptions=None,
 ):
     """
     Create a storage class
@@ -730,6 +731,7 @@ def create_storage_class(
         volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
             pod attachment.
         allow_volume_expansion(bool): True to create sc with volume expansion
+        kernelMountOptions (str): Mount option for security context
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -771,6 +773,8 @@ def create_storage_class(
         if sc_name
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
+    if kernelMountOptions:
+        sc_data["parameters"]["kernelMountOptions"] = kernelMountOptions
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
@@ -4414,3 +4418,24 @@ def verify_pvc_size(pod_obj, expected_size):
             f"Checking again."
         )
     return False
+
+
+def check_selinux_relabeling(pod_obj):
+    """
+    Check SeLinux Relabeling is set to false.
+
+    Args:
+        pod_obj (Pod object): App pod
+
+    """
+    # Get the node on which pod is running
+    node_name = pod.get_pod_node(pod_obj=pod_obj).name
+
+    # Check SeLinux Relabeling is set to false
+    logger.info("checking for crictl logs")
+    oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    cmd1 = "crictl inspect $(crictl ps --name perf -q)"
+    output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
+    key = '"selinuxRelabel": false'
+    assert key in output, f"{key} is not present in inspect logs"
+    logger.info(f"{key} is present in inspect logs of application pod running node")
