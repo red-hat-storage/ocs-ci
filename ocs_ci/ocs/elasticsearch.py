@@ -261,6 +261,16 @@ class ElasticSearch(object):
         """
         return self.es.get()["spec"]["ports"][0]["port"]
 
+    def get_scheme(self):
+        """
+        This function return the schema of the Elasticsearch cluster.
+
+        Return
+            str : String that represent the schema (http or https).
+
+        """
+        return self.es.get()["spec"]["ports"][0]["name"]
+
     def _deploy_es(self):
         """
         Deploying the Elasticsearch server
@@ -378,7 +388,15 @@ class ElasticSearch(object):
 
         """
         try:
-            es = Elasticsearch([{"host": self.get_ip(), "port": self.get_port()}])
+            es = Elasticsearch(
+                [
+                    {
+                        "host": self.get_ip(),
+                        "port": self.get_port(),
+                        "scheme": self.get_scheme(),
+                    }
+                ]
+            )
         except esexp.ConnectionError:
             log.warning("Cannot connect to ES server in the LocalServer")
             es = None

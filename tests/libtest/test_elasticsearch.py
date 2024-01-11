@@ -188,12 +188,17 @@ class TestElasticsearch:
         # Try to use the development ES server for testing the elasticsearch_load
         # function to push data into ES server
         try:
+            url = (
+                f"{defaults.ELASTICSEARCE_SCHEME}://{defaults.ELASTICSEARCH_DEV_IP}"
+                f":{defaults.ELASTICSEARCE_PORT}"
+            )
             main_es = Elasticsearch(
                 [
                     {
                         "host": defaults.ELASTICSEARCH_DEV_IP,
                         "port": defaults.ELASTICSEARCE_PORT,
-                        "url": f"http://{defaults.ELASTICSEARCH_DEV_IP}:{defaults.ELASTICSEARCE_PORT}",
+                        "scheme": defaults.ELASTICSEARCE_SCHEME,
+                        "url": url,
                     }
                 ]
             )
