@@ -258,6 +258,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @brown_squad
 @tier4a
 @ignore_leftovers
+@skipif_managed_service
 @skipif_bmpsi
 @skipif_external_mode
 @skipif_ms_consumer
