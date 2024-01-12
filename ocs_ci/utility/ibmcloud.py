@@ -522,14 +522,12 @@ class IBMCloud(object):
 
 def label_nodes_region():
     """
-    Apply the region label to the worker and master nodes.
+    Apply the region label to the worker nodes.
     Necessary for IBM COS-backed backingstore support.
 
     """
-    logger.info("Applying region label to worker and master nodes")
+    logger.info("Applying region label to worker nodes")
     region = config.ENV_DATA.get("region")
     worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
-    master_nodes = get_nodes(node_type=constants.MASTER_MACHINE)
-    all_nodes = worker_nodes + master_nodes
-    for node in all_nodes:
+    for node in worker_nodes:
         node.add_label(rf"ibm-cloud\.kubernetes\.io/region={region}")
