@@ -307,16 +307,19 @@ PERF:
   # use in the tests this ES IP and Port - in case of deploy_internal_es: false
   internal_es_server: ""
   internal_es_port: 9200
+  internal_es_scheme: "http"
   # There is a Production ES for long term results saving
   production_es: true
   # The Production (long term results saving) ES information:  IP / Port
   production_es_server: "10.0.78.167"
   production_es_port: 9200
+  production_es_scheme: "http"
   # There is a Lab ES for development testing - combine with --dev-mode argument
   dev_lab_es: true
   # The Dev. Lab ES information:  IP / Port
   dev_es_server: "10.0.144.103"
   dev_es_port: 9200
+  dev_es_scheme: "http"
   dashboard_cred: "data/perfdash"
 
 # Specific component to be enabled/disabled
