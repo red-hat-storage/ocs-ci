@@ -5,13 +5,13 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
-  worker_replicas: 6
-  master_replicas: 4
-  worker_num_cpus: '16'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '8'
   master_num_cpus: '4'
   master_memory: '16384'
-  compute_memory: '24576'
+  compute_memory: '65536'
   fio_storageutilization_min_mbps: 10.0
 REPORTING:
   polarion:
-    deployment_id: 'OCS-2363'
+    deployment_id: 'OCS-1453'
