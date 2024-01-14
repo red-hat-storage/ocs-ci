@@ -1,4 +1,4 @@
-# Use a base image with QEMU for multi-architecture support
+# Use a base image with QEMU for multi-architecture support.
 FROM --platform=$BUILDPLATFORM nginx:alpine
 
 RUN apk update
