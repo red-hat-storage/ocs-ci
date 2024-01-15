@@ -57,7 +57,7 @@ from ocs_ci.ocs.node import (
     get_provider_internal_node_ips,
 )
 from ocs_ci.ocs.version import get_ocp_version
-from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
+from ocs_ci.utility.version import get_semantic_version, VERSION_4_11, VERSION_4_14
 from ocs_ci.helpers.helpers import (
     get_secret_names,
     get_cephfs_name,
@@ -154,7 +154,7 @@ def ocs_install_verification(
             properly.
         post_upgrade_verification (bool): Set to True if this function is
             called after upgrade.
-        version_before_upgrade (float): Set to OCS version before upgrade
+        version_before_upgrade (str): Set to OCS version before upgrade
 
     """
     from ocs_ci.ocs.node import get_nodes
@@ -267,9 +267,12 @@ def ocs_install_verification(
                 constants.MGR_APP_LABEL: 1,
                 constants.MDS_APP_LABEL: 2,
                 constants.RGW_APP_LABEL: rgw_count,
-                constants.EXPORTER_APP_LABEL: number_of_worker_nodes,
             }
         )
+        if not (
+            version_before_upgrade == f"{VERSION_4_14}" and post_upgrade_verification
+        ):
+            resources_dict[constants.EXPORTER_APP_LABEL] = number_of_worker_nodes
 
     if fusion_aas_consumer:
         del resources_dict[constants.OCS_OPERATOR_LABEL]
