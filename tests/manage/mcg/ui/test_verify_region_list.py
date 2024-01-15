@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     bugzilla,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs.constants import NOOBAA_REGIONS_CODE_URL, AWS_REGIONS_DOC_URL
 from ocs_ci.ocs.ui.views import locate_aws_regions, locate_noobaa_regions
@@ -93,6 +94,7 @@ def setup_browser(request):
 
 
 @tier3
+@mcg
 @red_squad
 @bugzilla("2183480")
 @polarion_id("OCS-5153")
@@ -115,7 +117,6 @@ def test_verify_aws_regions_list(setup_browser):
     navigate_noobaa_code = NavigateAWSDocsWebURL()
     setup_browser(navigate_noobaa_code, NOOBAA_REGIONS_CODE_URL)
     for region in aws_regions.values():
-
         # fetch the noobaa regions parameters from the
         # source code
         noobaa_regions_str = navigate_noobaa_code.fetch_noobaa_regions()

@@ -9,6 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     red_squad,
+    rgw,
     skipif_mcg_only,
     tier1,
     tier3,
@@ -21,6 +22,7 @@ from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 logger = logging.getLogger(__name__)
 
 
+@rgw
 @red_squad
 @skipif_mcg_only
 class TestBucketDeletion:

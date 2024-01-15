@@ -8,6 +8,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     bugzilla,
     skipif_ocs_version,
+    mcg,
+    rgw,
 )
 
 log = logging.getLogger(__name__)
@@ -15,7 +17,6 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(scope="function")
 def hsbenchs3(request):
-
     hsbenchs3 = hsbench.HsBench()
     hsbenchs3.create_test_user()
     hsbenchs3.create_resource_hsbench()
@@ -31,7 +32,6 @@ def hsbenchs3(request):
 
 @pytest.fixture(scope="function")
 def s3bench(request):
-
     s3bench = hsbench.HsBench()
     s3bench.create_resource_hsbench()
     s3bench.install_hsbench()
@@ -50,6 +50,7 @@ class TestHsBench(E2ETest):
     Test writing one million S3 objects to a single bucket
     """
 
+    @rgw
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2321")
     def test_s3_benchmark_hsbench(self, hsbenchs3):
@@ -73,6 +74,7 @@ class TestHsBench(E2ETest):
         # Check ceph health status
         utils.ceph_health_check()
 
+    @mcg
     @bugzilla("1998680")
     @skipif_ocs_version("<4.9")
     @pytest.mark.polarion_id("OCS-2698")

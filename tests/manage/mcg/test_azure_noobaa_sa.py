@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     azure_platform_required,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -18,6 +19,7 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @tier1
 @azure_platform_required
@@ -39,7 +41,9 @@ class TestNoobaaStorageAccount:
 
         """
         azure_depl = AZUREIPI()
-        token = azure_depl.azure_util.credentials.token["access_token"]
+        tkn = azure_depl.azure_util.credentials.get_token(
+            "https://management.azure.com/.default"
+        )
         secret_ocp_obj = OCP(
             kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -53,7 +57,7 @@ class TestNoobaaStorageAccount:
         subscription_id = base64.b64decode(
             creds_secret_obj.get("data").get("azure_subscription_id")
         ).decode("utf-8")
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"Authorization": f"Bearer {tkn.token}"}
         url = (
             f"https://management.azure.com/subscriptions/{subscription_id}/"
             f"resourceGroups/{resource_group_name}/providers/Microsoft.Storage/"

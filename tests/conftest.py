@@ -48,7 +48,7 @@ from ocs_ci.ocs.exceptions import (
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
     ResourceNotDeleted,
-    MissingSquadDecoratorError,
+    MissingDecoratorError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -188,7 +188,7 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-def verify_squad_owners(items):
+def verify_test_decorators_requirements(items):
     """
     Verify that all tests collected are decorated with a squad marker
 
@@ -197,6 +197,7 @@ def verify_squad_owners(items):
 
     """
     items_without_squad_marker = {}
+    red_no_mcg_or_rgw_items = {}
     for item in items:
         base_dir = os.path.join(constants.TOP_DIR, "tests")
         ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
@@ -207,12 +208,24 @@ def verify_squad_owners(items):
                     "Ignoring test case %s as it has a marker in the ignore list",
                     item.name,
                 )
+
+            # Verify tests are decorated with the correct squad owner
             elif not any(["_squad" in marker for marker in item_markers]):
                 log.debug("%s is missing a squad owner marker", item.name)
                 items_without_squad_marker.update({item.name: item.fspath.strpath})
 
+            # Verify red squad tests are decorated with either @mcg or @rgw
+            elif (
+                "red_squad" in item_markers
+                and "mcg" not in item_markers
+                and "rgw" not in item_markers
+            ):
+                log.debug("%s is a red_squad test without @mcg or @rgw", item.name)
+                red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
+
+    err_msg = ""
     if items_without_squad_marker:
-        msg = f"""
+        err_msg += f"""
 Missing squad decorator for the following test items: {json.dumps(items_without_squad_marker, indent=4)}
 
 Tests are required to be decorated with their squad owner. Please add the tests respective owner.
@@ -223,8 +236,17 @@ For example:
     def test_name():
 
 Test owner marks can be imported from `ocs_ci.framework.pytest_customization.marks`
+
             """
-        raise MissingSquadDecoratorError(msg)
+    if red_no_mcg_or_rgw_items:
+        err_msg += f"""
+The following tests are missing either the @mcg or @rgw decorators: {json.dumps(red_no_mcg_or_rgw_items, indent=4)}
+
+Red squad tests are required to be decorated with either @mcg or @rgw. Please add either depending on the tests's focus.
+
+                """
+    if err_msg:
+        raise MissingDecoratorError(err_msg)
 
 
 def export_squad_marker_to_csv(items, filename=None):
@@ -294,9 +316,8 @@ def pytest_collection_modifyitems(session, config, items):
     deploy = ocsci_config.RUN["cli_params"].get("deploy")
     skip_ocs_deployment = ocsci_config.ENV_DATA["skip_ocs_deployment"]
 
-    # Verify tests are decorated with the correct squad owner
     if config.option.collectonly:
-        verify_squad_owners(items)
+        verify_test_decorators_requirements(items)
 
     # Add squad markers to each test item based on filepath
     for item in items:
@@ -798,6 +819,7 @@ def storageclass_factory_fixture(
         encryption_kms_id=None,
         volume_binding_mode="Immediate",
         allow_volume_expansion=True,
+        kernelMountOptions=None,
     ):
         """
         Args:
@@ -821,7 +843,8 @@ def storageclass_factory_fixture(
                     csi-kms-connection-details configmap
             volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending
                 till pod attachment.
-            allow_volume_expansion (bool)= True to Allows volume expansion
+            allow_volume_expansion (bool): True to Allows volume expansion
+            kernelMountOptions (str): Mount option for security context
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -859,6 +882,7 @@ def storageclass_factory_fixture(
                 encryption_kms_id=encryption_kms_id,
                 volume_binding_mode=volume_binding_mode,
                 allow_volume_expansion=allow_volume_expansion,
+                kernelMountOptions=kernelMountOptions,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -1172,6 +1196,7 @@ def pod_factory_fixture(request, pvc_factory):
         command_args=None,
         subpath=None,
         deployment=False,
+        pvc_read_only_mode=None,
     ):
         """
         Args:
@@ -1226,6 +1251,7 @@ def pod_factory_fixture(request, pvc_factory):
                 command_args=command_args,
                 subpath=subpath,
                 deployment=deployment,
+                pvc_read_only_mode=pvc_read_only_mode,
             )
             assert pod_obj, "Failed to create pod"
 
@@ -4320,9 +4346,6 @@ def nb_ensure_endpoint_count(request):
     """
     Validate and ensure the number of running noobaa endpoints
     """
-    # TODO: remove return once bug https://bugzilla.redhat.com/show_bug.cgi?id=2251741 is verified
-    # return since test cases are not dependant on endpoint count
-    return
     cls = request.cls
     min_ep_count = cls.MIN_ENDPOINT_COUNT
     max_ep_count = cls.MAX_ENDPOINT_COUNT
@@ -6807,6 +6830,11 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
 
 @pytest.fixture()
 def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
+    """
+    Fixture to create RWX cephfs volume
+
+    """
+
     def factory(project_name):
         return pvc_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -6818,9 +6846,32 @@ def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
     return factory
 
 
+@pytest.fixture(scope="session")
+def setup_stretch_cluster_project(request, project_factory_session):
+    """
+    Session scoped fixture for creating stretch cluster project
+
+    """
+    return project_factory_session(constants.STRETCH_CLUSTER_NAMESPACE)
+
+
 @pytest.fixture()
 def logwriter_workload_factory(request, teardown_factory):
+    """
+    Fixture to create logwriter deployment
+
+    """
+
     def factory(pvc, logwriter_path):
+        """
+        Args:
+            pvc (PVC): PVC object
+            logwriter_path (str): String representing logwriter yaml path
+
+        Returns:
+            OCS object: Lgwriter deployment object
+
+        """
         dc_data = templating.load_yaml(logwriter_path)
         dc_data["metadata"]["namespace"] = pvc.namespace
         dc_data["spec"]["replicas"] = 4
@@ -6856,6 +6907,17 @@ def logwriter_workload_factory(request, teardown_factory):
 @pytest.fixture()
 def logreader_workload_factory(request, teardown_factory):
     def factory(pvc, logreader_path, duration=30):
+        """
+        Args:
+            pvc (PVC): PVC object
+            logreader_path (str): String representing logreader yaml path
+            duration (int): Time in minutes, representing read duration
+
+        Retuns:
+            OCS object: Logreader job object
+
+        """
+
         job_data = templating.load_yaml(logreader_path)
         job_data["metadata"]["namespace"] = pvc.namespace
         job_data["spec"]["completions"] = 4
@@ -6893,42 +6955,68 @@ def logreader_workload_factory(request, teardown_factory):
 @pytest.fixture()
 def setup_logwriter_cephfs_workload_factory(
     request,
-    project_factory,
+    setup_stretch_cluster_project,
     pvc_factory,
     logwriter_cephfs_many_pvc_factory,
     logwriter_workload_factory,
     logreader_workload_factory,
 ):
-    logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
-    logreader_path = constants.LOGWRITER_CEPHFS_READER
-    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
-    pvc = logwriter_cephfs_many_pvc_factory(project_name=project)
-    logwriter_workload = logwriter_workload_factory(
-        pvc=pvc, logwriter_path=logwriter_path
-    )
-    logreader_workload = logreader_workload_factory(
-        pvc=pvc, logreader_path=logreader_path
-    )
+    """
+    This fixture will create the RWX cephfs volume and call the logwriter, logreader fixture to do
+    complete setup
 
-    return logwriter_workload, logreader_workload
+    """
+
+    def factory(read_duration=30):
+        """
+        Args:
+            read_duration (int): Time duration in minutes
+
+        Returns:
+             OCS objects: Representing both logwriter and logreader objects
+
+        """
+        logwriter_path = constants.LOGWRITER_CEPHFS_WRITER
+        logreader_path = constants.LOGWRITER_CEPHFS_READER
+        pvc = logwriter_cephfs_many_pvc_factory(
+            project_name=setup_stretch_cluster_project
+        )
+        logwriter_workload = logwriter_workload_factory(
+            pvc=pvc, logwriter_path=logwriter_path
+        )
+        logreader_workload = logreader_workload_factory(
+            pvc=pvc, logreader_path=logreader_path, duration=read_duration
+        )
+        return logwriter_workload, logreader_workload
+
+    return factory
 
 
 @pytest.fixture()
-def setup_logwriter_rbd_workload_factory(request, project_factory, teardown_factory):
+def setup_logwriter_rbd_workload_factory(
+    request, setup_stretch_cluster_project, teardown_factory
+):
+    """
+    This fixture will create the RWO RBD volume, create logwriter sts using that volume
+
+    Returns:
+        OCS object: Logwriter sts object
+
+    """
+
     logwriter_sts_path = constants.LOGWRITER_STS_PATH
-    project = project_factory(project_name=constants.STRETCH_CLUSTER_NAMESPACE)
     sts_data = templating.load_yaml(logwriter_sts_path)
-    sts_data["metadata"]["namespace"] = project.namespace
+    sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
     logwriter_sts = helpers.create_resource(**sts_data)
     teardown_factory(logwriter_sts)
     logwriter_sts_pods = [
         pod["metadata"]["name"]
         for pod in get_pods_having_label(
-            label="app=logwriter-rbd", namespace=project.namespace
+            label="app=logwriter-rbd", namespace=setup_stretch_cluster_project.namespace
         )
     ]
     wait_for_pods_to_be_running(
-        namespace=project.namespace, pod_names=logwriter_sts_pods
+        namespace=setup_stretch_cluster_project.namespace, pod_names=logwriter_sts_pods
     )
 
     return logwriter_sts
@@ -6954,3 +7042,15 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
         )
 
     return factory
+
+
+@pytest.fixture()
+def reset_conn_score():
+    """
+    This is a fixture that will reset the connections scores for
+    each mon's
+
+    """
+    from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+
+    return StretchCluster().reset_conn_score()

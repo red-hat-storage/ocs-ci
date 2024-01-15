@@ -43,7 +43,7 @@ def test_multicluster_dahorak():
 ## Execution of the example test
 
 See also [Running tests on multicluster environment section in Usage
-doc](usage.md#running-tests-on-multicluster-environment).
+doc](usage.md).
 
 I saved the above example test into `tests/test_multicluster_dahorak.py` file.
 Additionally I have two clusters and related cluster dirs:

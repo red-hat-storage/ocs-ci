@@ -15,6 +15,7 @@ spec:
     # server: 10.0.144.103
     server: 10.0.78.167
     port: 9200
+    scheme: http
   es_index: ripsaw-smallfile
   metadata_collection: true
   index_data: true

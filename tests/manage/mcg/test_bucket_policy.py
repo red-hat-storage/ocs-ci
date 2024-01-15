@@ -49,6 +49,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     bugzilla,
     red_squad,
+    mcg,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
@@ -56,6 +57,7 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @skipif_managed_service
 @skipif_ocs_version("<4.3")
@@ -895,7 +897,7 @@ class TestS3BucketPolicy(MCGTest):
         # Setting Get(read) policy action for all users(public)
         bucket_policy_generated = gen_bucket_policy(
             sid="PublicRead",
-            user_list=["*"],
+            user_list="*",
             actions_list=["GetObject"],
             resources_list=[f"{s3_bucket[0].name}/{'*'}"],
             effect="Allow",
@@ -1006,7 +1008,7 @@ class TestS3BucketPolicy(MCGTest):
             "GetObjectLegalHold",
         ]
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list="*",
             actions_list=actions_list,
             resources_list=[obc_obj.bucket_name],
         )
@@ -1031,13 +1033,13 @@ class TestS3BucketPolicy(MCGTest):
         bucket_policy = json.loads(bucket_policy)
 
         # Find the missing bucket policies
-        bucket_policies = bucket_policy["statement"][0]["action"]
+        bucket_policies = bucket_policy["Statement"][0]["Action"]
         bucket_policies = [
             action.split("s3:", 1)[1]
             for action in bucket_policies
             if action.startswith("s3:")
         ]
-        actions_list = [action.lower() for action in actions_list]
+        actions_list = [action for action in actions_list]
         missing_policies = [
             action for action in actions_list if action not in bucket_policies
         ]

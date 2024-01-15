@@ -67,8 +67,10 @@ class CephCluster(object):
     This class has depiction of ceph cluster. Contains references to
     pod objects which represents ceph cluster entities.
 
+    Parameters
+    ----------
     Attributes:
-        pods (list) : A list of  ceph cluster related pods
+        pods (list): A list of ceph cluster related pods
         cluster_name (str): Name of ceph cluster
         namespace (str): openshift Namespace where this cluster lives
     """
@@ -2127,7 +2129,7 @@ def change_ceph_backfillfull_ratio(backfillfull_ratio):
         backfillfull_ratio (int): backfillfull_ratio
 
     """
-    ceph_cmd = f"ceph osd set-backfillfull-ratio {str(float(backfillfull_ratio/100))}"
+    ceph_cmd = f"ceph osd set-backfillfull-ratio {str(float(backfillfull_ratio / 100))}"
     ct_pod = pod.get_ceph_tools_pod()
     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
@@ -2140,7 +2142,7 @@ def change_ceph_full_ratio(full_ratio):
         full_ratio (int): backfillfull_ratio
 
     """
-    ceph_cmd = f"ceph osd set-full-ratio {str(float(full_ratio/100))}"
+    ceph_cmd = f"ceph osd set-full-ratio {str(float(full_ratio / 100))}"
     ct_pod = pod.get_ceph_tools_pod()
     ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
 
@@ -3149,3 +3151,35 @@ def get_full_ratio_from_osd_dump():
     logger.info("Checking the values of ceph osd full ratios in osd map")
     osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
     return float(osd_dump_dict["full_ratio"])
+
+
+def fetch_connection_scores_for_mon(mon_pod):
+    """
+    This will fetch connection scores for each mons
+
+    Args:
+        mon_pod (Pod): Pod object for the respective mon pod
+
+    Returns:
+        String: Represeting connection score dump for the mon
+
+    """
+    mon_pod_id = pod.get_mon_pod_id(mon_pod)
+    cmd = f"ceph daemon mon.{mon_pod_id} connection scores dump"
+    return mon_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
+
+
+def get_mon_quorum_ranks():
+    """
+    This will return the map representing each mon's quorum ranks
+
+    Returns:
+        Dict: Mon quorum ranks
+
+    """
+    ceph_tools_pod = pod.get_ceph_tools_pod()
+    out = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+    mon_quorum_ranks = {}
+    for rank in list(out["quorum"]):
+        mon_quorum_ranks[list(out["quorum_names"])[rank]] = rank
+    return mon_quorum_ranks

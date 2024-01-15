@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_mcg_only,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 RECONCILE_WAIT = 60
 
 
+@mcg
 @red_squad
 class TestS3Routes:
 

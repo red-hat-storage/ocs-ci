@@ -708,6 +708,7 @@ def create_storage_class(
     fs_name=None,
     volume_binding_mode="Immediate",
     allow_volume_expansion=True,
+    kernelMountOptions=None,
 ):
     """
     Create a storage class
@@ -730,6 +731,7 @@ def create_storage_class(
         volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
             pod attachment.
         allow_volume_expansion(bool): True to create sc with volume expansion
+        kernelMountOptions (str): Mount option for security context
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -742,6 +744,7 @@ def create_storage_class(
     sc_data = templating.load_yaml(yamls[interface_type])
 
     if interface_type == constants.CEPHBLOCKPOOL:
+        sc_data["parameters"]["encrypted"] = "false"
         interface = constants.RBD_INTERFACE
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.RBD_PROVISIONER
@@ -756,6 +759,7 @@ def create_storage_class(
             sc_data["parameters"]["encryptionKMSID"] = (
                 encryption_kms_id if encryption_kms_id else get_encryption_kmsid()[0]
             )
+
     elif interface_type == constants.CEPHFILESYSTEM:
         interface = constants.CEPHFS_INTERFACE
         sc_data["parameters"]["fsName"] = fs_name if fs_name else get_cephfs_name()
@@ -769,6 +773,8 @@ def create_storage_class(
         if sc_name
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
+    if kernelMountOptions:
+        sc_data["parameters"]["kernelMountOptions"] = kernelMountOptions
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
@@ -2811,7 +2817,9 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
-def modify_deployment_replica_count(deployment_name, replica_count):
+def modify_deployment_replica_count(
+    deployment_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Function to modify deployment replica count,
     i.e to scale up or down deployment
@@ -2819,16 +2827,35 @@ def modify_deployment_replica_count(deployment_name, replica_count):
     Args:
         deployment_name (str): Name of deployment
         replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deployment exists
 
     Returns:
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=deployment_name, params=params)
+
+
+def modify_job_parallelism_count(
+    job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Function to modify Job instances count,
+
+    Args:
+        job_name (str): Name of job
+        count (int): instances count to be changed to
+        namespace (str): namespace where the job is running
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.JOB, namespace=namespace)
+    params = f'{{"spec": {{"parallelism": {count}}}}}'
+    return ocp_obj.patch(resource_name=job_name, params=params)
 
 
 def collect_performance_stats(dir_name):
@@ -3543,7 +3570,9 @@ def get_failure_domain():
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
 
 
-def modify_statefulset_replica_count(statefulset_name, replica_count):
+def modify_statefulset_replica_count(
+    statefulset_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Function to modify statefulset replica count,
     i.e to scale up or down statefulset
@@ -3556,9 +3585,7 @@ def modify_statefulset_replica_count(statefulset_name, replica_count):
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = OCP(
-        kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
 
@@ -4345,3 +4372,70 @@ def get_s3_credentials_from_secret(secret_name):
     secret_key = base64.b64decode(base64_secret_key).decode("utf-8")
 
     return access_key, secret_key
+
+
+def verify_pvc_size(pod_obj, expected_size):
+    """
+    Verify PVC size is as expected or not.
+
+    Args:
+        pod_obj : Pod Object
+        expected_size : Expected size of PVC
+    Returns:
+        bool: True if expected size is matched with the PVC attached to pod. else False
+
+    """
+    # Wait for 240 seconds to reflect the change on pod
+    logger.info(f"Checking pod {pod_obj.name} to verify the change.")
+
+    command = "df -kh"
+    for df_out in TimeoutSampler(240, 3, pod_obj.exec_cmd_on_pod, command=command):
+        if not df_out:
+            continue
+        df_out = df_out.split()
+
+        if not df_out:
+            logger.error(
+                f"Command {command} failed to return an output from pod {pod_obj.name}"
+            )
+            return False
+
+        new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
+        if (
+            expected_size - 0.5 <= float(new_size_mount[:-1]) <= expected_size
+            and new_size_mount[-1] == "G"
+        ):
+            logger.info(
+                f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
+                f"is reflected on pod {pod_obj.name}"
+            )
+            return True
+
+        logger.info(
+            f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
+            f" on pod {pod_obj.name}. New size on mount is not "
+            f"{expected_size}G as expected, but {new_size_mount}. "
+            f"Checking again."
+        )
+    return False
+
+
+def check_selinux_relabeling(pod_obj):
+    """
+    Check SeLinux Relabeling is set to false.
+
+    Args:
+        pod_obj (Pod object): App pod
+
+    """
+    # Get the node on which pod is running
+    node_name = pod.get_pod_node(pod_obj=pod_obj).name
+
+    # Check SeLinux Relabeling is set to false
+    logger.info("checking for crictl logs")
+    oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    cmd1 = "crictl inspect $(crictl ps --name perf -q)"
+    output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
+    key = '"selinuxRelabel": false'
+    assert key in output, f"{key} is not present in inspect logs"
+    logger.info(f"{key} is present in inspect logs of application pod running node")

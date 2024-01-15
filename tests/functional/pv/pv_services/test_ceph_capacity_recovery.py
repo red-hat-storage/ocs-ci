@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_disconnected_cluster,
     skipif_external_mode,
+    polarion_id,
 )
 
 from ocs_ci.ocs import node, constants
@@ -53,6 +54,7 @@ def check_health_status():
 
 @green_squad
 @tier2
+@polarion_id("OCS-5399")
 @skipif_external_mode
 @skipif_disconnected_cluster
 @skipif_ocs_version("<4.12")

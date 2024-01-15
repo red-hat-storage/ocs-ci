@@ -1,9 +1,8 @@
 import time
 
-from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
-from tests.ui.test_capacity_breakdown_ui import logger
 
 
 class BlockAndFile(StorageSystemDetails):

@@ -635,7 +635,7 @@ class ArchitectureNotSupported(Exception):
     pass
 
 
-class MissingSquadDecoratorError(Exception):
+class MissingDecoratorError(Exception):
     pass
 
 
@@ -677,4 +677,8 @@ class HostValidationFailed(Exception):
 
 
 class SameNameClusterAlreadyExistsException(Exception):
+    pass
+
+
+class NoRunningCephToolBoxException(Exception):
     pass

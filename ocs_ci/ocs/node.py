@@ -109,6 +109,22 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     return typed_nodes
 
 
+def get_nodes_having_label(label):
+    """
+    Gets nodes with particular label
+
+    Args:
+        label (str): Label
+
+    Return:
+        Dict: Representing nodes info
+
+    """
+    ocp_node_obj = OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get("items")
+    return nodes
+
+
 def get_all_nodes():
     """
     Gets the all nodes in cluster
@@ -1684,14 +1700,15 @@ def verify_all_nodes_created():
                 for node_list in TimeoutSampler(
                     timeout=wait_time, sleep=60, func=get_all_nodes
                 ):
-                    if len(node_list) == expected_num_nodes:
+                    existing_num_nodes = len(node_list)
+                    if existing_num_nodes == expected_num_nodes:
                         log.info(
                             f"All {expected_num_nodes} nodes are created successfully."
                         )
                         break
                     else:
                         log.warning(
-                            f"waiting for {expected_num_nodes} nodes to create but found {len(node_list)} nodes"
+                            f"waiting for {expected_num_nodes} nodes to create but found {existing_num_nodes} nodes"
                         )
             except TimeoutExpiredError:
                 log.error(f"Expected {expected_num_nodes} nodes are not created")

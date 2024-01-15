@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     ignore_leftover_label,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import random_object_round_trip_verification
@@ -20,6 +21,7 @@ from tests.conftest import revert_noobaa_endpoint_scc_class
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @skipif_mcg_only
 @skipif_ocs_version("<4.10")

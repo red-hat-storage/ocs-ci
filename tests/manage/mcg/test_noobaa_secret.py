@@ -16,12 +16,15 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_disconnected_cluster,
     red_squad,
+    mcg,
+    post_upgrade,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 from botocore.exceptions import EndpointConnectionError
 from ocs_ci.ocs.bucket_utils import create_aws_bs_using_cli
+from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,6 @@ def cleanup(request):
     instances = []
 
     def factory(resource_obj):
-
         if isinstance(resource_obj, list):
             instances.extend(resource_obj)
         else:
@@ -59,6 +61,7 @@ def cleanup(request):
     return factory
 
 
+@mcg
 @red_squad
 @tier2
 @skipif_ocs_version("<4.11")
@@ -330,3 +333,22 @@ class TestNoobaaSecrets:
         logger.info(
             "Secret got deleted after the all the linked backingstores are deleted!"
         )
+
+
+@mcg
+@post_upgrade
+@red_squad
+@bugzilla("2219522")
+@polarion_id("OCS-5205")
+@tier2
+def test_noobaa_root_secret():
+    """
+    This test verifies if the noobaa root secret is publicly
+    exposed or not during upgrade scenario
+
+    """
+
+    assert (
+        check_if_mcg_root_secret_public() is False
+    ), "Seems like MCG root secrets are exposed publicly, please check"
+    logger.info("MCG root secrets are not exposed to public")

@@ -29,6 +29,7 @@ from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import benchmark_operator, constants
+from ocs_ci.ocs.defaults import ELASTICSEARCE_SCHEME
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.ocs.perftests import PASTest
@@ -576,10 +577,15 @@ class TestSmallFileWorkload(PASTest):
                 self.es = None
                 return
             else:
+                url = (
+                    f"{config.PERF.get('internal_es_scheme')}://{config.PERF.get('internal_es_server')}"
+                    f":{config.PERF.get('internal_es_port')}",
+                )
                 self.es = {
                     "server": config.PERF.get("internal_es_server"),
                     "port": config.PERF.get("internal_es_port"),
-                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                    "scheme": config.PERF.get("internal_es_scheme"),
+                    "url": url,
                 }
                 # verify that the connection to the elasticsearch server is OK
                 if not super(TestSmallFileWorkload, self).es_connect():
@@ -644,7 +650,13 @@ class TestSmallFileWorkload(PASTest):
         else:
             log.info(self.es)
             self.es = Elasticsearch(
-                hosts=[{"host": self.es["server"], "port": self.es["port"]}]
+                hosts=[
+                    {
+                        "host": self.es["server"],
+                        "port": self.es["port"],
+                        "scheme": self.es.get("scheme", ELASTICSEARCE_SCHEME),
+                    }
+                ]
             )
             full_results.read()
 

@@ -10,7 +10,7 @@ from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 
 from ocs_ci.ocs import constants
 
-from ocs_ci.framework.pytest_customization.marks import red_squad
+from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
 from ocs_ci.framework.testlib import (
     skipif_aws_creds_are_missing,
     skipif_vsphere_ipi,
@@ -28,6 +28,7 @@ from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 @ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
 @skipif_aws_creds_are_missing

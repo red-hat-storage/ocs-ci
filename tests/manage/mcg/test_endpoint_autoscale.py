@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilization
 
@@ -15,6 +16,7 @@ log = logging.getLogger(__name__)
 # Skipped above 4.6 because of https://github.com/red-hat-storage/ocs-ci/issues/4129
 
 
+@mcg
 @red_squad
 @skipif_ocs_version(["<4.5", "<4.14"])
 @skipif_managed_service

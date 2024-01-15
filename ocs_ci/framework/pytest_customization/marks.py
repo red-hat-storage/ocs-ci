@@ -63,7 +63,8 @@ team_marks = [manage, ecosystem, e2e]
 ocp = pytest.mark.ocp
 rook = pytest.mark.rook
 ui = pytest.mark.ui
-noobaa = pytest.mark.noobaa
+mcg = pytest.mark.mcg
+rgw = pytest.mark.rgw
 csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
@@ -182,6 +183,11 @@ skipif_aws_creds_are_missing = pytest.mark.skipif(
 skipif_mcg_only = pytest.mark.skipif(
     config.ENV_DATA["mcg_only_deployment"],
     reason="This test cannot run on MCG-Only deployments",
+)
+
+stretchcluster_required = pytest.mark.skipif(
+    config.ENV_DATA.get("arbiter_deployment") is not True,
+    reason="Test runs only on Stretch cluster with arbiter deployments",
 )
 
 google_api_required = pytest.mark.skipif(

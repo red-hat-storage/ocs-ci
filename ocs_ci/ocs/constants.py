@@ -103,6 +103,7 @@ STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
+STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -365,6 +366,7 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
+EXPORTER_APP_LABEL = "app=rook-ceph-exporter"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
@@ -2359,6 +2361,10 @@ ARBITER_ZONE = "a"
 DATA_ZONE_1 = "b"
 DATA_ZONE_2 = "c"
 
+ZONES_LABELS = ["data-1", "data-2", "arbiter"]
+
+RGW_SVC_TOPOLOGY_ANNOTATIONS = "service.kubernetes.io/topology-mode: Auto"
+
 NETSPLIT_DATA_1_DATA_2 = f"{DATA_ZONE_1}{DATA_ZONE_2}"
 NETSPLIT_ARBITER_DATA_1 = f"{ARBITER_ZONE}{DATA_ZONE_1}"
 NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
@@ -2367,6 +2373,17 @@ NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
 NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
     f"{ARBITER_ZONE}{DATA_ZONE_1}-{DATA_ZONE_1}{DATA_ZONE_2}"
 )
+
+# Logwriter workload labels
+
+LOGWRITER_CEPHFS_LABEL = "app=logwriter-cephfs"
+LOGREADER_CEPHFS_LABEL = "app=logreader-cephfs"
+LOGWRITER_RBD_LABEL = "app=logwriter-rbd"
+
+# Logwriter workload names
+LOGWRITER_CEPHFS_NAME = "logwriter-cephfs"
+LOGWRITER_RBD_NAME = "logwriter-rbd"
+LOGREADER_CEPHFS_NAME = "logreader-cephfs"
 
 # prometheus metrics queries
 PVC_NAMESPACES_BY_USED = (
@@ -2392,6 +2409,7 @@ PODS_BY_USED = (
     "on (storageclass)  group_left(provisioner) "
     "kube_storageclass_info {provisioner=~'(.*rbd.csi.ceph.com)|(.*cephfs.csi.ceph.com)|(ceph.rook.io/block)'}))"
 )
+
 
 # NOOBAA MISC
 NOOBAA_REGIONS_CODE_URL = (

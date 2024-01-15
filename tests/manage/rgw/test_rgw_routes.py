@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     skipif_external_mode,
     tier1,
+    rgw,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import (
@@ -23,6 +24,7 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 log = logging.getLogger(__name__)
 
 
+@rgw
 @red_squad
 @on_prem_platform_required
 class TestRGWRoutes:
@@ -33,7 +35,7 @@ class TestRGWRoutes:
 
     @skipif_external_mode
     @bugzilla("2139037")
-    @tier1  # TODO: tier2 instead?
+    @tier1
     @pytest.mark.parametrize(
         argnames="route_data",
         argvalues=[
