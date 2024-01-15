@@ -4451,32 +4451,38 @@ def check_selinux_relabeling(pod_obj):
     logger.info(f"{key} is present in inspect logs of application pod running node")
 
 
-def verify_log_exist_in_pod_logs(
-    pod_name,
+def verify_log_exist_in_pods_logs(
+    pod_names,
     expected_log,
     container=None,
     namespace=config.ENV_DATA["cluster_namespace"],
     all_containers_flag=True,
+    since=None,
 ):
     """
-    Verify log exist in pod logs.
+    Verify log exist in pods logs.
 
     Args:
-        pod_name (str): Name of the pod
-        expected_log (str): the expected logs in "oc logs" command
+        pod_names (list): Name of the pod
+        expected_log:
         container (str): Name of the container
         namespace (str): Namespace of the pod
         all_containers_flag (bool): fetch logs from all containers of the resource
+        since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
 
     Returns:
         bool: return True if log exist otherwise False
 
     """
-    pod_logs = pod.get_pod_logs(
-        pod_name,
-        namespace=namespace,
-        container=container,
-        all_containers=all_containers_flag,
-    )
-    logger.info(f"logs osd:{pod_logs}")
-    return expected_log in pod_logs
+    for pod_name in pod_names:
+        pod_logs = pod.get_pod_logs(
+            pod_name,
+            namespace=namespace,
+            container=container,
+            all_containers=all_containers_flag,
+            since=since,
+        )
+        logger.info(f"logs osd:{pod_logs}")
+        if expected_log in pod_logs:
+            return True
+    return False
