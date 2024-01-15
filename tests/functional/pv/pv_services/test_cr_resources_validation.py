@@ -77,9 +77,9 @@ class TestCRRsourcesValidation(ManageTest):
             cr_object_kind (str): cr object kind
             cr_resource_yaml (str): full path  of the yaml file from which the object is to be created
             non_editable_patches (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
-                    have no effect. If such a patch is sucessfully applied, the test should fail
+                    have no effect. If such a patch is applied successfully , the test should fail
             editable_patches (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
-                    have an effect. If such a patch is not sucessfully applied, the test should fail
+                    have an effect. If such a patch is not applied successfully , the test should fail
             namespace (str): namespace in which cr object should be created
 
         """
@@ -97,7 +97,7 @@ class TestCRRsourcesValidation(ManageTest):
             f"get {cr_resource_name} -o yaml", namespace=namespace
         )
 
-        # test that all non editable properties are really not editable
+        # test to verify that all non-editable properties are really not editable
         non_editable_properties_errors = {}
         cr_resource_prev_yaml = cr_resource_original_yaml
         for patch in non_editable_patches:
