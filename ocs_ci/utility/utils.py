@@ -624,15 +624,29 @@ def exec_cmd(
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
-    if (
-        cluster_config
-        and cmd[0] == "oc"
-        and "--kubeconfig" not in cmd
-        #and config.multicluster
-    ):
+    if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
         kubepath = cluster_config.RUN["kubeconfig"]
-        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
-        cmd = list_insert_at_position(cmd, 2, [kubepath])
+        kube_index = 1
+        # check if we have an oc plugin in the command
+        plugin_list = "oc plugin list"
+        cp = subprocess.run(
+            shlex.split(plugin_list),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        subcmd = cmd[1].split("-")
+        if len(subcmd) > 1:
+            subcmd = "_".join(subcmd)
+            log.info(f"searching for plugin: {subcmd}")
+
+        for l in cp.stdout.decode().splitlines():
+            if subcmd in l:
+                # If oc cmdline has plugin name then we need to push the
+                # --kubeconfig to next index
+                kube_index = 2
+                log.info(f"Found oc plugin {subcmd}")
+        cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
+        cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
     if threading_lock and cmd[0] == "oc":
         threading_lock.acquire()
     completed_process = subprocess.run(
