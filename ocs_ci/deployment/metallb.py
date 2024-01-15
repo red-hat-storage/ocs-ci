@@ -2,6 +2,7 @@ import logging
 import tempfile
 
 from ocs_ci.deployment.vmware import assign_ips
+from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     METALLB_CATALOG_SOURCE_YAML,
     MARKETPLACE_NAMESPACE,
@@ -23,6 +24,7 @@ from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
+
 # TODO: adjust func for ipaddresspool
 # TODO: check created l2advertisement
 # TODO: release ipaddresses
@@ -30,10 +32,16 @@ logger = logging.getLogger(__name__)
 
 
 class MetalLBInstaller:
-    def __init__(self, version: str, ip_list: list, namespace: str = "metallb-system"):
+    def __init__(
+        self,
+        version: str = None,
+        namespace: str = "metallb-system",
+    ):
         self.addresses_reserved = None
-        self.version = version
-        self.ip_range = ip_list
+        if not version:
+            self.version = config.ENV_DATA.get("metallb_version")
+        else:
+            self.version = version
         self.namespace = namespace
 
     def create_metallb_namespace(self):
@@ -123,17 +131,15 @@ class MetalLBInstaller:
             namespace=self.namespace, pod_names=metallb_pods, timeout=300
         )
 
-    def create_ip_address_pool(self, num_of_ips: int = 2):
+    def create_ip_address_pool(self):
         """
         Create IP address pool for MetalLB
         """
-        assert (
-            num_of_ips >= 2
-        ), "Minimum 2 IP addresses are required for Provider/Client mode"
+        reserved_ips_num = config.ENV_DATA.get("reserved_ips_num")
 
         logger.info("Reserving IP addresses from IPAM and Creating IP address pool")
         # Reserve IP addresses for cluster assuming we need minimum 2 for each Hosted cluster
-        self.addresses_reserved = assign_ips(num_of_ips)
+        self.addresses_reserved = assign_ips(reserved_ips_num)
         # TODO - if IP addresses are not in format address/subnet mask - convert them
         logger.info(f"Reserved IP addresses are {self.addresses_reserved}")
 
@@ -176,7 +182,12 @@ class MetalLBInstaller:
         """
         Deploy MetalLB
         """
-        pass
+        self.create_metallb_namespace()
+        self.create_catalog_source()
+        self.create_metallb_operator_group()
+        self.create_metallb_subscription()
+        self.create_ip_address_pool()
+        self.create_l2advertisement()
 
     def undeploy(self):
         """
@@ -184,4 +195,4 @@ class MetalLBInstaller:
         """
         # Delete MetalLB
         # Delete namespace
-        pass
+        raise NotImplementedError("Not implemented yet")

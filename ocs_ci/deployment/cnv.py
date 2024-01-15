@@ -23,7 +23,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, exec_cmd
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -512,3 +512,45 @@ class CNVInstaller(object):
         self.enable_software_emulation()
         # Download and extract the virtctl binary to bin_dir
         self.download_and_extract_virtctl_binary()
+        if config.ENV_DATA.get("hcp_version"):
+            # Download hcp binary to bin_dir
+            self.download_hcp_binary()
+
+    def download_hcp_binary(self):
+        """
+        Download hcp binary to bin_dir
+
+        """
+        # Prepare bin directory for hcp
+        bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
+        bin_dir = os.path.abspath(bin_dir_rel_path)
+        hcp_binary_path = os.path.join(bin_dir, "hcp")
+        if os.path.isfile(hcp_binary_path):
+            logger.info(
+                f"hcp binary already exists {hcp_binary_path}, skipping download."
+            )
+        else:
+            endpoint_url = "quay.io"
+            exec_cmd(
+                f"podman login {endpoint_url} -u {constants.QUAY_SUPERUSER} -p {constants.QUAY_PW} --tls-verify=false"
+            )
+            hcp_version = config.ENV_DATA["hcp_version"]
+
+            logger.info(
+                f"Downloading hcp archive file from quay.io, version: {hcp_version}"
+            )
+            bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
+            bin_dir = os.path.abspath(bin_dir_rel_path)
+            exec_cmd(
+                f"podman create --name hcp quay.io/hypershift/hypershift-operator:{hcp_version} "
+                f"&& podman cp hcp:/bin/hcp {bin_dir}"
+            )
+            # check hcp binary is downloaded
+            if os.path.isfile(hcp_binary_path):
+                logger.info(
+                    f"hcp binary downloaded successfully to path:{hcp_binary_path}"
+                )
+            else:
+                raise exceptions.CommandFailed(
+                    f"hcp binary download failed to path:{hcp_binary_path}"
+                )
