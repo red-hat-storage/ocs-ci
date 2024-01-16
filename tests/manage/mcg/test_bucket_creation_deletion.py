@@ -67,6 +67,13 @@ class TestBucketCreationAndDeletion(MCGTest):
                     tier1,
                     acceptance,
                     pytest.mark.polarion_id("OCS-1298"),
+                ],
+            ),
+            pytest.param(
+                *[10, "OC", None],
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-4930"),
                     pytest.mark.bugzilla("2179271"),
                 ],
             ),
@@ -142,6 +149,7 @@ class TestBucketCreationAndDeletion(MCGTest):
             "100-S3-DEFAULT-BACKINGSTORE",
             "1000-S3-DEFAULT-BACKINGSTORE",
             "3-OC-DEFAULT-BACKINGSTORE",
+            "10-OC-DEFAULT-BACKINGSTORE",
             "100-OC-DEFAULT-BACKINGSTORE",
             "1000-OC-DEFAULT-BACKINGSTORE",
             "3-CLI-DEFAULT-BACKINGSTORE",
@@ -169,7 +177,7 @@ class TestBucketCreationAndDeletion(MCGTest):
         buckets = bucket_factory(amount, interface, bucketclass=bucketclass_dict)
 
         # verifying  bz2179271 for only one parameter
-        if amount == 3 and interface == "OC":
+        if amount == 10 and interface == "OC":
             unexpected_log = 'malformed BucketHost "s3.openshift-storage.svc": malformed subdomain name "s3"'
             rook_op_pod = get_operator_pods()
             pod_log = get_pod_logs(pod_name=rook_op_pod[0].name)
