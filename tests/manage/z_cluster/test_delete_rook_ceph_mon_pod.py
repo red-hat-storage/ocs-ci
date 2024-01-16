@@ -5,6 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     brown_squad,
+    runs_on_provider,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants
@@ -15,6 +16,7 @@ from ocs_ci.framework.testlib import ManageTest, tier2
 log = logging.getLogger(__name__)
 
 
+@runs_on_provider
 @brown_squad
 @tier2
 @skipif_external_mode
