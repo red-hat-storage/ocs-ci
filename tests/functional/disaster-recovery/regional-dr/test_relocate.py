@@ -27,14 +27,26 @@ if config.RUN.get("rdr_relocate_via_ui"):
 @acceptance
 @tier1
 @turquoise_squad
-@pytest.mark.polarion_id(polarion_id_relocate)
 class TestRelocate:
     """
     Test Relocate action
 
     """
 
-    def test_relocate(self, setup_acm_ui, dr_workload):
+    @pytest.mark.parametrize(
+        argnames=["workload_type"],
+        argvalues=[
+            pytest.param(
+                *[constants.SUBSCRIPTION],
+                marks=pytest.mark.polarion_id(polarion_id_relocate),
+            ),
+            pytest.param(
+                *[constants.APPLICATION_SET],
+                marks=pytest.mark.polarion_id("OCS-5007"),
+            ),
+        ],
+    )
+    def test_relocate(self, workload_type, setup_acm_ui, dr_workload):
         """
         Test to verify relocation of application between managed clusters
 
@@ -49,17 +61,20 @@ class TestRelocate:
                 raise NotImplementedError
 
         acm_obj = AcmAddClusters()
-        rdr_workload = dr_workload(num_of_subscription=1)[0]
+        if workload_type == constants.SUBSCRIPTION:
+            rdr_workload = dr_workload(num_of_subscription=1)[0]
+        else:
+            rdr_workload = dr_workload(num_of_subscription=0, num_of_appset=1)[0]
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace
+            rdr_workload.workload_namespace, workload_type
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -81,7 +96,14 @@ class TestRelocate:
             )
         else:
             # Relocate action via CLI
-            dr_helpers.relocate(secondary_cluster_name, rdr_workload.workload_namespace)
+            dr_helpers.relocate(
+                secondary_cluster_name,
+                rdr_workload.workload_namespace,
+                workload_type,
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None,
+            )
 
         # Verify resources deletion from primary cluster
         config.switch_to_cluster_by_name(primary_cluster_name)
