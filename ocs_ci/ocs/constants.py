@@ -916,7 +916,8 @@ DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 DRPOLICY_STATUS = "Validated"
 RDR_REPLICATION_POLICY = "async"
 RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
-
+RDR_OSD_MODE_GREENFIELD = "greenfield"
+RDR_OSD_MODE_BROWNFIELD = "brownfield"
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"

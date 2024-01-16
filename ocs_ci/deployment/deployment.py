@@ -1388,11 +1388,13 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"] = {
                     "storageClassName": storageclassnames["encryption"]
                 }
-        # Bluestore for RDR greenfield deployments: 4.14 onwards
+        # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards
         if (
             (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+            and config.ENV_DATA.get("rdr_osd_deployment_mode")
+            == constants.RDR_OSD_MODE_GREENFIELD
         ):
             rdr_bluestore_annotation = {
                 "ocs.openshift.io/clusterIsDisasterRecoveryTarget": "true"
@@ -1709,11 +1711,13 @@ class Deployment(object):
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
-        # In case of RDR, check for bluestore on osds: 4.14 onwards
+        # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards
         if (
             (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+            and config.ENV_DATA.get("rdr_osd_deployment_mode")
+            == constants.RDR_OSD_MODE_GREENFIELD
         ):
             if not ceph_cluster:
                 ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
@@ -1721,7 +1725,7 @@ class Deployment(object):
                 "storeType"
             ]
             if "bluestore-rdr" in store_type.keys():
-                logger.info("OSDs with bluestore found ")
+                logger.info("OSDs with bluestore-rdr found ")
             else:
                 raise UnexpectedDeploymentConfiguration(
                     f"OSDs were not brought up with Regional DR bluestore! instead we have {store_type} "
