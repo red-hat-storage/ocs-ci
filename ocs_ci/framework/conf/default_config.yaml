@@ -264,7 +264,7 @@ ENV_DATA:
   multus_cluster_net_type: "macvlan"
   multus_cluster_net_mode: "bridge"
 
-  #RDR Green filed
+  #RDR Green field
   rdr_osd_deployment_mode: "greenfield"
 
   # Assisted Installer related settings
