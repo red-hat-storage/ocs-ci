@@ -14,3 +14,4 @@ ENV_DATA:
   extra_disks: 2
   control_plane_extra_disks: 2
   fio_storageutilization_min_mbps: 10.0
+  cnv_deployment: True
