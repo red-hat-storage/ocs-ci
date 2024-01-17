@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier2,
     skipif_ocs_version,
+    mcg,
 )
 from ocs_ci.ocs.bucket_utils import (
     s3_put_bucket_versioning,
@@ -23,6 +24,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@mcg
 class TestObjectVersioning:
     @pytest.fixture(scope="function")
     def setup_file_object(self, request):

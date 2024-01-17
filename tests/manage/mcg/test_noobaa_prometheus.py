@@ -5,7 +5,12 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     ReturnedEmptyResponseException,
 )
-from ocs_ci.framework.pytest_customization.marks import tier2, bugzilla, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    bugzilla,
+    polarion_id,
+    mcg,
+)
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.ocs.bucket_utils import write_random_test_objects_to_bucket
 from ocs_ci.utility.retry import retry
@@ -29,6 +34,7 @@ def get_bucket_used_bytes_metric(bucket_name):
     return value[1]
 
 
+@mcg
 class TestNoobaaaPrometheus:
     @tier2
     @bugzilla("2168010")

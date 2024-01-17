@@ -6,6 +6,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_ocs_version,
@@ -20,6 +21,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @skipif_ocs_version("<4.10")
 # We have to ignore leftovers since environment_checker runs before the
 # bucket_factory_session teardown, due to it being session-scoped.

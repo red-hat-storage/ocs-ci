@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     system_test,
     skipif_vsphere_ipi,
+    mcg,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
@@ -33,6 +34,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @system_test
 @skipif_ocs_version("<4.9")
 @skipif_vsphere_ipi
@@ -87,7 +89,6 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         test_directory_setup,
         nodes,
     ):
-
         # check uni bucket replication from multi (aws+azure) namespace bucket to s3-compatible namespace bucket
         target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
         replication_policy = ("basic-replication-rule", target_bucket_name, None)

@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier3,
     skipif_managed_service,
     skipif_external_mode,
+    mcg,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
@@ -21,6 +22,7 @@ from ocs_ci.ocs.resources.pvc import get_pvc_objs
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @tier3
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2653")

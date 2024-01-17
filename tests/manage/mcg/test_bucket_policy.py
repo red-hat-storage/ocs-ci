@@ -45,13 +45,18 @@ from ocs_ci.ocs.constants import (
     bucket_website_action_list,
     bucket_version_action_list,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    bugzilla,
+    mcg,
+)
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @skipif_managed_service
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):

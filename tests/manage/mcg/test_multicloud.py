@@ -4,11 +4,15 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    mcg,
+)
 
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @skipif_managed_service
 class TestMultiCloud(MCGTest):
     """

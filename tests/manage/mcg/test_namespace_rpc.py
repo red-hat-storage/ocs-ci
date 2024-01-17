@@ -18,7 +18,10 @@ from ocs_ci.framework.testlib import (
     tier4a,
 )
 from ocs_ci.ocs.bucket_utils import sync_object_directory, verify_s3_object_integrity
-from ocs_ci.framework.pytest_customization.marks import skipif_aws_creds_are_missing
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_aws_creds_are_missing,
+    mcg,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -27,6 +30,7 @@ from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")

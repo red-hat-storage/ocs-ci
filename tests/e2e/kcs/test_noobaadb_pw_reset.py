@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     tier3,
     skipif_managed_service,
     skipif_ocs_version,
+    mcg,
 )
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -23,6 +24,7 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @tier3
 @pytest.mark.polarion_id("OCS-4662")
 @skipif_ocs_version("<4.9")

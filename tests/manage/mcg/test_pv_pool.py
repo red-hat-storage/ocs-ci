@@ -4,7 +4,12 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier2, tier3
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2,
+    tier3,
+    mcg,
+)
+
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
@@ -27,6 +32,7 @@ logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
 
 
+@mcg
 class TestPvPool:
     """
     Test pv pool related operations

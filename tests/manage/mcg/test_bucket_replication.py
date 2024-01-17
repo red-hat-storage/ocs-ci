@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, tier2
+from ocs_ci.framework.pytest_customization.marks import tier1, tier2, mcg
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -19,6 +19,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @skipif_ocs_version("<4.9")
 class TestReplication(MCGTest):
     """

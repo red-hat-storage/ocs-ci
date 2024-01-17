@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     tier2,
     tier4a,
+    mcg,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus, version
@@ -15,6 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@mcg
 @tier2
 @polarion_id("OCS-1254")
 @skipif_managed_service
@@ -111,6 +113,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
         )
 
 
+@mcg
 @tier4a
 @polarion_id("OCS-2498")
 @skipif_managed_service

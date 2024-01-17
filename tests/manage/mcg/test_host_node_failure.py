@@ -3,6 +3,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import (
     bugzilla,
     ignore_leftovers,
@@ -29,6 +30,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@mcg
 @tier4b
 @bugzilla("1853638")
 @ignore_leftovers
