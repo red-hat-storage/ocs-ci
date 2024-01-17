@@ -80,7 +80,7 @@ class TestCRRsourcesValidation(ManageTest):
                     have no effect. If such a patch is applied successfully , the test should fail
             editable_patches (dict, of str: str): patches to be applied by 'oc patch' command. These patches should
                     have an effect. If such a patch is not applied successfully , the test should fail
-            namespace (str): namespace in which cr object should be created
+            namespace (str): namespace in which CR object should be created
 
         """
         res = run_oc_command(cmd=f"create -f {cr_resource_yaml}", namespace=namespace)
