@@ -97,7 +97,7 @@ class TestCRRsourcesValidation(ManageTest):
             f"get {cr_resource_name} -o yaml", namespace=namespace
         )
 
-        # test to verify that all non-editable properties are really not editable
+        # test to verify that all the non-editable properties are really not editable
         non_editable_properties_errors = {}
         cr_resource_prev_yaml = cr_resource_original_yaml
         for patch in non_editable_patches:
