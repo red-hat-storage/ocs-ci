@@ -236,7 +236,7 @@ class AssistedInstallerCluster(object):
 
         # wait for discovered nodes in cluster definition
         for sample in TimeoutSampler(
-            timeout=3600, sleep=300, func=self.api.get_cluster_hosts, cluster_id=self.id
+            timeout=1200, sleep=120, func=self.api.get_cluster_hosts, cluster_id=self.id
         ):
             logger.debug(f"Discovered {len(sample)} nodes: {[n['id'] for n in sample]}")
             if expected_nodes == len(sample):
@@ -248,8 +248,8 @@ class AssistedInstallerCluster(object):
 
         # wait for discovered nodes in Infrastructure Environment definition
         for sample in TimeoutSampler(
-            timeout=3600,
-            sleep=300,
+            timeout=1200,
+            sleep=120,
             func=self.api.get_infra_env_hosts,
             infra_env_id=self.infra_id,
         ):
@@ -277,8 +277,8 @@ class AssistedInstallerCluster(object):
                             f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
                         )
         if failed_validations:
-            msg = f"Failed hosts validations: \n{failed_validations.join(os.linesep)}"
-            logger.error(msg)
+            msg = f"Failed hosts validations: \n{os.linesep.join(failed_validations)}"
+            logger.debug(msg)
             raise HostValidationFailed(msg)
         logger.info("Host validations passed on all hosts.")
 
@@ -322,10 +322,28 @@ class AssistedInstallerCluster(object):
         for sample in TimeoutSampler(
             timeout=3600, sleep=300, func=self.api.get_cluster, cluster_id=self.id
         ):
-            # TODO: add more information about cluster installation progress
-            logger.info(
-                f"Cluster installation status: {sample['status']} ({sample['status_info']})"
+            status_per_hosts = [
+                h.get("progress", {}).get("installation_percentage", 0)
+                for h in sample["hosts"]
+            ]
+            installation_percentage = round(
+                sum(status_per_hosts) / len(status_per_hosts)
             )
+            logger.info(
+                f"Cluster installation status: {sample['status']} ({sample['status_info']}, "
+                f"{installation_percentage}%)"
+            )
+            for host in sample["hosts"]:
+                try:
+                    logger.info(
+                        f"{host['requested_hostname']}: "
+                        f"{host['progress']['current_stage']} "
+                        f"({host['progress_stages'].index(host['progress']['current_stage']) + 1}/"
+                        f"{len(host['progress_stages'])})"
+                    )
+                except KeyError:
+                    pass
+
             if sample["status"] == "installed":
                 logger.info(
                     f"Cluster was successfully installed (status: {sample['status']} - {sample['status_info']})"
