@@ -799,6 +799,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
         ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=namespace,
+            cluster_kubeconfig=cluster_kubeconfig,
         )
         running_ct_pods = list()
         for pod in ct_pod_items:
