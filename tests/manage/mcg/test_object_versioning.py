@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_ocs_version,
     red_squad,
+    mcg,
 )
 from ocs_ci.ocs.bucket_utils import (
     s3_put_bucket_versioning,
@@ -24,6 +25,7 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @red_squad
 class TestObjectVersioning:
     @pytest.fixture(scope="function")

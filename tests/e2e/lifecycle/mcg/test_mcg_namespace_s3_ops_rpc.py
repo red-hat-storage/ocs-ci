@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_managed_service,
     red_squad,
+    mcg,
 )
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs import bucket_utils
@@ -26,6 +27,7 @@ ROOT_OBJ = "RootKey-" + str(uuid.uuid4().hex)
 COPY_OBJ = "CopyKey-" + str(uuid.uuid4().hex)
 
 
+@mcg
 @red_squad
 @pytest.mark.polarion_id("OCS-2296")
 @skipif_managed_service
