@@ -54,6 +54,7 @@ from ocs_ci.ocs.node import (
     verify_worker_nodes_security_groups,
     add_disk_to_node,
     get_nodes,
+    get_nodes_where_ocs_pods_running,
     get_provider_internal_node_ips,
 )
 from ocs_ci.ocs.version import get_ocp_version
@@ -201,6 +202,7 @@ def ocs_install_verification(
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
+    exporter_pod_count = len(get_nodes_where_ocs_pods_running())
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
     storage_cluster = StorageCluster(
         resource_name=storage_cluster_name,
@@ -267,7 +269,7 @@ def ocs_install_verification(
                 constants.MGR_APP_LABEL: 1,
                 constants.MDS_APP_LABEL: 2,
                 constants.RGW_APP_LABEL: rgw_count,
-                constants.EXPORTER_APP_LABEL: number_of_worker_nodes,
+                constants.EXPORTER_APP_LABEL: exporter_pod_count,
             }
         )
 
