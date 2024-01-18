@@ -55,13 +55,12 @@ from ocs_ci.ocs.exceptions import (
     InteractivePromptException,
     NotFoundError,
     CephToolBoxNotFoundException,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
 from psutil._common import bytes2human
-from ocs_ci.ocs import ocp
-from ocs_ci.ocs.exceptions import UnexpectedDeploymentConfiguration
 
 
 log = logging.getLogger(__name__)
@@ -2055,10 +2054,14 @@ def get_clusterset_name():
     """
     Function to fetch unique cluster set name used by managed clusters
 
-    Returns: list of cluster set
+    Returns:
+        list: list of cluster set
 
     """
     cluster_set = []
+    # Importing here to avoid circular imports
+    from ocs_ci.ocs import ocp
+
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
     # ignore local-cluster here
     for i in managed_clusters:

@@ -50,6 +50,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnsupportedFeatureError,
     MDRDeploymentException,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -131,6 +132,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
     get_oadp_version,
+    get_az_count,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -138,9 +140,7 @@ from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
-from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
-from ocs_ci.utility.utils import get_clusterset_name
 from ocs_ci.deployment.cnv import CNVInstaller
 
 logger = logging.getLogger(__name__)

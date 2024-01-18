@@ -28,6 +28,7 @@ from ocs_ci.utility.utils import (
     get_running_acm_version,
     string_chunkify,
     run_cmd,
+    get_clusterset_name,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
@@ -40,7 +41,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
-from ocs_ci.utility.utils import get_clusterset_name
 
 log = logging.getLogger(__name__)
 
