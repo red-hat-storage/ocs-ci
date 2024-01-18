@@ -1238,7 +1238,7 @@ def setup_mcg_bg_features(
                     bucket_types.pop(type)
 
         cloud_providers = {
-            "aws": (1, "eu-central-1"),
+            "aws": (1, None),
             "azure": (1, None),
             "pv": (
                 1,
