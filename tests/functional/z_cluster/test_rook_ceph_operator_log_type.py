@@ -17,11 +17,13 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
     bugzilla,
+    runs_on_provider,
 )
 
 log = logging.getLogger(__name__)
 
 
+@runs_on_provider
 @brown_squad
 @tier2
 @bugzilla("1962821")
