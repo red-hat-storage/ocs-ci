@@ -125,42 +125,7 @@ class MCG:
         ) + "/rpc"
         self.region = config.ENV_DATA["region"]
 
-        creds_secret_name = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("accounts")
-            .get("admin")
-            .get("secretRef")
-            .get("name")
-        )
-        secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
-        creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
-
-        self.access_key_id = base64.b64decode(
-            creds_secret_obj.get("data").get("AWS_ACCESS_KEY_ID")
-        ).decode("utf-8")
-        self.access_key = base64.b64decode(
-            creds_secret_obj.get("data").get("AWS_SECRET_ACCESS_KEY")
-        ).decode("utf-8")
-
-        self.noobaa_user = base64.b64decode(
-            creds_secret_obj.get("data").get("email")
-        ).decode("utf-8")
-        self.noobaa_password = base64.b64decode(
-            creds_secret_obj.get("data").get("password")
-        ).decode("utf-8")
-
-        self.noobaa_token = self.retrieve_nb_token()
-
-        self.s3_resource = boto3.resource(
-            "s3",
-            verify=retrieve_verification_mode(),
-            endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key,
-        )
-
-        self.s3_client = self.s3_resource.meta.client
+        self.update_s3_creds()
 
         if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
             "create_aws_creds"
@@ -688,9 +653,12 @@ class MCG:
         if replication_policy:
             bc_data["spec"].setdefault(
                 "replicationPolicy",
-                json.dumps(replication_policy)
-                if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
-                else json.dumps({"rules": replication_policy}),
+                (
+                    json.dumps(replication_policy)
+                    if version.get_semantic_ocs_version_from_config()
+                    < version.VERSION_4_12
+                    else json.dumps({"rules": replication_policy})
+                ),
             )
 
         return create_resource(**bc_data)
@@ -1040,3 +1008,74 @@ class MCG:
         ).group(1)
 
         return version.get_semantic_version(mcg_cli_version_str, only_major_minor=True)
+
+    def get_noobaa_admin_credentials_from_secret(self):
+        """
+        Get the NooBaa admin credentials from the OCP secret
+
+        Returns:
+            credentials_dict (dict): Dictionary containing the following keys:
+                AWS_ACCESS_KEY_ID (str): NooBaa admin S3 access key ID
+                AWS_SECRET_ACCESS_KEY (str): NooBaa admin S3 secret access key
+                email (str): NooBaa admin user email
+                password (str): NooBaa admin user password
+
+        """
+
+        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
+
+        creds_secret_name = (
+            get_noobaa.get("items")[0]
+            .get("status")
+            .get("accounts")
+            .get("admin")
+            .get("secretRef")
+            .get("name")
+        )
+
+        secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
+        creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
+
+        credentials_dict = {}
+
+        credentials_dict["AWS_ACCESS_KEY_ID"] = base64.b64decode(
+            creds_secret_obj.get("data").get("AWS_ACCESS_KEY_ID")
+        ).decode("utf-8")
+
+        credentials_dict["AWS_SECRET_ACCESS_KEY"] = base64.b64decode(
+            creds_secret_obj.get("data").get("AWS_SECRET_ACCESS_KEY")
+        ).decode("utf-8")
+
+        credentials_dict["email"] = base64.b64decode(
+            creds_secret_obj.get("data").get("email")
+        ).decode("utf-8")
+
+        credentials_dict["password"] = base64.b64decode(
+            creds_secret_obj.get("data").get("password")
+        ).decode("utf-8")
+
+        return credentials_dict
+
+    def update_s3_creds(self):
+        """
+        Set the S3 credentials of the NooBaa admin user from the
+        noobaa-admin secret, and update the S3 resource and client
+
+        """
+        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
+        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
+        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
+        self.noobaa_user = admin_credentials["email"]
+        self.noobaa_password = admin_credentials["password"]
+
+        self.noobaa_token = self.retrieve_nb_token()
+
+        self.s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key,
+        )
+
+        self.s3_client = self.s3_resource.meta.client
