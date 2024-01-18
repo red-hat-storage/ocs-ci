@@ -106,6 +106,8 @@ class TestSequentialFailover:
             time.sleep(wait_time * 60)
             nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
             wait_for_nodes_status([node.name for node in primary_cluster_nodes])
+            logger.info("Wait for 180 seconds for pods to stabilize")
+            time.sleep(180)
             logger.info(
                 "Wait for all the pods in openshift-storage to be in running state"
             )
