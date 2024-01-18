@@ -175,6 +175,8 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     ), f"Job {mcg_workload_job.name} doesn't have any running pod"
 
 
+# TODO: Remove this skip once the feature is implemented
+@pytest.mark.skip("Skipping until https://url.corp.redhat.com/c960ed4 is complete")
 @post_upgrade
 @skipif_managed_service
 @pytest.mark.polarion_id("OCS-2207")
@@ -185,6 +187,7 @@ def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
     """
+
     assert wait_for_active_pods(
         mcg_workload_job, 1
     ), f"Job {mcg_workload_job.name} doesn't have any running pod"
