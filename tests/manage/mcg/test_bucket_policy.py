@@ -393,7 +393,10 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Getting object by user: {user.email_id} on bucket: {s3_bucket.name} "
         )
-        assert s3_get_object(
+        retry_s3_get_object = retry(boto3exception.ClientError, tries=4, delay=10)(
+            s3_get_object
+        )
+        assert retry_s3_get_object(
             user, s3_bucket.name, object_key
         ), f"Failed: Get Object by user {user.email_id}"
 
