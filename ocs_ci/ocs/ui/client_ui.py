@@ -22,7 +22,7 @@ class ClientUI(PageNavigator):
 
         """
         self.navigate_client_page()
-        logget.info("Click on 'Generate client onboarding token'")
+        logger.info("Click on 'Generate client onboarding token'")
         self.do_click(self.client_loc["generate_token"])
         token = self.get_element_text(self.client_loc["token"])
         return token
