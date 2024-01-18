@@ -363,10 +363,15 @@ class TestFIOBenchmark(PASTest):
             if config.PERF.get("internal_es_server") == "":
                 self.es = None
             else:
+                url = (
+                    f"{config.PERF.get('internal_es_scheme')}://{config.PERF.get('internal_es_server')}"
+                    f":{config.PERF.get('internal_es_port')}"
+                )
                 self.es = {
                     "server": config.PERF.get("internal_es_server"),
                     "port": config.PERF.get("internal_es_port"),
-                    "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                    "scheme": config.PERF.get("internal_es_scheme"),
+                    "url": url,
                 }
                 # verify that the connection to the elasticsearch server is OK
                 if not self.es_connect():
