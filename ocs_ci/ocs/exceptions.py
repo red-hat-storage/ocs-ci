@@ -637,3 +637,7 @@ class ReturnedEmptyResponseException(Exception):
 
 class VSLMNotFoundException(Exception):
     pass
+
+
+class MissingDecoratorError(Exception):
+    pass
