@@ -2850,3 +2850,22 @@ def is_node_rack_or_zone_exist(failure_domain, node_name):
     """
     node_obj = get_node_objs([node_name])[0]
     return get_node_rack_or_zone(failure_domain, node_obj) is not None
+
+
+def list_encrypted_rbd_devices_onnode(node):
+    """
+    Get rbd crypt devices from the node
+
+    Args:
+        node: node name
+
+    Returns:
+        List of encrypted osd device names
+    """
+    node_obj = OCP(kind="node")
+    crypt_devices_out = node_obj.exec_oc_debug_cmd(
+        node=node,
+        cmd_list=["lsblk | grep crypt | awk '{print $1}'"],
+    ).split("\n")
+    crypt_devices = [device.strip() for device in crypt_devices_out if device != ""]
+    return crypt_devices

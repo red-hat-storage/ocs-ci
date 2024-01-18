@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import kms
 from semantic_version import Version
+from ocs_ci.ocs.node import list_encrypted_rbd_devices_onnode
 
 log = logging.getLogger(__name__)
 
@@ -173,12 +174,9 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
         )
         for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
 
-            # Verify whether encrypted device is present inside the pod
-            if pod_obj.exec_sh_cmd_on_pod(
-                command=f"lsblk | grep {vol_handle} | grep crypt"
-            ):
-                log.info(f"Encrypted device found in {pod_obj.name}")
-            else:
+            rbd_devices = list_encrypted_rbd_devices_onnode(pod_obj.get_node())
+            crypt_device = [device for device in rbd_devices if vol_handle in device]
+            if not crypt_device:
                 raise ResourceNotFoundError(
                     f"Encrypted device not found in {pod_obj.name}"
                 )
@@ -333,11 +331,9 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
 
         # Verify encrypted device is present and md5sum on all pods
         for vol_handle, pod_obj in zip(restore_vol_handles, restore_pod_objs):
-            if pod_obj.exec_sh_cmd_on_pod(
-                command=f"lsblk | grep {vol_handle} | grep crypt"
-            ):
-                log.info(f"Encrypted device found in {pod_obj.name}")
-            else:
+            rbd_devices = list_encrypted_rbd_devices_onnode(pod_obj.get_node())
+            crypt_device = [device for device in rbd_devices if vol_handle in device]
+            if not crypt_device:
                 raise ResourceNotFoundError(
                     f"Encrypted device not found in {pod_obj.name}"
                 )

@@ -18,6 +18,8 @@ from ocs_ci.helpers.helpers import (
     create_pods,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import list_encrypted_rbd_devices_onnode
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
 
 
 log = logging.getLogger(__name__)
@@ -105,12 +107,12 @@ class TestKmipRbdPvEncryptionKMIP(ManageTest):
 
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
-            if pod_obj.exec_sh_cmd_on_pod(
-                command=f"lsblk | grep {vol_handle} | grep crypt"
-            ):
-                log.info(f"Encrypted device found in {pod_obj.name}")
-            else:
-                log.error(f"Encrypted device not found in {pod_obj.name}")
+            rbd_devices = list_encrypted_rbd_devices_onnode(pod_obj.get_node())
+            crypt_device = [device for device in rbd_devices if vol_handle in device]
+            if not crypt_device:
+                raise ResourceNotFoundError(
+                    f"Encrypted device not found in {pod_obj.name}"
+                )
 
             pod_obj.run_io(
                 storage_type="block",
