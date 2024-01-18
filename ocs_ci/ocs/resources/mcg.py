@@ -128,23 +128,7 @@ class MCG:
         ) + "/rpc"
         self.region = config.ENV_DATA["region"]
 
-        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
-        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
-        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
-        self.noobaa_user = admin_credentials["email"]
-        self.noobaa_password = admin_credentials["password"]
-
-        self.noobaa_token = self.retrieve_nb_token()
-
-        self.s3_resource = boto3.resource(
-            "s3",
-            verify=retrieve_verification_mode(),
-            endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key,
-        )
-
-        self.s3_client = self.s3_resource.meta.client
+        self.update_s3_creds()
 
         if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
             "create_aws_creds"
@@ -1083,6 +1067,30 @@ class MCG:
         ).decode("utf-8")
 
         return credentials_dict
+
+    def update_s3_creds(self):
+        """
+        Set the S3 credentials of the NooBaa admin user from the
+        noobaa-admin secret, and update the S3 resource and client
+
+        """
+        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
+        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
+        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
+        self.noobaa_user = admin_credentials["email"]
+        self.noobaa_password = admin_credentials["password"]
+
+        self.noobaa_token = self.retrieve_nb_token()
+
+        self.s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key,
+        )
+
+        self.s3_client = self.s3_resource.meta.client
 
     def reset_admin_pw(self, new_password):
         """
