@@ -623,6 +623,8 @@ AWSCLI_MULTIARCH_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "awscli_multiarch
 
 S3CLI_MULTIARCH_STS_YAML = os.path.join(TEMPLATE_MCG_DIR, "s3cli-sts.yaml")
 
+S3CLI_STS_NAME = "s3cli"
+
 JAVA_SDK_S3_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "java_sdk_s3_pod.yaml")
 
 JAVA_SRC_CODE_PATH = os.path.join(TEMPLATE_MCG_DIR, "java/s3test")
