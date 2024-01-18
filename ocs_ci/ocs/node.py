@@ -2878,6 +2878,10 @@ def verify_crypt_device_present_onnode(node, vol_handle):
     Args:
         node : node name
         vol_handle : volumen handle name.
+
+    Returns:
+        True: if volume handle device found on the node.
+        False: if volume handle device not found on the node.
     """
     device_list = list_encrypted_rbd_devices_onnode(node)
     crypt_device = [device for device in device_list if vol_handle in device]
