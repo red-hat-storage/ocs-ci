@@ -79,6 +79,53 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
+def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
+    """
+    Crafts the S3cmd CLI command including the
+    login credentials amd command to be ran
+
+    Args:
+        mcg_obj: An MCG class instance
+        cmd: The s3cmd command to run
+        signed_request_creds: a dictionary containing S3 creds for a signed request
+
+    Returns:
+        str: The crafted command, ready to be executed on the pod
+
+    """
+    no_ssl = "--no-ssl"
+    if mcg_obj:
+        if mcg_obj.region:
+            region = f"--region={mcg_obj.region} "
+        else:
+            region = ""
+        base_command = (
+            f"s3cmd --access_key={mcg_obj.access_key_id} "
+            f"--secret_key={mcg_obj.access_key} "
+            f"{region}"
+            f"--host={mcg_obj.s3_external_endpoint} "
+            f"--host-bucket={mcg_obj.s3_external_endpoint} "
+            f"{no_ssl} "
+        )
+    elif signed_request_creds:
+        if signed_request_creds.get("region"):
+            region = f'--region={signed_request_creds.get("region")} '
+        else:
+            region = ""
+        base_command = (
+            f's3cmd --access_key={signed_request_creds.get("access_key_id")} '
+            f'--secret_key={signed_request_creds.get("access_key")} '
+            f"{region}"
+            f'--host={signed_request_creds.get("endpoint")} '
+            f'--host-bucket={signed_request_creds.get("endpoint")} '
+            f"{no_ssl} "
+        )
+    else:
+        base_command = f"s3cmd {no_ssl}"
+
+    return f"{base_command}{cmd}"
+
+
 def verify_s3_object_integrity(
     original_object_path, result_object_path, awscli_pod, result_pod=None
 ):
@@ -407,6 +454,53 @@ def sync_object_directory(
         **kwargs,
     ), "Failed to sync objects"
     # Todo: check that all objects were synced successfully
+
+
+def download_objects_using_s3cmd(
+    podobj,
+    src,
+    target,
+    s3_obj=None,
+    recursive=False,
+    signed_request_creds=None,
+    **kwargs,
+):
+    """
+    Download objects from bucket to target directories using s3cmd utility
+
+    Args:
+        podobj (OCS): The pod on which to execute the commands and download the objects to
+        src (str): Fully qualified object source path
+        target (str): Fully qualified object target path
+        s3_obj (MCG, optional): The MCG object to use in case the target or source
+                                 are in an MCG
+        signed_request_creds (dictionary, optional): the access_key, secret_key,
+            endpoint and region to use when willing to send signed aws s3 requests
+
+    """
+    logger.info(f"Download all objects from {src} to {target} using s3cmd utility")
+    if recursive:
+        retrieve_cmd = f"get --recursive {src} {target}"
+    else:
+        retrieve_cmd = f"get {src} {target}"
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [
+            signed_request_creds.get("access_key_id"),
+            signed_request_creds.get("access_key"),
+            signed_request_creds.get("endpoint"),
+        ]
+    else:
+        secrets = None
+    podobj.exec_cmd_on_pod(
+        command=craft_s3cmd_command(
+            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+        ),
+        out_yaml_format=False,
+        secrets=secrets,
+        **kwargs,
+    ), "Failed to download objects"
 
 
 def rm_object_recursive(podobj, target, mcg_obj, option=""):
