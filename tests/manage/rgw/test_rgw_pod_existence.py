@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import acceptance, rgw
+from ocs_ci.framework.pytest_customization.marks import acceptance, red_squad, rgw
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @rgw
+@red_squad
 @acceptance
 class TestRGWPodExistence:
     """

@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     performance,
     skipif_mcg_only,
-    mcg,
     red_squad,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
@@ -23,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 
 @red_squad
-@mcg
 @skipif_managed_service
 class TestBucketCreation(MCGTest):
     """

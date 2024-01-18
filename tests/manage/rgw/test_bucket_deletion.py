@@ -8,9 +8,10 @@ from ocs_ci.ocs.bucket_utils import sync_object_directory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
-    rgw,
     tier1,
     tier3,
+    red_squad,
+    rgw,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @rgw
+@red_squad
 class TestBucketDeletion:
     """
     Test deletion of RGW buckets

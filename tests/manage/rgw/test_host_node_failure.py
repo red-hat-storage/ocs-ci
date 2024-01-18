@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import rgw
+from ocs_ci.framework.pytest_customization.marks import red_squad, rgw
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -34,6 +34,7 @@ log = logging.getLogger(__name__)
 
 
 @rgw
+@red_squad
 @tier4b
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2374")
