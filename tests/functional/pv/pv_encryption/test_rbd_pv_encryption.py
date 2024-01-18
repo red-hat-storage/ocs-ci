@@ -23,7 +23,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import kms
 from semantic_version import Version
-from ocs_ci.ocs.node import list_encrypted_rbd_devices_onnode
+from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
 
 log = logging.getLogger(__name__)
@@ -164,12 +164,10 @@ class TestRbdPvEncryption(ManageTest):
 
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
-            rbd_devices = list_encrypted_rbd_devices_onnode(pod_obj.get_node())
-            crypt_device = [device for device in rbd_devices if vol_handle in device]
-            if not crypt_device:
-                raise ResourceNotFoundError(
-                    f"Encrypted device not found in {pod_obj.name}"
-                )
+            node = pod_obj.get_node()
+            assert verify_crypt_device_present_onnode(
+                node, vol_handle
+            ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
             pod_obj.run_io(
                 storage_type="block",

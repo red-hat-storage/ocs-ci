@@ -27,7 +27,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import kms
 from semantic_version import Version
-from ocs_ci.ocs.node import list_encrypted_rbd_devices_onnode
+from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
 log = logging.getLogger(__name__)
 
@@ -174,12 +174,10 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
         )
         for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
 
-            rbd_devices = list_encrypted_rbd_devices_onnode(pod_obj.get_node())
-            crypt_device = [device for device in rbd_devices if vol_handle in device]
-            if not crypt_device:
-                raise ResourceNotFoundError(
-                    f"Encrypted device not found in {pod_obj.name}"
-                )
+            node = pod_obj.get_node()
+            assert verify_crypt_device_present_onnode(
+                node, vol_handle
+            ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
             # Find initial md5sum
             pod_obj.md5sum_before_io = cal_md5sum(
@@ -331,12 +329,10 @@ class TestEncryptedRbdBlockPvcSnapshot(ManageTest):
 
         # Verify encrypted device is present and md5sum on all pods
         for vol_handle, pod_obj in zip(restore_vol_handles, restore_pod_objs):
-            rbd_devices = list_encrypted_rbd_devices_onnode(pod_obj.get_node())
-            crypt_device = [device for device in rbd_devices if vol_handle in device]
-            if not crypt_device:
-                raise ResourceNotFoundError(
-                    f"Encrypted device not found in {pod_obj.name}"
-                )
+            node = pod_obj.get_node()
+            assert verify_crypt_device_present_onnode(
+                node, vol_handle
+            ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
             log.info(f"Verifying md5sum on pod {pod_obj.name}")
             verify_data_integrity(

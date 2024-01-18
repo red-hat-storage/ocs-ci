@@ -2869,3 +2869,23 @@ def list_encrypted_rbd_devices_onnode(node):
     ).split("\n")
     crypt_devices = [device.strip() for device in crypt_devices_out if device != ""]
     return crypt_devices
+
+
+def verify_crypt_device_present_onnode(node, vol_handle):
+    """
+    Find the crypt device maching for given volume handle.
+
+    Args:
+        node : node name
+        vol_handle : volumen handle name.
+    """
+    device_list = list_encrypted_rbd_devices_onnode(node)
+    crypt_device = [device for device in device_list if vol_handle in device]
+    if not crypt_device:
+        log.error(
+            f"crypt device for volume handle {vol_handle} not present on node : {node}"
+        )
+        return False
+
+    log.info(f"Crypt device for volume handle {vol_handle} present on the node: {node}")
+    return True
