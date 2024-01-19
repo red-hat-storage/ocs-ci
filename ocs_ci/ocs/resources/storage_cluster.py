@@ -739,7 +739,7 @@ def ocs_install_verification(
 
     # Verify olm.maxOpenShiftVersion property
     # check ODF version due to upgrades
-    if ocs_version >= version.VERSION_4_14:
+    if ocs_version >= version.VERSION_4_14 and not hci_cluster:
         verify_max_openshift_version()
         if config.RUN["cli_params"].get("deploy") and not (
             config.DEPLOYMENT["external_mode"]
