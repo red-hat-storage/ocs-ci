@@ -1247,6 +1247,7 @@ client = {
     "generate_token": ("//button[text()='Generate client onboarding token']", By.XPATH),
     "copy": ("//button[text()='Copy to clipboard']", By.XPATH),
     "token": ("//div[@class='odf-onboarding-modal__text-area']", By.XPATH),
+    "search_client": ("input[data-test='name-filter-input']", By.CSS_SELECTOR),
 }
 
 validation = {

@@ -26,3 +26,22 @@ class ClientUI(PageNavigator):
         self.do_click(self.client_loc["generate_token"])
         token = self.get_element_text(self.client_loc["token"])
         return token
+
+    def verify_client_ui(
+        self, client_name, cluster_id, ocp_version, odf_version, heartbeat
+    ):
+        """
+        Verify client details on Clients page
+
+        Args:
+            client_name (str): name of the client
+            cluster_id (str): client's cluster ID
+            ocp_version (str): OCP version of the client
+            odf_version (str): ODF version of the client
+            heartbeat (str): last heartbeat of the client in the form "X minutes ago"
+
+        """
+        self.navigate_client_page()
+        logger.info(f"Search for {client_name} client")
+        self.do_send_keys(self.client_loc["search_client"], text=client_name)
+        time.sleep(2)
