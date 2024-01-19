@@ -519,7 +519,7 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # TODO: Enable the tools pod check when a solution is identified for tools pod on FaaS consumer
-    if not fusion_aas_consumer or client_cluster:
+    if not (fusion_aas_consumer or client_cluster):
         ct_pod = get_ceph_tools_pod()
 
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
@@ -669,7 +669,7 @@ def ocs_install_verification(
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
-    if not fusion_aas:
+    if not (fusion_aas or client_cluster):
         verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
@@ -685,7 +685,7 @@ def ocs_install_verification(
             if config.ENV_DATA.get("VAULT_CA_ONLY", None):
                 verify_kms_ca_only()
 
-    if not fusion_aas_consumer or client_cluster:
+    if not (fusion_aas_consumer or client_cluster):
         storage_cluster_obj = get_storage_cluster()
         is_flexible_scaling = (
             storage_cluster_obj.get()["items"][0]
