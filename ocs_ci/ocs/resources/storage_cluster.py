@@ -398,7 +398,7 @@ def ocs_install_verification(
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
     if not provider_cluster:
-        if fusion_aas_consumer:
+        if fusion_aas_consumer or client_cluster:
             {
                 f"{namespace}.cephfs.csi.ceph.com",
                 f"{namespace}.rbd.csi.ceph.com",
