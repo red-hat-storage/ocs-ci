@@ -1313,9 +1313,11 @@ class Deployment(object):
         logger.info("Deploying odf with ocs addon.")
         clustername = config.ENV_DATA.get("cluster_name")
         ocs_version = version.get_semantic_ocs_version_from_config()
+        disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
+        noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
-            f"{ocs_version}.0"
+            f"{ocs_version}.0 {noobaa_cmd_arg}"
         )
         run_ibmcloud_cmd(cmd)
         time.sleep(120)
