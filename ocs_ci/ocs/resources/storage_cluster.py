@@ -685,7 +685,7 @@ def ocs_install_verification(
             if config.ENV_DATA.get("VAULT_CA_ONLY", None):
                 verify_kms_ca_only()
 
-    if not fusion_aas_consumer:
+    if not fusion_aas_consumer or client_cluster:
         storage_cluster_obj = get_storage_cluster()
         is_flexible_scaling = (
             storage_cluster_obj.get()["items"][0]
