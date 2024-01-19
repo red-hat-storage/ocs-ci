@@ -432,7 +432,7 @@ def ocs_install_verification(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
     if not disable_blockpools and not provider_cluster:
-        if consumer_cluster:
+        if consumer_cluster or client_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -475,7 +475,7 @@ def ocs_install_verification(
                 )
 
     if not disable_cephfs and not provider_cluster:
-        if consumer_cluster:
+        if consumer_cluster or client_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -519,7 +519,7 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # TODO: Enable the tools pod check when a solution is identified for tools pod on FaaS consumer
-    if not fusion_aas_consumer:
+    if not fusion_aas_consumer or client_cluster:
         ct_pod = get_ceph_tools_pod()
 
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
