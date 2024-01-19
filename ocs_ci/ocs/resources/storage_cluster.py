@@ -275,7 +275,7 @@ def ocs_install_verification(
             }
         )
 
-    if fusion_aas_consumer:
+    if fusion_aas_consumer or client_cluster:
         del resources_dict[constants.OCS_OPERATOR_LABEL]
         del resources_dict[constants.OPERATOR_LABEL]
 
@@ -294,7 +294,7 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service):
+        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
             continue
         if "mds" in label and disable_cephfs:
             continue
