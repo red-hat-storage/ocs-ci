@@ -4,6 +4,7 @@ All multicluster specific utility functions and classes can be here
 """
 
 from abc import ABC, abstractmethod
+import logging
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.utils import (
@@ -13,6 +14,8 @@ from ocs_ci.ocs.utils import (
     get_all_acm_indexes,
 )
 from ocs_ci.ocs.constants import MDR_ROLES
+
+log = logging.getLogger(__name__)
 
 
 class MultiClusterUpgradeParametrize(ABC):
@@ -28,6 +31,7 @@ class MultiClusterUpgradeParametrize(ABC):
         "post_ocp_upgrade",
         "mco_upgrade",
         "dr_hub_upgrade",
+        "dr_cluster_operator_upgrade",
         "acm_upgrade",
         "pre_ocs_upgrade",
         "ocs_upgrade",
@@ -39,6 +43,7 @@ class MultiClusterUpgradeParametrize(ABC):
         self.roles = []
         # List of zones which are participating in this multicluster setup
         self.zones = self.get_zone_info()
+        self.zones.sort()
         self.zone_base_rank = 100
         # Each zone will be assigned with a rank
         # This rank comes handy when we have to order the tests
@@ -66,6 +71,7 @@ class MultiClusterUpgradeParametrize(ABC):
             self.zone_ranks[f"{self.zones[i]}"] = (
                 self.zone_base_rank + i * self.zone_base_rank
             )
+        log.info(f"zone ranks = {self.zone_ranks}")
 
     @abstractmethod
     def generate_role_ranks(self):
