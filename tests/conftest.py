@@ -349,9 +349,9 @@ def pytest_generate_tests(metafunc):
     """
     # For now we are only dealing with multicluster scenarios in this hook
     if ocsci_config.multicluster:
+        upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
         # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
         roles = None
-        upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
         roles = upgrade_parametrizer.get_roles(metafunc)
         if roles:
             upgrade_parametrizer.config_init()
@@ -493,6 +493,7 @@ def pytest_collection_modifyitems(session, config, items):
                         # Lower the sum, higher the rank hence it gets prioritized early
                         # in the test execution sequence
                         newval = val + zone_rank + role_rank
+                        log.info(f"ORIGINAL = {val}, NEW={newval}")
                         markers_update.append((pytest.mark.order, newval))
                         break
                 markers_update.append(
@@ -500,7 +501,16 @@ def pytest_collection_modifyitems(session, config, items):
                 )
                 # Apply all the markers now
                 for mark, param in markers_update:
+                    # if mark.name == 'run':
+                    #     for m in item.iter_markers():
+                    #         if m.name == 'run':
+                    #             m.kwargs['order'] = param
+                    # else:
                     item.add_marker(mark(param))
+                log.info(f"TEST={item.name}")
+                log.info(
+                    f"MARKERS = {[(i.name, i.args, i.kwargs) for i in item.iter_markers()]}"
+                )
 
 
 def pytest_collection_finish(session):

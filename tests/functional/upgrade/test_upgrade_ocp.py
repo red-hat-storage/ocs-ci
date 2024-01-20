@@ -80,7 +80,9 @@ class TestUpgradeOCP(ManageTest):
                 f" {version_before_upgrade}, new config file will not be loaded"
             )
 
-    def test_upgrade_ocp(self, zone_rank, role_rank, config_index, reduce_and_resume_cluster_load):
+    def test_upgrade_ocp(
+        self, zone_rank, role_rank, config_index, reduce_and_resume_cluster_load
+    ):
         """
         Tests OCS stability when upgrading OCP
 
