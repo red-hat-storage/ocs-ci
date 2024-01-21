@@ -2,6 +2,8 @@ import json
 import logging
 from uuid import uuid4
 
+import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
@@ -21,6 +23,7 @@ from ocs_ci.ocs.bucket_utils import (
     get_nb_bucket_stores,
     write_random_test_objects_to_bucket,
     compare_bucket_object_list,
+    patch_replication_policy_to_bucketclass,
 )
 from ocs_ci.ocs.ocp import OCP
 
@@ -116,6 +119,26 @@ class TestDefaultBackingstoreOverride(MCGTest):
             default_admin_resource == default_bc_backingstore == alt_default_bs_name
         ), "The new default backingstore was not preserved after the upgrade!"
 
+    @pytest.fixture()
+    def nb_default_bc_cleanup_fixture(self, request):
+        """
+        Clear all replication policies from the default noobaa bucketclass
+
+        """
+
+        def clear_replication_policies_from_nb_default_bucketclass():
+            replication_policy_patch_dict = {"spec": {"replicationPolicy": None}}
+
+            OCP(
+                kind="bucketclass",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+            ).patch(
+                params=json.dumps(replication_policy_patch_dict), format_type="merge"
+            )
+
+        request.addfinalizer(clear_replication_policies_from_nb_default_bucketclass)
+
     @tier2
     @skipif_aws_creds_are_missing
     @polarion_id("OCS-5195")
@@ -127,6 +150,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
         override_default_backingstore,
         awscli_pod_session,
         test_directory_setup,
+        nb_default_bc_cleanup_fixture,
     ):
         """
         1. Create a target bucket
@@ -139,24 +163,16 @@ class TestDefaultBackingstoreOverride(MCGTest):
         # 1. Create a target bucket
         target_bucketclass_dict = {
             "interface": "OC",
-            "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            "backingstore_dict": {"aws": [(1, None)]},
         }
         target_bucket = bucket_factory(bucketclass=target_bucketclass_dict)[0]
 
         # 2. Set a bucketclass replication policy to the target bucket on the default bucket class
-        replication_policy = {
-            "rules": [
-                {"rule_id": uuid4().hex, "destination_bucket": target_bucket.name}
-            ]
-        }
-        replication_policy_patch_dict = {
-            "spec": {"replicationPolicy": json.dumps(replication_policy)}
-        }
-        OCP(
-            kind=constants.BUCKETCLASS,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
-        ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+        patch_replication_policy_to_bucketclass(
+            bucketclass_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+            rule_id=uuid4().hex,
+            destination_bucket_name=target_bucket.name,
+        )
 
         # 3. Override the default noobaa backingstore
         override_default_backingstore()
