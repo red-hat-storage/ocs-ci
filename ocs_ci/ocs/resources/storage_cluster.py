@@ -197,8 +197,10 @@ def ocs_install_verification(
     fusion_aas_provider = fusion_aas and provider_cluster
 
     # Basic Verification for cluster
-    if not fusion_aas_consumer:
+    if not (fusion_aas_consumer or client_cluster):
         basic_verification(ocs_registry_image)
+    if client_cluster:
+        verify_ocs_csv(ocs_registry_image=None)
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
@@ -273,7 +275,7 @@ def ocs_install_verification(
             }
         )
 
-    if fusion_aas_consumer:
+    if fusion_aas_consumer or client_cluster:
         del resources_dict[constants.OCS_OPERATOR_LABEL]
         del resources_dict[constants.OPERATOR_LABEL]
 
@@ -292,7 +294,7 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service):
+        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
             continue
         if "mds" in label and disable_cephfs:
             continue
@@ -396,7 +398,7 @@ def ocs_install_verification(
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
     if not provider_cluster:
-        if fusion_aas_consumer:
+        if fusion_aas_consumer or client_cluster:
             {
                 f"{namespace}.cephfs.csi.ceph.com",
                 f"{namespace}.rbd.csi.ceph.com",
@@ -430,7 +432,7 @@ def ocs_install_verification(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
     if not disable_blockpools and not provider_cluster:
-        if consumer_cluster:
+        if consumer_cluster or client_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -473,7 +475,7 @@ def ocs_install_verification(
                 )
 
     if not disable_cephfs and not provider_cluster:
-        if consumer_cluster:
+        if consumer_cluster or client_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -517,7 +519,7 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # TODO: Enable the tools pod check when a solution is identified for tools pod on FaaS consumer
-    if not fusion_aas_consumer:
+    if not (fusion_aas_consumer or client_cluster):
         ct_pod = get_ceph_tools_pod()
 
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
@@ -667,7 +669,7 @@ def ocs_install_verification(
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
-    if not fusion_aas:
+    if not (fusion_aas or client_cluster):
         verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
@@ -683,7 +685,7 @@ def ocs_install_verification(
             if config.ENV_DATA.get("VAULT_CA_ONLY", None):
                 verify_kms_ca_only()
 
-    if not fusion_aas_consumer:
+    if not (fusion_aas_consumer or client_cluster):
         storage_cluster_obj = get_storage_cluster()
         is_flexible_scaling = (
             storage_cluster_obj.get()["items"][0]
@@ -737,7 +739,7 @@ def ocs_install_verification(
 
     # Verify olm.maxOpenShiftVersion property
     # check ODF version due to upgrades
-    if ocs_version >= version.VERSION_4_14:
+    if ocs_version >= version.VERSION_4_14 and not hci_cluster:
         verify_max_openshift_version()
         if config.RUN["cli_params"].get("deploy") and not (
             config.DEPLOYMENT["external_mode"]
@@ -756,10 +758,11 @@ def ocs_install_verification(
         validate_serviceexport()
 
     # check that noobaa root secrets are not public
-    assert (
-        check_if_mcg_root_secret_public() is False
-    ), "Seems like MCG root secrets are public, please check"
-    log.info("Noobaa root secrets are not public")
+    if not client_cluster:
+        assert (
+            check_if_mcg_root_secret_public() is False
+        ), "Seems like MCG root secrets are public, please check"
+        log.info("Noobaa root secrets are not public")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):

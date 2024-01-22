@@ -224,6 +224,8 @@ def get_ocs_csv():
             ver < VERSION_4_9
             or config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM
         )
+        else constants.OCS_CLIENT_OPERATOR
+        if config.ENV_DATA["platform"] in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         else defaults.ODF_OPERATOR_NAME
     )
     namespace = config.ENV_DATA["cluster_namespace"]
@@ -247,7 +249,9 @@ def get_ocs_csv():
     if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
         ocp_cluster = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="csv")
         for item in ocp_cluster.get()["items"]:
-            if item["metadata"]["name"].startswith(defaults.OCS_OPERATOR_NAME):
+            if item["metadata"]["name"].startswith(defaults.OCS_OPERATOR_NAME) or item[
+                "metadata"
+            ]["name"].startswith(constants.OCS_CLIENT_OPERATOR):
                 ocs_csv_name = item["metadata"]["name"]
         if not ocs_csv_name:
             raise CSVNotFound(f"No OCS CSV found for {config.ENV_DATA['platform']}")
