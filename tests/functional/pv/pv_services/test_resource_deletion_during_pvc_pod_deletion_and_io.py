@@ -201,7 +201,9 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Wait for pods to be in Running state
         for pod_obj in pod_objs + rwx_pod_objs:
-            wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
+            )
             pod_obj.reload()
         log.info(f"Created {len(pod_objs) + len(rwx_pod_objs)} pods.")
 
