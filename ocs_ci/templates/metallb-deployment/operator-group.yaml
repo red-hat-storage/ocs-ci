@@ -6,5 +6,3 @@ metadata:
   namespace: metallb-system
 spec:
   upgradeStrategy: Default
-  targetNamespaces:
-    - metallb-system
