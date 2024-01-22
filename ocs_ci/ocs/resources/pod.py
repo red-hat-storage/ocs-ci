@@ -1964,7 +1964,7 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     pods_log = {}
     for pod in pods:
         pods_log[pod] = get_pod_logs(
-            pod_name=pod.name, container=leader_types[leader_type]
+            pod_name=pod.name, container=leader_types[leader_type], namespace=namespace
         ).split("\n")
 
     for pod, log_list in pods_log.items():
