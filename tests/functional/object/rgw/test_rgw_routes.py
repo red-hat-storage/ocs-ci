@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     tier1,
     rgw,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.bucket_utils import (
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 
 @rgw
 @red_squad
+@runs_on_provider
 @on_prem_platform_required
 class TestRGWRoutes:
     """

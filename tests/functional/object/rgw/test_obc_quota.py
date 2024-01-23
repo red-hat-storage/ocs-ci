@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     red_squad,
     rgw,
+    runs_on_provider,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 @rgw
 @red_squad
+@runs_on_provider
 @bugzilla("1940823")
 @skipif_ocs_version("<4.10")
 @skipif_mcg_only
