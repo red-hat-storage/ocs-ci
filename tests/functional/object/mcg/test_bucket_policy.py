@@ -49,6 +49,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     bugzilla,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.utility import version
@@ -59,6 +60,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_managed_service
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):

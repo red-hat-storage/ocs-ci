@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_ocs_version,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs.bucket_utils import (
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 class TestObjectVersioning:
     @pytest.fixture(scope="function")
     def setup_file_object(self, request):

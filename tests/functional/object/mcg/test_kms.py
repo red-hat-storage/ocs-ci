@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_no_kms,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @mcg
 @red_squad
 @skipif_no_kms
+@runs_on_provider
 class TestNoobaaKMS(MCGTest):
     """
     Test KMS integration with NooBaa

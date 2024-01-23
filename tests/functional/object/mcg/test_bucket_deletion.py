@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     bugzilla,
     skipif_ocs_version,
+    runs_on_provider,
     red_squad,
     mcg,
 )
@@ -31,6 +32,7 @@ ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_managed_service
 class TestBucketDeletion(MCGTest):
     """

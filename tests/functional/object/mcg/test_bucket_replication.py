@@ -3,7 +3,13 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1, tier2, red_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    tier2,
+    runs_on_provider,
+    red_squad,
+    mcg,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.utility.retry import retry
@@ -32,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_ocs_version("<4.9")
 class TestReplication(MCGTest):
     """

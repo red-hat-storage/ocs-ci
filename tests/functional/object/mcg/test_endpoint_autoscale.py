@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilization
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_ocs_version(["<4.5", "<4.14"])
 @skipif_managed_service
 @tier1

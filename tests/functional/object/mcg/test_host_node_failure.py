@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     bugzilla,
     ignore_leftovers,
     ManageTest,
+    runs_on_provider,
     skipif_ocs_version,
     skipif_vsphere_ipi,
     tier4b,
@@ -33,6 +34,7 @@ log = logging.getLogger(__name__)
 @mcg
 @red_squad
 @tier4b
+@runs_on_provider
 @bugzilla("1853638")
 @ignore_leftovers
 @skipif_vsphere_ipi

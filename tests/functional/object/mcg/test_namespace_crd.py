@@ -36,6 +36,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs import constants, bucket_utils
@@ -50,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_disconnected_cluster

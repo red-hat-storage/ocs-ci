@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_disconnected_cluster,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
+@runs_on_provider
 class TestMultiRegion(MCGTest):
     """
     Test the multi region functionality

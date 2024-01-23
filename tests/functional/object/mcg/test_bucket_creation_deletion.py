@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     performance,
     skipif_mcg_only,
+    runs_on_provider,
     red_squad,
     mcg,
 )
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_managed_service
 class TestBucketCreationAndDeletion(MCGTest):
     """

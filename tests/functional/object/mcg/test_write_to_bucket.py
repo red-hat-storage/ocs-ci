@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.framework.testlib import (
@@ -83,6 +84,7 @@ def file_setup(request):
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_managed_service
 class TestBucketIO(MCGTest):
     """

@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_disconnected_cluster,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 
@@ -27,6 +28,7 @@ RUNTIME_SKIP = pytest.mark.skip("Runtime is too long; Code needs to be paralleli
 
 @mcg
 @red_squad
+@runs_on_provider
 @flaky
 @skipif_managed_service
 class TestObjectIntegrity(MCGTest):

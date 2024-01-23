@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_mcg_only,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.helpers import helpers
@@ -35,6 +36,7 @@ def setup(request):
 
 @mcg
 @red_squad
+@runs_on_provider
 @ignore_leftovers()
 @skipif_mcg_only
 @pytest.mark.usefixtures(setup.__name__)

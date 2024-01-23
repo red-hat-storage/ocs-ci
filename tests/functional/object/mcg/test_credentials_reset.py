@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     polarion_id,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @mcg
+@runs_on_provider
 @red_squad
 class TestCredentialsReset(MCGTest):
     """

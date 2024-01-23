@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_ocs_version,
     skipif_managed_service,
+    runs_on_provider,
     tier1,
     tier2,
     tier3,
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("!=4.6")

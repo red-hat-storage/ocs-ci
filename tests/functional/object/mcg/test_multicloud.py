@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_managed_service
 class TestMultiCloud(MCGTest):
     """
