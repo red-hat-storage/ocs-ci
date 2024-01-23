@@ -17,7 +17,7 @@ def pytest_collection_modifyitems(items):
     # Need to update the condition when MCG will get supported
     if config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS:
         for item in items.copy():
-            if "manage/mcg" in str(item.fspath):
+            if "object/mcg" in str(item.fspath):
                 log.debug(
                     f"Test {item} is removed from the collected items"
                     f" mcg is not supported on {config.ENV_DATA['platform'].lower()}"
