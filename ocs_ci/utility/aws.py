@@ -38,7 +38,7 @@ class AWS(object):
     _ec2_client = None
     _ec2_resource = None
     _region_name = None
-    _s3_client = None
+    _s3_resource = None
     _route53_client = None
     _elb_client = None
 
@@ -80,7 +80,7 @@ class AWS(object):
         return self._ec2_resource
 
     @property
-    def s3_client(self):
+    def s3_resource(self):
         """
         Property for s3 client
 
@@ -88,12 +88,12 @@ class AWS(object):
             boto3.resource instance of s3
 
         """
-        if not self._s3_client:
-            self._s3_client = boto3.resource(
+        if not self._s3_resource:
+            self._s3_resource = boto3.resource(
                 "s3",
                 region_name=self._region_name,
             )
-        return self._s3_client
+        return self._s3_resource
 
     @property
     def route53_client(self):
@@ -972,7 +972,7 @@ class AWS(object):
             file_path (str): path for the file to be uploaded
 
         """
-        self.s3_client.meta.client.upload_file(
+        self.s3_resource.meta.client.upload_file(
             file_path, bucket_name, object_key, ExtraArgs={"ACL": "public-read"}
         )
 
@@ -985,7 +985,7 @@ class AWS(object):
             object_key (str): the key for s3 object
 
         """
-        self.s3_client.meta.client.delete_object(Bucket=bucket_name, Key=object_key)
+        self.s3_resource.meta.client.delete_object(Bucket=bucket_name, Key=object_key)
 
     def get_s3_bucket_object_url(self, bucket_name, object_key):
         """
