@@ -262,7 +262,8 @@ generic_locators = {
         By.XPATH,
     ),
     "searchbar-dropdown": (
-        "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text']",
+        "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text'] | "
+        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text']",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
