@@ -85,6 +85,8 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
         list: The nodes OCP instances
 
     """
+    from ocs_ci.ocs.cluster import is_hci_provider_cluster
+
     if (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
         and node_type == constants.WORKER_MACHINE
@@ -104,6 +106,14 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
             if node_type
             in node.ocp.get_resource(resource_name=node.name, column="ROLES")
         ]
+    if is_hci_provider_cluster() and node_type == constants.WORKER_MACHINE:
+        typed_nodes = [
+            node
+            for node in typed_nodes
+            if constants.MASTER_MACHINE
+            not in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+        ]
+
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
     return typed_nodes
@@ -1171,6 +1181,8 @@ def get_worker_nodes():
         list: List of names of worker nodes
 
     """
+    from ocs_ci.ocs.cluster import is_hci_provider_cluster
+
     label = "node-role.kubernetes.io/worker"
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
     nodes = ocp_node_obj.get(selector=label).get("items")
@@ -1186,6 +1198,9 @@ def get_worker_nodes():
             if node.get("metadata").get("name") not in infra_node_ids
         ]
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
+    if is_hci_provider_cluster():
+        master_node_list = get_master_nodes()
+        worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
     return worker_nodes_list
 
 
