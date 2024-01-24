@@ -10,7 +10,6 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.cluster import change_ceph_full_ratio, CephCluster
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
@@ -83,12 +82,12 @@ class TestCloneDeletion(E2ETest):
         change_ceph_full_ratio(10)
 
         # Use 10% of the free storage capacity in the test
-        self.capacity_to_use = int(self.ceph_capacity * 0.10)
+        self.capacity_to_use = int(self.ceph_free_capacity * 0.10)
         logger.info(f"capacity_to_use: {self.capacity_to_use}")
 
-        self.num_of_clones = 200
+        self.num_of_clones = 10
         # Calculating the PVC size in GiB
-        self.pvc_size = int(self.capacity_to_use / (self.num_of_clones + 2))
+        self.pvc_size = int(self.capacity_to_use / (self.num_of_clones + 1))
         logger.info(f"pvc size: {self.pvc_size}")
 
         self.pvc_obj = pvc_factory(
@@ -98,13 +97,13 @@ class TestCloneDeletion(E2ETest):
             interface=interface_type, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-        # Calculating the file size as 70% of the PVC size - in MB
-        self.filesize = f"{int(self.pvc_size * 1024 * 0.7)}M"
+        # Calculating the file size as 95% of the PVC size - in MB
+        self.filesize = f"{int(self.pvc_size * 1024 * 0.95)}M"
 
         self.pod_obj.run_io(
-            storage_type="fs",
             size=self.filesize,
             io_direction="write",
+            storage_type="fs",
         )
 
         self.pod_obj.get_fio_results()
@@ -130,6 +129,7 @@ class TestCloneDeletion(E2ETest):
         actual_alerts = list()
         for alert in alerts_response.json().get("data").get("alerts"):
             actual_alerts.append(alert.get("labels").get("alertname"))
+            print("Actual Alerts:", actual_alerts)
         for expected_alert in expected_alerts:
             if expected_alert not in actual_alerts:
                 logger.error(
@@ -154,7 +154,7 @@ class TestCloneDeletion(E2ETest):
             6. Clone deletion should be successful and should not give error messages.
         """
         # Creating the clones one by one and wait until they bound
-
+        self.timeout = 1800
         logger.info(
             f"Start creating {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} GB."
         )
@@ -162,13 +162,10 @@ class TestCloneDeletion(E2ETest):
         for i in range(self.num_of_clones):
             index = i + 1
             logger.info(f"Start creation of clone number {index}.")
-            cloned_pvc_obj = pvc.create_pvc_clone(
-                sc_name=self.pvc_obj.backed_sc,
-                parent_pvc=self.pvc_obj.name,
-                pvc_name=f"clone-pas-test-{index}",
-                clone_yaml=Interfaces_info[interface_type]["clone_yaml"],
-                namespace=self.pvc_obj.namespace,
-                storage_size=f"{self.pvc_obj.size}Gi",
+
+            cloned_pvc_obj = pvc_clone_factory(
+                self.pvc_obj,
+                storageclass=self.pvc_obj.backed_sc,
             )
 
             helpers.wait_for_resource_state(
@@ -181,6 +178,7 @@ class TestCloneDeletion(E2ETest):
             )
 
         logger.info("Verify Alerts are seen 'CephClusterErrorState'")
+
         expected_alerts = ["CephClusterErrorState"]
         sample = TimeoutSampler(
             timeout=600,
