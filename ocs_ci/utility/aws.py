@@ -6,6 +6,7 @@ import random
 import traceback
 import re
 
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 
 from ocs_ci.utility.retry import retry
@@ -38,6 +39,7 @@ class AWS(object):
     _ec2_client = None
     _ec2_resource = None
     _region_name = None
+    _s3_client = None
     _s3_resource = None
     _route53_client = None
     _elb_client = None
@@ -82,7 +84,7 @@ class AWS(object):
     @property
     def s3_resource(self):
         """
-        Property for s3 client
+        Property for s3 resource
 
         Returns:
             boto3.resource instance of s3
@@ -94,6 +96,22 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._s3_resource
+
+    @property
+    def s3_client(self):
+        """
+        Property for s3 client
+
+        Returns:
+            boto3.client instance of s3
+
+        """
+        if not self._s3_client:
+            self._s3_client = boto3.client(
+                "s3",
+                region_name=self._region_name,
+            )
+        return self._s3_client
 
     @property
     def route53_client(self):
@@ -1869,6 +1887,98 @@ class AWS(object):
                     f"Waiting for instance {instance_name} to reach status terminated"
                 )
                 instance.wait_until_terminated()
+
+    def list_buckets(self):
+        """
+        List the buckets
+
+        Returns:
+            list: List of dictionaries which contains bucket name and creation date as keys
+               e.g: [
+               {'Name': '214qpg-oidc', 'CreationDate': datetime.datetime(2023, 1, 9, 11, 27, 48, tzinfo=tzutc())},
+               {'Name': '214rmh4-oidc', 'CreationDate': datetime.datetime(2023, 1, 9, 12, 32, 8, tzinfo=tzutc())}
+               ]
+
+        """
+        return self.s3_client.list_buckets()["Buckets"]
+
+    def get_buckets_with_prefix_(self, bucket_prefix, days):
+        """
+        Get the bucket with prefix which are older than given days
+
+        Args:
+            bucket_prefix (str): prefix for the buckets to fetch
+            days (int): fetch buckets that are older than to the specified number of days
+
+        """
+        buckets_with_prefix = []
+        # Get the current date in UTC
+        current_date = datetime.now(timezone.utc)
+        all_buckets = self.list_buckets()
+        for bucket in all_buckets:
+            bucket_name = bucket["Name"]
+            if bucket_name.startswith(bucket_prefix):
+                # Get the creation date of the bucket in UTC
+                bucket_creation_date = bucket["CreationDate"].replace(
+                    tzinfo=timezone.utc
+                )
+
+                # Calculate the age of the bucket
+                age_of_bucket = current_date - bucket_creation_date
+
+                # Check if the bucket is older than given days
+                if age_of_bucket.days >= days:
+                    logger.info(
+                        f"{bucket_name} (Created on {bucket_creation_date} and age is {age_of_bucket}) can be deleted"
+                    )
+                    buckets_with_prefix.append(bucket_name)
+        return buckets_with_prefix
+
+    def delete_objects_in_bucket(self, bucket):
+        """
+        Delete objects in a bucket
+
+        Args:
+            bucket (str): Name of the bucket to delete objects
+
+        """
+        # List all objects within the bucket
+        response = self.s3_client.list_objects_v2(Bucket=bucket)
+
+        # Delete each object within the bucket
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                object_key = obj["Key"]
+                self.s3_client.delete_object(Bucket=bucket, Key=object_key)
+                logger.info(f"Deleted object: {object_key}")
+        else:
+            logger.info(f"No objects found in bucket {bucket}")
+
+    def delete_bucket(self, bucket):
+        """
+        Delete the bucket
+
+        Args:
+            bucket (str): Name of the bucket to delete
+
+        """
+        logger.info(f"Deleting bucket {bucket}")
+        self.delete_objects_in_bucket(bucket=bucket)
+
+        # Delete the empty bucket
+        self.s3_client.delete_bucket(Bucket=bucket)
+        logger.info(f"Deleted bucket {bucket}")
+
+    def delete_buckets(self, buckets):
+        """
+        Delete the buckets
+
+        Args:
+            buckets (list): List of buckets to delete
+
+        """
+        for each_bucket in buckets:
+            self.delete_bucket(bucket=each_bucket)
 
 
 def get_instances_ids_and_names(instances):
