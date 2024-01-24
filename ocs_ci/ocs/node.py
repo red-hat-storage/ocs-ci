@@ -75,7 +75,8 @@ def get_node_objs(node_names=None):
 def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
-    number of requested nodes from that type
+    number of requested nodes from that type.
+    In case of HCI provider cluster and 'node_type' is worker, it will exclude the master nodes.
 
     Args:
         node_type (str): The node type (e.g. worker, master)
@@ -1176,6 +1177,7 @@ def get_master_nodes():
 def get_worker_nodes():
     """
     Fetches all worker nodes.
+    In case of HCI provider cluster, it will exclude the master nodes.
 
     Returns:
         list: List of names of worker nodes
