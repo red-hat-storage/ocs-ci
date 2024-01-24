@@ -1487,8 +1487,8 @@ validation_4_13 = {
         By.XPATH,
     ),
     "namespace-store-tab-active": (
-        "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
-        "//a[normalize-space()='Namespace Store']",
+        "//button[@class='pf-c-tabs__link' and @aria-selected='true']"
+        "//span[normalize-space()='Namespace Store']",
         By.XPATH,
     ),
 }
