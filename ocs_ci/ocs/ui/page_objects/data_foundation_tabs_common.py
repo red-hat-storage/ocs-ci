@@ -539,10 +539,12 @@ class DataFoundationTabBar(PageNavigator):
         Navigate to Overview tab. Accessible from any Data Foundation tabs
         """
         logger.info("Navigate to Data Foundation - Overview")
-        # pay attention Overview loc will show twice if Home Page nav extended
-        self.do_click(
-            locator=self.validation_loc["odf-overview"], enable_screenshot=True
-        )
+
+        # check if 'Overview' element is present and active, if not click on 'Overview' tab
+        if not self.get_elements(self.validation_loc["odf-overview-tab-active"]):
+            self.do_click(
+                locator=self.validation_loc["odf-overview"], enable_screenshot=True
+            )
 
         from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 
