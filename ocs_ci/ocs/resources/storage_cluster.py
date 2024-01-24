@@ -286,6 +286,13 @@ def ocs_install_verification(
             }
         )
 
+    if ocs_version >= version.VERSION_4_15 and not client_cluster:
+        resources_dict.update(
+            {
+                constants.UX_BACKEND_APP_LABEL: 1,
+            }
+        )
+
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
             if (
