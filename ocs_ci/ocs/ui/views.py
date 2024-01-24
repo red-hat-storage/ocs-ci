@@ -298,15 +298,15 @@ generic_locators = {
 
 ocs_operator_locators = {
     "backingstore_page": (
-        'a[data-test-id="horizontal-link-Backing Store"]',
+        'a[data-test-id="horizontal-link-Backing Store"], button[data-test="horizontal-link-Backing Store"]',
         By.CSS_SELECTOR,
     ),
     "namespacestore_page": (
-        'a[data-test-id="horizontal-link-Namespace Store"]',
+        'a[data-test-id="horizontal-link-Namespace Store"], button[data-test="horizontal-link-Namespace Store"]',
         By.CSS_SELECTOR,
     ),
     "bucketclass_page": (
-        'a[data-test-id="horizontal-link-Bucket Class"]',
+        'a[data-test-id="horizontal-link-Bucket Class"], button[data-test="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
 }
@@ -1176,15 +1176,15 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "osc_backing_store_tab": (
-        'a[data-test-id="horizontal-link-Backing Store"]',
+        'a[data-test-id="horizontal-link-Backing Store"], button[data-test="horizontal-link-Backing Store"]',
         By.CSS_SELECTOR,
     ),
     "osc_bucket_class_tab": (
-        'a[data-test-id="horizontal-link-Bucket Class"]',
+        'a[data-test-id="horizontal-link-Bucket Class"], button[data-test="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
     "namespacestore_page": (
-        'a[data-test-id="horizontal-link-Namespace Store"]',
+        'a[data-test-id="horizontal-link-Namespace Store"], button[data-test="horizontal-link-Namespace Store"]',
         By.CSS_SELECTOR,
     ),
     "capacity_breakdown_options": (
@@ -1446,7 +1446,7 @@ validation_4_11 = {
     "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
     "blockpools-odf-4-10": ("//a[normalize-space()='BlockPools']", By.XPATH),
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
-    "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
+    "backingstorage-breadcrumb": ("//a[normalize-space()='Backing Stores']", By.XPATH),
     "backingstorage-breadcrumb-odf-4-10": (
         "//a[normalize-space()='noobaa.io~v1alpha1~BackingStore']",
         By.XPATH,
