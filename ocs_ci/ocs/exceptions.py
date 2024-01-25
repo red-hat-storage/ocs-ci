@@ -698,3 +698,7 @@ class MultiStorageClusterExternalCephHealth(Exception):
 
 class StorageSizeNotReflectedException(Exception):
     pass
+
+
+class ClusterNotInSTSModeException(Exception):
+    pass

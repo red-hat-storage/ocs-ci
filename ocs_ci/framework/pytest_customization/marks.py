@@ -196,6 +196,11 @@ stretchcluster_required = pytest.mark.skipif(
     reason="Test runs only on Stretch cluster with arbiter deployments",
 )
 
+sts_deployment_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("sts_enabled") is False,
+    reason="Test runs only on the AWS STS enabled cluster deployments",
+)
+
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(config.RUN["google_api_secret"])),
     reason="Google API credentials don't exist",
@@ -385,6 +390,7 @@ skipif_bmpsi = pytest.mark.skipif(
     and config.DEPLOYMENT.get("local_storage") is True,
     reason="Test will not run on Baremetal PSI",
 )
+
 
 skipif_managed_service = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,

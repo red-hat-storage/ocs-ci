@@ -37,7 +37,6 @@ from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 from jinja2 import FileSystemLoader, Environment
-
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
@@ -57,6 +56,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     CephToolBoxNotFoundException,
     NoRunningCephToolBoxException,
+    ClusterNotInSTSModeException,
 )
 
 from ocs_ci.utility import version as version_module
@@ -4739,3 +4739,26 @@ def exec_nb_db_query(query):
         output = output[2:-1]
 
     return output
+
+
+def get_role_arn_from_sub():
+    """
+    Get the RoleARN from the OCS subscription
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if config.DEPLOYMENT.get("sts_enabled"):
+        role_arn = None
+        odf_sub = OCP(
+            kind=constants.SUBSCRIPTION,
+            resource_name=constants.ODF_SUBSCRIPTION,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        for item in odf_sub.get()["spec"]["config"]["env"]:
+            if item["name"] == "ROLEARN":
+                role_arn = item["value"]
+                break
+        return role_arn
+    else:
+        raise ClusterNotInSTSModeException

@@ -22,6 +22,7 @@ def cloud_uls_factory(request, cld_mgr):
 
     """
     all_created_uls = {
+        "aws-sts": set(),
         "aws": set(),
         "gcp": set(),
         "azure": set(),
@@ -31,6 +32,7 @@ def cloud_uls_factory(request, cld_mgr):
     }
     try:
         ulsMap = {
+            "aws-sts": cld_mgr.aws_sts_client,
             "aws": cld_mgr.aws_client,
             "gcp": cld_mgr.gcp_client,
             "azure": cld_mgr.azure_client,
@@ -47,6 +49,11 @@ def cloud_uls_factory(request, cld_mgr):
         ulsMap["rgw"] = cld_mgr.rgw_client
     except AttributeError:
         log.info("RGW is not available and was not initialized")
+
+    try:
+        ulsMap["aws-sts"] = cld_mgr.aws_sts_client
+    except Exception:
+        log.info("Cluster is not deployed STS mode")
 
     def _create_uls(uls_dict):
         """
@@ -65,6 +72,7 @@ def cloud_uls_factory(request, cld_mgr):
 
         """
         current_call_created_uls = {
+            "aws-sts": set(),
             "aws": set(),
             "gcp": set(),
             "azure": set(),
