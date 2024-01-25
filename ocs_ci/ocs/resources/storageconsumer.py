@@ -2,6 +2,7 @@
 A module for all StorageConsumer functionalities and abstractions.
 """
 import logging
+import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -54,6 +55,34 @@ class StorageConsumer:
             .get("client")
             .get("operatorVersion")
         )
+
+    def get_heartbeat(self):
+        """
+        Get lastHeartbeat from storageconsumer resource
+
+        Returns:
+            string: heartbeat in format "2024-01-24T10:10:01Z"
+
+        """
+        return self.ocp.get(resource_name=self.name).get("status").get("lastHeartbeat")
+
+    def is_heartbeat_ok(self):
+        """
+        Checks if last heartbeat was less than 5 minutes ago
+
+        Returns:datetime.datetime.now()
+            heartbeat_ok (bool): True if last heartbeat was less than 5 minutes
+                ago, False otherwise
+
+        """
+        heartbeat_str = self.get_heartbeat()
+        log.info(f"Heartbeat of {self.name} is {heartbeat_str}")
+        heartbeat_time = datetime.datetime.strptime(heartbeat_str, "%Y-%m-%dT%H:%M:%SZ")
+        heartbeat_delta = datetime.datetime.now() - heartbeat_time
+        log.info(f"Last heartbeat was {heartbeat_delta.seconds} ago")
+        if heartbeat_delta.seconds < 300:
+            return True
+        return False
 
     def set_ocs_version(self, version):
         """
@@ -134,3 +163,21 @@ class StorageConsumer:
         """
         config.switch_ctx(self.consumer_context)
         log.info(f"Switched to consumer cluster with index {self.consumer_context}")
+
+
+def get_all_storageconsumer_names():
+    """
+    Get the names of all storageconsumers
+
+    Returns:
+        list: list of all storageconsumer names
+    """
+    consumers_obj = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+    )
+    consumers_items = consumers_obj.get().get("items")
+    consumer_names = [
+        consumer.get("metadata").get("name") for consumer in consumers_items
+    ]
+    return consumer_names
