@@ -20,7 +20,7 @@ def pytest_collection_modifyitems(items):
         or version.get_semantic_ocs_version_from_config() < version.VERSION_4_5
     ):
         for item in items.copy():
-            if "manage/rgw" in str(item.fspath):
+            if "object/rgw" in str(item.fspath):
                 log.debug(
                     f"Test {item} is removed from the collected items"
                     f" due to {config.ENV_DATA['platform'].lower()} not being an on-prem platform "
