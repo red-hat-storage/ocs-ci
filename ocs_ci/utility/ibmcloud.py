@@ -518,3 +518,16 @@ class IBMCloud(object):
             logger.info(f"volume is deleted successfully: {volume}")
         else:
             logger.info("volume is not deleted")
+
+
+def label_nodes_region():
+    """
+    Apply the region label to the worker nodes.
+    Necessary for IBM COS-backed backingstore support.
+
+    """
+    logger.info("Applying region label to worker nodes")
+    region = config.ENV_DATA.get("region")
+    worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+    for node in worker_nodes:
+        node.add_label(rf"ibm-cloud\.kubernetes\.io/region={region}")
