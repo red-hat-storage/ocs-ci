@@ -17,6 +17,7 @@ import yaml
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 import boto3
 
+from ocs_ci.deployment.helpers.hypershift import HyperShift
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -586,6 +587,9 @@ class Deployment(object):
             CNVInstaller().deploy_cnv()
         if config.DEPLOYMENT.get("metallb_operator"):
             MetalLBInstaller().deploy()
+        if config.ENV_DATA.get("hcp_version"):
+            # Download hcp binary to bin_dir
+            HyperShift().download_hcp_binary()
 
     def get_rdr_conf(self):
         """
