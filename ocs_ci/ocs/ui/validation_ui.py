@@ -203,72 +203,64 @@ class ValidationUI(PageNavigator):
         if not, this function will enable it so as to see ODF tab under Storage section
 
         """
-        if (
-            self.ocp_version_semantic >= version.VERSION_4_9
-            and self.ocs_version_semantic >= version.VERSION_4_9
-        ):
-            self.navigate_installed_operators_page()
-            logger.info("Click on project dropdown")
-            self.do_click(self.validation_loc["project-dropdown"])
-            default_projects_is_checked = self.driver.find_element_by_xpath(
-                "//input[@type='checkbox']"
-            )
-            if (
-                default_projects_is_checked.get_attribute("data-checked-state")
-                == "false"
-            ):
-                logger.info("Show default projects")
-                self.do_click(self.validation_loc["show-default-projects"])
-            logger.info("Search for 'openshift-storage' project")
-            self.do_send_keys(
-                self.validation_loc["project-search-bar"], text="openshift-storage"
-            )
-            logger.info("Select 'openshift-storage' project")
-            time.sleep(2)
-            self.do_click(
-                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
-            )
-            self.page_has_loaded(retries=25, sleep_time=10)
+
+        self.navigate_installed_operators_page()
+        logger.info("Click on project dropdown")
+        self.do_click(self.validation_loc["project-dropdown"])
+        default_projects_is_checked = self.driver.find_element_by_xpath(
+            "//input[@type='checkbox']"
+        )
+        if default_projects_is_checked.get_attribute("data-checked-state") == "false":
+            logger.info("Show default projects")
+            self.do_click(self.validation_loc["show-default-projects"])
+        logger.info("Search for 'openshift-storage' project")
+        self.do_send_keys(
+            self.validation_loc["project-search-bar"], text="openshift-storage"
+        )
+        logger.info("Select 'openshift-storage' project")
+        time.sleep(2)
+        self.do_click(
+            self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+        )
+        self.page_has_loaded(retries=25, sleep_time=1)
+        logger.info(
+            "Check if 'Plugin available' option is available on the Installed Operators page"
+        )
+        plugin_availability_check = self.wait_until_expected_text_is_found(
+            locator=self.dep_loc["plugin-available"],
+            expected_text="Plugin available",
+            timeout=15,
+        )
+        if plugin_availability_check:
             logger.info(
-                "Check if 'Plugin available' option is available on the Installed Operators page"
+                "Storage plugin is disabled, navigate to Operator details page further confirmation"
             )
-            plugin_availability_check = self.wait_until_expected_text_is_found(
-                locator=self.dep_loc["plugin-available"],
-                expected_text="Plugin available",
-                timeout=15,
+            self.do_click(self.validation_loc["odf-operator"])
+            self.page_has_loaded(retries=15, sleep_time=5)
+            console_plugin_status = self.get_element_text(
+                self.validation_loc["console_plugin_option"]
             )
-            if plugin_availability_check:
+            if console_plugin_status == "Disabled":
                 logger.info(
-                    "Storage plugin is disabled, navigate to Operator details page further confirmation"
+                    "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
                 )
-                self.do_click(self.validation_loc["odf-operator"])
-                self.page_has_loaded(retries=15, sleep_time=5)
-                console_plugin_status = self.get_element_text(
-                    self.validation_loc["console_plugin_option"]
+                self.do_click(self.validation_loc["console_plugin_option"])
+                self.do_click(self.dep_loc["enable_console_plugin"])
+                self.do_click(self.validation_loc["save_console_plugin_settings"])
+                logger.info("Waiting for warning alert to refresh the web console")
+                self.refresh_web_console()
+                refresh_web_console_popup = self.wait_until_expected_text_is_found(
+                    locator=self.validation_loc["warning-alert"],
+                    expected_text="Refresh web console",
                 )
-                if console_plugin_status == "Disabled":
+                if refresh_web_console_popup:
                     logger.info(
-                        "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
+                        "Refresh web console option is now available, click on it to see the changes"
                     )
-                    self.do_click(self.validation_loc["console_plugin_option"])
-                    self.do_click(self.dep_loc["enable_console_plugin"])
-                    self.do_click(self.validation_loc["save_console_plugin_settings"])
-                    logger.info("Waiting for warning alert to refresh the web console")
-                    self.refresh_web_console()
-                    refresh_web_console_popup = self.wait_until_expected_text_is_found(
-                        locator=self.validation_loc["warning-alert"],
-                        expected_text="Refresh web console",
+                    self.do_click(
+                        self.validation_loc["refresh-web-console"],
+                        enable_screenshot=True,
                     )
-                    if refresh_web_console_popup:
-                        logger.info(
-                            "Refresh web console option is now available, click on it to see the changes"
-                        )
-                        self.do_click(
-                            self.validation_loc["refresh-web-console"],
-                            enable_screenshot=True,
-                        )
-                else:
-                    logger.info("Console plugin status Enabled")
             else:
                 logger.info("Plugin availability check skipped")
 
