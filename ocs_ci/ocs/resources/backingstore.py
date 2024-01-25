@@ -13,6 +13,7 @@ from ocs_ci.ocs.bucket_utils import (
     cli_create_pv_backingstore,
     cli_create_ibmcos_backingstore,
     cli_create_aws_backingstore,
+    cli_create_aws_sts_backingstore,
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -273,6 +274,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             "azure": cli_create_azure_backingstore,
             "ibmcos": cli_create_ibmcos_backingstore,
             "pv": cli_create_pv_backingstore,
+            "aws-sts": cli_create_aws_sts_backingstore,
         },
     }
 

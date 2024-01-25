@@ -682,3 +682,7 @@ class SameNameClusterAlreadyExistsException(Exception):
 
 class NoRunningCephToolBoxException(Exception):
     pass
+
+
+class ClusterNotInSTSModeException(Exception):
+    pass

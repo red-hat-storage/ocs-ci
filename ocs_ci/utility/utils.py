@@ -55,6 +55,7 @@ from ocs_ci.ocs.exceptions import (
     InteractivePromptException,
     NotFoundError,
     CephToolBoxNotFoundException,
+    ClusterNotInSTSModeException,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -4558,3 +4559,14 @@ def is_cluster_y_version_upgraded():
     ) > version_module.get_semantic_version(prev_version_num, only_major_minor=True):
         is_upgraded = True
     return is_upgraded
+
+
+def is_cluster_sts():
+    return False
+
+
+def get_roleArn_from_sub():
+    if is_cluster_sts():
+        return "xyz"
+    else:
+        raise ClusterNotInSTSModeException
