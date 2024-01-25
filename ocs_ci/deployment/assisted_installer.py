@@ -176,13 +176,11 @@ class AssistedInstallerCluster(object):
             "cpu_architecture": self.cpu_architecture,
             "high_availability_mode": self.high_availability_mode,
             "base_dns_domain": self.base_dns_domain,
-            "api_vip": self.api_vip,
             "api_vips": [
                 {
                     "ip": self.api_vip,
                 }
             ],
-            "ingress_vip": self.ingress_vip,
             "ingress_vips": [
                 {
                     "ip": self.ingress_vip,
