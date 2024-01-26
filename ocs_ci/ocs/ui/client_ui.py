@@ -1,4 +1,5 @@
 import logging
+import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.resources.storageconsumer import (
@@ -75,13 +76,13 @@ class ClientUI(PageNavigator):
         """
         consumer_names = get_all_storageconsumer_names()
         connected_clients, total_clients = self.get_number_of_clients_from_dashboard()
-        assert len(consumer_name) == int(total_clients), (
+        assert len(consumer_names) == int(total_clients), (
             f"Total number of clients on the dashboard: {total_clients}"
-            f"Total number of storageconsumers: {len(consumer_name)}"
+            f"Total number of storageconsumers: {len(consumer_names)}"
         )
         clients_with_heartbeat = 0
         for consumer_name in consumer_names:
-            client = storageconsumer.StorageConsumer(consumer_name)
+            client = StorageConsumer(consumer_name)
             if client.is_heartbeat_ok:
                 clients_with_heartbeat += 1
         assert clients_with_heartbeat == int(connected_clients), (
