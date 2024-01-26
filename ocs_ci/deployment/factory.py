@@ -69,12 +69,18 @@ class DeploymentFactory(object):
 
             self.cls_map["powervs_upi"] = IBMDeployment
         elif self.deployment_platform in constants.BAREMETAL_PLATFORMS:
-            from .baremetal import BAREMETALUPI, BAREMETALAI, BaremetalPSIUPI
+            from .baremetal import (
+                BAREMETALUPI,
+                BAREMETALIPI,
+                BAREMETALAI,
+                BaremetalPSIUPI,
+            )
 
             self.cls_map.update(
                 {
                     "baremetalpsi_upi_flexy": BaremetalPSIUPI,
                     "baremetal_upi": BAREMETALUPI,
+                    "baremetal_ipi": BAREMETALIPI,
                     "baremetal_ai": BAREMETALAI,
                     "hci_baremetal_ai": BAREMETALAI,
                 }
