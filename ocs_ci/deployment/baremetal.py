@@ -59,6 +59,7 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         Pre-Requisites for Bare Metal deployments
         """
+        super(BMBaseOCPDeployment, self).deploy_prereq()
         # check for BM status
         logger.info("Checking BM Status")
         status = self.check_bm_status_exist()
