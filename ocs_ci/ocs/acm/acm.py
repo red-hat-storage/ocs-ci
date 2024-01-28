@@ -669,7 +669,7 @@ class CreateClusterViaACM(object):
         Create credential
 
         """
-        with RunWithConfigContext():
+        with RunWithAcmConfigContext():
             cred_vsphere = templating.load_yaml(constants.ACM_VSPHERE_CRED_YAML)
             cred_vsphere["stringData"]["vCenter"] = config.ENV_DATA["vsphere_server"]
             cred_vsphere["stringData"]["username"] = config.ENV_DATA["vsphere_user"]
@@ -690,7 +690,7 @@ class CreateClusterViaACM(object):
             manifest = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="manifest-", delete=False
             )
-            logging.info(f"Tmp file name: {manifest.name}")
+            log.info(f"Tmp file name: {manifest.name}")
             templating.dump_data_to_temp_yaml(cred_vsphere, manifest.name)
             run_cmd(f"oc apply -f {manifest.name}")
 
@@ -881,7 +881,7 @@ class CreateClusterViaACM(object):
         Delete cluster
 
         """
-        with RunWithConfigContext():
+        with RunWithAcmConfigContext():
             ocp_obj = OCP()
             log.info(f"Detach a managed cluster {self.cluster_name}")
             ocp_obj.exec_oc_cmd(
@@ -904,7 +904,7 @@ class CreateClusterViaACM(object):
         manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="manifest-", delete=False
         )
-        logging.info(f"Tmp file name: {manifest.name}")
+        log.info(f"Tmp file name: {manifest.name}")
         templating.dump_data_to_temp_yaml(data, manifest.name)
         self.file_paths.append(manifest.name)
 
@@ -916,7 +916,7 @@ class CreateClusterViaACM(object):
             kuconfig, kubeadmin-password (tuple):
 
         """
-        with RunWithConfigContext():
+        with RunWithAcmConfigContext():
             kubeadmin_password_secret_name = get_secret_name_by_pattern(
                 pattern="admin-password", namespace=self.cluster_name
             )
@@ -945,7 +945,7 @@ class CreateClusterViaACM(object):
         Verify new OCP cluster created
 
         """
-        with RunWithConfigContext():
+        with RunWithAcmConfigContext():
             ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
             ocp_obj.wait_for_resource(
                 timeout=10,
@@ -993,13 +993,19 @@ class CreateClusterViaACM(object):
 
 
 class RunWithConfigContext(object):
-    def __init__(self):
+    def __init__(self, config_index):
         self.original_config_index = config.cur_index
-        self.acm_index = get_all_acm_indexes()[0]
+        self.config_index = config_index
 
     def __enter__(self):
-        config.switch_ctx(self.acm_index)
+        config.switch_ctx(self.config_index)
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         config.switch_ctx(self.original_config_index)
+
+
+class RunWithAcmConfigContext(RunWithConfigContext):
+    def __init__(self):
+        acm_index = get_all_acm_indexes()[0]
+        super().__init__(acm_index)
