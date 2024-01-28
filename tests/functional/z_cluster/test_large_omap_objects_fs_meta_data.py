@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -32,10 +33,7 @@ class TestLargeOmapObjectsFsMetaData(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
-            try:
-                self.pod_obj.exec_cmd_on_pod("ls")
-            except Exception as e:
-                log.info(f"Exception: {e}")
+            ceph_health_check(tries=40, delay=30)
 
         request.addfinalizer(finalizer)
 
@@ -44,6 +42,8 @@ class TestLargeOmapObjectsFsMetaData(ManageTest):
         Test Process:
         1.Create pvc with ceph-fs storage class
         2.Create NGINX pod
+        3.Create large number of files under a directory exceeding the mds configuration mds_bal_split_size.
+        4.Verify ceph status is ok
 
         """
         pvc_obj = pvc_factory(
@@ -63,10 +63,8 @@ class TestLargeOmapObjectsFsMetaData(ManageTest):
             pod_dict_path=pod_dict_path,
             raw_block_pv=raw_block_pv,
         )
-        self.pod_obj.exec_cmd_on_pod(
-            command="""
-            touch dir/file{0..11000} ; create 11000 files (> mds_bal_split_size)
-            mkdir dir/.snap/snap_a
-            rm -rf dir/file{0..11000}
-            """
+        cmd = (
+            "mkdir -p dir3/.snap; for n in {1..100}; do touch dir3/file{0..11000}; "
+            "mkdir -p dir3/.snap/snap_$n; rm -f dir3/file{0..11000}; done"
         )
+        self.pod_obj.exec_sh_cmd_on_pod(command=cmd, sh="bash")
