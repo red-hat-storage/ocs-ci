@@ -33,7 +33,7 @@ class TestLargeOmapObjectsFsMetaData(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
-            ceph_health_check(tries=40, delay=30)
+            ceph_health_check(tries=10, delay=30)
 
         request.addfinalizer(finalizer)
 
