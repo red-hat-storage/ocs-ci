@@ -14,7 +14,7 @@ from semantic_version import Version
 import socket
 
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility import psiutils, aws, version
+from ocs_ci.utility import psiutils, aws, version, baremetal
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
@@ -860,6 +860,7 @@ class BAREMETALIPI(BAREMETALBASE):
     class OCPDeployment(BAREMETALBASE.BMBaseOCPDeployment):
         def __init__(self):
             super(BAREMETALIPI.OCPDeployment, self).deploy_prereq()
+            self.baremetal = baremetal.BAREMETAL()
 
         def deploy_prereq(self):
             """
