@@ -6,7 +6,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_openshift_dedicated,
     red_squad,
+    runs_on_provider,
     mcg,
+    provider_client_ms_platform_required,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
@@ -62,3 +64,25 @@ def test_verify_noobaa_db_service(mcg_obj_session):
     assert (
         re.search(pattern=pattern, string=noobaa_db_log) is None
     ), f"Error: {pattern} msg found in the noobaa db logs."
+
+
+@mcg
+@red_squad
+@runs_on_provider
+@provider_client_ms_platform_required
+@tier1
+@polarion_id("OCS-5415")
+def test_verify_backingstore_uses_rgw(mcg_obj_session):
+    """
+    Validates whether default MCG backingstore uses rgw endpoint
+    """
+    ceph_object_store = OCP(
+        kind=constants.CEPHOBJECTSTORE, name="ocs-storagecluster-cephobjectstore"
+    ).get()["items"][0]
+    rgw_endpoint = ceph_object_store["status"]["endpoints"]["secure"]
+
+    # Get default backingstore status
+    backingstore_data = mcg_obj_session.exec_mcg_cmd(
+        "backingstore status noobaa-default-backing-store"
+    ).stdout
+    assert f"endpoint: {rgw_endpoint}" in backingstore_data
