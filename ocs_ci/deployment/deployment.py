@@ -2629,6 +2629,7 @@ class MultiClusterDROperatorsDeploy(object):
             ]
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            dr_policy_hub_data["metadata"]["name"] = "odr-policy-mdr"
             dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
 
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
@@ -2932,7 +2933,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Check backupstoragelocation resource in "Available" phase
         backupstorage = ocp.OCP(
             kind="BackupStorageLocation",
-            resource_name=constants.MDR_DPA,
+            resource_name="default",
             namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
         )
         resource = backupstorage.get()
