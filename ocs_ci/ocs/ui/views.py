@@ -262,7 +262,8 @@ generic_locators = {
         By.XPATH,
     ),
     "searchbar-dropdown": (
-        "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text']",
+        "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text'] | "
+        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text']",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
@@ -286,7 +287,7 @@ generic_locators = {
     "close_modal_btn": ("//button[@id='modal-close-action']", By.XPATH),
     # project name in the dropdown header
     "project_selected": (
-        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project: {}')]",
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project: {}')]",
         By.XPATH,
     ),
     # project name in the dropdown list
@@ -298,15 +299,15 @@ generic_locators = {
 
 ocs_operator_locators = {
     "backingstore_page": (
-        'a[data-test-id="horizontal-link-Backing Store"]',
+        'a[data-test-id="horizontal-link-Backing Store"], button[data-test="horizontal-link-Backing Store"]',
         By.CSS_SELECTOR,
     ),
     "namespacestore_page": (
-        'a[data-test-id="horizontal-link-Namespace Store"]',
+        'a[data-test-id="horizontal-link-Namespace Store"], button[data-test="horizontal-link-Namespace Store"]',
         By.CSS_SELECTOR,
     ),
     "bucketclass_page": (
-        'a[data-test-id="horizontal-link-Bucket Class"]',
+        'a[data-test-id="horizontal-link-Bucket Class"], button[data-test="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
 }
@@ -558,6 +559,14 @@ pvc_4_10 = {
 pvc_4_12 = {
     "resize-value": ("//input[@data-test='pvc-expand-size-input']", By.XPATH),
 }
+
+pvc_4_15 = {
+    "pvc_project_selector": (
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        By.XPATH,
+    ),
+}
+
 page_nav = {
     "page_navigator_sidebar": ("page-sidebar", By.ID),
     "Home": ("//button[text()='Home']", By.XPATH),
@@ -595,7 +604,11 @@ page_nav = {
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
-    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+    # show-default-projects works both for OCP 4.14 and 4.15
+    "show-default-projects": (
+        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle",
+        By.CSS_SELECTOR,
+    ),
 }
 
 page_nav_4_6 = {
@@ -1164,15 +1177,15 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "osc_backing_store_tab": (
-        'a[data-test-id="horizontal-link-Backing Store"]',
+        'a[data-test-id="horizontal-link-Backing Store"], button[data-test="horizontal-link-Backing Store"]',
         By.CSS_SELECTOR,
     ),
     "osc_bucket_class_tab": (
-        'a[data-test-id="horizontal-link-Bucket Class"]',
+        'a[data-test-id="horizontal-link-Bucket Class"], button[data-test="horizontal-link-Bucket Class"]',
         By.CSS_SELECTOR,
     ),
     "namespacestore_page": (
-        'a[data-test-id="horizontal-link-Namespace Store"]',
+        'a[data-test-id="horizontal-link-Namespace Store"], button[data-test="horizontal-link-Namespace Store"]',
         By.CSS_SELECTOR,
     ),
     "capacity_breakdown_options": (
@@ -1309,14 +1322,23 @@ validation_4_9 = {
         By.XPATH,
     ),
     "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
-    "project-dropdown": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
+    # project-dropdown is different for Storage pages and generic such as Operators/Installed Operators
+    "project-dropdown": (
+        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
+        "//div[@class='co-namespace-dropdown']",
+        By.XPATH,
+    ),
     "project-search-bar": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
     "storage-system-on-installed-operators": (
         "a[title='storagesystems.odf.openshift.io']",
         By.CSS_SELECTOR,
     ),
-    "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
+    # show-default-projects works both on OCP 4.14 and 4.15
+    "show-default-projects": (
+        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle",
+        By.CSS_SELECTOR,
+    ),
     "ocs-storagecluster-storgesystem": (
         ".co-resource-item__resource-name[data-test-operand-link='ocs-storagecluster-storagesystem']",
         By.CSS_SELECTOR,
@@ -1465,8 +1487,8 @@ validation_4_13 = {
         By.XPATH,
     ),
     "namespace-store-tab-active": (
-        "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
-        "//a[normalize-space()='Namespace Store']",
+        "//button[@class='pf-c-tabs__link' and @aria-selected='true']"
+        "//span[normalize-space()='Namespace Store']",
         By.XPATH,
     ),
 }
@@ -1478,6 +1500,15 @@ validation_4_14 = {
         By.XPATH,
     ),
 }
+
+
+validation_4_15 = {
+    "pvc_project_selector": (
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        By.XPATH,
+    ),
+}
+
 
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
@@ -1680,7 +1711,7 @@ locators = {
             **deployment_4_15,
         },
         "obc": obc,
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12, **pvc_4_15},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
@@ -1697,6 +1728,7 @@ locators = {
             **validation_4_12,
             **validation_4_13,
             **validation_4_14,
+            **validation_4_15,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},

@@ -10,11 +10,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     performance,
     skipif_mcg_only,
-    bugzilla,
     red_squad,
     mcg,
 )
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
+from ocs_ci.ocs.bucket_utils import sync_object_directory
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_operator_pods
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 @mcg
 @red_squad
 @skipif_managed_service
-class TestBucketCreation(MCGTest):
+class TestBucketCreationAndDeletion(MCGTest):
     """
     Test creation of a bucket
     """
@@ -67,6 +67,14 @@ class TestBucketCreation(MCGTest):
                     tier1,
                     acceptance,
                     pytest.mark.polarion_id("OCS-1298"),
+                ],
+            ),
+            pytest.param(
+                *[10, "OC", None],
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-4930"),
+                    pytest.mark.bugzilla("2179271"),
                 ],
             ),
             pytest.param(
@@ -141,6 +149,7 @@ class TestBucketCreation(MCGTest):
             "100-S3-DEFAULT-BACKINGSTORE",
             "1000-S3-DEFAULT-BACKINGSTORE",
             "3-OC-DEFAULT-BACKINGSTORE",
+            "10-OC-DEFAULT-BACKINGSTORE",
             "100-OC-DEFAULT-BACKINGSTORE",
             "1000-OC-DEFAULT-BACKINGSTORE",
             "3-CLI-DEFAULT-BACKINGSTORE",
@@ -150,14 +159,55 @@ class TestBucketCreation(MCGTest):
             "1-CLI-PVPOOL",
         ],
     )
-    def test_bucket_creation(
-        self, bucket_class_factory, bucket_factory, amount, interface, bucketclass_dict
+    def test_bucket_creation_deletion(
+        self,
+        verify_rgw_restart_count,
+        mcg_obj,
+        bucket_class_factory,
+        bucket_factory,
+        amount,
+        interface,
+        bucketclass_dict,
+        awscli_pod_session,
     ):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
         """
-        bucket_factory(amount, interface, bucketclass=bucketclass_dict)
+        buckets = bucket_factory(amount, interface, bucketclass=bucketclass_dict)
+
+        # verifying  bz2179271 for only one parameter
+        if amount == 10 and interface == "OC":
+            unexpected_log = 'malformed BucketHost "s3.openshift-storage.svc": malformed subdomain name "s3"'
+            rook_op_pod = get_operator_pods()
+            pod_log = get_pod_logs(pod_name=rook_op_pod[0].name)
+            assert not (
+                unexpected_log in pod_log
+            ), f"Bucket notification errors found {unexpected_log}"
+
+        # cover acceptance for basic write file to bucket test
+        if amount == 3 and interface == "S3":
+            bucketname = buckets[0].name
+            full_object_path = f"s3://{bucketname}"
+            downloaded_files = awscli_pod_session.exec_cmd_on_pod(
+                f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
+            ).split(" ")
+            # Write all downloaded objects to the new bucket
+            sync_object_directory(
+                awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+            )
+
+            assert set(downloaded_files).issubset(
+                obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+            )
+
+        if amount not in [100, 1000] or interface != "CLI":
+            for bucket in buckets:
+                logger.info(f"Deleting bucket: {bucket.name}")
+                bucket.delete()
+                assert not mcg_obj.s3_verify_bucket_exists(
+                    bucket.name
+                ), f"Found {bucket.name} that should've been removed"
 
     @pytest.mark.parametrize(
         argnames="amount,interface",
@@ -196,31 +246,3 @@ class TestBucketCreation(MCGTest):
                 logger.info(
                     f"Create duplicate bucket {bucket_name} failed as" " expected"
                 )
-
-    @bugzilla("2179271")
-    @pytest.mark.parametrize(
-        argnames="amount,interface",
-        argvalues=[
-            pytest.param(
-                *[10, "OC"], marks=[tier1, pytest.mark.polarion_id("OCS-4930")]
-            ),
-        ],
-    )
-    def test_check_for_bucket_notification_error_in_rook_op_logs(
-        self, bucket_factory, amount, interface
-    ):
-        """
-        Test to check for bucket notification error 'malformed BucketHost "s3.openshift-storage.svc"
-        in rook operator logs post creation of noobaa obc
-
-        """
-
-        bucket_factory(amount, interface)
-
-        # Check rook-operator pod logs for the bucket notification error
-        unexpected_log = 'malformed BucketHost "s3.openshift-storage.svc": malformed subdomain name "s3"'
-        rook_op_pod = get_operator_pods()
-        pod_log = get_pod_logs(pod_name=rook_op_pod[0].name)
-        assert not (
-            unexpected_log in pod_log
-        ), f"Bucket notification errors found {unexpected_log}"

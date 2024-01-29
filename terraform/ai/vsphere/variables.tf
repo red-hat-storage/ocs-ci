@@ -34,6 +34,13 @@ variable "vsphere_datastore" {
   default     = ""
   description = "This is the name of the vSphere data store."
 }
+
+variable "vsphere_storage_policy" {
+  type        = string
+  default     = "vSAN Default Storage Policy"
+  description = "This is the name of storage policy."
+}
+
 variable "vm_network" {
   type        = string
   description = "This is the name of the publicly accessible network for cluster ingress and access."
@@ -93,6 +100,16 @@ variable "control_plane_memory" {
 variable "control_plane_num_cpus" {
   type    = string
   default = "4"
+}
+
+variable "control_plane_data_disks_count" {
+  type    = string
+  default = "2"
+}
+
+variable "control_plane_data_disks_size" {
+  type    = string
+  default = "256"
 }
 
 //////////

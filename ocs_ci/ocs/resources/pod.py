@@ -799,6 +799,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
         ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=namespace,
+            cluster_kubeconfig=cluster_kubeconfig,
         )
         running_ct_pods = list()
         for pod in ct_pod_items:
@@ -1963,7 +1964,7 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     pods_log = {}
     for pod in pods:
         pods_log[pod] = get_pod_logs(
-            pod_name=pod.name, container=leader_types[leader_type]
+            pod_name=pod.name, container=leader_types[leader_type], namespace=namespace
         ).split("\n")
 
     for pod, log_list in pods_log.items():

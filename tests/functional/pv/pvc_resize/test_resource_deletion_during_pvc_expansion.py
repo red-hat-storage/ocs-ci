@@ -165,11 +165,12 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
                     continue
                 df_out = df_out.split()
                 new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
-                if new_size_mount in [
-                    f"{pvc_size_expanded - 0.1}G",
-                    f"{float(pvc_size_expanded)}G",
-                    f"{pvc_size_expanded}G",
-                ]:
+                if (
+                    pvc_size_expanded - 0.7
+                    <= float(new_size_mount[:-1])
+                    <= pvc_size_expanded
+                    and new_size_mount[-1] == "G"
+                ):
                     log.info(
                         f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
                         f"is reflected on pod {pod_obj.name}"

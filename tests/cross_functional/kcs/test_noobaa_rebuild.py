@@ -72,7 +72,7 @@ class TestNoobaaRebuild(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    def test_noobaa_rebuild(self, bucket_factory):
+    def test_noobaa_rebuild(self, bucket_factory_session, mcg_obj_session):
         """
         Test case to verify noobaa rebuild. Verifies KCS: https://access.redhat.com/solutions/5948631
 
@@ -152,7 +152,8 @@ class TestNoobaaRebuild(E2ETest):
             )
         else:
             dep_ocp.exec_oc_cmd(
-                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server noobaa-root-master-key"
+                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator "
+                "noobaa-server noobaa-root-master-key-backend noobaa-root-master-key-volume"
             )
 
         # Scale back noobaa-operator deployment
@@ -187,6 +188,10 @@ class TestNoobaaRebuild(E2ETest):
         logger.info("Verifying all resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
 
+        # Since the rebuild changed the noobaa-admin secret, update
+        # the s3 credentials in mcg_object_session
+        mcg_obj_session.update_s3_creds()
+
         # Verify default backingstore/bucketclass
         default_bs = OCP(
             kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
@@ -202,4 +207,4 @@ class TestNoobaaRebuild(E2ETest):
 
         # Create OBCs
         logger.info("Creating OBCs after noobaa rebuild")
-        bucket_factory(amount=3, interface="OC", verify_health=True)
+        bucket_factory_session(amount=3, interface="OC", verify_health=True)

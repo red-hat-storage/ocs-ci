@@ -20,6 +20,9 @@ vsphere_datacenter = "DatacenterName"
 // Name of the vSphere data store.
 vsphere_datastore = "vsanDatastore"
 
+// Name of vSphere Storage policy
+vsphere_storage_policy = "vSAN Default Storage Policy"
+
 // Name of the publicly accessible network for cluster ingress and access.
 vm_network = "VM Network"
 

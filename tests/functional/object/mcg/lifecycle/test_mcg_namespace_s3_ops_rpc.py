@@ -14,7 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import E2ETest, skipif_ocs_version
 from ocs_ci.ocs import bucket_utils
 from ocs_ci.ocs import constants
-from tests.e2e.lifecycle.mcg.test_mcg_namespace_s3_ops_crd import (
+from tests.functional.object.mcg.lifecycle.test_mcg_namespace_s3_ops_crd import (
     setup_objects_to_list,
     multipart_setup,
     get_list_and_verify,
