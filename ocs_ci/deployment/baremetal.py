@@ -10,6 +10,7 @@ from time import sleep
 import yaml
 import requests
 from semantic_version import Version
+import socket
 
 from .flexy import FlexyBaremetalPSI
 from ocs_ci.utility import psiutils, aws, version
@@ -74,6 +75,22 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         assert (
             result == constants.BM_STATUS_RESPONSE_UPDATED
         ), "Failed to update request"
+
+        self.connect_to_helper_node()
+
+    # the VM hosting the httpd, tftp and dhcp services might be just started and it might take some time to
+    # propagate the DDNS name, if used, so re-trying this function for 20 minutes
+    @retry((TimeoutError, socket.gaierror), tries=10, delay=120, backoff=1)
+    def connect_to_helper_node(self):
+        """
+        Create connection to helper node hosting httpd, tftp and dhcp services for PXE boot
+        """
+        self.host = self.bm_config["bm_httpd_server"]
+        self.user = self.bm_config["bm_httpd_server_user"]
+        self.private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
+
+        # wait till the server is up and running
+        self.helper_node_handler = Connection(self.host, self.user, self.private_key)
 
     def check_bm_status_exist(self):
         """
@@ -177,13 +194,6 @@ class BAREMETALUPI(BAREMETALBASE):
                 config.ENV_DATA.get("cluster_path"), constants.WORKER_IGN
             )
 
-            self.host = self.bm_config["bm_httpd_server"]
-            self.user = self.bm_config["bm_httpd_server_user"]
-            self.private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
-
-            self.helper_node_handler = Connection(
-                self.host, self.user, self.private_key
-            )
             cmd = f"rm -rf {self.bm_config['bm_path_to_upload']}"
             logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
             cmd = f"mkdir -m 755 {self.bm_config['bm_path_to_upload']}"
