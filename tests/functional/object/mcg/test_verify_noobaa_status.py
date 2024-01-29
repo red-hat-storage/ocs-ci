@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     provider_client_ms_platform_required,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.testlib import polarion_id, bugzilla
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
