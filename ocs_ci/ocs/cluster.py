@@ -366,7 +366,10 @@ class CephCluster(object):
         Wait for Noobaa health to be OK
         """
         return retry(
-            exceptions.NoobaaHealthException, tries=tries, delay=delay, backoff=1
+            (exceptions.NoobaaHealthException, exceptions.CommandFailed),
+            tries=tries,
+            delay=delay,
+            backoff=1,
         )(self.noobaa_health_check)()
 
     def mon_change_count(self, new_count):
