@@ -106,7 +106,7 @@ class TestAddNodeCrashCollector(ManageTest):
         else:
             drain_node = old_nodes[0]
 
-        drain_nodes([drain_node])
+        drain_nodes([drain_node], timeout=2400)
 
         logger.info("Wait for 3 mon pods to be on running state")
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
