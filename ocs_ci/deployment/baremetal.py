@@ -31,6 +31,7 @@ from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pendi
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    exec_cmd,
     run_cmd,
     upload_file,
     get_ocp_version,
@@ -508,7 +509,7 @@ class BAREMETALUPI(BAREMETALBASE):
             master_count = 0
             worker_count = 0
             logger.info("Deploying OCP cluster for Bare Metal platform")
-            logger.info(f"Openshift-installer will be using log level:{log_cli_level}")
+            logger.info(f"Openshift-installer will be using log level: {log_cli_level}")
             ocp_version = get_ocp_version()
             for machine in self.srv_details:
                 if self.srv_details[machine].get("cluster_name") or self.srv_details[
@@ -858,7 +859,7 @@ class BAREMETALIPI(BAREMETALBASE):
 
     class OCPDeployment(BAREMETALBASE.BMBaseOCPDeployment):
         def __init__(self):
-            super().__init__()
+            super(BAREMETALIPI.OCPDeployment, self).deploy_prereq()
 
         def deploy_prereq(self):
             """
@@ -866,6 +867,91 @@ class BAREMETALIPI(BAREMETALBASE):
             """
             super().deploy_prereq()
             self.stop_dnsmasq_service_on_helper_vm()
+
+            # prepare directory for backup of previous work dirs (if not exists)
+            cmd = "mkdir -p ~/clusterconfigs-backup"
+            # backup working directory on Provisioner from previous deployment
+            self.provisioner.exec_cmd(cmd=cmd)
+            cmd = (
+                "[[ -d ~/clusterconfigs ]] && "
+                "mv ~/clusterconfigs ~/clusterconfigs-backup/clusterconfigs-$(date '+%Y-%m-%dT%H-%M-%S')"
+            )
+            self.provisioner.exec_cmd(cmd=cmd)
+            # prepare working directory on Provisioner
+            cmd = "mkdir ~/clusterconfigs"
+            self.provisioner.exec_cmd(cmd=cmd)
+            # copy install-config.yaml to Provisioner
+            self.provisioner.upload_file(
+                localpath=os.path.join(self.cluster_path, "install-config.yaml"),
+                remotepath="~/clusterconfigs/install-config.yaml",
+            )
+
+            # configure DNS records
+            logger.info("Configuring DNS records")
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            zone_id = self.aws.create_hosted_zone(cluster_name=cluster_name)
+            response_list = []
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=zone_id,
+                    record_name=f"api.{cluster_name}",
+                    data=config.ENV_DATA["vips"][0],
+                    type="A",
+                    operation_type="Add",
+                )
+            )
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=zone_id,
+                    record_name=f"*.apps.{cluster_name}",
+                    data=config.ENV_DATA["vips"][1],
+                    type="A",
+                    operation_type="Add",
+                )
+            )
+
+            ns_list = self.aws.get_ns_for_hosted_zone(zone_id)
+            dns_data_dict = {}
+            ns_list_values = []
+            for value in ns_list:
+                dns_data_dict["Value"] = value
+                ns_list_values.append(dns_data_dict.copy())
+            base_domain_zone_id = self.aws.get_hosted_zone_id_for_domain(
+                domain=config.ENV_DATA["base_domain"]
+            )
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=base_domain_zone_id,
+                    record_name=f"{cluster_name}",
+                    data=ns_list_values,
+                    type="NS",
+                    operation_type="Add",
+                    ttl=300,
+                    raw_data=True,
+                )
+            )
+            logger.info("Waiting for Record Response")
+            self.aws.wait_for_record_set(response_list=response_list)
+            logger.info("Records Created Successfully")
+
+            # Ensure all bare metal nodes are powered off prior to installing the OCP cluster
+            nodes = [
+                key
+                for key in self.srv_details
+                if self.srv_details[key].get("role")
+                in (constants.MASTER_MACHINE, constants.WORKER_MACHINE)
+            ]
+            for node in nodes:
+                cmd = (
+                    f"ipmitool -I lanplus -U {self.srv_details[node]['mgmt_username']} "
+                    f"-P {self.srv_details[node]['mgmt_password']} "
+                    f"-H {self.srv_details[node]['mgmt_console']} chassis power off"
+                )
+                secrets = [
+                    self.srv_details[node]["mgmt_username"],
+                    self.srv_details[node]["mgmt_password"],
+                ]
+                exec_cmd(cmd=cmd, secrets=secrets)
 
         def create_config(self):
             """
@@ -894,19 +980,26 @@ class BAREMETALIPI(BAREMETALBASE):
             if ssh_key:
                 install_config_obj["sshKey"] = ssh_key
 
-            # find boostrap machine
-            bm = [
-                key
-                for key in self.srv_details
-                if self.srv_details[key].get("role") == constants.BOOTSTRAP_MACHINE
-            ][0]
+            # find bootstrap machine
+            # bm = [
+            #     key
+            #     for key in self.srv_details
+            #     if self.srv_details[key].get("role") == constants.BOOTSTRAP_MACHINE
+            # ][0]
 
-            install_config_obj["platform"]["baremetal"][
-                "bootstrapExternalStaticIP"
-            ] = self.srv_details[bm]["ip"]
-            install_config_obj["platform"]["baremetal"][
-                "bootstrapExternalStaticGateway"
-            ] = self.srv_details[bm]["gw"]
+            install_config_obj["platform"]["baremetal"] = {}
+            # install_config_obj["platform"]["baremetal"][
+            #     "bootstrapExternalStaticIP"
+            # ] = self.srv_details[bm]["ip"]
+            # install_config_obj["platform"]["baremetal"][
+            #     "bootstrapExternalStaticGateway"
+            # ] = self.srv_details[bm]["gw"]
+            install_config_obj["platform"]["baremetal"]["apiVIP"] = config.ENV_DATA[
+                "vips"
+            ][0]
+            install_config_obj["platform"]["baremetal"]["ingressVIP"] = config.ENV_DATA[
+                "vips"
+            ][1]
 
             install_config_obj["platform"]["baremetal"]["hosts"] = []
             # add master nodes
@@ -933,8 +1026,17 @@ class BAREMETALIPI(BAREMETALBASE):
                             "password": self.srv_details[master_nodes[i]][
                                 "mgmt_password"
                             ],
+                            "disableCertificateVerification": True,
                         },
-                        "bootMACAddress": self.srv_details[master_nodes[i]]["mac"],
+                        "bootMACAddress": self.srv_details[master_nodes[i]][
+                            "private_mac"
+                        ],
+                        "rootDeviceHints": {
+                            "serialNumber": self.srv_details[master_nodes[i]][
+                                "root_disk_sn"
+                            ],
+                        },
+                        "bootMode": "legacy",
                     }
                 )
             # add worker nodes
@@ -963,7 +1065,15 @@ class BAREMETALIPI(BAREMETALBASE):
                             ],
                             "disableCertificateVerification": True,
                         },
-                        "bootMACAddress": self.srv_details[worker_nodes[i]]["mac"],
+                        "bootMACAddress": self.srv_details[worker_nodes[i]][
+                            "private_mac"
+                        ],
+                        "rootDeviceHints": {
+                            "serialNumber": self.srv_details[master_nodes[i]][
+                                "root_disk_sn"
+                            ],
+                        },
+                        "bootMode": "legacy",
                     }
                 )
 
@@ -996,6 +1106,17 @@ class BAREMETALIPI(BAREMETALBASE):
                 "{self.srv_details[machine]]['mgmt_console']}"
                 "/redfish/v1/Systems/System.Embedded.1"
             )
+
+        def deploy(self, log_cli_level="DEBUG"):
+            """
+            Deploy
+            """
+            logger.info("Deploying OCP cluster for Bare Metal platform (IPI)")
+            logger.debug(
+                f"Openshift-installer will be using log level: {log_cli_level}"
+            )
+
+            raise Exception("TMP ABORT - deploy() not implemented")
 
 
 class BAREMETALAI(BAREMETALBASE):
