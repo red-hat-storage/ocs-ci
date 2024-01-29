@@ -186,7 +186,7 @@ skipif_mcg_only = pytest.mark.skipif(
 )
 
 stretchcluster_required = pytest.mark.skipif(
-    config.ENV_DATA.get("arbiter_deployment") is not True,
+    config.ENV_DATA.get("arbiter_deployment") == "true",
     reason="Test runs only on Stretch cluster with arbiter deployments",
 )
 
