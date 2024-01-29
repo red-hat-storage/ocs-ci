@@ -40,7 +40,110 @@ from ocs_ci.utility.utils import (
 logger = logging.getLogger(__name__)
 
 
-class BAREMETALUPI(Deployment):
+class BAREMETALBASE(Deployment):
+    """
+    A common class for Bare metal deployments
+    """
+
+    def __init__(self):
+        super().__init__()
+
+
+class BMBaseOCPDeployment(BaseOCPDeployment):
+    def __init__(self):
+        super().__init__()
+        self.helper_node_details = config.AUTH["baremetal"]
+        self.mgmt_details = config.AUTH["ipmi"]
+
+    def deploy_prereq(self):
+        """
+        Pre-Requisites for Bare Metal deployments
+        """
+        super(BMBaseOCPDeployment, self).deploy_prereq()
+        # check for BM status
+        logger.info("Checking BM Status")
+        status = self.check_bm_status_exist()
+        if status == constants.BM_STATUS_PRESENT:
+            pytest.fail(
+                f"BM Cluster still present and locked by {self.get_locked_username()}"
+            )
+
+        # update BM status
+        logger.info("Updating BM Status")
+        result = self.update_bm_status(constants.BM_STATUS_PRESENT)
+        assert (
+            result == constants.BM_STATUS_RESPONSE_UPDATED
+        ), "Failed to update request"
+
+    def check_bm_status_exist(self):
+        """
+        Check if BM Cluster already exist
+
+        Returns:
+            str: response status
+        """
+        headers = {"content-type": "application/json"}
+        response = requests.get(
+            url=self.helper_node_details["bm_status_check"], headers=headers
+        )
+        return response.json()[0]["status"]
+
+    def get_locked_username(self):
+        """
+        Get name of user who has locked baremetal resource
+
+        Returns:
+            str: username
+        """
+        headers = {"content-type": "application/json"}
+        response = requests.get(
+            url=self.helper_node_details["bm_status_check"], headers=headers
+        )
+        return response.json()[0]["user"]
+
+    def update_bm_status(self, bm_status):
+        """
+        Update BM status when cluster is deployed/teardown
+
+        Args:
+            bm_status (str): Status to be updated
+
+        Returns:
+            str: response message
+        """
+        if bm_status == constants.BM_STATUS_PRESENT:
+            now = datetime.today().strftime("%Y-%m-%d")
+            payload = {
+                "status": bm_status,
+                "cluster_name": config.ENV_DATA["cluster_name"],
+                "creation_date": now,
+            }
+        else:
+            payload = {
+                "status": bm_status,
+                "cluster_name": "null",
+                "creation_date": "null",
+            }
+        headers = {"content-type": "application/json"}
+        response = requests.put(
+            url=self.helper_node_details["bm_status_check"],
+            json=payload,
+            headers=headers,
+        )
+        return response.json()["message"]
+
+    def destroy(self, log_level=""):
+        """
+        Destroy OCP cluster
+        """
+        logger.info("Updating BM status")
+        result = self.update_bm_status(constants.BM_STATUS_ABSENT)
+        assert (
+            result == constants.BM_STATUS_RESPONSE_UPDATED
+        ), "Failed to update request"
+
+
+class BAREMETALUPI(BAREMETALBASE):
     """
     A class to handle Bare metal UPI specific deployment
     """
@@ -49,11 +152,9 @@ class BAREMETALUPI(Deployment):
         logger.info("BAREMETAL UPI")
         super().__init__()
 
-    class OCPDeployment(BaseOCPDeployment):
+    class OCPDeployment(BMBaseOCPDeployment):
         def __init__(self):
             super().__init__()
-            self.helper_node_details = config.AUTH["baremetal"]
-            self.mgmt_details = config.AUTH["ipmi"]
             self.aws = aws.AWS()
 
         def deploy_prereq(self):
@@ -61,20 +162,6 @@ class BAREMETALUPI(Deployment):
             Pre-Requisites for Bare Metal UPI Deployment
             """
             super(BAREMETALUPI.OCPDeployment, self).deploy_prereq()
-            # check for BM status
-            logger.info("Checking BM Status")
-            status = self.check_bm_status_exist()
-            if status == constants.BM_STATUS_PRESENT:
-                pytest.fail(
-                    f"BM Cluster still present and locked by {self.get_locked_username()}"
-                )
-
-            # update BM status
-            logger.info("Updating BM Status")
-            result = self.update_bm_status(constants.BM_STATUS_PRESENT)
-            assert (
-                result == constants.BM_STATUS_RESPONSE_UPDATED
-            ), "Failed to update request"
             # create manifest
             self.create_manifest()
             # create chrony resource
@@ -554,68 +641,7 @@ class BAREMETALUPI(Deployment):
                 delete_from_base_domain=True,
             )
 
-            logger.info("Updating BM status")
-            result = self.update_bm_status(constants.BM_STATUS_ABSENT)
-            assert (
-                result == constants.BM_STATUS_RESPONSE_UPDATED
-            ), "Failed to update request"
-
-        def check_bm_status_exist(self):
-            """
-            Check if BM Cluster already exist
-
-            Returns:
-                str: response status
-            """
-            headers = {"content-type": "application/json"}
-            response = requests.get(
-                url=self.helper_node_details["bm_status_check"], headers=headers
-            )
-            return response.json()[0]["status"]
-
-        def get_locked_username(self):
-            """
-            Get name of user who has locked baremetal resource
-
-            Returns:
-                str: username
-            """
-            headers = {"content-type": "application/json"}
-            response = requests.get(
-                url=self.helper_node_details["bm_status_check"], headers=headers
-            )
-            return response.json()[0]["user"]
-
-        def update_bm_status(self, bm_status):
-            """
-            Update BM status when cluster is deployed/teardown
-
-            Args:
-                bm_status (str): Status to be updated
-
-            Returns:
-                str: response message
-            """
-            if bm_status == constants.BM_STATUS_PRESENT:
-                now = datetime.today().strftime("%Y-%m-%d")
-                payload = {
-                    "status": bm_status,
-                    "cluster_name": config.ENV_DATA["cluster_name"],
-                    "creation_date": now,
-                }
-            else:
-                payload = {
-                    "status": bm_status,
-                    "cluster_name": "null",
-                    "creation_date": "null",
-                }
-            headers = {"content-type": "application/json"}
-            response = requests.put(
-                url=self.helper_node_details["bm_status_check"],
-                json=payload,
-                headers=headers,
-            )
-            return response.json()["message"]
+            super().destroy(log_level=log_level)
 
         def create_pxe_files(self, ocp_version, role, disk_path):
             """
