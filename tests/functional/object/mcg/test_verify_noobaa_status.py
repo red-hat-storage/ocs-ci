@@ -78,9 +78,13 @@ def test_verify_backingstore_uses_rgw(mcg_obj_session):
     Validates whether default MCG backingstore uses rgw endpoint
     """
     ceph_object_store = OCP(
-        kind=constants.CEPHOBJECTSTORE, name="ocs-storagecluster-cephobjectstore"
+        kind=constants.CEPHOBJECTSTORE,
+        resource_name="ocs-storagecluster-cephobjectstore",
     ).get()["items"][0]
     rgw_endpoint = ceph_object_store["status"]["endpoints"]["secure"]
+    log.info(
+        f"Checking if backingstore noobaa-default-backing-store uses endpoint {rgw_endpoint}"
+    )
 
     # Get default backingstore status
     backingstore_data = mcg_obj_session.exec_mcg_cmd(
