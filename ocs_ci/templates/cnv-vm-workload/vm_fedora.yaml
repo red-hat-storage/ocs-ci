@@ -1,0 +1,79 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: fedora-pink-vicuna-77
+
+spec:
+  dataVolumeTemplates:
+    - metadata:
+        name: fedora-pink-vicuna-77
+      spec:
+        preallocation: false
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: ocs-storagecluster-ceph-rbd-virtualization
+  running: true
+  template:
+    metadata:
+      annotations:
+        vm.kubevirt.io/flavor: small
+        vm.kubevirt.io/os: fedora
+        vm.kubevirt.io/workload: server
+      labels:
+        kubevirt.io/domain: fedora-pink-vicuna-77
+        kubevirt.io/size: small
+    spec:
+      accessCredentials:
+        - sshPublicKey:
+            propagationMethod:
+              noCloud: {}
+            source:
+              secret:
+                secretName: new-my-secret-1
+      architecture: amd64
+      domain:
+        cpu:
+          cores: 1
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - bootOrder: 1
+              name: rootdisk
+              disk:
+                bus: virtio
+            - bootOrder: 2
+              name: cloudinitdisk
+              disk: {}
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          networkInterfaceMultiqueue: true
+          rng: {}
+        features:
+          acpi: { }
+        machine:
+          type: pc-q35-rhel9.2.0
+        memory:
+          guest: 2Gi
+        resources: {}
+      networks:
+        - name: default
+          pod: {}
+      terminationGracePeriodSeconds: 180
+      volumes:
+        - dataVolume:
+            name: fedora-pink-vicuna-77
+          name: rootdisk
+        - cloudInitNoCloud:
+            userData: |-
+              #!/bin/sh
+              echo 'printed from cloud-init userdata'
+          name: cloudinitdisk

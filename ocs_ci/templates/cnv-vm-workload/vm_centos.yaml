@@ -1,0 +1,76 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: centos-stream8
+  namespace: default
+
+spec:
+  dataVolumeTemplates:
+    - metadata:
+        name: centos-stream8
+      spec:
+        preallocation: false
+        sourceRef:
+          kind: DataSource
+          name: centos-stream8
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: ocs-storagecluster-ceph-rbd-virtualization
+  running: true
+  template:
+    metadata:
+      annotations:
+        vm.kubevirt.io/flavor: small
+        vm.kubevirt.io/os: centos-stream8
+        vm.kubevirt.io/workload: server
+      creationTimestamp: null
+      labels:
+        kubevirt.io/domain: centos-stream8
+        kubevirt.io/size: small
+    spec:
+      architecture: amd64
+      domain:
+        cpu:
+          cores: 1
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - bootOrder: 1
+              disk:
+                bus: virtio
+              name: rootdisk
+            - bootOrder: 2
+              disk:
+                bus: virtio
+              name: cloudinitdisk
+          interfaces:
+            - macAddress: '02:68:fa:00:00:01'
+              masquerade: {}
+              model: virtio
+              name: default
+          networkInterfaceMultiqueue: true
+          rng: {}
+        machine:
+          type: pc-q35-rhel9.2.0
+        memory:
+          guest: 2Gi
+        resources: {}
+      networks:
+        - name: default
+          pod: {}
+      terminationGracePeriodSeconds: 180
+      volumes:
+        - dataVolume:
+            name: centos-stream8
+          name: rootdisk
+        - cloudInitNoCloud:
+            userData: |-
+              #cloud-config
+              user: centos
+              password: 7lua-f8o8-nk3t
+              chpasswd: { expire: False }
+          name: cloudinitdisk
