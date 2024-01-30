@@ -896,7 +896,7 @@ class BAREMETALIPI(BAREMETALBASE):
                 self.aws.update_hosted_zone_record(
                     zone_id=zone_id,
                     record_name=f"api.{cluster_name}",
-                    data=config.ENV_DATA["vips"][0],
+                    data=config.ENV_DATA["api_vip"],
                     type="A",
                     operation_type="Add",
                 )
@@ -905,7 +905,7 @@ class BAREMETALIPI(BAREMETALBASE):
                 self.aws.update_hosted_zone_record(
                     zone_id=zone_id,
                     record_name=f"*.apps.{cluster_name}",
-                    data=config.ENV_DATA["vips"][1],
+                    data=config.ENV_DATA["ingress_vip"],
                     type="A",
                     operation_type="Add",
                 )
@@ -996,11 +996,11 @@ class BAREMETALIPI(BAREMETALBASE):
             #     "bootstrapExternalStaticGateway"
             # ] = self.srv_details[bm]["gw"]
             install_config_obj["platform"]["baremetal"]["apiVIP"] = config.ENV_DATA[
-                "vips"
-            ][0]
+                "api_vip"
+            ]
             install_config_obj["platform"]["baremetal"]["ingressVIP"] = config.ENV_DATA[
-                "vips"
-            ][1]
+                "ingress_vip"
+            ]
 
             install_config_obj["platform"]["baremetal"]["hosts"] = []
             # add master nodes
