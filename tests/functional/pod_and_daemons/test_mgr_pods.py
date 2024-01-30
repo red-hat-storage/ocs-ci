@@ -29,7 +29,7 @@ class TestMgrPods(BaseTest):
     4. Check Active MGR pod reboot
     """
 
-    def test_two_mgr_pods_and_metadata(self, pod_factory):
+    def test_two_mgr_pods_and_metadata(self):
         """
         Testing two mgr pods exists or not
 
@@ -77,3 +77,58 @@ class TestMgrPods(BaseTest):
             "Mgr metadata is correct with two distinct entries with two distinct names."
         )
         log.info(f"Name entries in mgr metadata: {mgr_metadata_names}")
+
+    def test_two_mgr_daemons_and_failure(self):
+        """
+        Testing two mgr pods exists or not
+
+        - login to ceph-tools
+            oc rsh <rook-ceph-tool-pod-name>
+        - check mgr stat
+            ceph mgr stat
+        - fail mgr daemon
+            ceph mgr fail <daemon name>
+            ex. ceph mgr fail a
+        - check mgr stat again and the active passive should bea ctive
+            ceph mgr stat
+        """
+        log.info("Testing the mgr daemon stats")
+
+        log.info("Checking mgr stat.")
+        toolbox = pod.get_ceph_tools_pod()
+        try:
+            before_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
+            before_mgr_stat = toolbox.exec_cmd_on_pod("ceph mgr stat")
+        except exceptions.CommandFailed:
+            log.error("Unable to run command on toolbox")
+
+        log.info(
+            f"Currently mgr daemon {before_mgr_stat.get('active_name')} is set at "
+            f"available: {before_mgr_stat.get('available')}"
+        )
+        log.info(f"Ceph health Status is at: {before_ceph_health}")
+
+        log.info(f"Failing the active mgr dameon: {before_mgr_stat.get('active_name')}")
+        try:
+            toolbox.exec_cmd_on_pod(
+                f"ceph mgr fail {before_mgr_stat.get('active_name')}"
+            )
+            after_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
+        except exceptions.CommandFailed:
+            log.error("Unable to run command on toolbox")
+
+        log.info(f"Ceph health status is at: {after_ceph_health}")
+        log.info("Checking mgr stat again.")
+        after_mgr_stat = toolbox.exec_cmd_on_pod("ceph mgr stat")
+        log.info(
+            f"Currently mgr daemon {after_mgr_stat.get('active_name')} is set at "
+            f"available: {after_mgr_stat.get('available')}"
+        )
+
+        assert before_mgr_stat.get("active_name") != after_mgr_stat.get(
+            "active_name"
+        ), (
+            f"The mgr daemon before and after fail are the same: "
+            f"before failure: {before_mgr_stat.get('active_name')}"
+            f"after failure: {after_mgr_stat.get('active_name')}"
+        )
