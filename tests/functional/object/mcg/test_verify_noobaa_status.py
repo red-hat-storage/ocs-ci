@@ -82,7 +82,7 @@ def test_verify_backingstore_uses_rgw(mcg_obj_session):
         resource_name="ocs-storagecluster-cephobjectstore",
     ).get()
     log.debug(f"Ceph object store: {ceph_object_store}")
-    rgw_endpoint = ceph_object_store["status"]["endpoints"]["secure"]
+    rgw_endpoint = ceph_object_store["status"]["endpoints"]["secure"][0]
     log.info(
         f"Checking if backingstore noobaa-default-backing-store uses endpoint {rgw_endpoint}"
     )
