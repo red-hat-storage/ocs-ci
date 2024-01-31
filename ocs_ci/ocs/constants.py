@@ -91,6 +91,9 @@ CHRONY_TEMPLATE = os.path.join(
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 BUSYBOX_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "busybox.yaml")
+AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
+    "ocp-deployment", "ai-host-network-config.yaml.j2"
+)
 # Statuses
 STATUS_READY = "Ready"
 PEER_READY = "Peer ready"
@@ -1873,6 +1876,8 @@ DNSMASQ_PXE_CONF_FILE_TEMPLATE = os.path.join("ocp-deployment", "dnsmasq.pxe.con
 DNSMASQ_COMMON_CONF_FILE_TEMPLATE = os.path.join(
     "ocp-deployment", "dnsmasq.common.conf.j2"
 )
+PXELINUX_CFG_IPXE_TEMPLATE = os.path.join("ocp-deployment", "pxelinux.cfg.ipxe.j2")
+PXELINUX_CFG_DISK0_TEMPLATE = os.path.join("ocp-deployment", "pxelinux.cfg.disk0.j2")
 RHCOS_IMAGES_FILE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "rhcos_images.yaml")
 PXE_FILE = os.path.join(TEMPLATE_DIR, "baremetal-pxefile")
 coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"

@@ -2,6 +2,7 @@ import json
 import os
 import pytest
 import logging
+import re
 import tempfile
 import time
 from datetime import datetime
@@ -18,10 +19,12 @@ from ocs_ci.utility import psiutils, aws, version
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.utility import ibmcloud_bm
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
@@ -36,6 +39,7 @@ from ocs_ci.utility.utils import (
     get_infra_id,
     TimeoutSampler,
     add_chrony_to_ocp_deployment,
+    replace_content_in_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -790,7 +794,7 @@ LABEL disk0
                 self.srv_details[machine]["mgmt_username"],
                 self.srv_details[machine]["mgmt_password"],
             ]
-            # Changes boot prioriy to pxe
+            # Changes boot priority to pxe
             cmd = (
                 f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
                 f"-P {self.srv_details[machine]['mgmt_password']} "
@@ -811,6 +815,440 @@ LABEL disk0
                 f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
             )
             run_cmd(cmd=cmd, secrets=secrets)
+
+
+class BAREMETALAI(BAREMETALBASE):
+    """
+    A class to handle Bare metal Assisted Installer specific deployment
+    """
+
+    def __init__(self):
+        logger.info("BAREMETAL AI")
+        super(BAREMETALAI, self).__init__()
+
+    class OCPDeployment(BMBaseOCPDeployment):
+        def __init__(self):
+            super(BAREMETALAI.OCPDeployment, self).__init__()
+
+        def deploy_prereq(self):
+            """
+            Pre-Requisites for Bare Metal AI Deployment
+            """
+            super().deploy_prereq()
+
+            # create initial metadata.json file in cluster dir, to ensure, that
+            # destroy job will be properly triggered even when the deployment fails
+            # and metadata.json file will not be created
+            with open(
+                os.path.join(self.cluster_path, "metadata.json"), "w"
+            ) as metadata_file:
+                json.dump(
+                    {"clusterName": self.cluster_name, "infraID": self.cluster_name},
+                    metadata_file,
+                )
+            # load API and Ingress IPs from config
+            self.api_vip = config.ENV_DATA["api_vip"]
+            self.ingress_vip = config.ENV_DATA["ingress_vip"]
+
+            # prepare required dnsmasq configuration (for PXE boot)
+            self.configure_dnsmasq_on_helper_vm()
+
+            # prepare ipxe directory in web document root
+            cmd = f"mkdir -m 755 {self.bm_config['bm_httpd_document_root']}/ipxe"
+            logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
+
+            # cleanup leftover files on httpd server from previous deployment
+            cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+            logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
+            # create cluster/environment specific folder on httpd server
+            cmd = f"mkdir -m 755 {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+            # TODO this kind of assert doesn't work - it doesn't handle the not-zero error message!
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to create required folder"
+
+            self.configure_ipxe_on_helper()
+
+        def create_config(self):
+            """
+            Create the OCP deploy config.
+            """
+            logger.debug(
+                "create_config() is not required for Assisted installer deployment"
+            )
+
+        def deploy(self, log_cli_level="DEBUG"):
+            """
+            Deployment specific to OCP cluster on this platform
+
+            Args:
+                log_cli_level (str): not used for Assisted Installer deployment
+
+            """
+            logger.info(
+                "Deploying OCP cluster on Bare Metal platform via Assisted Installer"
+            )
+
+            # prepare hosts configuration
+            master_count = 0
+            master_nodes = []
+            worker_count = 0
+            worker_nodes = []
+            # MAC addresses to node name mapping
+            mac_name_mapping = {}
+            # MAC addresses to node role mapping
+            mac_role_mapping = {}
+            static_network_config = []
+            # which network is used for provisioning (public|private)
+            provisioning_network = self.bm_config["bm_provisioning_network"]
+            for machine in self.srv_details:
+                if (
+                    self.srv_details[machine]["role"] == constants.MASTER_MACHINE
+                    and master_count < config.ENV_DATA["master_replicas"]
+                ):
+                    master_nodes.append(machine)
+                    mac_name_mapping[
+                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                    ] = machine
+                    mac_role_mapping[
+                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                    ] = "master"
+                    master_count += 1
+                elif (
+                    self.srv_details[machine]["role"] == constants.WORKER_MACHINE
+                    and worker_count < config.ENV_DATA["worker_replicas"]
+                ):
+                    worker_nodes.append(machine)
+                    mac_name_mapping[
+                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                    ] = machine
+                    mac_role_mapping[
+                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                    ] = "worker"
+                    worker_count += 1
+
+            # check number of available master and worker nodes (in configuration)
+            assert len(master_nodes) == config.ENV_DATA["master_replicas"], (
+                f"Number of available master_nodes ({len(master_nodes)}: {master_nodes}) in configuration "
+                f"doesn't match configured master_replicas ({config.ENV_DATA['master_replicas']}."
+            )
+            assert len(worker_nodes) == config.ENV_DATA["worker_replicas"], (
+                f"Number of available worker_nodes ({len(worker_nodes)}: {worker_nodes}) in configuration "
+                f"doesn't match configured worker_replicas ({config.ENV_DATA['worker_replicas']}."
+            )
+
+            # use static network configuration, instead of configuration from DHCP
+            # TODO: this part (static network configuration) is not fully implemented
+            if self.bm_config.get("network_config") == "static":
+                _templating = Templating()
+                for machine in master_nodes + worker_nodes:
+                    network_yaml_str = _templating.render_template(
+                        constants.AI_NETWORK_CONFIG_TEMPLATE, self.srv_details[machine]
+                    )
+                    network_yaml = yaml.safe_load(network_yaml_str)
+                    static_network_config.append(
+                        {
+                            "mac_interface_map": [
+                                {
+                                    "logical_nic_name": "eth0",
+                                    "mac_address": self.srv_details[machine][
+                                        "private_mac"
+                                    ],
+                                },
+                            ],
+                            "network_yaml": yaml.safe_dump(network_yaml),
+                        }
+                    )
+
+            # initialize AssistedInstallerCluster object
+            self.ai_cluster = assisted_installer.AssistedInstallerCluster(
+                name=self.cluster_name,
+                cluster_path=self.cluster_path,
+                openshift_version=str(version.get_semantic_ocp_version_from_config()),
+                base_dns_domain=config.ENV_DATA["base_domain"],
+                api_vip=self.api_vip,
+                ingress_vip=self.ingress_vip,
+                ssh_public_key=self.get_ssh_key(),
+                pull_secret=self.get_pull_secret(),
+                static_network_config=static_network_config,
+            )
+
+            # create (register) cluster in Assisted Installer console
+            self.ai_cluster.create_cluster()
+
+            # create Infrastructure Environment in Assisted Installer console
+            self.ai_cluster.create_infrastructure_environment()
+
+            # configure DNS records for API and Ingress
+            self.create_dns_records()
+
+            # download discovery ipxe config
+            ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
+            # parse ipxe_config_file for initrd, kernel and rootfs urls
+            with open(ipxe_config_file) as ipxe_config_content:
+                content = ipxe_config_content.read()
+            initrd_url = re.search(r"\ninitrd --name initrd (.*)\n", content).group(1)
+            kernel_url, rootfs_url = re.search(
+                r"\nkernel ([^ ]*) initrd=initrd coreos.live.rootfs_url=([^ ]*)",
+                content,
+            ).groups()
+
+            # download initrd, kernel and rootfs to httpd server
+            dest_dir = f"{self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+            cmd = f"wget --no-verbose -O {dest_dir}/initrd '{initrd_url}'"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to download initrd"
+            cmd = f"wget --no-verbose -O {dest_dir}/kernel '{kernel_url}'"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to download kernel"
+            cmd = f"wget --no-verbose -O {dest_dir}/rootfs '{rootfs_url}'"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to download rootfs"
+
+            # update ipxe_config_file to point initrd, kernel and rootfs to the downloaded files
+            base_dest_url = (
+                f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
+                f"{self.bm_config['env_name']}"
+            )
+            replace_content_in_file(
+                ipxe_config_file, initrd_url, f"{base_dest_url}/initrd"
+            )
+            replace_content_in_file(
+                ipxe_config_file, kernel_url, f"{base_dest_url}/kernel"
+            )
+            replace_content_in_file(
+                ipxe_config_file, rootfs_url, f"{base_dest_url}/rootfs"
+            )
+
+            # upload ipxe config to httpd server (helper_node)
+            self.helper_node_handler.upload_file(
+                ipxe_config_file,
+                (
+                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                    f"{self.bm_config['env_name']}/discovery.ipxe"
+                ),
+            )
+            ipxe_file_url = (
+                f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
+                f"{self.bm_config['env_name']}/discovery.ipxe"
+            )
+
+            # configure pxelinux.cfg files for each server (named based on MAC address)
+            # to boot from the ipxe configuration file
+            pxelinux_cfg_file = self.create_pxe_file(ipxe_file_url=ipxe_file_url)
+            for machine in master_nodes + worker_nodes:
+                mac = self.srv_details[machine][f"{provisioning_network}_mac"]
+                dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
+                self.helper_node_handler.upload_file(
+                    pxelinux_cfg_file,
+                    f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
+                )
+
+            # reboot all servers and boot them from PXE
+            for machine in master_nodes + worker_nodes:
+                self.set_pxe_boot_and_reboot(machine)
+
+            # wait for discovering all nodes
+            expected_node_num = (
+                config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"]
+            )
+            self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
+
+            # verify validations info
+            self.ai_cluster.verify_validations_info_for_discovered_nodes()
+
+            # configure pxelinux.cfg files for each server (named based on MAC address)
+            # to boot from the first disk (without this change, if the servers are configured to boot from PXE, they
+            # will be stuck in boot loop
+            pxelinux_cfg_file = self.create_pxe_file(
+                template=constants.PXELINUX_CFG_DISK0_TEMPLATE
+            )
+            for machine in master_nodes + worker_nodes:
+                mac = self.srv_details[machine][f"{provisioning_network}_mac"]
+                dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
+                self.helper_node_handler.upload_file(
+                    pxelinux_cfg_file,
+                    f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
+                )
+
+            # update discovered hosts (configure hostname and role)
+            self.ai_cluster.update_hosts_config(
+                mac_name_mapping=mac_name_mapping, mac_role_mapping=mac_role_mapping
+            )
+
+            # install the OCP cluster
+            self.ai_cluster.install_cluster()
+
+        def create_dns_records(self):
+            """
+            Configure DNS records for api and ingress
+            """
+            response_list = []
+            zone_id = self.aws.get_hosted_zone_id_for_domain()
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=zone_id,
+                    record_name=f"api.{self.cluster_name}",
+                    data=self.api_vip,
+                    type="A",
+                    operation_type="Add",
+                )
+            )
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=zone_id,
+                    record_name=f"*.apps.{self.cluster_name}",
+                    data=self.ingress_vip,
+                    type="A",
+                    operation_type="Add",
+                )
+            )
+            logger.info("Waiting for Record Response")
+            self.aws.wait_for_record_set(response_list=response_list)
+            logger.info("Records Created Successfully")
+
+        def configure_ipxe_on_helper(self):
+            """
+            Configure iPXE on helper node
+            """
+            cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}/ipxe"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to create required folder"
+
+            cmd = (
+                f"wget -O {self.bm_config['bm_tftp_base_dir']}/ipxe/ipxe.lkrn "
+                f"http://boot.ipxe.org/ipxe.lkrn"
+            )
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to download ipxe.lkrn"
+
+        def create_pxe_file(
+            self, template=constants.PXELINUX_CFG_IPXE_TEMPLATE, **kwargs
+        ):
+            """
+            Prepare content of PXE file for chain loading to ipxe
+            """
+            _templating = Templating()
+            template_data = kwargs
+            pxe_config_content = _templating.render_template(
+                template,
+                template_data,
+            )
+            temp_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix=f"ipxe.{self.bm_config['env_name']}", delete=False
+            )
+            with open(temp_file.name, "w") as t_file:
+                t_file.writelines(pxe_config_content)
+            return temp_file.name
+
+        def set_pxe_boot_and_reboot(self, machine):
+            """
+            Ipmi Set Pxe boot and Restart the machine
+
+            Args:
+                machine (str): Machine Name
+
+            """
+            if self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ipmitool":
+                secrets = [
+                    self.srv_details[machine]["mgmt_username"],
+                    self.srv_details[machine]["mgmt_password"],
+                ]
+                # Changes boot priority to pxe
+                cmd = (
+                    f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                    f"-P {self.srv_details[machine]['mgmt_password']} "
+                    f"-H {self.srv_details[machine]['mgmt_console']} chassis bootdev pxe"
+                )
+                self.helper_node_handler.exec_cmd(cmd=cmd, secrets=secrets)
+                logger.info(
+                    "Sleeping for 2 Sec to make sure bootdev pxe is set properly using ipmitool cmd"
+                )
+                sleep(2)
+                # Power On Machine
+                cmd = (
+                    f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                    f"-P {self.srv_details[machine]['mgmt_password']} "
+                    f"-H {self.srv_details[machine]['mgmt_console']} chassis power cycle || "
+                    f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                    f"-P {self.srv_details[machine]['mgmt_password']} "
+                    f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
+                )
+                self.helper_node_handler.exec_cmdrun_cmd(cmd=cmd, secrets=secrets)
+
+            elif (
+                self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ibmcloud"
+            ):
+                ibmcloud = ibmcloud_bm.IBMCloudBM()
+                m = ibmcloud.get_machines_by_names([machine])
+                ibmcloud.stop_machines(m)
+                time.sleep(5)
+                ibmcloud.start_machines(m)
+                # run the power-on command second time to make sure the host is powered on
+                time.sleep(5)
+                ibmcloud.start_machines(m)
+
+        def destroy(self):
+            """
+            Cleanup cluster related resources.
+            """
+            # delete cluster definition from Assisted Installer console
+            try:
+                ai_cluster = assisted_installer.AssistedInstallerCluster(
+                    name=self.cluster_name,
+                    cluster_path=self.cluster_path,
+                    existing_cluster=True,
+                )
+                ai_cluster.delete_cluster()
+                ai_cluster.delete_infrastructure_environment()
+            except (
+                exceptions.OpenShiftAPIResponseException,
+                exceptions.ClusterNotFoundException,
+            ) as err:
+                logger.warning(
+                    f"Failed to delete cluster in Assisted Installer Console: {err}\n"
+                    "(ignoring the failure and continuing the destroy process to remove other resources)"
+                )
+
+            # delete DNS records for API and Ingress
+            # get the record sets
+            record_sets = self.aws.get_record_sets()
+            # form the record sets to delete
+            cluster_domain = (
+                f"{config.ENV_DATA.get('cluster_name')}."
+                f"{config.ENV_DATA.get('base_domain')}"
+            )
+            records_to_delete = [
+                f"api.{cluster_domain}.",
+                f"\\052.apps.{cluster_domain}.",
+            ]
+            # delete the records
+            hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
+            logger.debug(f"hosted zone id: {hosted_zone_id}")
+            for record in record_sets:
+                if record["Name"] in records_to_delete:
+                    logger.info(f"Deleting DNS record: {record}")
+                    self.aws.delete_record(record, hosted_zone_id)
+
+            # cleanup ipxe provisioning files
+            cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+            logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific to Baremetal - Assisted installer deployment
+
+        Args:
+            log_level (str): this parameter is not used here
+
+        """
+        self.ocp_deployment = self.OCPDeployment()
+        self.ocp_deployment.destroy()
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
