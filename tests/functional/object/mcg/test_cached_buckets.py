@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     tier2,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
+@runs_on_provider
 class TestCachedBuckets(MCGTest):
     """
     Tests Noobaa cache bucket caching mechanism

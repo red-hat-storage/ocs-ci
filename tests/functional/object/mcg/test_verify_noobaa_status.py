@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_openshift_dedicated,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @tier1
 @polarion_id("OCS-2084")
 @bugzilla("1799077")
@@ -37,6 +39,7 @@ def test_verify_noobaa_status_cli(mcg_obj_session):
 
 @mcg
 @red_squad
+@runs_on_provider
 @tier1
 @skipif_ocs_version("<4.8")
 @polarion_id("OCS-2748")

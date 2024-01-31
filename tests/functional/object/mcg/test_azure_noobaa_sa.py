@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     azure_platform_required,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @tier1
 @azure_platform_required
+@runs_on_provider
 @bugzilla("1970123")
 @pytest.mark.polarion_id("OCS-3963")
 @skipif_ocs_version("<4.10")

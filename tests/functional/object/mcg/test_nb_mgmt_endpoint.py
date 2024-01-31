@@ -2,7 +2,7 @@ import json
 import requests
 import logging
 
-from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import red_squad, runs_on_provider, mcg
 from ocs_ci.framework.testlib import tier1
 
 from ocs_ci.framework.testlib import MCGTest
@@ -15,6 +15,7 @@ logger = logging.getLogger(name=__file__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @tier1
 @skipif_ocs_version(">4.13")
 class TestNoobaaMgmtEndpoint(MCGTest):

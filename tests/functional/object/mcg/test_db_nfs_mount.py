@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     vsphere_platform_required,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs.ocp import OCP
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 @mcg
+@runs_on_provider
 @red_squad
 class TestNoobaaDbNFSMount:
     @pytest.fixture()

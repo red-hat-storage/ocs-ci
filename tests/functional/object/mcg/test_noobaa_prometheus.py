@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     polarion_id,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -37,6 +38,7 @@ def get_bucket_used_bytes_metric(bucket_name, threading_lock):
 
 @mcg
 @red_squad
+@runs_on_provider
 class TestNoobaaaPrometheus:
     @tier2
     @bugzilla("2168010")

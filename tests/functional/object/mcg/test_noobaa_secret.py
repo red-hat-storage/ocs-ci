@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     skipif_disconnected_cluster,
     red_squad,
+    runs_on_provider,
     mcg,
     post_upgrade,
 )
@@ -64,6 +65,7 @@ def cleanup(request):
 @mcg
 @red_squad
 @tier2
+@runs_on_provider
 @skipif_ocs_version("<4.11")
 @skipif_disconnected_cluster
 class TestNoobaaSecrets:
@@ -340,6 +342,7 @@ class TestNoobaaSecrets:
 @red_squad
 @bugzilla("2219522")
 @polarion_id("OCS-5205")
+@runs_on_provider
 @tier2
 def test_noobaa_root_secret():
     """

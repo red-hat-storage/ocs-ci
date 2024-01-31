@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     polarion_id,
     red_squad,
+    runs_on_provider,
     tier2,
     mcg,
 )
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 @tier2
 @mcg
+@runs_on_provider
 @bugzilla("2183092")
 @polarion_id("OCS-5217")
 @red_squad

@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_mcg_only,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs import constants, ocp
@@ -26,6 +27,7 @@ RECONCILE_WAIT = 60
 
 @mcg
 @red_squad
+@runs_on_provider
 class TestS3Routes:
 
     """

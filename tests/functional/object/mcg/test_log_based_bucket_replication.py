@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import (
     skipif_vsphere_ipi,
     ignore_leftover_label,
     polarion_id,
+    runs_on_provider,
     tier1,
     tier2,
     tier3,
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
 @skipif_aws_creds_are_missing
 class TestLogBasedBucketReplication(MCGTest):

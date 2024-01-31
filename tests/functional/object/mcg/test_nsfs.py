@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     ignore_leftover_label,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 @skipif_mcg_only
 @skipif_ocs_version("<4.10")
 @ignore_leftover_label(constants.NOOBAA_ENDPOINT_POD_LABEL)

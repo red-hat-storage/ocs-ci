@@ -4,7 +4,13 @@ from time import sleep
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, bugzilla, red_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    bugzilla,
+    red_squad,
+    runs_on_provider,
+    mcg,
+)
 from ocs_ci.framework.testlib import MCGTest, version
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
@@ -14,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@runs_on_provider
 class TestObjectExpiration(MCGTest):
     """
     Tests suite for object expiration

@@ -8,7 +8,12 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
 )
 
-from ocs_ci.framework.pytest_customization.marks import red_squad, skipif_mcg_only, rgw
+from ocs_ci.framework.pytest_customization.marks import (
+    red_squad,
+    skipif_mcg_only,
+    rgw,
+    runs_on_provider,
+)
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
@@ -18,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 @rgw
 @red_squad
+@runs_on_provider
 @skipif_mcg_only
 class TestObjectIntegrity(ManageTest):
     """
