@@ -2,6 +2,7 @@ import argparse
 import logging
 import re
 import yaml
+import sys
 
 from ocs_ci.framework import config
 from ocs_ci import framework
@@ -96,12 +97,13 @@ class IbmClusterDeleteion(object):
             created_time = self.ibm_cloud_ipi_obj.get_created_time(resource_group_name)
             for prefix, hours in CLUSTER_PREFIXES_SPECIAL_RULES.items():
                 pattern = re.compile(f"r'{prefix}'")
-                if pattern.search(resource_group_name):
+                if prefix == "never":
+                    delete_hours = sys.maxsize
+                elif pattern.search(resource_group_name):
                     delete_hours = hours
-                elif prefix == "never":
-                    continue
                 else:
                     delete_hours = DEFAULT_TIME
+
             if created_time > delete_hours:
                 self.clusters_deletion.append(resource_group_name)
 
