@@ -8,6 +8,7 @@ import json
 import logging
 import os
 
+from datetime import datetime, timezone
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
@@ -490,6 +491,47 @@ class IBMCloudIPI(CloudDeploymentBase):
             and cluster["name"].startswith(cluster_name_prefix)
         ]
         return bool(cluster_matches)
+
+    # def get_resources(self, resource_group):
+    #     """
+    #     Return a list leftover resources for the specified Resource Group
+    #     """
+    #     cmd = f"ibmcloud resource service-instances --type all -g {resource_group} --output json"
+    #     proc = exec_cmd(cmd)
+    #
+    #     return json.loads(proc.stdout)
+
+    def get_created_time(self, resource_group):
+        """
+
+        Args:
+            resource_group:
+
+        Returns:
+
+        """
+        cmd = f"ibmcloud resource service-instances -g {resource_group} --output json"
+        proc = exec_cmd(cmd)
+        created_time_str = json.loads(proc.stdout)[0]["created_at"]
+        time_now = datetime.now(timezone.utc)
+        created_time = datetime.fromisoformat(f"{created_time_str.split('.')[0]}+00:00")
+        time_difference = time_now - created_time
+        return int(time_difference.total_seconds() / 3600)
+
+    def get_resource_groups(self):
+        """
+
+        Returns:
+
+        """
+        cmd = "ibmcloud resource groups --output json"
+        proc = exec_cmd(cmd)
+        logger.info("Retrieving cluster resource group")
+        resource_groups = json.loads(proc.stdout)
+        resource_group_names = list()
+        for resource_group in resource_groups:
+            resource_group_names.append(resource_group["name"])
+        return resource_group_names
 
     @staticmethod
     def export_api_key():
