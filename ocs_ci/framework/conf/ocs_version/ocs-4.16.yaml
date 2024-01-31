@@ -1,0 +1,12 @@
+---
+DEPLOYMENT:
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.16"
+  # Once we have stable build, change tag to latest-stable-4.16
+  default_latest_tag: 'latest-4.16'
+  ocs_csv_channel: "stable-4.16"
+  default_ocp_version: '4.16'
+ENV_DATA:
+  ocs_version: '4.16'
+REPORTING:
+  default_ocs_must_gather_latest_tag: 'latest-4.16'
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
