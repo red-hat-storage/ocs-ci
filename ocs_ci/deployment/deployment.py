@@ -30,6 +30,7 @@ from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
+from ocs_ci.helpers.dr_helpers import configure_drcluster_for_fencing
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -91,6 +92,7 @@ from ocs_ci.ocs.utils import (
     enable_console_plugin,
     get_all_acm_indexes,
     get_active_acm_index,
+    enable_mco_console_plugin,
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
@@ -127,6 +129,7 @@ from ocs_ci.utility.utils import (
     load_auth_config,
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
+    get_oadp_version,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2422,6 +2425,7 @@ class MultiClusterDROperatorsDeploy(object):
             ]
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
             dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
 
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
@@ -2610,10 +2614,14 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         for i in acm_indexes:
             config.switch_ctx(i)
             self.deploy_dr_multicluster_orchestrator()
+            # Enable MCO console plugin
+            enable_mco_console_plugin()
         # Configure mirror peer
         self.configure_mirror_peer()
         # Deploy dr policy
         self.deploy_dr_policy()
+        # Configure DRClusters for fencing automation
+        configure_drcluster_for_fencing()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
@@ -2634,23 +2642,6 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
         self.enable_managed_serviceaccount()
-        # Create backupschedule resource
-        self.create_backup_schedule()
-
-    def create_backup_schedule(self):
-        """
-        Create backupschedule resource only on active hub
-
-        """
-        old_ctx = config.cur_index
-        config.switch_ctx(get_active_acm_index())
-        backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
-        backup_schedule_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="bkp", delete=False
-        )
-        templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
-        run_cmd(f"oc create -f {backup_schedule_yaml.name}")
-        config.switch_ctx(old_ctx)
 
     def enable_managed_serviceaccount(self):
         """
@@ -2709,9 +2700,16 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         3. backupstoragelocation resource in "Available" phase
 
         """
-        # Check restic pods
+        # Check restic pods.
+        # Restic pods have been renamed to node-agent after oadp 1.2
+        oadp_version = get_oadp_version()
+
+        if version.compare_versions(f"{oadp_version} >= 1.2"):
+            restic_pod_prefix = "node-agent"
+        else:
+            restic_pod_prefix = "restic"
         restic_list = get_pods_having_label(
-            "name=restic", constants.ACM_HUB_BACKUP_NAMESPACE
+            f"name={restic_pod_prefix}", constants.ACM_HUB_BACKUP_NAMESPACE
         )
         if len(restic_list) != constants.MDR_RESTIC_POD_COUNT:
             raise MDRDeploymentException("restic pod count mismatch")
