@@ -54,12 +54,12 @@ def ibm_cleanup():
         framework.config.update(vsphere_config_data)
         ibm_conf.close()
 
+    config.ENV_DATA["cluster_path"] = "/"
     if args.cluster_name:
         cluster_name = args.cluster_name
         config.ENV_DATA["cluster_name"] = cluster_name
-        config.ENV_DATA["cluster_path"] = "/"
         ibm_cloud_ipi_obj = IBMCloudIPI()
-        resource_group_name = ibm_cloud_ipi_obj.get_resource_group()
+        resource_group_name = ibm_cloud_ipi_obj.get_resource_group(return_id=False)
         resource_group_id = ibm_cloud_ipi_obj.get_resource_group(return_id=True)
 
         if resource_group_name is None:
@@ -73,44 +73,38 @@ def ibm_cleanup():
             logger.info(f"Resource group ID: {resource_group_id}")
 
         ibm_cloud_ipi_obj.delete_leftover_resources(resource_group_name)
+        return
     else:
         config.ENV_DATA["cluster_name"] = "cluster"
 
+    IbmClusterDeleteion()
+
     # region = IBM_REGION if not args.region else args.region
 
-    ibm_cloud_ipi_obj = IBMCloudIPI()
-    resource_group_name = ibm_cloud_ipi_obj.get_resource_group()
-    resource_group_id = ibm_cloud_ipi_obj.get_resource_group(return_id=True)
-    if resource_group_name is None:
-        logger.info(
-            "Resource group not found. Please check via command: "
-            "ibmcloud resource groups , what resource group you have."
-        )
-        return
-    else:
-        logger.info(f"Resource group found: {resource_group_name}")
-        logger.info(f"Resource group ID: {resource_group_id}")
 
-    if resource_group_name:
-        pass
-    clusters_deletion = determine_cluster_deletion()
-    for cluster_deletion in clusters_deletion:
-        ibm_cloud_ipi_obj.delete_leftover_resources(cluster_deletion)
+class IbmClusterDeleteion(object):
+    def __init__(self):
+        self.clusters_deletion = list()
+        self.ibm_cloud_ipi_obj = IBMCloudIPI()
+        self.determine_cluster_deletion()
+        self.delete_clusters()
 
+    def determine_cluster_deletion(self):
+        resource_group_names = self.ibm_cloud_ipi_obj.get_resource_groups()
 
-def determine_cluster_deletion():
-    cluster_deletion = list()
-    ibm_cloud_ipi_obj = IBMCloudIPI()
-    resource_group_names = ibm_cloud_ipi_obj.get_resource_groups()
-    for resource_group_name in resource_group_names:
-        for prefix, hours in CLUSTER_PREFIXES_SPECIAL_RULES.items():
-            pattern = re.compile(f"r'{prefix}'")
-            created_time = ibm_cloud_ipi_obj.get_created_time(resource_group_name)
-            if pattern.search(resource_group_name):
-                if hours == "never":
+        for resource_group_name in resource_group_names:
+            created_time = self.ibm_cloud_ipi_obj.get_created_time(resource_group_name)
+            for prefix, hours in CLUSTER_PREFIXES_SPECIAL_RULES.items():
+                pattern = re.compile(f"r'{prefix}'")
+                if pattern.search(resource_group_name):
+                    delete_hours = hours
+                elif prefix == "never":
                     continue
-                if created_time > hours:
-                    cluster_deletion.append(resource_group_name)
-            elif created_time > DEFAULT_TIME:
-                cluster_deletion.append(resource_group_name)
-    return resource_group_names
+                else:
+                    delete_hours = DEFAULT_TIME
+            if created_time > delete_hours:
+                self.clusters_deletion.append(resource_group_name)
+
+    def delete_clusters(self):
+        for cluster_deletion in self.clusters_deletion:
+            self.ibm_cloud_ipi_obj.delete_leftover_resources(cluster_deletion)
