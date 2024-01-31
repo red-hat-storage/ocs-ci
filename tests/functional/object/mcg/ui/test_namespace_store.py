@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import black_squad
+from ocs_ci.framework.pytest_customization.marks import black_squad, runs_on_provider
 from ocs_ci.framework.testlib import tier1, ui, polarion_id
 from ocs_ci.ocs.ui.mcg_ui import NamespaceStoreUI
 from ocs_ci.ocs.resources.namespacestore import NamespaceStore
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @black_squad
+@runs_on_provider
 class TestNamespaceStoreUI(object):
     """
     Test namespace-store via User Interface.

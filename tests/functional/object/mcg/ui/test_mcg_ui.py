@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     on_prem_platform_required,
     black_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @black_squad
+@runs_on_provider
 class TestStoreUserInterface(object):
     """
     Test the MCG store UI
@@ -131,6 +133,7 @@ class TestStoreUserInterface(object):
 @mcg
 @black_squad
 @ui
+@runs_on_provider
 @skipif_ui_not_support("bucketclass")
 @tier1
 @skipif_ocs_version("!=4.8")
@@ -269,6 +272,7 @@ class TestBucketclassUserInterface(object):
 
 @skipif_disconnected_cluster
 @black_squad
+@runs_on_provider
 @skipif_ui_not_support("obc")
 class TestObcUserInterface(object):
     """

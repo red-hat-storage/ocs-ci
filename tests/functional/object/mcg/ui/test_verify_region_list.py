@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     bugzilla,
     red_squad,
+    runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs.constants import NOOBAA_REGIONS_CODE_URL, AWS_REGIONS_DOC_URL
@@ -17,6 +18,7 @@ from ocs_ci.ocs.ui.base_ui import BaseUI, garbage_collector_webdriver
 logger = logging.getLogger(__name__)
 
 
+@runs_on_provider
 class NavigateAWSDocsWebURL(BaseUI):
     def __init__(self):
         super().__init__()
@@ -96,6 +98,7 @@ def setup_browser(request):
 @tier3
 @mcg
 @red_squad
+@runs_on_provider
 @bugzilla("2183480")
 @polarion_id("OCS-5153")
 def test_verify_aws_regions_list(setup_browser):
