@@ -228,6 +228,26 @@ class AssistedInstallerCluster(object):
         download_file(iso_url, local_path)
         logger.info(f"Downloaded discovery iso from '{iso_url}' to {local_path}")
 
+    def download_ipxe_config(self, local_path):
+        """
+        Download the ipxe config for discovery boot
+
+        Args:
+            local_path (str): path where to store the ipxe config
+
+        Return:
+            str: path to the downloaded ipxe config file
+
+        """
+        ipxe_config_path = self.api.download_infra_file(
+            infra_env_id=self.infra_id,
+            dest_dir=local_path,
+            file_name="ipxe-script",
+            ipxe_script_type="discovery-image-always",
+        )
+        logger.info(f"Downloaded iPXE config {ipxe_config_path}")
+        return ipxe_config_path
+
     def wait_for_discovered_nodes(self, expected_nodes):
         """
         Wait for expected number of nodes to appear in the Assisted Installer infra/cluster
