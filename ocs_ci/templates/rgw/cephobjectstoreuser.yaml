@@ -1,0 +1,12 @@
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: test-cosu
+  namespace: openshift-storage
+spec:
+  displayName: test-cosu
+  store: ocs-storagecluster-cephobjectstore
+  capabilities:
+    user: "*"
+    bucket: "*"
+    roles: "*"
