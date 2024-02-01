@@ -29,18 +29,18 @@ def ibm_cleanup():
         action="store",
         required=False,
         type=argparse.FileType("r", encoding="UTF-8"),
-        help="""IBM configuration file in yaml format.
+        help="""
+            IBM configuration file in yaml format.
             Example file:
                 ---
                 ENV_DATA:
                   platform: 'ibm_cloud'
                   deployment_type: 'ipi'
                   region: 'us-south'
-
             """,
     )
     parser.add_argument(
-        "--region",
+        "--hours",
         action="store",
         required=False,
         help="The name of the IBM region to delete the resources from",
@@ -51,8 +51,8 @@ def ibm_cleanup():
     # load ibm_conf data to config
     if args.ocsci_conf:
         ibm_conf = args.ocsci_conf
-        vsphere_config_data = yaml.safe_load(ibm_conf)
-        framework.config.update(vsphere_config_data)
+        ibm_config_data = yaml.safe_load(ibm_conf)
+        framework.config.update(ibm_config_data)
         ibm_conf.close()
 
     config.ENV_DATA["cluster_path"] = "/"
@@ -78,35 +78,52 @@ def ibm_cleanup():
     else:
         config.ENV_DATA["cluster_name"] = "cluster"
 
-    IbmClusterDeleteion()
-
-    # region = IBM_REGION if not args.region else args.region
+    time_to_delete = int(args.hours) if args.hours else None
+    IbmClusterDeleteion(time_to_delete)
 
 
 class IbmClusterDeleteion(object):
-    def __init__(self):
+    def __init__(self, time_to_delete):
+        self.time_to_delete = (
+            time_to_delete if time_to_delete is not None else DEFAULT_TIME
+        )
         self.clusters_deletion = list()
+        self.clusters_deletion_failed = dict()
         self.ibm_cloud_ipi_obj = IBMCloudIPI()
         self.determine_cluster_deletion()
         self.delete_clusters()
 
     def determine_cluster_deletion(self):
         resource_group_names = self.ibm_cloud_ipi_obj.get_resource_groups()
-
         for resource_group_name in resource_group_names:
             created_time = self.ibm_cloud_ipi_obj.get_created_time(resource_group_name)
             for prefix, hours in CLUSTER_PREFIXES_SPECIAL_RULES.items():
-                pattern = re.compile(f"r'{prefix}'")
-                if prefix == "never":
-                    delete_hours = sys.maxsize
-                elif pattern.search(resource_group_name):
-                    delete_hours = hours
+                prefix_pattern = re.compile(rf"^{prefix}")
+                if prefix_pattern.match(resource_group_name):
+                    if hours == "never":
+                        delete_hours = sys.maxsize
+                        break
+                    else:
+                        delete_hours = hours
+                        break
                 else:
-                    delete_hours = DEFAULT_TIME
+                    delete_hours = self.time_to_delete
 
             if created_time > delete_hours:
                 self.clusters_deletion.append(resource_group_name)
 
     def delete_clusters(self):
         for cluster_deletion in self.clusters_deletion:
-            self.ibm_cloud_ipi_obj.delete_leftover_resources(cluster_deletion)
+            try:
+                self.ibm_cloud_ipi_obj.delete_leftover_resources(cluster_deletion)
+            except Exception as e:
+                self.clusters_deletion_failed[cluster_deletion] = e
+                logger.info(f"{cluster_deletion} cluster deletion failed:\n{e}")
+
+        if len(self.clusters_deletion_failed) > 0:
+            err_string = ""
+            for cluster_deletion_failed, error in self.clusters_deletion_failed.items():
+                err_string += (
+                    f"{cluster_deletion_failed} cluster deletion failed:\n{error}"
+                )
+            raise Exception(err_string)

@@ -7,6 +7,7 @@ on IBM Cloud Platform.
 import json
 import logging
 import os
+import sys
 
 from datetime import datetime, timezone
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
@@ -503,15 +504,20 @@ class IBMCloudIPI(CloudDeploymentBase):
 
     def get_created_time(self, resource_group):
         """
+        Get
 
         Args:
-            resource_group:
+            resource_group (str): Resource group in IBM Cloud that contains the cluster resources.
+
 
         Returns:
+            int:
 
         """
         cmd = f"ibmcloud resource service-instances -g {resource_group} --output json"
         proc = exec_cmd(cmd)
+        if len(json.loads(proc.stdout)) == 0:
+            return sys.maxsize
         created_time_str = json.loads(proc.stdout)[0]["created_at"]
         time_now = datetime.now(timezone.utc)
         created_time = datetime.fromisoformat(f"{created_time_str.split('.')[0]}+00:00")
