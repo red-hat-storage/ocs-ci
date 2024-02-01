@@ -67,6 +67,15 @@ from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
 
+class CephClusterMultiCluster(object):
+    """
+    TODO: Implement this class later
+    This class will be used in case of multicluster scenario
+    and current cluster is ACM hence this cluster should point to
+    the ODF which is not in current context
+
+    """
+
 
 class CephCluster(object):
     """
@@ -83,30 +92,35 @@ class CephCluster(object):
         namespace (str): openshift Namespace where this cluster lives
     """
 
-    def __init__(self):
+    def __init__(self, cluster_config):
         """
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
-        if config.ENV_DATA["mcg_only_deployment"] or (
-            config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
-            and config.ENV_DATA["cluster_type"].lower() == "consumer"
+        if cluster_config:
+            logger.info("INITIALIZING")
+            self.config = cluster_config
+        else:
+            self.config = config
+        if self.config.ENV_DATA["mcg_only_deployment"] or (
+            self.config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+            and self.config.ENV_DATA["cluster_type"].lower() == "consumer"
         ):
             return
         # cluster_name is name of cluster in rook of type CephCluster
-        self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
+        self.POD = ocp.OCP(kind="Pod", namespace=self.config.ENV_DATA["cluster_namespace"])
         self.CEPHCLUSTER = ocp.OCP(
-            kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+            kind="CephCluster", namespace=self.config.ENV_DATA["cluster_namespace"]
         )
         self.CEPHFS = ocp.OCP(
-            kind="CephFilesystem", namespace=config.ENV_DATA["cluster_namespace"]
+            kind="CephFilesystem", namespace=self.config.ENV_DATA["cluster_namespace"]
         )
         self.RBD = ocp.OCP(
-            kind="CephBlockPool", namespace=config.ENV_DATA["cluster_namespace"]
+            kind="CephBlockPool", namespace=self.config.ENV_DATA["cluster_namespace"]
         )
 
         self.DEP = ocp.OCP(
-            kind="Deployment", namespace=config.ENV_DATA["cluster_namespace"]
+            kind="Deployment", namespace=self.config.ENV_DATA["cluster_namespace"]
         )
 
         self.cluster_resource_config = self.CEPHCLUSTER.get().get("items")[0]
@@ -288,9 +302,9 @@ class CephCluster(object):
 
         self.scan_cluster()
 
-        if config.ENV_DATA[
+        if self.config.ENV_DATA[
             "platform"
-        ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
+        ] in constants.HCI_PC_OR_MS_PLATFORM and self.config.ENV_DATA["cluster_type"] in [
             constants.MS_CONSUMER_TYPE,
             constant.HCI_CLIENT,
         ]:
@@ -340,8 +354,8 @@ class CephCluster(object):
 
         # Check Noobaa health
         if (
-            config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
-            and not config.COMPONENTS["disable_noobaa"]
+            self.config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
+            and not self.config.COMPONENTS["disable_noobaa"]
         ):
             # skip noobaa healthcheck due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2075422
             ocp_version = version.get_semantic_ocp_version_from_config()
