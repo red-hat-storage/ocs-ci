@@ -149,7 +149,9 @@ def get_all_nodes():
     return [node["metadata"]["name"] for node in node_items]
 
 
-def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=180):
+def wait_for_nodes_status(
+    node_names=None, status=constants.NODE_READY, timeout=180, sleep=3
+):
     """
     Wait until all nodes are in the given status
 
@@ -160,6 +162,7 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
             (e.g. 'Ready', 'NotReady', 'SchedulingDisabled')
         timeout (int): The number in seconds to wait for the nodes to reach
             the status
+        sleep (int): Time in seconds to sleep between attempts
 
     Raises:
         ResourceWrongStatusException: In case one or more nodes haven't
@@ -174,7 +177,7 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
                     break
         nodes_not_in_state = copy.deepcopy(node_names)
         log.info(f"Waiting for nodes {node_names} to reach status {status}")
-        for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
+        for sample in TimeoutSampler(timeout, sleep, get_node_objs, nodes_not_in_state):
             for node in sample:
                 try:
                     if node.ocp.get_resource_status(node.name) == status:
