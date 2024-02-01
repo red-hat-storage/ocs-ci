@@ -21,10 +21,12 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.ocs.utils import is_acm_cluster, get_non_acm_cluster_config
 from ocs_ci.utility.ocp_upgrade import (
     pause_machinehealthcheck,
     resume_machinehealthcheck,
 )
+from ocs_ci.utility.multicluster import MDRClusterUpgradeParametrize
 from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
@@ -90,7 +92,17 @@ class TestUpgradeOCP(ManageTest):
 
         cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
-        ceph_cluster = CephCluster()
+        if config.multicluster and config.MULTICLUSTER['multicluster_mode'] == 'metro-dr' and is_acm_cluster():
+            # Find the ODF cluster in current zone
+            mdr_upgrade = MDRClusterUpgradeParametrize()
+            mdr_upgrade.config_init()
+            local_zone_odf = None
+            for cluster in get_non_acm_cluster_config():
+                if config.ENV_DATA['zone'] == cluster.ENV_DATA['zone']:
+                    local_zone_odf = cluster
+            ceph_cluster = CephCluster(local_zone_odf)
+        else:
+            ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
             ocp_channel = config.UPGRADE.get(
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
