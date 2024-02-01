@@ -533,7 +533,7 @@ def pytest_fixture_setup(fixturedef, request):
     """
     # If this is the first fixture getting loaded then its the right time
     # to switch context
-    if ocsci_config.multicluster and ocsci_config["UPGRADE"].get("upgrade", ""):
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", ""):
         if request.fixturenames.index(fixturedef.argname) == 0:
             for mark in request.node.iter_markers():
                 if mark.name == "config_index":
