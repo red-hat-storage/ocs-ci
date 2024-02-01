@@ -1,6 +1,7 @@
 import json
 import logging
 import pytest
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -371,16 +372,14 @@ class TestPvPool:
 
         # wait for about 10 mins to check if
         # the backingstore has reached Rejected state
+        time.sleep(10)
         pv_bs_obj = OCP(
             kind=constants.BACKINGSTORE,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             resource_name=pv_backingstore.name,
         )
-        assert (
-            pv_bs_obj.wait_for_resource(
-                condition="Rejected", column="PHASE", timeout=600, sleep=5
-            )
-            is False
+        assert pv_bs_obj.wait_for_resource(
+            condition="Ready", column="PHASE", timeout=600, sleep=5
         ), "Pv pool backingstore reached rejected phase after noobaa core pod restart"
         logger.info(
             "Pv pool backingstore didnt goto Rejected phase after noobaa-core pod restarts"
