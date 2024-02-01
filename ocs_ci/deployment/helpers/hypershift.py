@@ -12,6 +12,26 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
 logger = logging.getLogger(__name__)
 
+# TODO: create networkpolicy for each Client cluster namespace
+"""
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openshift-storage-egress
+  namespace: clusters-hcp-98
+spec:
+  podSelector:
+    matchLabels:
+      kubevirt.io: virt-launcher
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-storage
+  policyTypes:
+  - Egress
+"""
+
 
 class HyperShift:
     """
