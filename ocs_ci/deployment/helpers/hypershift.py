@@ -7,7 +7,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.version import get_ocp_version
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ class HyperShift:
     def __init__(self):
         self.hcp_binary_path = None
         self.base_deployment = BaseOCPDeployment()
+        self.ocp = OCP()
 
     def download_hcp_binary(self):
         """
@@ -90,7 +91,7 @@ class HyperShift:
         icsp_file_path = self.get_ICSP_list()
         index_image = f"{constants.REGISTRY_SVC}:{get_ocp_version()}"
 
-        exec_cmd(
+        create_hcp_cluster_cmd = (
             f"{self.hcp_binary_path} create cluster kubevirt "
             f"--release-image {index_image} "
             f"--name {name} "
@@ -101,7 +102,153 @@ class HyperShift:
             f"--pull-secret {pull_secret_path}"
             f"--image-content-sources {icsp_file_path}"
         )
-        logger.info("HyperShift hosted cluster created successfully")
+
+        logger.info(
+            f"Creating HyperShift hosted cluster with command: {create_hcp_cluster_cmd}"
+        )
+        exec_cmd(create_hcp_cluster_cmd)
+
+        namespace = f"clusters-{name}"
+
+        logger.info("Waiting for HyperShift hosted cluster pods to be ready...")
+        app_selectors_to_resource_count = [
+            {"app=capi-provider-controller-manager": 1},
+            {"app=catalog-operator": 2},
+            {"app=certified-operators-catalog": 1},
+            {"app=cluster-api": 1},
+            {"app=redhat-operators-catalog": 1},
+        ]
+
+        pod = OCP(kind=constants.POD, namespace=namespace)
+
+        for app_selector, resource_count in app_selectors_to_resource_count:
+            assert pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=app_selector,
+                resource_count=resource_count,
+                timeout=300,
+            ), f"pods with label {app_selector} are not in running state"
+
+        self.wait_hosted_cluster_completed(name)
+
+        logger.info(
+            "HyperShift hosted cluster create request completed, progressing with node-pool creation"
+        )
+
+        self.wait_for_worker_nodes_to_be_ready(name)
+
+        logger.info("HyperShift hosted cluster node-pool creation completed")
+
+    def get_current_nodepool_size(self, name):
+        """
+        Get existing nodepool of HyperShift hosted cluster
+        :param name: name of the cluster
+        :return: int number of nodes in the nodepool
+        """
+
+        logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
+        return self.ocp.exec_oc_cmd(
+            f"get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $4}}'"
+        )
+
+    def worker_nodes_deployed(self, name):
+        """
+        Check if worker nodes are deployed for HyperShift hosted cluster
+        :param name: name of the cluster
+        :return: True if worker nodes are deployed, False otherwise
+        """
+        logger.info(f"Checking if worker nodes are deployed for cluster {name}")
+        return self.get_current_nodepool_size(name) == self.get_desired_nodepool_size(
+            name
+        )
+
+    def get_desired_nodepool_size(self, name):
+        """
+        Get desired nodepool of HyperShift hosted cluster
+        :param name: name of the cluster
+        :return: int number of nodes in the nodepool
+        """
+
+        logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
+        return self.ocp.exec_oc_cmd(
+            f"get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $3}}'"
+        )
+
+    def wait_hosted_cluster_completed(self, name):
+        """
+        Wait for HyperShift hosted cluster creation to complete
+        :param name:
+        :return: True if cluster creation completed, False otherwise
+        """
+        logger.info(
+            f"Waiting for HyperShift hosted cluster {name} creation to complete"
+        )
+        for sample in TimeoutSampler(
+            timeout=3600,
+            sleep=60,
+            func=self.get_hosted_cluster_progress,
+            name=name,
+        ):
+            if sample == "Completed":
+                return True
+
+    def wait_for_worker_nodes_to_be_ready(self, name):
+        """
+        Wait for worker nodes to be ready for HyperShift hosted cluster
+        :param name: name of the cluster
+        :return: True if worker nodes are ready, False otherwise
+        """
+
+        wait_timeout_min = 40
+        logger.info(
+            f"Waiting for worker nodes to be ready for HyperShift hosted cluster {name}. "
+            f"Max wait time: {wait_timeout_min} min "
+        )
+        for sample in TimeoutSampler(
+            timeout=wait_timeout_min * 60,
+            sleep=60,
+            func=self.worker_nodes_deployed,
+            name=name,
+        ):
+            if sample:
+                return True
+
+    def get_hosted_cluster_kubeconfig_name(self, name):
+        """
+        Get HyperShift hosted cluster kubeconfig
+        :param name: name of the cluster
+        :return: hosted cluster kubeconfig name
+        """
+        logger.info(f"Getting kubeconfig for HyperShift hosted cluster {name}")
+        return self.ocp.exec_oc_cmd(
+            f"get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
+        )
+
+    def download_hosted_cluster_kubeconfig(self, name, kubeconfig_path):
+        """
+        Download HyperShift hosted cluster kubeconfig
+        :param name: name of the cluster
+        :param kubeconfig_path: path to download kubeconfig
+        :return: True if kubeconfig downloaded successfully, False otherwise
+        """
+        logger.info(
+            f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
+        )
+        exec_cmd(
+            f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}"
+        )
+        if os.path.isfile(kubeconfig_path) and os.stat(kubeconfig_path).st_size > 0:
+            return True
+
+    def get_hosted_cluster_progress(self, name):
+        """
+        Get HyperShift hosted cluster creation progress
+        :param name: name of the cluster
+        :return: progress status; 'Completed' is expected in most cases
+        """
+        return self.ocp.exec_oc_cmd(
+            f"get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
+        )
 
     def get_ICSP_list(self, output_file: str = None):
         """
@@ -120,9 +267,31 @@ class HyperShift:
                 mode="w+", prefix="icsp_mirrors", delete=False
             ).name
 
-        ocp = OCP()
-        ocp.exec_oc_cmd(
+        self.ocp.exec_oc_cmd(
             "get imagecontentsourcepolicy -o json | jq -r '.items[].spec.repositoryDigestMirrors[] | "
             f"- mirrors:\n  - \\(.mirrors[0])\n  source: \\(.source)'> {output_file}"
         )
         return output_file
+
+    def destroy_kubevirt_cluster(self, name):
+        """
+        Destroy HyperShift hosted cluster
+
+        Args:
+            name (str): Name of the cluster
+        """
+        destroy_timeout_min = 10
+        logger.info(
+            f"Destroying HyperShift hosted cluster {name}. Timeout: {destroy_timeout_min} min"
+        )
+        exec_cmd(f"{self.hcp_binary_path} destroy cluster --name {name}")
+
+        logger.info("Waiting for HyperShift hosted cluster to be deleted...")
+        for sample in TimeoutSampler(
+            timeout=destroy_timeout_min * 60,
+            sleep=60,
+            func=self.get_hosted_cluster_progress,
+            name=name,
+        ):
+            if sample == "":
+                return True
