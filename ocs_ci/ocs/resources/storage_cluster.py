@@ -2618,3 +2618,41 @@ def validate_serviceexport():
     assert mon_count == len(
         get_mon_pods()
     ), f"Mon serviceexport count mismatch {mon_count} != {len(get_mon_pods())}"
+
+
+def set_non_resilient_pool(
+    storage_cluster: StorageCluster, enable: bool = True
+) -> None:
+    """
+    Enable non-resilient ceph settings by patching the storage cluster
+    (Replica-1 feature)
+
+    Args:
+        storage_cluster (StorageCluster): StorageCluster object
+        enable (bool, optional): cephNonResilientPools value *** Setting False is not supported by ODF in 4.14 ***.
+
+    """
+    cmd = f'[{{ "op": "replace", "path": "/spec/managedResources/cephNonResilientPools/enable", "value": {enable} }}]'
+    storage_cluster.patch(
+        resource_name=constants.DEFAULT_CLUSTERNAME, format_type="json", params=cmd
+    )
+
+
+def validate_non_resilient_pool(storage_cluster: StorageCluster) -> bool:
+    """
+    Validate non-resilient pools (replica-1) are enabled in storage cluster
+
+    Args:
+        storage_cluster (StorageCluster): StorageCluster object
+
+    Returns:
+        bool: True if replica-1 enabled, False otherwise
+
+    """
+    storagecluster_yaml = storage_cluster.get(
+        resource_name=constants.DEFAULT_CLUSTERNAME
+    )
+    if str(storagecluster_yaml["spec"]["managedResources"][""]).lower() == "true":
+        return True
+
+    return False
