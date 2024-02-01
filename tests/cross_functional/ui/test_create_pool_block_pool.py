@@ -4,6 +4,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
     green_squad,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -34,6 +35,7 @@ need_to_delete = []
         pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
     ],
 )
+@skipif_hci_provider_and_client
 class TestPoolUserInterface(ManageTest):
     """
     Test Pool User Interface
