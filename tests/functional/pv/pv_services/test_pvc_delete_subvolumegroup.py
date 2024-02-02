@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 @green_squad
-@skipif_ocs_version("<4.12")
+@skipif_ocs_version(["<4.12", ">4.14"])
 @polarion_id("OCS-4664")
 @bugzilla("2124469")
 @tier2
