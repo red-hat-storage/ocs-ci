@@ -40,8 +40,15 @@ class TestPvcDeleteSubVolumeGroup(ManageTest):
         """
         registry_exists = registry.check_if_registry_stack_exists()
         if registry_exists:
-            logger.info("Removing OCP registry from ODF")
+            logger.info(
+                "Attempting to remove existing registry configuration with ODF backed PVCs"
+            )
             remove_ocp_registry_from_ocs(config.ENV_DATA["platform"])
+            if registry.check_if_registry_stack_exists():
+                logger.warning("Registry removal failed")
+                pytest.skip(
+                    "Test skipped due to registry configuration on the cluster with ODF backed PVCs"
+                )
             registry_pvc = get_all_pvc_objs(
                 namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
             )[0]
