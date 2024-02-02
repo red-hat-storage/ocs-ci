@@ -28,7 +28,7 @@ setup(
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
         "openshift==0.11.2",
-        "boto3==1.34.14",
+        "boto3==1.24.96",
         "munch==2.5.0",
         "pytest==6.2.5",
         "pytest-logger==0.5.1",
