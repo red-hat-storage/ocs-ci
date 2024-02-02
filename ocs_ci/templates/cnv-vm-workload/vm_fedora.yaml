@@ -1,12 +1,12 @@
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
-  name: fedora-pink-vicuna-77
+  name: fedora
 
 spec:
   dataVolumeTemplates:
     - metadata:
-        name: fedora-pink-vicuna-77
+        name: fedora
       spec:
         preallocation: false
         sourceRef:
@@ -26,16 +26,9 @@ spec:
         vm.kubevirt.io/os: fedora
         vm.kubevirt.io/workload: server
       labels:
-        kubevirt.io/domain: fedora-pink-vicuna-77
+        kubevirt.io/domain: fedora
         kubevirt.io/size: small
     spec:
-      accessCredentials:
-        - sshPublicKey:
-            propagationMethod:
-              noCloud: {}
-            source:
-              secret:
-                secretName: new-my-secret
       architecture: amd64
       domain:
         cpu:
@@ -49,8 +42,9 @@ spec:
               disk:
                 bus: virtio
             - bootOrder: 2
+              disk:
+                bus: virtio
               name: cloudinitdisk
-              disk: {}
           interfaces:
             - name: default
               masquerade: {}
@@ -64,16 +58,19 @@ spec:
         memory:
           guest: 2Gi
         resources: {}
+      evictionStrategy: LiveMigrate
       networks:
         - name: default
           pod: {}
       terminationGracePeriodSeconds: 180
       volumes:
         - dataVolume:
-            name: fedora-pink-vicuna-77
+            name: fedora
           name: rootdisk
         - cloudInitNoCloud:
             userData: |-
-              #!/bin/sh
-              echo 'printed from cloud-init userdata'
+              #cloud-config
+              user: fedora
+              password: noyt-ltsv-dq3t
+              chpasswd: { expire: False }
           name: cloudinitdisk
