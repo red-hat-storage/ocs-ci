@@ -19,22 +19,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 logger = logging.getLogger(__name__)
 
 
-Interfaces_info = {
-    constants.CEPHBLOCKPOOL: {
-        "name": "RBD",
-        "sc": constants.CEPHBLOCKPOOL_SC,
-        "clone_yaml": constants.CSI_RBD_PVC_CLONE_YAML,
-        "accessmode": constants.ACCESS_MODE_RWO,
-    },
-    constants.CEPHFILESYSTEM: {
-        "name": "CephFS",
-        "sc": constants.CEPHFILESYSTEM_SC,
-        "clone_yaml": constants.CSI_CEPHFS_PVC_CLONE_YAML,
-        "accessmode": constants.ACCESS_MODE_RWX,
-    },
-}
-
-
 @tier2
 @pytest.mark.parametrize(
     argnames=["interface_type"],
@@ -177,14 +161,14 @@ class TestCloneDeletion(E2ETest):
                 f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
             )
 
-        logger.info("Verify Alerts are seen 'CephClusterErrorState'")
+        logger.info("Verify 'CephClusterErrorState' Alerts are seen ")
 
-        expected_alerts = ["CephClusterErrorState"]
+        expected_alerts = "CephClusterErrorState"
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
             func=self.verify_alerts_via_prometheus,
-            expected_alerts=expected_alerts,
+            expected_alerts=[expected_alerts],
             threading_lock=threading_lock,
         )
         if not sample.wait_for_func_status(result=True):
@@ -192,7 +176,7 @@ class TestCloneDeletion(E2ETest):
             raise TimeoutExpiredError
 
         # Make the cluster out of full by increasing the full ratio.
-        logger.info("Change Ceph full_ratio from from 20% to 50%")
+        logger.info("Change Ceph full_ratio from from 10% to 50%")
 
         change_ceph_full_ratio(50)
         # After the cluster is out of full state and IOs started , Try to delete clones.
@@ -200,13 +184,13 @@ class TestCloneDeletion(E2ETest):
         logger.info(
             f"Start deleting {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} Gi."
         )
-        index = 0
-        for clone in clones_list:
-            index += 1
+
+        for i, clone in enumerate(clones_list):
+            i += 1
             pvc_reclaim_policy = clone.reclaim_policy
             clone.delete()
             logger.info(
-                f"Deletion of clone number {index} , the clone name is {clone.name}."
+                f"Deletion of clone number {i} , the clone name is {clone.name}."
             )
             clone.ocp.wait_for_delete(clone.name, self.timeout)
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
