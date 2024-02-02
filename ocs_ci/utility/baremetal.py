@@ -24,7 +24,7 @@ class BAREMETAL(object):
         Initialize the variables required
 
         """
-        self.mgmt_details = config.AUTH["ipmi"]
+        self.srv_details = config.ENV_DATA["baremetal"]["servers"]
 
     def get_ipmi_ctx(self, host, user, password):
         """
@@ -92,11 +92,11 @@ class BAREMETAL(object):
         """
         for node in baremetal_machine:
             if force:
-                if self.mgmt_details[node.name]:
+                if self.srv_details[node.name]:
                     ipmi_ctx = self.get_ipmi_ctx(
-                        host=self.mgmt_details[node.name]["mgmt_console"],
-                        user=self.mgmt_details[node.name]["mgmt_username"],
-                        password=self.mgmt_details[node.name]["mgmt_password"],
+                        host=self.srv_details[node.name]["mgmt_console"],
+                        user=self.srv_details[node.name]["mgmt_username"],
+                        password=self.srv_details[node.name]["mgmt_password"],
                     )
                     logger.info(f"Powering Off {node.name}")
                     ipmi_ctx.chassis_control_power_down()
@@ -105,11 +105,11 @@ class BAREMETAL(object):
                 ocp.exec_oc_debug_cmd(
                     node=node.name, cmd_list=["shutdown now"], timeout=60
                 )
-                if self.mgmt_details[node.name]:
+                if self.srv_details[node.name]:
                     ipmi_ctx = self.get_ipmi_ctx(
-                        host=self.mgmt_details[node.name]["mgmt_console"],
-                        user=self.mgmt_details[node.name]["mgmt_username"],
-                        password=self.mgmt_details[node.name]["mgmt_password"],
+                        host=self.srv_details[node.name]["mgmt_console"],
+                        user=self.srv_details[node.name]["mgmt_username"],
+                        password=self.srv_details[node.name]["mgmt_password"],
                     )
                     for status in TimeoutSampler(
                         600, 5, self.get_power_status, ipmi_ctx
@@ -175,20 +175,20 @@ class BAREMETAL(object):
 
         """
         for node in baremetal_machine:
-            if self.mgmt_details[node.name]:
+            if self.srv_details[node.name]:
                 ipmi_ctx = self.get_ipmi_ctx(
-                    host=self.mgmt_details[node.name]["mgmt_console"],
-                    user=self.mgmt_details[node.name]["mgmt_username"],
-                    password=self.mgmt_details[node.name]["mgmt_password"],
+                    host=self.srv_details[node.name]["mgmt_console"],
+                    user=self.srv_details[node.name]["mgmt_username"],
+                    password=self.srv_details[node.name]["mgmt_password"],
                 )
                 logger.info(f"Powering On {node.name}")
                 ipmi_ctx.chassis_control_power_up()
             if wait:
-                if self.mgmt_details[node.name]:
+                if self.srv_details[node.name]:
                     ipmi_ctx = self.get_ipmi_ctx(
-                        host=self.mgmt_details[node.name]["mgmt_console"],
-                        user=self.mgmt_details[node.name]["mgmt_username"],
-                        password=self.mgmt_details[node.name]["mgmt_password"],
+                        host=self.srv_details[node.name]["mgmt_console"],
+                        user=self.srv_details[node.name]["mgmt_username"],
+                        password=self.srv_details[node.name]["mgmt_password"],
                     )
                     for status in TimeoutSampler(
                         600, 5, self.get_power_status, ipmi_ctx
@@ -236,11 +236,11 @@ class BAREMETAL(object):
         """
         node_ipmi_ctx = list()
         for node in baremetal_machine:
-            if self.mgmt_details[node.name]:
+            if self.srv_details[node.name]:
                 ipmi_ctx = self.get_ipmi_ctx(
-                    host=self.mgmt_details[node.name]["mgmt_console"],
-                    user=self.mgmt_details[node.name]["mgmt_username"],
-                    password=self.mgmt_details[node.name]["mgmt_password"],
+                    host=self.srv_details[node.name]["mgmt_console"],
+                    user=self.srv_details[node.name]["mgmt_username"],
+                    password=self.srv_details[node.name]["mgmt_password"],
                 )
                 node_ipmi_ctx.append(ipmi_ctx)
         return node_ipmi_ctx
