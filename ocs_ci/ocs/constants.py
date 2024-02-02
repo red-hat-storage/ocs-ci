@@ -758,6 +758,8 @@ CNV_HYPERCONVERGED_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_CNV, "hyperconverged.yaml"
 )
 
+CNV_VM_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "vm-secret.yaml")
+
 # CNV VM workload yamls
 CNV_VM_CENTOS_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm_centos.yaml")
 CNV_VM_FEDORA_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm_fedora.yaml")

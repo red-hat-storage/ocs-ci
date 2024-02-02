@@ -1,6 +1,7 @@
 """
 Virtual machine class
 """
+import yaml
 import logging
 
 from ocs_ci.ocs.ocp import OCP
@@ -45,6 +46,10 @@ class VirtualMachine(Virtctl):
             vmi_name=self._vm_name, namespace=namespace
         )
 
+    @property
+    def name(self):
+        return self._vm_name
+
     def get(self, out_yaml_format=True):
         """
         Get information about the VirtualMachine.
@@ -59,6 +64,31 @@ class VirtualMachine(Virtctl):
         return self.vm_ocp_obj.get(
             resource_name=self._vm_name, out_yaml_format=out_yaml_format
         )
+
+    def get_os_username(self):
+        """
+        Retrieve the operating system username from the cloud-init data associated with the virtual machine
+
+        Returns:
+            str or None: The operating system username if found, otherwise None
+
+        """
+        vm_get_out = self.get()
+        volumes = (
+            vm_get_out.get("spec", {})
+            .get("template", {})
+            .get("spec", {})
+            .get("volumes", [])
+        )
+        for volume in volumes:
+            cloud_init_data = volume.get("cloudInitNoCloud") or volume.get(
+                "cloudInitConfigDrive"
+            )
+            if cloud_init_data:
+                user_data = cloud_init_data.get("userData", {})
+                user_data_dict = yaml.safe_load(user_data)
+                return user_data_dict.get("user")
+        return None
 
     def wait_for_vm_status(self, status=constants.VM_RUNNING, timeout=600):
         """
@@ -232,7 +262,7 @@ class VirtualMachine(Virtctl):
              str: stdout of command
 
         """
-        logger.info(f"Executing {command} on the {self._vm_name} VM using SSH")
+        logger.info(f"Executing {command} command on the {self._vm_name} VM using SSH")
         return self.run_ssh_command(
             self._vm_name,
             username,

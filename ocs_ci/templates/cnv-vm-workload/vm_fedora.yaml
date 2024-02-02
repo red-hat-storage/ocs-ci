@@ -35,7 +35,7 @@ spec:
               noCloud: {}
             source:
               secret:
-                secretName: new-my-secret-1
+                secretName: new-my-secret
       architecture: amd64
       domain:
         cpu:
