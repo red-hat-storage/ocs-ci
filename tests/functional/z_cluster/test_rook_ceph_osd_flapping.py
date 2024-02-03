@@ -65,7 +65,7 @@ class TestRookCephOsdFlapping(ManageTest):
         """
         log.info("Get One OSD ID")
         osd_pod_objs = pod.get_osd_pods()
-        self.osd_pod_obj = osd_pod_objs[random.randint(0, len(osd_pod_objs) - 1)]
+        self.osd_pod_obj = random.choice(osd_pod_objs)
         log.info(f"Get osd pod {self.osd_pod_obj.name}")
         osd_pod_id = pod.get_osd_pod_id(self.osd_pod_obj)
         ct_pod = pod.get_ceph_tools_pod()

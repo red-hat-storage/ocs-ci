@@ -4463,7 +4463,7 @@ def verify_log_exist_in_pod_logs(
 
     Args:
         pod_name (str): Name of the pod
-        expected_log:
+        expected_log (str): the expected logs in "oc logs" command
         container (str): Name of the container
         namespace (str): Namespace of the pod
         all_containers_flag (bool): fetch logs from all containers of the resource
