@@ -25,7 +25,6 @@ ERRMSG = "Error in command"
 @green_squad
 @tier2
 @skipif_ocp_version("<4.15")
-@skipif_ocs_version("<4.15")
 class TestCRRsourcesValidation(ManageTest):
     """
     Test that check that csi addons resources are not editable after creation
