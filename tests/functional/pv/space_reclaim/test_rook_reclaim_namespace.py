@@ -17,7 +17,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     bugzilla,
     skipif_ocs_version,
-    skipif_external_mode,
     ignore_leftovers,
 )
 
@@ -28,7 +27,6 @@ log = logging.getLogger(__name__)
 @tier2
 @ignore_leftovers
 @bugzilla("2214838")
-@skipif_external_mode
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-XXXX")
 class TestRookReclaimNamespace(ManageTest):
@@ -41,8 +39,8 @@ class TestRookReclaimNamespace(ManageTest):
     def teardown(self, request):
         def finalizer():
             try:
-                self.reclaim_space_job_obj_2.delete()
-                self.reclaim_space_job_obj_1.delete()
+                self.reclaim_job_after_pod_delete.delete()
+                self.reclaim_job_before_pod_delete.delete()
             except Exception as e:
                 log.info(f"Exception: {e}")
 
@@ -86,7 +84,9 @@ class TestRookReclaimNamespace(ManageTest):
         )
 
         log.info(f"Create reclaimspacejob CR to run on pvc {pvc_obj.name}")
-        self.reclaim_space_job_obj_1 = create_reclaim_space_job(pvc_name=pvc_obj.name)
+        self.reclaim_job_before_pod_delete = create_reclaim_space_job(
+            pvc_name=pvc_obj.name
+        )
         expected_log = "skipping sparsify operation"
         pod_names = get_pod_name_by_pattern(pattern="csi-rbdplugin-provisioner")
 
@@ -108,11 +108,13 @@ class TestRookReclaimNamespace(ManageTest):
         log.info(f"Delete pod {pod_obj.name}")
         pod_obj.delete()
 
-        log.info(f"Delete reclaimspacejob CR {self.reclaim_space_job_obj_1.name}")
-        self.reclaim_space_job_obj_1.delete()
+        log.info(f"Delete reclaimspacejob CR {self.reclaim_job_before_pod_delete.name}")
+        self.reclaim_job_before_pod_delete.delete()
 
         log.info("Recreate reclaimspacejob CR")
-        self.reclaim_space_job_obj_2 = create_reclaim_space_job(pvc_name=pvc_obj.name)
+        self.reclaim_job_after_pod_delete = create_reclaim_space_job(
+            pvc_name=pvc_obj.name
+        )
 
         log.info(f"Sleep 70 seconds so the logs in {pod_names} will be updated")
         time.sleep(70)
