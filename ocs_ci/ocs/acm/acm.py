@@ -463,12 +463,13 @@ def verify_running_acm():
     log.info(f"ACM Version Detected: {acm_version}")
 
 
-def validate_cluster_import(cluster_name):
+def validate_cluster_import(cluster_name, switch_ctx=None):
     """
     Validate ACM status of managed cluster
 
     Args:
         cluster_name: (str): cluster name to validate
+        switch_ctx (int): The cluster index by the cluster name
 
     Assert:
         All conditions of selected managed cluster should be "True", Failed otherwise
@@ -476,7 +477,7 @@ def validate_cluster_import(cluster_name):
     Return:
         True, if not AssertionError
     """
-    config.switch_ctx(0)
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_ctx(0)
     oc_obj = OCP(kind=ACM_MANAGED_CLUSTERS)
     conditions = oc_obj.exec_oc_cmd(
         f"get managedclusters {cluster_name} -ojsonpath='{{.status.conditions}}'"

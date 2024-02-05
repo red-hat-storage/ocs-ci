@@ -8,8 +8,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters, validate_cluster_import
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
-from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
+from ocs_ci.deployment.deployment import Deployment
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.helpers.dr_helpers import (
     enable_fence,
     enable_unfence,
@@ -32,11 +32,13 @@ from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
     verify_failover_relocate_status_ui,
-    verify_drpolicy_ui,
 )
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_active_acm_index
-from ocs_ci.utility import version, vsphere
+from ocs_ci.utility import version
+from ocs_ci.utility.utils import TimeoutSampler
+
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +59,16 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         def finalizer():
             if (
                 self.primary_cluster_name
-                and get_fence_state(self.primary_cluster_name) == "Fenced"
+                and get_fence_state(
+                    drcluster_name=self.primary_cluster_name,
+                    switch_ctx=get_passive_acm_index(),
+                )
+                == "Fenced"
             ):
-                enable_unfence(self.primary_cluster_name)
+                enable_unfence(
+                    drcluster_name=self.primary_cluster_name,
+                    switch_ctx=get_passive_acm_index(),
+                )
                 gracefully_reboot_ocp_nodes(self.namespace, self.primary_cluster_name)
 
         request.addfinalizer(finalizer)
@@ -70,7 +79,6 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         setup_acm_ui,
         nodes_multicluster,
         dr_workload,
-        node_restart_teardown,
     ):
 
         """
@@ -87,6 +95,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                 raise NotImplementedError
 
         acm_obj = AcmAddClusters()
+        # ToDO: Create appset and multiple apps
         workload = dr_workload(num_of_subscription=1)[0]
         self.namespace = workload.workload_namespace
 
@@ -106,72 +115,66 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         logger.info(f"Wait {wait_time} until backup is taken ")
         time.sleep(wait_time)
 
-        # Get nodes from zone where active hub running
+        # Install gitops operator on passive hub
+        dep_obj = Deployment()
+        dep_obj.deploy_gitops_operator(switch_ctx=get_passive_acm_index())
+
+        # Get the active hub nodes
         config.switch_ctx(get_active_acm_index())
         active_hub_index = config.cur_index
-        zone = config.ENV_DATA.get("zone")
         active_hub_cluster_node_objs = get_node_objs()
-        set_current_primary_cluster_context(workload.workload_namespace)
-        if config.ENV_DATA.get("zone") == zone:
-            managed_cluster_index = config.cur_index
-            managed_cluster_node_objs = get_node_objs()
-        else:
-            set_current_secondary_cluster_context(workload.workload_namespace)
-            managed_cluster_index = config.cur_index
-            managed_cluster_node_objs = get_node_objs()
-        external_cluster_node_roles = config.EXTERNAL_MODE.get(
-            "external_cluster_node_roles"
-        )
-        ceph_node_ips = []
-        for ceph_node in external_cluster_node_roles:
-            if (
-                external_cluster_node_roles[ceph_node].get("location").get("datacenter")
-                != "zone-b"
-            ):
-                continue
-            else:
-                ceph_node_ips.append(
-                    external_cluster_node_roles[ceph_node].get("ip_address")
-                )
 
-        # Shutdown one zones
-        logger.info("Shutting down all the nodes from active hub zone")
-        nodes_multicluster[managed_cluster_index].stop_nodes(managed_cluster_node_objs)
+        # Shutdown active hub nodes
+        logger.info("Shutting down all the nodes of active hub")
         nodes_multicluster[active_hub_index].stop_nodes(active_hub_cluster_node_objs)
-        host = config.ENV_DATA["vsphere_server"]
-        user = config.ENV_DATA["vsphere_user"]
-        password = config.ENV_DATA["vsphere_password"]
-        vm_objs = vsphere.VSPHERE(host, user, password)
-        ceph_vms = [
-            vm_objs.get_vm_by_ip(ip=each_ip, dc="None") for each_ip in ceph_node_ips
-        ]
-        vm_objs.stop_vms(vms=ceph_vms)
         logger.info(
-            "All nodes from active hub zone are powered off, "
+            "All nodes of active hub zone are powered off, "
             f"wait {wait_time} seconds before restoring in passive hub"
         )
 
         # Restore new hub
         restore_backup()
-        wait_time = 300
         logger.info(f"Wait {wait_time} until restores are taken ")
         time.sleep(wait_time)
 
-        # Validate the secondary managed cluster are imported
-        validate_cluster_import(cluster_name=secondary_cluster_name)
+        # Validate the clusters are imported
+        clusters = [self.primary_cluster_name, secondary_cluster_name]
+        for cluster in clusters:
+            for sample in TimeoutSampler(
+                timeout=1800,
+                sleep=60,
+                func=validate_cluster_import,
+                cluster_name=cluster,
+                switch_ctx=get_passive_acm_index(),
+            ):
+                if sample:
+                    logger.info(
+                        f"Cluster: {cluster} successfully imported post hub recovery"
+                    )
+                else:
+                    logger.error(
+                        f"import of cluster: {cluster} failed post hub recovery"
+                    )
 
-        # Validate klusterlet addons are running on managed cluster
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        wait_for_pods_to_be_running(
-            namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
-        )
+            # Validate klusterlet addons are running on managed cluster
+            config.switch_to_cluster_by_name(cluster)
+            wait_for_pods_to_be_running(
+                namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
+            )
 
         # Wait or verify the drpolicy is in validated state
-        if config.RUN.get("mdr_failover_via_ui"):
-            config.switch_ctx(get_passive_acm_index())
-            verify_drpolicy_ui(acm_obj, 0)
-        else:
-            verify_drpolicy_cli(switch_ctx=get_passive_acm_index())
+        for sample in TimeoutSampler(
+            timeout=1800,
+            sleep=60,
+            func=verify_drpolicy_cli(switch_ctx=get_passive_acm_index()),
+        ):
+            if sample:
+                logger.info("Post hub recovery: DRPolicy validation succeeded")
+            else:
+                logger.error("Post hub recoevry: DRPolicy validation failed")
+                raise UnexpectedBehaviour(
+                    "Post hub recovery: DRPolicy is not in validated state"
+                )
 
         # ToDo: Deploy application in both managed cluster and
         #  to verify the applications are present in secondary cluster
@@ -212,33 +215,6 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         if config.RUN.get("mdr_failover_via_ui"):
             config.switch_ctx(get_passive_acm_index())
             verify_failover_relocate_status_ui(acm_obj)
-
-        # Start nodes of the managed cluster and ceph nodes which is down
-        wait_time = 120
-        vm_objs.start_vms(vms=ceph_vms)
-        logger.info(
-            f"Wait for {wait_time} seconds before starting the nodes of managed cluster which is down"
-        )
-        time.sleep(wait_time)
-        nodes_multicluster[managed_cluster_index].start_nodes(managed_cluster_node_objs)
-        logger.info(
-            f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
-        )
-        time.sleep(wait_time)
-        wait_for_nodes_status([node.name for node in managed_cluster_node_objs])
-
-        wait_for_cluster_connectivity()
-        logger.info(f"Wait for {wait_time} seconds after cluster is bought up")
-        time.sleep(wait_time)
-
-        # Validate the primary managed cluster is imported which was down
-        validate_cluster_import(cluster_name=self.primary_cluster_name)
-
-        # Validate klusterlet addons are running on managed cluster
-        config.switch_ctx(managed_cluster_index)
-        wait_for_pods_to_be_running(
-            namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
-        )
 
         # Verify application are deleted from old cluster
         set_current_secondary_cluster_context(workload.workload_namespace)
