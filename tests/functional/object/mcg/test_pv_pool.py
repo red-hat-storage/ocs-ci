@@ -1,7 +1,6 @@
 import json
 import logging
 import pytest
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -372,7 +371,6 @@ class TestPvPool:
 
         # wait for about 10 mins to check if
         # the backingstore has reached Rejected state
-        time.sleep(10)
         pv_bs_obj = OCP(
             kind=constants.BACKINGSTORE,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
