@@ -747,7 +747,6 @@ class IBMCloudIPI(object):
         out = json.loads(out)
 
         if len(out["volume_attachments"]) == 0:
-
             logger.info(f"attachment command output: {out}")
             cmd = f"ibmcloud is instance-volume-attachment-add data-vol-name {node[0].name} {volume} --output json"
             out = run_ibmcloud_cmd(cmd)
