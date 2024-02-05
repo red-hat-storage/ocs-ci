@@ -10,7 +10,6 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.ocs.constants import HCI_BAREMETAL_DEFAULT_REGION
 
 
 logger = logging.getLogger(name=__file__)
@@ -22,7 +21,7 @@ class IBMCloudBM(object):
     Wrapper for IBM Cloud with Bare metal machines
     """
 
-    def __int__(self, region=None):
+    def __init__(self, region=None):
         """
         Constructor for IBM Cloud Bare Metal machines
 
@@ -32,17 +31,13 @@ class IBMCloudBM(object):
         """
         self.api_key = ibm_config["api_key"]
         self.account_id = ibm_config.get("account_id")
-        self.api_endpoint = ibm_config.get("api_endpoint")
-        self.region = region or HCI_BAREMETAL_DEFAULT_REGION
+        self.region = region or config.ENV_DATA.get("region")
 
     def login(self):
         """
         Login to IBM Cloud account
         """
-        login_cmd = (
-            f"ibmcloud login --apikey {self.api_key} -c {self.account_id} "
-            f"-a {self.api_endpoint} -r {self.region}"
-        )
+        login_cmd = f"ibmcloud login --apikey {self.api_key} -c {self.account_id} -r {self.region}"
         logger.info("Logging to IBM cloud")
         run_cmd(login_cmd, secrets=[self.api_key])
         logger.info("Successfully logged in to IBM cloud")

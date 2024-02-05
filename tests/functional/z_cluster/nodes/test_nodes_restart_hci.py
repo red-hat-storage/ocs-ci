@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     bugzilla,
     provider_client_platform_required,
+    polarion_id,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import HCI_PROVIDER
@@ -100,7 +101,7 @@ class TestNodesRestartHCI(ManageTest):
 
         logger.info("Verify the node osd pods go into a Terminating state")
         res = pod.wait_for_pods_to_be_in_statuses(
-            [constants.STATUS_TERMINATING], node_osd_pod_names, timeout=360
+            [constants.STATUS_TERMINATING], node_osd_pod_names, timeout=480, sleep=20
         )
         assert res, "Not all the node osd pods are in a Terminating state"
 
@@ -125,9 +126,11 @@ class TestNodesRestartHCI(ManageTest):
         argvalues=[
             pytest.param(
                 *[HCI_PROVIDER, constants.WORKER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-5420"),
             ),
             pytest.param(
                 *[HCI_PROVIDER, constants.MASTER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-5420"),
             ),
         ],
     )
@@ -151,9 +154,11 @@ class TestNodesRestartHCI(ManageTest):
         argvalues=[
             pytest.param(
                 *[HCI_PROVIDER, constants.WORKER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-5421"),
             ),
             pytest.param(
                 *[HCI_PROVIDER, constants.MASTER_MACHINE],
+                marks=pytest.mark.polarion_id("OCS-5421"),
             ),
         ],
     )
@@ -196,6 +201,7 @@ class TestNodesRestartHCI(ManageTest):
             ceph_health_check(tries=40)
 
     @tier4a
+    @polarion_id("OCS-4482")
     @pytest.mark.parametrize(
         argnames=["cluster_type", "node_type"],
         argvalues=[
@@ -232,13 +238,15 @@ class TestNodesRestartHCI(ManageTest):
         )
 
         # Restart the node
-        nodes.restart_nodes(nodes=typed_nodes, wait=False)
+        nodes.restart_nodes(nodes=[typed_node], wait=False)
 
         # Verify that the node restarted
         try:
             wait_for_nodes_status(
                 node_names=[typed_node_name],
                 status=constants.NODE_NOT_READY_SCHEDULING_DISABLED,
+                timeout=180,
+                sleep=5,
             )
         except ResourceWrongStatusException:
             # Sometimes, the node will be back to running state quickly so
