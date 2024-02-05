@@ -313,10 +313,22 @@ class PASTest(BaseTest):
         # backup the Main ES info (if exists)
         if not self.crd_data["spec"]["elasticsearch"] == {}:
             self.backup_es = self.crd_data["spec"]["elasticsearch"]
+            server = self.backup_es["server"]
+            port = self.backup_es["port"]
+            scheme = self.backup_es.get("scheme", ELASTICSEARCE_SCHEME)
             log.info(
                 f"Creating object for the Main ES server on {self.backup_es['url']}"
             )
-            self.main_es = Elasticsearch([self.backup_es["url"]], verify_certs=True)
+            self.main_es = Elasticsearch(
+                [
+                    {
+                        "host": server,
+                        "port": port,
+                        "scheme": scheme,
+                    }
+                ],
+                verify_certs=True,
+            )
         else:
             log.warning("Elastic Search information does not exists for this test")
 
