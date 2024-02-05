@@ -105,6 +105,8 @@ STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
 STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
+STATUS_STOPPED = "stopped"
+STATUS_STOPPING = "stopping"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
