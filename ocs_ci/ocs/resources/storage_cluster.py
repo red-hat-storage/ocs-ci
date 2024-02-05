@@ -765,7 +765,7 @@ def ocs_install_verification(
         validate_serviceexport()
 
     # check that noobaa root secrets are not public
-    if not client_cluster:
+    if not (client_cluster or managed_service):
         assert (
             check_if_mcg_root_secret_public() is False
         ), "Seems like MCG root secrets are public, please check"
