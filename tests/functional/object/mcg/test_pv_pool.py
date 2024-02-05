@@ -354,7 +354,7 @@ class TestPvPool:
     @fips_required
     @tier2
     @bugzilla("2247731")
-    @polarion_id()
+    @polarion_id("OCS-5422")
     def test_pvpool_bs_in_fips(self, backingstore_factory):
         """
         Create PV pool based backingstore and make sure the backingstore doesn't
