@@ -31,7 +31,7 @@ class TestObjectStoreUserCaps:
 
     @tier3
     @bugzilla("2196858")
-    @polarion_id("")
+    @polarion_id("OCS-5423")
     def test_cephobjectstore_user_roles_cap(self, create_test_cosu):
         """
         Create CephObjectStoreUser with roles cap and
