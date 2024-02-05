@@ -343,8 +343,13 @@ def create_account_roles(prefix="ManagedOpenShift"):
         prefix (str): role prefix
 
     """
-    cmd = f"rosa create account-roles --mode auto" f" --prefix {prefix}  --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    try:
+        cmd = f"rosa create account-roles --mode auto" f" --prefix {prefix}  --yes"
+        utils.run_cmd(cmd, timeout=1200)
+    except CommandFailed as ex:
+        logger.info(f"The command failed due to the exception {str(ex)}")
+        utils.run_cmd("rosa create account-roles")
+        utils.run_cmd(cmd, timeout=1200)
 
 
 def create_operator_roles(cluster):
