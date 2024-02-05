@@ -342,18 +342,18 @@ class TestAdmissionWebhooks(MCGTest):
         Verify that store target bucket changing is blocked
         """
         if "backingstore_dict" in bucketclass_dict:
-            store_name = (
-                bucket_factory_session(1, bucketclass=bucketclass_dict)[0]
-                .bucketclass.backingstores[0]
-                .name
+            bucket_obj = bucket_factory_session(
+                1, bucketclass=bucketclass_dict, verify_health=False
             )
+            bucket_obj[0].verify_health(timeout=360)
+            store_name = bucket_obj[0].bucketclass.backingstores[0].name
             kind = "backingstore"
         else:
-            store_name = (
-                bucket_factory_session(1, bucketclass=bucketclass_dict)[0]
-                .bucketclass.namespacestores[0]
-                .name
+            bucket_obj = bucket_factory_session(
+                1, bucketclass=bucketclass_dict, verify_health=False
             )
+            bucket_obj[0].verify_health(timeout=360)
+            store_name = bucket_obj[0].bucketclass.namespacestores[0].name
             kind = "namespacestore"
         try:
             OCP(
