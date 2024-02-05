@@ -45,6 +45,9 @@ class PvcUI(PageNavigator):
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
 
+        logger.info("Click on Create PVC from dropdown options 'With Form'")
+        self.do_click(self.pvc_loc["create_pvc_dropdown_item"])
+
         logger.info("Click on Storage Class selection")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
 

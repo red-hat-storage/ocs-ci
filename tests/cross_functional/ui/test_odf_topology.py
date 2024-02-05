@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_and_client,
     tier4a,
     ignore_leftovers,
+    ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_node_names
@@ -66,6 +67,7 @@ def teardown_depl_busybox(request):
     request.addfinalizer(finalizer)
 
 
+@ui
 @black_squad
 @skipif_ibm_cloud_managed
 @skipif_managed_service

@@ -560,6 +560,20 @@ pvc_4_12 = {
     "resize-value": ("//input[@data-test='pvc-expand-size-input']", By.XPATH),
 }
 
+pvc_4_14 = {
+    "pvc_project_selector": (
+        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        By.XPATH,
+    ),
+    # tested on both for 4.14 and 4.15
+    "create_pvc_dropdown_item": (
+        "//button[(@class='pf-c-dropdown__menu-item' or @class='pf-v5-c-dropdown__menu-item') "
+        "and contains(text(), 'With Form')]",
+        By.XPATH,
+    ),
+}
+
 pvc_4_15 = {
     "pvc_project_selector": (
         "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
@@ -848,8 +862,32 @@ acm_configuration_4_11 = {
 
 acm_configuration_4_12 = {
     "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
-    "all-clusters": ("//a[normalize-space()='All Clusters']", By.XPATH),
-    "local-cluster": ("//h2[text()='local-cluster']", By.XPATH),
+    # works for OCP 4.12 to 4.15
+    "all-clusters_dropdown": (
+        "//a[normalize-space()='All Clusters'] | "
+        "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
+        "and normalize-space()='All Clusters']",
+        By.XPATH,
+    ),
+    # works for OCP 4.12 to 4.15
+    "all-clusters_dropdown_item": (
+        "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
+        "and text()='All Clusters']",
+        By.XPATH,
+    ),
+    # works for OCP 4.12 to 4.15
+    "local-cluster_dropdown": (
+        "//h2[text()='local-cluster'] | "
+        "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
+        "and text()='local-cluster']",
+        By.XPATH,
+    ),
+    # works for OCP 4.12 to 4.15
+    "local-cluster_dropdown_item": (
+        "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
+        "and text()='local-cluster']",
+        By.XPATH,
+    ),
     "cluster_status_check": ('//button[normalize-space()="{}"]', By.XPATH),
     "cluster_name": ("//a[normalize-space()='{}']", By.XPATH),
     "clusters-page": ("a[class='pf-c-breadcrumb__link']", By.CSS_SELECTOR),
@@ -893,6 +931,10 @@ acm_configuration_4_12 = {
     "create-cluster-set": ("//button[@id='createClusterSet']", By.XPATH),
     "review-btn": ("//button[@id='save']", By.XPATH),
     "next-btn": ("//button[@class='pf-c-button pf-m-primary']", By.XPATH),
+    "acm_nav_sidebar": (
+        "//*[@data-test-id='acm-perspective-nav'] | //*[@class='pf-v5-c-nav__list oc-perspective-nav']",
+        By.XPATH,
+    ),
 }
 
 acm_configuration_4_13 = {
@@ -1499,6 +1541,11 @@ validation_4_14 = {
         "//button[@data-test='horizontal-link-Overview']",
         By.XPATH,
     ),
+    "pvc_project_selector": (
+        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        By.XPATH,
+    ),
 }
 
 
@@ -1750,7 +1797,7 @@ locators = {
             **deployment_4_12,
         },
         "obc": obc,
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12},
+        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12, **pvc_4_14},
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,

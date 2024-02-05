@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_mcg_only,
     skipif_ibm_cloud_managed,
+    skipif_hci_provider_or_client,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
@@ -106,6 +107,7 @@ class TestUserInterfaceValidation(object):
     @skipif_mcg_only
     @pytest.mark.bugzilla("2096414")
     @polarion_id("OCS-4685")
+    @skipif_hci_provider_or_client
     def test_odf_cephblockpool_compression_status(self, setup_ui_class):
         """
         Validate Compression status for cephblockpool at StorageSystem details and ocs-storagecluster-cephblockpool
