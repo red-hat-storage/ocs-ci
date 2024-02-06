@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 @tier2
 @bugzilla("2214838")
 @skipif_ocs_version("<4.13")
-@pytest.mark.polarion_id("OCS-XXXX")
+@pytest.mark.polarion_id("OCS-OCS-5424")
 class TestRookReclaimNamespace(ManageTest):
     """
     Test Rook Reclaim Namespace
