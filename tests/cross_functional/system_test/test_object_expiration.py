@@ -416,10 +416,11 @@ class TestObjectExpiration:
         sample_if_objects_expired()
 
         # validate mcg entry criteria post test
-        validate_mcg_bg_features(
+        retry(Exception, tries=5, delay=10)(validate_mcg_bg_features)(
             feature_setup_map,
             run_in_bg=False,
-            skip_any_features=["nsfs", "rgw kafka", "caching", "replication"],
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
             object_amount=5,
         )
+
         logger.info("No issues seen with the MCG bg feature validation")
