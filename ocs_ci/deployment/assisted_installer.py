@@ -318,7 +318,7 @@ class AssistedInstallerCluster(object):
         logger.info("Started cluster installation")
         # wait for cluster installation success
         for sample in TimeoutSampler(
-            timeout=3600, sleep=300, func=self.api.get_cluster, cluster_id=self.id
+            timeout=7200, sleep=300, func=self.api.get_cluster, cluster_id=self.id
         ):
             status_per_hosts = [
                 h.get("progress", {}).get("installation_percentage", 0)
