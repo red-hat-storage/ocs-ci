@@ -430,6 +430,7 @@ class IBMCloudIPI(CloudDeploymentBase):
                     exec_cmd(delete_cmd)
 
         if resource_group:
+            self.get_resource_id(resource_group)
             leftovers = _get_resources(resource_group)
             if not leftovers:
                 logger.info("No leftovers found")
@@ -501,6 +502,16 @@ class IBMCloudIPI(CloudDeploymentBase):
     #     proc = exec_cmd(cmd)
     #
     #     return json.loads(proc.stdout)
+
+    def get_resource_id(self, resource_group):
+        cmd = "ibmcloud resource groups --output json"
+        proc = exec_cmd(cmd)
+        logger.info("Retrieving cluster resource group")
+        resource_data = json.loads(proc.stdout)
+        for group in resource_data:
+            if group["name"] == resource_group:
+                return group["id"]
+        return False
 
     def get_created_time(self, resource_group):
         """
