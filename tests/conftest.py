@@ -7039,6 +7039,7 @@ def logreader_workload_factory(request, teardown_factory):
 
     return factory
 
+
 @pytest.fixture()
 def setup_logwriter_cephfs_workload_factory(
     request,
@@ -7129,6 +7130,7 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
         )
 
     return factory
+
 
 @pytest.fixture()
 def reset_conn_score():
@@ -7294,6 +7296,7 @@ def override_default_backingstore_fixture(
 
     request.addfinalizer(finalizer)
     return _override_nb_default_backingstore_implementation
+
 
 @pytest.fixture(scope="session")
 def scale_noobaa_resources_session():
