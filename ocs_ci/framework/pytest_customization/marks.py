@@ -58,6 +58,7 @@ team_marks = [manage, ecosystem, e2e]
 ocp = pytest.mark.ocp
 rook = pytest.mark.rook
 ui = pytest.mark.ui
+noobaa = pytest.mark.noobaa
 csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
