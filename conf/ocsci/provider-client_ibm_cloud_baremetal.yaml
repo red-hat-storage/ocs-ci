@@ -1,0 +1,12 @@
+---
+DEPLOYMENT:
+  cnv_deployment: true
+  metallb_operator: true
+ENV_DATA:
+  deploy_acm_hub_cluster: true
+  skip_ocs_deployment: true
+  acm_version: "2.9"
+  acm_hub_channel: release-2.9
+  # we have 2 vlan public subnets, so we can use any of them
+  public_subnet_id: 1
+  hcp_version: "4.14"

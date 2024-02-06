@@ -213,7 +213,9 @@ class MetalLBInstaller:
 
             self.addresses_reserved = assign_ips(hosts=self.hostnames)
             logger.info(f"Reserved IP addresses are {self.addresses_reserved}")
-
+        elif config.ENV_DATA["platform"] == constants.IBM_CLOUD_BAREMETAL_PLATFORM:
+            # TODO - rewrite the next line to get set of IPs and decode them
+            self.addresses_reserved = config.ENV_DATA.get("reserved_ips")
         else:
             raise NotImplementedError(
                 f"Platform {config.ENV_DATA['platform']} is not supported yet"

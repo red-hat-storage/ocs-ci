@@ -8,7 +8,6 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
-from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +32,14 @@ spec:
 """
 
 
-class HyperShift:
+class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
     """
 
     def __init__(self):
         self.hcp_binary_path = None
-        self.base_deployment = BaseOCPDeployment()
+        # ocp instance for running oc commands
         self.ocp = OCP()
 
     def download_hcp_binary(self):
