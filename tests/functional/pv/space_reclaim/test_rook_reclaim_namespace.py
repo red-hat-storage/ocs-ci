@@ -6,7 +6,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.resources.pod import get_csi_provisioner_pod
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.helpers.helpers import (
     create_reclaim_space_job,
@@ -88,7 +88,7 @@ class TestRookReclaimNamespace(ManageTest):
             pvc_name=pvc_obj.name
         )
         expected_log = "skipping sparsify operation"
-        pod_names = get_pod_name_by_pattern(pattern="csi-rbdplugin-provisioner")
+        pod_names = get_csi_provisioner_pod(interface=constants.CEPHBLOCKPOOL)
 
         log.info(
             f"Check logs of csi-rbdplugin-provisioner-xxx/csi-rbdplugin pods {pod_names}"
