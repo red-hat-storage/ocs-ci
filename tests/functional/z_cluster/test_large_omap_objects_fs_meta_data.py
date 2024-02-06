@@ -10,8 +10,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     bugzilla,
     skipif_ocs_version,
-    skipif_external_mode,
-    ignore_leftovers,
 )
 
 log = logging.getLogger(__name__)
@@ -19,11 +17,9 @@ log = logging.getLogger(__name__)
 
 @brown_squad
 @tier2
-@ignore_leftovers
 @bugzilla("2120944")
-@skipif_external_mode
 @skipif_ocs_version("<4.12")
-@pytest.mark.polarion_id("OCS-XXXX")
+@pytest.mark.polarion_id("OCS-5425")
 class TestLargeOmapObjectsFsMetaData(ManageTest):
     """
     Test Large Omap Objects FS Meta Data
@@ -64,7 +60,7 @@ class TestLargeOmapObjectsFsMetaData(ManageTest):
             raw_block_pv=raw_block_pv,
         )
         cmd = (
-            "mkdir -p dir3/.snap; for n in {1..100}; do touch dir3/file{0..11000}; "
-            "mkdir -p dir3/.snap/snap_$n; rm -f dir3/file{0..11000}; done"
+            "mkdir -p /var/lib/www/html/dir3/.snap; for n in {1..100}; do touch /var/lib/www/html/dir3/file{0..11000}; "
+            "mkdir -p /var/lib/www/html/dir3/.snap/snap_$n; rm -f /var/lib/www/html/dir3/file{0..11000}; done"
         )
         self.pod_obj.exec_sh_cmd_on_pod(command=cmd, sh="bash")
