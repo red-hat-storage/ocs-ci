@@ -118,16 +118,12 @@ class PerfResult:
             return False
 
         log.info(f"Writing all data to ES server {self.es}")
-        log.info(
-            f"Params : index={self.new_index}, "
-            f"doc_type=_doc, body={self.results}, id={self.uuid}"
-        )
+        log.info(f"Params : index={self.new_index} body={self.results}, id={self.uuid}")
         retry = 3
         while retry > 0:
             try:
                 self.es.index(
                     index=self.new_index,
-                    doc_type="_doc",
                     body=self.results,
                     id=self.uuid,
                 )
