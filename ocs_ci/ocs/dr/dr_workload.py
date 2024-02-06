@@ -489,6 +489,223 @@ class BusyBox_AppSet(DRWorkload):
             raise ResourceNotDeleted(err_msg)
 
 
+class CnvWorkload(DRWorkload):
+    """
+    Class handling everything related to CNV workloads covers both Subscription and Appset apps
+
+    """
+
+    def __init__(self, **kwargs):
+        workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+
+        self.workload_name = kwargs.get("workload_name")
+        self.vm_name = kwargs.get("vm_name")
+        self.workload_type = kwargs.get("workload_type")
+        self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.workload_pod_count = kwargs.get("workload_pod_count")
+        self.workload_pvc_count = kwargs.get("workload_pvc_count")
+        self.dr_policy_name = kwargs.get(
+            "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
+        ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
+        self.preferred_primary_cluster = config.ENV_DATA.get(
+            "preferred_primary_cluster"
+        ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
+        self.target_clone_dir = config.ENV_DATA.get(
+            "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
+        )
+        self.cnv_workload_dir = os.path.join(
+            self.target_clone_dir, kwargs.get("workload_dir")
+        )
+        self.cnv_workload_yaml_file = os.path.join(
+            self.cnv_workload_dir, self.workload_name + ".yaml"
+        )
+        self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+        self.cnv_workload_placement_name = kwargs.get("workload_placement_name")
+        self.cnv_workload_pvc_selector = kwargs.get("workload_pvc_selector")
+
+    def deploy_workload(self):
+        """
+        Deployment specific to cnv workloads
+
+        """
+        self._deploy_prereqs()
+        self.workload_namespace = self._get_workload_namespace()
+
+        # Load DRPC
+        drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
+        drpc_yaml_data["metadata"]["name"] = f"{self.cnv_workload_placement_name}-drpc"
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        drpc_yaml_data["spec"]["placementRef"][
+            "name"
+        ] = self.cnv_workload_placement_name
+        if self.workload_type == constants.SUBSCRIPTION:
+            drpc_yaml_data["metadata"]["namespace"] = self.workload_namespace
+            drpc_yaml_data["spec"]["placementRef"][
+                "namespace"
+            ] = self.workload_namespace
+        drpc_yaml_data["spec"]["pvcSelector"][
+            "matchLabels"
+        ] = self.cnv_workload_pvc_selector
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+
+        cnv_workload_yaml_data_load = list(
+            templating.load_yaml(self.cnv_workload_yaml_file, multi_document=True)
+        )
+        log.info(cnv_workload_yaml_data_load)
+        for cnv_workload_yaml_data in cnv_workload_yaml_data_load:
+            # Update Channel for sub apps
+            if self.workload_type == constants.SUBSCRIPTION:
+                if cnv_workload_yaml_data["kind"] == "Channel":
+                    cnv_workload_yaml_data["spec"]["pathname"] = self.workload_repo_url
+
+            if cnv_workload_yaml_data["kind"] == constants.PLACEMENT:
+                # Update preferred cluster name
+                cnv_workload_yaml_data["spec"]["predicates"][0][
+                    "requiredClusterSelector"
+                ]["labelSelector"]["matchExpressions"][0]["values"][
+                    0
+                ] = self.preferred_primary_cluster
+
+        templating.dump_data_to_temp_yaml(
+            cnv_workload_yaml_data_load, self.cnv_workload_yaml_file
+        )
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -f {self.cnv_workload_yaml_file}")
+        self.add_annotation_to_placement()
+        run_cmd(f"oc create -f {drcp_data_yaml.name}")
+        self.verify_workload_deployment()
+
+    def _deploy_prereqs(self):
+        """
+        Perform prerequisites
+
+        """
+        # Clone workload repo
+        clone_repo(
+            url=self.workload_repo_url,
+            location=self.target_clone_dir,
+            branch=self.workload_repo_branch,
+        )
+
+    def add_annotation_to_placement(self):
+        """
+        Add annotation to appset and sub placements
+
+        """
+
+        config.switch_acm_ctx()
+        placement_obj = ocp.OCP(
+            kind=constants.PLACEMENT_KIND,
+            resource_name=self.cnv_workload_placement_name,
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE
+            if self.workload_type == constants.APPLICATION_SET
+            else self.workload_namespace,
+        )
+        placement_obj.annotate(
+            annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
+        )
+
+    def _get_workload_namespace(self):
+        """
+        Get the workload namespace
+
+        """
+
+        cnv_workload_data = list(
+            templating.load_yaml(self.cnv_workload_yaml_file, multi_document=True)
+        )
+
+        for _wl_data in cnv_workload_data:
+            if self.workload_type == constants.APPLICATION_SET:
+                if _wl_data["kind"] == constants.APPLICATION_SET:
+                    return _wl_data["spec"]["template"]["spec"]["destination"][
+                        "namespace"
+                    ]
+            else:
+                if _wl_data["kind"] == constants.SUBSCRIPTION:
+                    return _wl_data["metadata"]["namespace"]
+
+    def _get_workload_name(self):
+        """
+        Get cnv workload name
+
+        """
+        cnv_workload_data = list(
+            templating.load_yaml(self.cnv_workload_yaml_file, multi_document=True)
+        )
+
+        for _wl_data in cnv_workload_data:
+            if (
+                _wl_data["kind"] == constants.APPLICATION_SET
+                or _wl_data["kind"] == constants.SUBSCRIPTION
+            ):
+                return _wl_data["metadata"]["name"]
+            if self.workload_type == constants.APPLICATION_SET:
+                if _wl_data["kind"] == constants.APPLICATION_SET:
+                    return _wl_data["metadata"]["name"]
+            else:
+                if _wl_data["kind"] == constants.SUBSCRIPTION:
+                    return _wl_data["metadata"]["name"]
+
+    def verify_workload_deployment(self):
+        """
+        Verify cnv workload deployment
+
+        """
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            self.workload_pvc_count,
+            self.workload_pod_count,
+            self.workload_namespace,
+        )
+        dr_helpers.wait_for_cnv_workload(
+            vm_name=self.vm_name,
+            namespace=self.workload_namespace,
+            phase=constants.STATUS_RUNNING,
+        )
+
+    def delete_workload(self, force=False):
+        """
+        Deletes cnv workload
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        """
+        try:
+            config.switch_acm_ctx()
+            run_cmd(cmd=f"oc delete -f {self.cnv_workload_yaml_file}", timeout=900)
+
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                dr_helpers.wait_for_all_resources_deletion(
+                    namespace=self.workload_namespace,
+                    check_replication_resources_state=False,
+                )
+                log.info(f"Verify VM: {self.vm_name} is deletion")
+                vm_obj = ocp.OCP(
+                    kind=constants.VIRTUAL_MACHINE_INSTANCES,
+                    resource_name=self.vm_name,
+                    namespace=self.workload_namespace,
+                )
+                vm_obj.wait_for_delete(timeout=300)
+
+        except (
+            TimeoutExpired,
+            TimeoutExpiredError,
+            TimeoutError,
+            UnexpectedBehaviour,
+        ) as ex:
+            err_msg = f"Failed to delete the workload: {ex}"
+            raise ResourceNotDeleted(err_msg)
+
+
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
     """
     Verifies the md5sum values of files are OK
