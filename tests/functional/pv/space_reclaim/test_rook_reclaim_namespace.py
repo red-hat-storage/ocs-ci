@@ -17,7 +17,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     bugzilla,
     skipif_ocs_version,
-    ignore_leftovers,
 )
 
 log = logging.getLogger(__name__)
@@ -25,7 +24,6 @@ log = logging.getLogger(__name__)
 
 @brown_squad
 @tier2
-@ignore_leftovers
 @bugzilla("2214838")
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-XXXX")
