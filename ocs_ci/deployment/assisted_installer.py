@@ -123,8 +123,12 @@ class AssistedInstallerCluster(object):
         infra_config = self.api.get_infra_env(self.infra_id)
         self.openshift_version = cl_config["openshift_version"]
         self.base_dns_domain = cl_config["base_dns_domain"]
-        self.api_vip = cl_config["api_vip"]
-        self.ingress_vip = cl_config["ingress_vip"]
+        try:
+            self.api_vip = cl_config["api_vips"][0]["ip"]
+            self.ingress_vip = cl_config["ingress_vips"][0]["ip"]
+        except (KeyError, IndexError):
+            self.api_vip = ""
+            self.ingress_vip = ""
         self.ssh_public_key = cl_config["ssh_public_key"]
         # self.pull_secret = cl_config["pull_secret"]
         self.cpu_architecture = cl_config["cpu_architecture"]
