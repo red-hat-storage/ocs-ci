@@ -11,9 +11,11 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import update_container_with_mirrored_image
 
 log = logging.getLogger(__name__)

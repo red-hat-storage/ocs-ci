@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -72,7 +73,6 @@ def test_write_file_to_bucket_on_client(
     bucketname = bucket_factory(1, interface="S3")[0].name
     full_object_path = f"s3://{bucketname}"
 
-    provider_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     config.switch_ctx(client_cluster)
     log.info(f"Switched to client cluster with index {client_cluster}")
     downloaded_files = awscli_pod.exec_cmd_on_pod(
