@@ -2448,7 +2448,7 @@ def awscli_pod(request, awscli_pod_session):
 
 
 @pytest.fixture(scope="session")
-def awscli_pod_client_session(request):
+def awscli_pod_client_session(request, project_factory):
     """
     Creates a new AWSCLI pod for relaying commands on a client cluster.
 
@@ -2461,6 +2461,7 @@ def awscli_pod_client_session(request):
         int: Index of client cluster where the awscli pod is running
 
     """
+    project = project_factory(constants.AWSCLI_NAMESPACE)
     original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     ocsci_config.switch_to_consumer()
     client_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
@@ -2469,14 +2470,14 @@ def awscli_pod_client_session(request):
     def _create_awscli_pod():
         ocsci_config.switch_ctx(client_cluster)
         log.info(f"Switched to client with index {client_cluster}")
-        create_awscli_pod()
+        create_awscli_pod(namespace=constants.AWSCLI_NAMESPACE)
         ocsci_config.switch_ctx(original_cluster)
         log.info(f"Switched to provider with index {original_cluster}")
 
     def _awscli_pod_cleanup():
         ocsci_config.switch_ctx(client_cluster)
         log.info(f"Switched to client with index {client_cluster}")
-        awscli_pod_cleanup()
+        awscli_pod_cleanup(namespace=constants.AWSCLI_NAMESPACE)
         ocsci_config.switch_ctx(original_cluster)
         log.info(f"Switched to provider with index {original_cluster}")
 
