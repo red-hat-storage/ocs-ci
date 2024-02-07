@@ -63,7 +63,7 @@ def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
     assert s3cli_sts_obj, "Failed to create S3CLI STS"
     if service_account:
         s3cli_sts_obj.ocp.exec_oc_cmd(
-            f"set serviceaccount statefulset {s3cli_sts_obj.name} {serviceaccount}"
+            f"set serviceaccount statefulset {s3cli_sts_obj.name} {service_account}"
         )
     awscli_pod_obj = retry(IndexError, tries=3, delay=15)(
         lambda: Pod(**get_pods_having_label(constants.S3CLI_LABEL, namespace)[0])
