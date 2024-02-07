@@ -55,16 +55,16 @@ def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
         "name"
     ] = service_ca_configmap_name
     awscli_sts_dict["metadata"]["namespace"] = namespace
-    if service_account:
-        awscli_sts_dict["spec"]["template"]["spec"]["containers"][0][
-            "serviceAccount"
-        ] = service_account
     update_container_with_mirrored_image(awscli_sts_dict)
     update_container_with_proxy_env(awscli_sts_dict)
     s3cli_sts_obj = create_resource(**awscli_sts_dict)
 
     log.info("Verifying the AWS CLI StatefulSet is running")
     assert s3cli_sts_obj, "Failed to create S3CLI STS"
+    if service_account:
+        s3cli_sts_obj.ocp.exec_oc_cmd(
+            f"set serviceaccount statefulset {s3cli_sts_obj.name} {serviceaccount}"
+        )
     awscli_pod_obj = retry(IndexError, tries=3, delay=15)(
         lambda: Pod(**get_pods_having_label(constants.S3CLI_LABEL, namespace)[0])
     )()
