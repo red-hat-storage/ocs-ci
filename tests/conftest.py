@@ -184,7 +184,7 @@ def pytest_logger_config(logger_config):
 
 def verify_test_decorators_requirements(items):
     """
-    Verify that all tests collected are decorated with a squad marker
+    Verify that all collected tests have the required decorators
 
     Args:
         items: list of collected tests
