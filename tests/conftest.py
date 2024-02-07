@@ -2461,7 +2461,7 @@ def awscli_pod_client_session(request, project_factory):
         int: Index of client cluster where the awscli pod is running
 
     """
-    project = project_factory(constants.AWSCLI_NAMESPACE)
+    project_factory(constants.AWSCLI_NAMESPACE)
     original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     ocsci_config.switch_to_consumer()
     client_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
