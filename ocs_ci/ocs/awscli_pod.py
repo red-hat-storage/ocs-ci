@@ -21,7 +21,7 @@ from ocs_ci.utility.utils import update_container_with_mirrored_image
 log = logging.getLogger(__name__)
 
 
-def create_awscli_pod(scope_name=None, namespace=None):
+def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
     """
     Create AWS cli pod and its resources.
 
@@ -55,6 +55,10 @@ def create_awscli_pod(scope_name=None, namespace=None):
         "name"
     ] = service_ca_configmap_name
     awscli_sts_dict["metadata"]["namespace"] = namespace
+    if service_account:
+        awscli_sts_dict["spec"]["template"]["spec"]["containers"][0][
+            "serviceAccount"
+        ] = service_account
     update_container_with_mirrored_image(awscli_sts_dict)
     update_container_with_proxy_env(awscli_sts_dict)
     s3cli_sts_obj = create_resource(**awscli_sts_dict)
