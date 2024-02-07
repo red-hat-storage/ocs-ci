@@ -193,7 +193,7 @@ def verify_test_decorators_requirements(items):
     red_no_mcg_or_rgw_items = {}
     for item in items:
         base_dir = os.path.join(constants.TOP_DIR, "tests")
-        ignored_markers = constants.SQUAD_CHECK_IGNORED_MARKERS
+        ignored_markers = constants.DECORATORS_CHECK_IGNORED_MARKERS
         if item.fspath.strpath.startswith(base_dir):
             item_markers = [marker.name for marker in item.iter_markers()]
             if any(marker in item_markers for marker in ignored_markers):
@@ -224,7 +224,7 @@ Red squad tests are required to be decorated with either @mcg or @rgw. Please ad
         raise MissingDecoratorError(err_msg)
 
 
-def pytest_collection_modifyitems(session, pytest_config, items):
+def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
@@ -235,11 +235,13 @@ def pytest_collection_modifyitems(session, pytest_config, items):
         items: list of collected tests
 
     """
-    teardown = config.RUN["cli_params"].get("teardown")
-    deploy = config.RUN["cli_params"].get("deploy")
-    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+    ocs_config = globals()["config"]
 
-    if pytest_config.option.collectonly:
+    teardown = ocs_config.RUN["cli_params"].get("teardown")
+    deploy = ocs_config.RUN["cli_params"].get("deploy")
+    skip_ocs_deployment = ocs_config.ENV_DATA["skip_ocs_deployment"]
+
+    if config.option.collectonly:
         verify_test_decorators_requirements(items)
 
     # Add squad markers to each test item based on filepath
@@ -275,8 +277,8 @@ def pytest_collection_modifyitems(session, pytest_config, items):
             skipif_lvm_not_installed_marker = item.get_closest_marker(
                 "skipif_lvm_not_installed"
             )
-            if skipif_lvm_not_installed_marker and "lvm" in config.RUN:
-                if not config.RUN["lvm"]:
+            if skipif_lvm_not_installed_marker and "lvm" in ocs_config.RUN:
+                if not ocs_config.RUN["lvm"]:
                     log.info(f"Test {item} will be removed due to lvm not installed")
                     items.remove(item)
                     continue
@@ -329,14 +331,15 @@ def pytest_collection_modifyitems(session, pytest_config, items):
                     continue
     # skip UI test on openshift dedicated ODF-MS platform
     if (
-        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
-        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        ocs_config.ENV_DATA["platform"].lower()
+        == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or ocs_config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     ):
         for item in items.copy():
             if "/ui/" in str(item.fspath):
                 log.debug(
                     f"Test {item} is removed from the collected items"
-                    f" UI is not supported on {config.ENV_DATA['platform'].lower()}"
+                    f" UI is not supported on {ocs_config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
 
