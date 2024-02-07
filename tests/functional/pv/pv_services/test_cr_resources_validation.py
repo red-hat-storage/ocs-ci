@@ -7,7 +7,6 @@ from tempfile import NamedTemporaryFile
 from ocs_ci.framework.pytest_customization.marks import bugzilla, green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
-    skipif_ocs_version,
     ManageTest,
     tier2,
 )
