@@ -2411,14 +2411,6 @@ def mcg_obj_session(request):
     return mcg_obj_fixture(request)
 
 
-@pytest.fixture(scope="session")
-def aws_cli_project(project_factory_session):
-    """
-    awscli project for awscli_pod on client.
-    """
-    return project_factory_session(constants.AWSCLI_NAMESPACE)
-
-
 def mcg_obj_fixture(request, *args, **kwargs):
     """
     Returns an MCG resource that's connected to the S3 endpoint
@@ -2456,7 +2448,7 @@ def awscli_pod(request, awscli_pod_session):
 
 
 @pytest.fixture(scope="session")
-def awscli_pod_client_session(request, aws_cli_project):
+def awscli_pod_client_session(request, project_factory_session):
     """
     Creates a new AWSCLI pod for relaying commands on a client cluster.
 
@@ -2471,6 +2463,10 @@ def awscli_pod_client_session(request, aws_cli_project):
     """
     original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     ocsci_config.switch_to_consumer()
+    log.info(
+        f"Creating namespace {constants.AWSCLI_NAMESPACE} on client for aws cli pod"
+    )
+    project_factory_session(constants.AWSCLI_NAMESPACE)
     client_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     ocsci_config.switch_ctx(original_cluster)
 
