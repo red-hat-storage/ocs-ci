@@ -638,6 +638,8 @@ def exec_cmd(
         if len(subcmd) > 1:
             subcmd = "_".join(subcmd)
             log.info(f"searching for plugin: {subcmd}")
+        if not isinstance(subcmd, str) and isinstance(subcmd, list):
+            subcmd = str(subcmd[0])
 
         for l in cp.stdout.decode().splitlines():
             if subcmd in l:
