@@ -12,7 +12,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_external_mode,
     vsphere_platform_required,
-    orange_squad,
     rgw,
 )
 from ocs_ci.utility.utils import ocsci_log_path
@@ -35,7 +34,6 @@ obc_scaled_data_file = f"{log_path}/obc_scale_rgw_data_file.yaml"
 
 
 @rgw
-@orange_squad
 @pre_upgrade
 @vsphere_platform_required
 @skipif_external_mode
@@ -113,7 +111,6 @@ def test_scale_obc_rgw_pre_upgrade(tmp_path, mcg_job_factory, timeout=60):
 
 
 @rgw
-@orange_squad
 @post_upgrade
 @vsphere_platform_required
 @skipif_external_mode

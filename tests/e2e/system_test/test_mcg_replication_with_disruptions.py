@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     system_test,
     skipif_vsphere_ipi,
-    magenta_squad,
     mcg,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
@@ -36,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 @mcg
-@magenta_squad
 @system_test
 @skipif_ocs_version("<4.9")
 @skipif_vsphere_ipi

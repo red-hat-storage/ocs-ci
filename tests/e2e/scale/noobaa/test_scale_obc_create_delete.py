@@ -4,7 +4,7 @@ import csv
 
 from ocs_ci.ocs import constants, scale_noobaa_lib
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.utils import ocsci_log_path
@@ -22,7 +22,6 @@ def teardown(request):
 
 
 @mcg
-@orange_squad
 @scale
 class TestScaleOCBCreateDelete(E2ETest):
     """

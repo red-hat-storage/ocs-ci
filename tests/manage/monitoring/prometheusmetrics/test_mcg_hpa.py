@@ -3,7 +3,6 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.pytest_customization.marks import (
-    blue_squad,
     skipif_managed_service,
     tier1,
     mcg,
@@ -17,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 @mcg
-@blue_squad
 @tier1
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")

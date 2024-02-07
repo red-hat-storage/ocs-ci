@@ -7,7 +7,6 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     tier2,
     tier4a,
-    blue_squad,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -18,7 +17,6 @@ log = logging.getLogger(__name__)
 
 
 @mcg
-@blue_squad
 @tier2
 @polarion_id("OCS-1254")
 @skipif_managed_service
@@ -116,7 +114,6 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
 
 
 @mcg
-@blue_squad
 @tier4a
 @polarion_id("OCS-2498")
 @skipif_managed_service

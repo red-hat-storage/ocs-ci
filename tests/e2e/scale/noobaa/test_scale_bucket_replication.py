@@ -2,7 +2,7 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs import hsbench
@@ -29,7 +29,6 @@ def s3bench(request):
 
 
 @mcg
-@orange_squad
 @scale
 @skipif_ocs_version("<4.9")
 class TestScaleBucketReplication(E2ETest):

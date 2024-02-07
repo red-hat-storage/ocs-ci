@@ -7,7 +7,7 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     list_objects_from_bucket,
 )
-from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.testlib import scale, bugzilla, skipif_ocs_version
 from ocs_ci.ocs.resources.mcg import MCG
@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 
 
 @mcg
-@orange_squad
 @scale
 class TestListOfObjects(E2ETest):
     """

@@ -7,7 +7,6 @@ from datetime import datetime
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier1,
@@ -31,7 +30,6 @@ log = logging.getLogger(__name__)
 
 
 @rgw
-@magenta_squad
 @tier1
 @bugzilla("2209616")
 @bugzilla("1937187")

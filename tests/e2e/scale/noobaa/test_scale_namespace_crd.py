@@ -6,7 +6,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     on_prem_platform_required,
     scale,
-    orange_squad,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -30,7 +29,6 @@ def s3bench(request):
 
 
 @mcg
-@orange_squad
 @scale
 class TestScaleNamespace(E2ETest):
     """

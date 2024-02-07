@@ -3,7 +3,6 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     on_prem_platform_required,
-    black_squad,
     mcg,
 )
 from ocs_ci.ocs import constants
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 
 @mcg
-@black_squad
 @skipif_ui_not_support("mcg_stores")
 class TestStoreUserInterface(object):
     """
@@ -98,7 +96,6 @@ class TestStoreUserInterface(object):
 
 
 @mcg
-@black_squad
 @ui
 @skipif_ui_not_support("bucketclass")
 @tier1

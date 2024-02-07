@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     bugzilla,
-    orange_squad,
     mcg,
 )
 
@@ -30,7 +29,6 @@ def warps3(request):
 
 
 @mcg
-@orange_squad
 @scale
 @ignore_leftovers
 class TestWarp(E2ETest):
