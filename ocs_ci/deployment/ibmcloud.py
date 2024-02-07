@@ -22,10 +22,9 @@ from ocs_ci.ocs.resources.pvc import (
     scale_down_pods_and_remove_pvcs,
 )
 from ocs_ci.utility import ibmcloud, version
+from ocs_ci.utility import cco
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
-    delete_file,
-    download_file,
     exec_cmd,
     get_infra_id_from_openshift_install_state,
 )
@@ -162,7 +161,7 @@ class IBMCloudIPI(CloudDeploymentBase):
 
         # IBM Cloud specific prereqs
         ibmcloud.login()
-        self.configure_cloud_credential_operator()
+        cco.configure_cloud_credential_operator()
         self.export_api_key()
         self.manually_create_iam_for_vpc()
 
@@ -198,8 +197,8 @@ class IBMCloudIPI(CloudDeploymentBase):
                 "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
             )
         # Make sure ccoctl is downloaded before using it in destroy job.
-        self.configure_cloud_credential_operator()
-        self.delete_service_id()
+        cco.configure_cloud_credential_operator()
+        cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
         if resource_group:
             resource_group = self.get_resource_group()
         # Based on docs:
@@ -214,39 +213,17 @@ class IBMCloudIPI(CloudDeploymentBase):
         """
         Manually specify the IAM secrets for the cloud provider
         """
-        logger.info("Creating manifests")
-        cmd = f"{self.ocp_deployment.installer} create manifests --dir {self.cluster_path}"
-        exec_cmd(cmd)
-
-        release_image = self.get_release_image()
-
-        logger.info("Extracting CredentialsRequests")
-        cmd = (
-            f"oc adm release extract --cloud=ibmcloud --credentials-requests {release_image} "
-            f"--to={self.credentials_requests_dir} --registry-config={self.pull_secret_path}"
+        cco.create_manifests(self.ocp_deployment.installer)
+        release_image = cco.get_release_image(self.ocp_deployment.installer)
+        cco.extract_credentials_requests(
+            release_image, self.credentials_requests_dir, self.pull_secret_path
         )
-        exec_cmd(cmd)
-
         # get infraID
         infra_id = get_infra_id_from_openshift_install_state(self.cluster_path)
 
-        logger.info("Creating service ID")
-        cmd = (
-            f"ccoctl ibmcloud create-service-id --credentials-requests-dir {self.credentials_requests_dir} "
-            f"--name {infra_id} --output-dir {self.cluster_path}"
+        cco.create_service_id(
+            infra_id, self.cluster_path, self.credentials_requests_dir
         )
-        exec_cmd(cmd)
-
-    def get_release_image(self):
-        """
-        Retrieve release image using the openshift installer.
-        """
-        logger.info("Retrieving release image")
-        cmd = f"{self.ocp_deployment.installer} version"
-        proc = exec_cmd(cmd)
-        for line in proc.stdout.decode().split("\n"):
-            if "release image" in line:
-                return line.split(" ")[2].strip()
 
     def get_resource_group(self, return_id=False):
         """
@@ -272,17 +249,6 @@ class IBMCloudIPI(CloudDeploymentBase):
                 else:
                     return group["id"]
         logger.info(f"No resource group found with cluster name: {self.cluster_name}")
-
-    def delete_service_id(self):
-        """
-        Delete the Service ID.
-        """
-        logger.info("Deleting service ID")
-        cmd = (
-            f"ccoctl ibmcloud delete-service-id --credentials-requests-dir {self.credentials_requests_dir} "
-            f"--name {self.cluster_name}"
-        )
-        exec_cmd(cmd)
 
     def delete_volumes(self, resource_group):
         """
@@ -469,29 +435,6 @@ class IBMCloudIPI(CloudDeploymentBase):
             and cluster["name"].startswith(cluster_name_prefix)
         ]
         return bool(cluster_matches)
-
-    @staticmethod
-    def configure_cloud_credential_operator():
-        """
-        Extract and Prepare the CCO utility (ccoctl) binary. This utility
-        allows us to create and manage cloud credentials from outside of
-        the cluster while in manual mode.
-
-        """
-        bin_dir = config.RUN["bin_dir"]
-        ccoctl_path = os.path.join(bin_dir, "ccoctl")
-        if not os.path.isfile(ccoctl_path):
-            # retrieve ccoctl binary from https://mirror.openshift.com
-            version = config.DEPLOYMENT.get("ccoctl_version")
-            source = f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/ccoctl-linux.tar.gz"
-            bin_dir = config.RUN["bin_dir"]
-            tarball = os.path.join(bin_dir, "ccoctl-linux.tar.gz")
-            logger.info("Downloading ccoctl tarball from %s", source)
-            download_file(source, tarball)
-            cmd = f"tar -xzC {bin_dir} -f {tarball} ccoctl"
-            logger.info("Extracting ccoctl binary from %s", tarball)
-            exec_cmd(cmd)
-            delete_file(tarball)
 
     @staticmethod
     def export_api_key():
