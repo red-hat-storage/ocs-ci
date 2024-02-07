@@ -375,7 +375,10 @@ obc = {
         "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
         By.XPATH,
     ),
-    "obc_menu_name": ("//a[normalize-space()='Object Bucket Claims']", By.XPATH),
+    "obc_menu_name": (
+        "//a[normalize-space()='Object Bucket Claims'] | //span[normalize-space()='Object Bucket Claims']/..",
+        By.XPATH,
+    ),
     "storageclass_dropdown": ("sc-dropdown", By.ID),
     "storageclass_text_field": ("//input[@id='search-bar']", By.XPATH),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
@@ -599,7 +602,10 @@ page_nav = {
     "volumesnapshots_page": ("VolumeSnapshots", By.LINK_TEXT),
     "volumesnapshotclasses_page": ("VolumeSnapshotClasses", By.LINK_TEXT),
     "volumesnapshotcontents_page": ("VolumeSnapshotContents", By.LINK_TEXT),
-    "object_buckets_tab": ("//a[normalize-space()='Object Buckets']", By.XPATH),
+    "object_buckets_tab": (
+        "//a[normalize-space()='Object Buckets'] | //span[normalize-space()='Object Buckets']/..",
+        By.XPATH,
+    ),
     "object_storage": ("//a[normalize-space()='Object Storage']", By.XPATH),
     "Monitoring": ("//button[text()='Monitoring']", By.XPATH),
     "alerting_page": ("Alerting", By.LINK_TEXT),
@@ -866,26 +872,26 @@ acm_configuration_4_12 = {
     "all-clusters_dropdown": (
         "//a[normalize-space()='All Clusters'] | "
         "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
-        "and normalize-space()='All Clusters']",
+        "and normalize-space()='All Clusters']/..",
         By.XPATH,
     ),
     # works for OCP 4.12 to 4.15
     "all-clusters_dropdown_item": (
         "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
-        "and text()='All Clusters']",
+        "and text()='All Clusters']/..",
         By.XPATH,
     ),
     # works for OCP 4.12 to 4.15
     "local-cluster_dropdown": (
         "//h2[text()='local-cluster'] | "
         "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
-        "and text()='local-cluster']",
+        "and text()='local-cluster']/..",
         By.XPATH,
     ),
     # works for OCP 4.12 to 4.15
     "local-cluster_dropdown_item": (
         "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
-        "and text()='local-cluster']",
+        "and text()='local-cluster']/..",
         By.XPATH,
     ),
     "cluster_status_check": ('//button[normalize-space()="{}"]', By.XPATH),
