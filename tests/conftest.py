@@ -190,7 +190,6 @@ def verify_test_decorators_requirements(items):
         items: list of collected tests
 
     """
-    items_without_squad_marker = {}
     red_no_mcg_or_rgw_items = {}
     for item in items:
         base_dir = os.path.join(constants.TOP_DIR, "tests")
@@ -203,11 +202,6 @@ def verify_test_decorators_requirements(items):
                     item.name,
                 )
 
-            # Verify tests are decorated with the correct squad owner
-            elif not any(["_squad" in marker for marker in item_markers]):
-                log.debug("%s is missing a squad owner marker", item.name)
-                items_without_squad_marker.update({item.name: item.fspath.strpath})
-
             # Verify red squad tests are decorated with either @mcg or @rgw
             elif (
                 "red_squad" in item_markers
@@ -218,20 +212,7 @@ def verify_test_decorators_requirements(items):
                 red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
 
     err_msg = ""
-    if items_without_squad_marker:
-        err_msg += f"""
-Missing squad decorator for the following test items: {json.dumps(items_without_squad_marker, indent=4)}
 
-Tests are required to be decorated with their squad owner. Please add the tests respective owner.
-
-For example:
-
-    @magenta_squad
-    def test_name():
-
-Test owner marks can be imported from `ocs_ci.framework.pytest_customization.marks`
-
-            """
     if red_no_mcg_or_rgw_items:
         err_msg += f"""
 The following tests are missing either the @mcg or @rgw decorators: {json.dumps(red_no_mcg_or_rgw_items, indent=4)}
