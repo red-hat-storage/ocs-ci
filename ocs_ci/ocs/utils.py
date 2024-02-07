@@ -1638,6 +1638,7 @@ def get_all_acm_indexes():
             acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
     return acm_indexes
 
+
 def is_acm_cluster():
     """
     Check whether the current cluster in context is an ACM cluster
