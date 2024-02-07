@@ -92,13 +92,17 @@ class TestUpgradeOCP(ManageTest):
 
         cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
-        if config.multicluster and config.MULTICLUSTER['multicluster_mode'] == 'metro-dr' and is_acm_cluster():
+        if (
+            config.multicluster
+            and config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
+            and is_acm_cluster()
+        ):
             # Find the ODF cluster in current zone
             mdr_upgrade = MDRClusterUpgradeParametrize()
             mdr_upgrade.config_init()
             local_zone_odf = None
             for cluster in get_non_acm_cluster_config():
-                if config.ENV_DATA['zone'] == cluster.ENV_DATA['zone']:
+                if config.ENV_DATA["zone"] == cluster.ENV_DATA["zone"]:
                     local_zone_odf = cluster
             ceph_cluster = CephCluster(local_zone_odf)
         else:

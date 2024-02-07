@@ -67,6 +67,7 @@ from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
 
+
 class CephClusterMultiCluster(object):
     """
     TODO: Implement this class later
@@ -75,6 +76,9 @@ class CephClusterMultiCluster(object):
     the ODF which is not in current context
 
     """
+
+    def __init__(self):
+        pass
 
 
 class CephCluster(object):
@@ -98,29 +102,30 @@ class CephCluster(object):
         after cluster deployment. However its harmless to do anywhere.
         """
         if cluster_config:
-            logger.info("INITIALIZING")
-            self.config = cluster_config
-        else:
-            self.config = config
-        if self.config.ENV_DATA["mcg_only_deployment"] or (
-            self.config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
-            and self.config.ENV_DATA["cluster_type"].lower() == "consumer"
+            logger.info(
+                "CephClusterMulticluster will be used to handle multicluster case"
+            )
+            return CephClusterMultiCluster()
+
+        if config.ENV_DATA["mcg_only_deployment"] or (
+            config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
+            and config.ENV_DATA["cluster_type"].lower() == "consumer"
         ):
             return
         # cluster_name is name of cluster in rook of type CephCluster
-        self.POD = ocp.OCP(kind="Pod", namespace=self.config.ENV_DATA["cluster_namespace"])
+        self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
         self.CEPHCLUSTER = ocp.OCP(
-            kind="CephCluster", namespace=self.config.ENV_DATA["cluster_namespace"]
+            kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
         )
         self.CEPHFS = ocp.OCP(
-            kind="CephFilesystem", namespace=self.config.ENV_DATA["cluster_namespace"]
+            kind="CephFilesystem", namespace=config.ENV_DATA["cluster_namespace"]
         )
         self.RBD = ocp.OCP(
-            kind="CephBlockPool", namespace=self.config.ENV_DATA["cluster_namespace"]
+            kind="CephBlockPool", namespace=config.ENV_DATA["cluster_namespace"]
         )
 
         self.DEP = ocp.OCP(
-            kind="Deployment", namespace=self.config.ENV_DATA["cluster_namespace"]
+            kind="Deployment", namespace=config.ENV_DATA["cluster_namespace"]
         )
 
         self.cluster_resource_config = self.CEPHCLUSTER.get().get("items")[0]
@@ -302,9 +307,9 @@ class CephCluster(object):
 
         self.scan_cluster()
 
-        if self.config.ENV_DATA[
+        if config.ENV_DATA[
             "platform"
-        ] in constants.HCI_PC_OR_MS_PLATFORM and self.config.ENV_DATA["cluster_type"] in [
+        ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
             constants.MS_CONSUMER_TYPE,
             constant.HCI_CLIENT,
         ]:
@@ -354,8 +359,8 @@ class CephCluster(object):
 
         # Check Noobaa health
         if (
-            self.config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
-            and not self.config.COMPONENTS["disable_noobaa"]
+            config.ENV_DATA["platform"] not in constants.MANAGED_SERVICE_PLATFORMS
+            and not config.COMPONENTS["disable_noobaa"]
         ):
             # skip noobaa healthcheck due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2075422
             ocp_version = version.get_semantic_ocp_version_from_config()
@@ -1045,6 +1050,18 @@ class CephCluster(object):
         self.RBD.exec_oc_cmd(f"patch {patch}")
 
 
+class MulticlusterCephHealthMonitor(object):
+    # TODO: This will be a placeholder for now
+    def __init__(self):
+        pass
+
+    def __entry__(self):
+        pass
+
+    def __exit__(self):
+        pass
+
+
 class CephHealthMonitor(threading.Thread):
     """
     Context manager class for monitoring ceph health status of CephCluster.
@@ -1062,6 +1079,8 @@ class CephHealthMonitor(threading.Thread):
             sleep (int): Number of seconds to sleep between health checks.
 
         """
+        if isinstance(ceph_cluster, CephClusterMultiCluster):
+            return MulticlusterCephHealthMonitor()
         self.ceph_cluster = ceph_cluster
         self.sleep = sleep
         self.health_error_status = None
