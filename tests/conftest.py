@@ -2469,12 +2469,8 @@ def awscli_pod_client_session(
         f"Creating namespace {constants.AWSCLI_NAMESPACE} on client for aws cli pod"
     )
     project = project_factory_session(constants.AWSCLI_NAMESPACE)
-    log.info(
-        f"Creating service account {constants.AWSCLI_NAMESPACE} on client for aws cli pod"
-    )
-    sa = service_account_factory_session(
-        project=project, service_account=constants.AWSCLI_NAMESPACE
-    )
+    log.info("Creating service account on client for aws cli pod")
+    sa = service_account_factory_session(project=project)
     client_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
     ocsci_config.switch_ctx(original_cluster)
 
