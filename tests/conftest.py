@@ -2477,9 +2477,12 @@ def awscli_pod_client_session(
     def _create_awscli_pod():
         ocsci_config.switch_ctx(client_cluster)
         log.info(f"Switched to client with index {client_cluster}")
-        create_awscli_pod(namespace=constants.AWSCLI_NAMESPACE, service_account=sa.name)
+        awscli_pod = create_awscli_pod(
+            namespace=constants.AWSCLI_NAMESPACE, service_account=sa.name
+        )
         ocsci_config.switch_ctx(original_cluster)
         log.info(f"Switched to provider with index {original_cluster}")
+        return awscli_pod
 
     def _awscli_pod_cleanup():
         ocsci_config.switch_ctx(client_cluster)
