@@ -86,6 +86,15 @@ class TestBucketDeletion(MCGTest):
                 ],
                 marks=[tier1],
             ),
+            pytest.param(
+                *[
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
+                    },
+                ]
+            ),
         ],
         ids=[
             "S3",
@@ -96,6 +105,7 @@ class TestBucketDeletion(MCGTest):
             "OC-GCP",
             "OC-IBMCOS",
             "CLI-IBMCOS",
+            "CLI-AWS-STS",
         ],
     )
     @flaky
