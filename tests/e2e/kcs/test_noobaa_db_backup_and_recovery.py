@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import warp
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -20,6 +21,7 @@ from ocs_ci.ocs.resources.pod import (
 log = logging.getLogger(__name__)
 
 
+@mcg
 @tier3
 @ignore_leftovers
 @skipif_managed_service
@@ -84,7 +86,6 @@ class TestNoobaaBackupAndRecovery(E2ETest):
 
     @pytest.fixture()
     def warps3(self, request):
-
         warps3 = warp.Warp()
         warps3.create_resource_warp(replicas=4, multi_client=True)
 

@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     on_prem_platform_required,
     scale,
+    mcg,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import hsbench
@@ -27,6 +28,7 @@ def s3bench(request):
     return s3bench
 
 
+@mcg
 @scale
 class TestScaleNamespace(E2ETest):
     """

@@ -9,6 +9,8 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework.pytest_customization.marks import (
+    red_squad,
+    mcg,
     skipif_managed_service,
 )
 from ocs_ci.ocs.bucket_utils import get_bucket_available_size
@@ -56,6 +58,8 @@ def compare_sizes(mcg_obj, ceph_obj, bucket_name):
         )
 
 
+@mcg
+@red_squad
 @skipif_managed_service
 @skipif_ocs_version("<4.7")
 @pytest.mark.polarion_id("OCS-2476")
@@ -80,9 +84,11 @@ def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
     ceph_obj = OCP(
         namespace=config.ENV_DATA["cluster_namespace"],
         kind="CephCluster",
-        resource_name=f"{constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephcluster"
-        if config.DEPLOYMENT["external_mode"]
-        else f"{constants.DEFAULT_CLUSTERNAME}-cephcluster",
+        resource_name=(
+            f"{constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephcluster"
+            if config.DEPLOYMENT["external_mode"]
+            else f"{constants.DEFAULT_CLUSTERNAME}-cephcluster"
+        ),
     )
     bucket_name = bucket_factory(amount=1, interface="S3")[0].name
     assert not compare_sizes(

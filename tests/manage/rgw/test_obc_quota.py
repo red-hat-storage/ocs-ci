@@ -12,11 +12,15 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     bugzilla,
     skipif_ocs_version,
+    red_squad,
+    rgw,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@rgw
+@red_squad
 @bugzilla("1940823")
 @skipif_ocs_version("<4.10")
 class TestOBCQuota:

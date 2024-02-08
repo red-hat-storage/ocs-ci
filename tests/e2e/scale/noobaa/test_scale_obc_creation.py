@@ -6,7 +6,10 @@ from ocs_ci.ocs import constants, scale_noobaa_lib
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import scale, E2ETest
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
-from ocs_ci.framework.pytest_customization.marks import vsphere_platform_required
+from ocs_ci.framework.pytest_customization.marks import (
+    vsphere_platform_required,
+    mcg,
+)
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +22,7 @@ def teardown(request):
     request.addfinalizer(finalizer)
 
 
+@mcg
 @scale
 class TestScaleOCBCreation(E2ETest):
     """

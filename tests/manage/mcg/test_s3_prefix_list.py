@@ -11,17 +11,20 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier2,
     skipif_ocs_version,
+    red_squad,
+    mcg,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@mcg
+@red_squad
 @bugzilla("2068110")
 @pytest.mark.polarion_id("OCS-3925")
 @tier2
 @skipif_ocs_version("<4.10")
 class TestS3PrefixList:
-
     """
     Test S3 prefix list operations
     """
