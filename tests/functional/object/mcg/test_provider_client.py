@@ -79,10 +79,12 @@ def test_write_file_to_bucket_on_client(
         f"ls -A1 {constants.AWSCLI_TEST_OBJ_DIR}"
     ).split(" ")
     # create s3_creds structure with s3_endpoint so that s3_internal_endpoint is not used
+    # TODO(fbalak): remove ssl=False option and provide correct certificate
     s3_creds = {
         "access_key_id": mcg_obj.access_key_id,
         "access_key": mcg_obj.access_key,
         "endpoint": mcg_obj.s3_endpoint,
+        "ssl": False,
     }
     # Write all downloaded objects to the new bucket
     sync_object_directory(
