@@ -694,7 +694,7 @@ class TestS3BucketPolicy(MCGTest):
         # Statement_1 public read access to a bucket
         single_statement_policy = gen_bucket_policy(
             sid="statement-1",
-            user_list=["*"],
+            user_list="*",
             actions_list=["GetObject"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
             effect="Allow",
@@ -706,14 +706,14 @@ class TestS3BucketPolicy(MCGTest):
             "statement_2": {
                 "Action": "s3:PutObject",
                 "Effect": "Allow",
-                "Principal": obc_obj.obc_account,
+                "Principal": {"AWS": obc_obj.obc_account},
                 "Resource": [f'arn:aws:s3:::{obc_obj.bucket_name}/{"*"}'],
                 "Sid": "Statement-2",
             },
             "statement_3": {
                 "Action": "s3:DeleteObject",
                 "Effect": "Deny",
-                "Principal": [obc_obj.obc_account],
+                "Principal": {"AWS": [obc_obj.obc_account]},
                 "Resource": [f'arn:aws:s3:::{"*"}'],
                 "Sid": "Statement-3",
             },
