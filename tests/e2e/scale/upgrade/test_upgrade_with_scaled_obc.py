@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_managed_service,
     skipif_external_mode,
+    mcg,
 )
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.utility import utils, templating
@@ -29,6 +30,7 @@ log_path = ocsci_log_path()
 obc_scaled_data_file = f"{log_path}/obc_scale_data_file.yaml"
 
 
+@mcg
 @pre_upgrade
 @skipif_external_mode
 @skipif_bm
@@ -79,6 +81,7 @@ def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
         w_obj.write(str(f"OBC_SCALE_LIST: {obc_scaled_list}\n"))
 
 
+@mcg
 @post_upgrade
 @skipif_external_mode
 @skipif_bm

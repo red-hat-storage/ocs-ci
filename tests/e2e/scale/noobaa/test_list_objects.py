@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs.bucket_utils import copy_objects, craft_s3_command
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.framework.testlib import scale, bugzilla, skipif_ocs_version
 from ocs_ci.ocs.resources.mcg import MCG
@@ -10,6 +11,7 @@ from ocs_ci.ocs.resources.mcg import MCG
 log = logging.getLogger(__name__)
 
 
+@mcg
 @scale
 @bugzilla("2052079")
 @skipif_ocs_version("<4.8")

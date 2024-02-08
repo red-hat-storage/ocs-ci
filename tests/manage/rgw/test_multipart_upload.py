@@ -4,6 +4,7 @@ import pytest
 import uuid
 
 from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.pytest_customization.marks import red_squad, skipif_mcg_only, rgw
 from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
     abort_all_multipart_upload,
@@ -48,6 +49,9 @@ def setup(pod_obj, rgw_bucket_factory, test_directory_setup):
     return bucket, object_key, origin_dir, res_dir, full_object_path, parts
 
 
+@rgw
+@red_squad
+@skipif_mcg_only
 class TestS3MultipartUpload(ManageTest):
     """
     Test Multipart upload on RGW buckets

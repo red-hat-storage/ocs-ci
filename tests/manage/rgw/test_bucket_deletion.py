@@ -6,7 +6,14 @@ from flaky import flaky
 from ocs_ci.ocs.bucket_utils import sync_object_directory
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
+from ocs_ci.framework.pytest_customization.marks import (
+    acceptance,
+    red_squad,
+    rgw,
+    skipif_mcg_only,
+    tier1,
+    tier3,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
@@ -15,6 +22,9 @@ from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 logger = logging.getLogger(__name__)
 
 
+@rgw
+@red_squad
+@skipif_mcg_only
 class TestBucketDeletion:
     """
     Test deletion of RGW buckets

@@ -43,6 +43,7 @@ from ocs_ci.ocs.exceptions import (
     StorageclassNotCreated,
     PoolNotDeletedFromUI,
     StorageClassNotDeletedFromUI,
+    MissingDecoratorError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -178,7 +179,49 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-def pytest_collection_modifyitems(session, items):
+def verify_test_decorators_requirements(items):
+    """
+    Verify that all collected tests have the required decorators
+
+    Args:
+        items: list of collected tests
+
+    """
+    red_no_mcg_or_rgw_items = {}
+    for item in items:
+        base_dir = os.path.join(constants.TOP_DIR, "tests")
+        ignored_markers = constants.DECORATORS_CHECK_IGNORED_MARKERS
+        if item.fspath.strpath.startswith(base_dir):
+            item_markers = [marker.name for marker in item.iter_markers()]
+            if any(marker in item_markers for marker in ignored_markers):
+                log.debug(
+                    "Ignoring test case %s as it has a marker in the ignore list",
+                    item.name,
+                )
+
+            # Verify red squad tests are decorated with either @mcg or @rgw
+            elif (
+                "red_squad" in item_markers
+                and "mcg" not in item_markers
+                and "rgw" not in item_markers
+            ):
+                log.debug("%s is a red_squad test without @mcg or @rgw", item.name)
+                red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
+
+    err_msg = ""
+
+    if red_no_mcg_or_rgw_items:
+        err_msg += f"""
+The following tests are missing either the @mcg or @rgw decorators: {json.dumps(red_no_mcg_or_rgw_items, indent=4)}
+
+Red squad tests are required to be decorated with either @mcg or @rgw. Please add either depending on the tests's focus.
+
+                """
+    if err_msg:
+        raise MissingDecoratorError(err_msg)
+
+
+def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version, skipif_upgraded_from or skipif_no_kms
@@ -189,9 +232,14 @@ def pytest_collection_modifyitems(session, items):
         items: list of collected tests
 
     """
-    teardown = config.RUN["cli_params"].get("teardown")
-    deploy = config.RUN["cli_params"].get("deploy")
-    skip_ocs_deployment = config.ENV_DATA["skip_ocs_deployment"]
+    ocs_config = globals()["config"]
+
+    teardown = ocs_config.RUN["cli_params"].get("teardown")
+    deploy = ocs_config.RUN["cli_params"].get("deploy")
+    skip_ocs_deployment = ocs_config.ENV_DATA["skip_ocs_deployment"]
+
+    if config.option.collectonly:
+        verify_test_decorators_requirements(items)
 
     # Add squad markers to each test item based on filepath
     for item in items:
@@ -226,8 +274,8 @@ def pytest_collection_modifyitems(session, items):
             skipif_lvm_not_installed_marker = item.get_closest_marker(
                 "skipif_lvm_not_installed"
             )
-            if skipif_lvm_not_installed_marker and "lvm" in config.RUN:
-                if not config.RUN["lvm"]:
+            if skipif_lvm_not_installed_marker and "lvm" in ocs_config.RUN:
+                if not ocs_config.RUN["lvm"]:
                     log.info(f"Test {item} will be removed due to lvm not installed")
                     items.remove(item)
                     continue
@@ -279,14 +327,15 @@ def pytest_collection_modifyitems(session, items):
                     continue
     # skip UI test on openshift dedicated ODF-MS platform
     if (
-        config.ENV_DATA["platform"].lower() == constants.OPENSHIFT_DEDICATED_PLATFORM
-        or config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
+        ocs_config.ENV_DATA["platform"].lower()
+        == constants.OPENSHIFT_DEDICATED_PLATFORM
+        or ocs_config.ENV_DATA["platform"].lower() == constants.ROSA_PLATFORM
     ):
         for item in items.copy():
             if "/ui/" in str(item.fspath):
                 log.debug(
                     f"Test {item} is removed from the collected items"
-                    f" UI is not supported on {config.ENV_DATA['platform'].lower()}"
+                    f" UI is not supported on {ocs_config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
 
@@ -1099,9 +1148,11 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment_config or deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=constants.DEPLOYMENTCONFIG
-                if deployment_config
-                else constants.DEPLOYMENT,
+                kind=(
+                    constants.DEPLOYMENTCONFIG
+                    if deployment_config
+                    else constants.DEPLOYMENT
+                ),
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)

@@ -3,7 +3,12 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1, skipif_no_kms
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    skipif_no_kms,
+    red_squad,
+    mcg,
+)
 from ocs_ci.framework.testlib import MCGTest, version
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources import pod
@@ -11,6 +16,8 @@ from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
+@mcg
+@red_squad
 @skipif_no_kms
 class TestNoobaaKMS(MCGTest):
     """

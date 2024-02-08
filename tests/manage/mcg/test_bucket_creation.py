@@ -10,6 +10,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
     performance,
     skipif_mcg_only,
+    red_squad,
+    mcg,
 )
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -20,6 +22,8 @@ from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 logger = logging.getLogger(__name__)
 
 
+@mcg
+@red_squad
 @skipif_managed_service
 class TestBucketCreation(MCGTest):
     """

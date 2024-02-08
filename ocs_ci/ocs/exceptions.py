@@ -602,3 +602,14 @@ class ArchitectureNotSupported(Exception):
 
 class TerrafromFileNotFoundException(Exception):
     pass
+
+
+class IncorrectUiOptionRequested(Exception):
+    def __init__(self, text, func=None):
+        super().__init__(text)
+        if func is not None:
+            func()
+
+
+class MissingDecoratorError(Exception):
+    pass

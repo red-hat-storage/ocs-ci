@@ -1660,6 +1660,7 @@ SQUADS = {
     "Yellow": ["/managed-service/"],
     "Turquoise": ["/regional-dr/"],
 }
+DECORATORS_CHECK_IGNORED_MARKERS = ["libtest"]
 
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
