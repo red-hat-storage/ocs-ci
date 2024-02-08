@@ -368,7 +368,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets policy all users '*' (Public access)
         bucket_policy_generated = gen_bucket_policy(
-            user_list=["*"],
+            user_list="*",
             actions_list=["GetObject"],
             resources_list=[f'{s3_bucket.name}/{"*"}'],
         )
