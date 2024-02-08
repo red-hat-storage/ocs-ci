@@ -78,9 +78,18 @@ def test_write_file_to_bucket_on_client(
     downloaded_files = awscli_pod.exec_cmd_on_pod(
         f"ls -A1 {constants.AWSCLI_TEST_OBJ_DIR}"
     ).split(" ")
+    # create s3_creds structure with s3_endpoint so that s3_internal_endpoint is not used
+    s3_creds = {
+        "access_key_id": mcg_obj.access_key_id,
+        "access_key": mcg_obj.access_key,
+        "endpoint": mcg_obj.s3_endpoint,
+    }
     # Write all downloaded objects to the new bucket
     sync_object_directory(
-        awscli_pod, constants.AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+        awscli_pod,
+        constants.AWSCLI_TEST_OBJ_DIR,
+        full_object_path,
+        signed_request_creds=s3_creds,
     )
 
     assert set(downloaded_files).issubset(
