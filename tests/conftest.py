@@ -7470,8 +7470,8 @@ def scale_noobaa_resources(request):
     """
 
     storagecluster_obj = OCP(
-        kind="storagecluster",
-        resource_name="ocs-storagecluster",
+        kind=constants.STORAGECLUSTER,
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
 
@@ -7735,7 +7735,11 @@ def scale_noobaa_db_pod_pv_size(request):
 
     """
 
-    operators = ["ocs-operator", "rook-ceph-operator", "noobaa-operator"]
+    operators = [
+        constants.OCS_SUBSCRIPTION,
+        constants.ROOK_CEPH_OPERATOR,
+        constants.NOOBAA_OPERATOR_DEPLOYMENT,
+    ]
     labels = [
         constants.OCS_OPERATOR_LABEL,
         constants.ROOK_CEPH_OPERATOR_LABEL,
@@ -7748,8 +7752,10 @@ def scale_noobaa_db_pod_pv_size(request):
         """
         Args:
             pv_size(int): Size in GB
+
         Returns:
             None
+
         """
         pods = []
 

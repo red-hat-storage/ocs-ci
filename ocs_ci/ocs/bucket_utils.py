@@ -907,6 +907,7 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         use_yes=True,
     )
 
+
 def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     """
     Create a new backingstore with pv underlying storage using oc create command
@@ -1801,6 +1802,7 @@ def s3_list_objects_v2(
         con_token (str): Token used to continue the list
         fetch_owner (bool): Unique object Identifier
         start_after (str): Name of the object after which you want to list
+
     Returns:
         dict : list object v2 response
 
@@ -2684,6 +2686,7 @@ def list_objects_in_batches(
     which maybe expensive in terms of typical list operations.
 
     Args:
+        mcg_obj (MCG): MCG object
         bucket_name (str): Name of the bucket
         batch_size (int): Number of objects to list at a time, by default 1000
         yield_individual (bool): If True, it will yield indviudal objects until all the
@@ -2711,5 +2714,4 @@ def list_objects_in_batches(
 
         marker = response.get("Contents", [])[-1]["Key"]
         del response
-
 
