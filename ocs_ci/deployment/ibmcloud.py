@@ -371,6 +371,28 @@ class IBMCloudIPI(CloudDeploymentBase):
 
             return json.loads(proc.stdout)
 
+        def _delete_resources(resources, ignore_errors=False):
+            """
+            Deleting leftover resources.
+
+            Args:
+                resources (list): Resource leftover names.
+                ignore_errors (bool): If True, it will be ignoring errors from ibmcloud cmd.
+
+            """
+            for resource in resources:
+                logger.info(f"Deleting leftover {resource}")
+                delete_cmd = f"ibmcloud resource service-instance-delete -g {resource_group} -f --recursive {resource}"
+                if ignore_errors:
+                    try:
+                        exec_cmd(delete_cmd)
+                    except CommandFailed as ex:
+                        logger.debug(
+                            f"Exception will be ignored because ignore_error is set to true! Exception: {ex}"
+                        )
+                else:
+                    exec_cmd(delete_cmd)
+
         def _get_reclamations(resource_group):
             """
             Get reclamations for resource group.
@@ -407,30 +429,38 @@ class IBMCloudIPI(CloudDeploymentBase):
                 )
                 exec_cmd(cmd)
 
-        def _delete_resources(resources, ignore_errors=False):
-            """
-            Deleting leftover resources.
+        def _get_vpc(resource_group_id):
+            cmd = f"ibmcloud is vpcs --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            return json.loads(proc.stdout)
 
-            Args:
-                resources (list): Resource leftover names.
-                ignore_errors (bool): If True, it will be ignoring errors from ibmcloud cmd.
+        def _get_instances_id(resource_group_id):
+            cmd = f"ibmcloud is instances --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            return json.loads(proc.stdout)
 
-            """
-            for resource in resources:
-                logger.info(f"Deleting leftover {resource}")
-                delete_cmd = f"ibmcloud resource service-instance-delete -g {resource_group} -f --recursive {resource}"
-                if ignore_errors:
-                    try:
-                        exec_cmd(delete_cmd)
-                    except CommandFailed as ex:
-                        logger.debug(
-                            f"Exception will be ignored because ignore_error is set to true! Exception: {ex}"
-                        )
-                else:
-                    exec_cmd(delete_cmd)
+        def _get_load_balancer(resource_group_id):
+            cmd = f"ibmcloud is load-balancers --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            return json.loads(proc.stdout)
+
+        def _get_subnet_name(resource_group_id):
+            cmd = f"ibmcloud is subnets --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            return json.loads(proc.stdout)
+
+        def _get_subnet_id(resource_group_id):
+            cmd = f"ibmcloud is subnets --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            return json.loads(proc.stdout)
+
+        def _get_pgw_name(resource_group_id):
+            cmd = f"ibmcloud is public-gateways --resource-group-id {resource_group_id} --output json "
+            proc = exec_cmd(cmd)
+            return json.loads(proc.stdout)
 
         if resource_group:
-            self.get_resource_id(resource_group)
+            # resource_group_id = self.get_resource_id(resource_group)
             leftovers = _get_resources(resource_group)
             if not leftovers:
                 logger.info("No leftovers found")
@@ -493,15 +523,6 @@ class IBMCloudIPI(CloudDeploymentBase):
             and cluster["name"].startswith(cluster_name_prefix)
         ]
         return bool(cluster_matches)
-
-    # def get_resources(self, resource_group):
-    #     """
-    #     Return a list leftover resources for the specified Resource Group
-    #     """
-    #     cmd = f"ibmcloud resource service-instances --type all -g {resource_group} --output json"
-    #     proc = exec_cmd(cmd)
-    #
-    #     return json.loads(proc.stdout)
 
     def get_resource_id(self, resource_group):
         cmd = "ibmcloud resource groups --output json"
