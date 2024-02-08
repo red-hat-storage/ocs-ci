@@ -161,6 +161,7 @@ class ObjectBucket(ABC):
         self.rgw = rgw
         self.bucketclass = bucketclass
         self.replication_policy = self.__parse_replication_policy(replication_policy)
+        self.cluster_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
 
         self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
@@ -206,6 +207,14 @@ class ObjectBucket(ABC):
 
         """
         logger.info(f"Deleting bucket: {self.name}")
+        # switch to a context where the resource was created
+        original_context = None
+        if (
+            config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            != self.cluster_context
+        ):
+            original_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            config.switch_ctx(self.cluster_context)
         try:
             self.internal_delete()
         except NotFoundError:
@@ -215,6 +224,8 @@ class ObjectBucket(ABC):
             verify = True
         if verify:
             self.verify_deletion()
+        if original_context:
+            config.switch_ctx(original_context)
 
     @property
     def status(self):
