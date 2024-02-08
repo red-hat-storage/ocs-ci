@@ -174,7 +174,7 @@ class TestMcgNamespaceDisruptionsCrd(E2ETest):
 
         # Admin sets Public access policy(*)
         bucket_policy_generated = gen_bucket_policy(
-            user_list=["*"],
+            user_list="*",
             actions_list=["GetObject"],
             resources_list=[f'{ns_bucket}/{"*"}'],
         )
