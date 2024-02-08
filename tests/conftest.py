@@ -1422,11 +1422,19 @@ def service_account_factory_fixture(request):
         Delete the service account
         """
         for instance in instances:
+            original_cluster = None
+            if instance.ocp.cluster_context:
+                original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER.get(
+                    "multicluster_index"
+                )
+                config.switch_ctx(instance.ocp.cluster_context)
             helpers.remove_scc_policy(
                 sa_name=instance.name, namespace=instance.namespace
             )
             instance.delete()
             instance.ocp.wait_for_delete(resource_name=instance.name)
+            if original_cluster:
+                config.switch_ctx(original_cluster)
 
     request.addfinalizer(finalizer)
     return factory
