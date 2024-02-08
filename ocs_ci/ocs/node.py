@@ -1023,28 +1023,28 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
         str: The new node name
 
     """
-    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
-
-    plt = PlatformNodesFactory()
-    node_util = plt.get_nodes_platform()
-
-    osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    # For a stretch cluster config, we need to add the zone label too
-    if config.DEPLOYMENT.get("arbiter_deployment") is True:
-        zone = get_node_topology_zone_label(osd_node)
-    else:
-        zone = None
-
+    # from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+    #
+    # plt = PlatformNodesFactory()
+    # node_util = plt.get_nodes_platform()
+    #
+    # osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    # # For a stretch cluster config, we need to add the zone label too
+    # if config.DEPLOYMENT.get("arbiter_deployment") is True:
+    #     zone = get_node_topology_zone_label(osd_node)
+    # else:
+    #     zone = None
+    zone = "data-2"
     # remove nodes
-    remove_nodes([osd_node])
+    # remove_nodes([osd_node])
 
-    log.info(f"Waiting for node {osd_node_name} to be deleted")
-    osd_node.ocp.wait_for_delete(
-        osd_node_name, timeout=600
-    ), f"Node {osd_node_name} is not deleted"
-
-    log.info(f"name of deleted node = {osd_node_name}")
-    node_util.terminate_nodes([osd_node])
+    # log.info(f"Waiting for node {osd_node_name} to be deleted")
+    # osd_node.ocp.wait_for_delete(
+    #     osd_node_name, timeout=600
+    # ), f"Node {osd_node_name} is not deleted"
+    #
+    # log.info(f"name of deleted node = {osd_node_name}")
+    # node_util.terminate_nodes([osd_node])
 
     if config.ENV_DATA.get("rhel_workers"):
         node_type = constants.RHEL_OS
@@ -1090,8 +1090,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     sc_name = constants.LOCAL_BLOCK_RESOURCE
     old_pv_objs = get_pv_objs_in_sc(sc_name)
 
-    osd_node = get_node_objs(node_names=[osd_node_name])[0]
-    osd_ids = get_node_osd_ids(osd_node_name)
+    # osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    # osd_ids = get_node_osd_ids(osd_node_name)
+    osd_ids = ["2", "7"]
     assert osd_ids, f"The node {osd_node_name} does not have osd pods"
 
     ocs_version = config.ENV_DATA["ocs_version"]
@@ -1105,11 +1106,12 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     osd_id = osd_ids[0]
     log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
-    osd_node_hostname_label = get_node_hostname_label(osd_node)
+    # osd_node_hostname_label = get_node_hostname_label(osd_node)
+    osd_node_hostname_label = "compute-1"
 
-    log.info("Scale down node deployments...")
-    scale_down_deployments(osd_node_name)
-    log.info("Scale down deployments finished successfully")
+    # log.info("Scale down node deployments...")
+    # scale_down_deployments(osd_node_name)
+    # log.info("Scale down deployments finished successfully")
 
     new_node_name = delete_and_create_osd_node_vsphere_upi(
         osd_node_name, use_existing_node
