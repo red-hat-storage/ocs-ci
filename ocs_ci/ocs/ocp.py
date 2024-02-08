@@ -84,6 +84,7 @@ class OCP(object):
         self.threading_lock = threading_lock
         self.silent = silent
         self.skip_tls_verify = skip_tls_verify
+        self.cluster_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
 
     @property
     def api_version(self):
@@ -366,6 +367,7 @@ class OCP(object):
             command += " -o yaml"
         output = self.exec_oc_cmd(command)
         log.debug(f"{yaml.dump(output)}")
+        self.cluster_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
         return output
 
     def delete(
@@ -394,6 +396,14 @@ class OCP(object):
             raise CommandFailed(
                 "At least one of resource_name or yaml_file have to " "be provided"
             )
+        # switch to a context where the resource was created
+        original_context = None
+        if (
+            config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            != self.cluster_context
+        ):
+            original_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            config.switch_ctx(self.cluster_context)
 
         command = "delete "
         if resource_name:
@@ -405,7 +415,10 @@ class OCP(object):
         # oc default for wait is True
         if not wait:
             command += " --wait=false"
-        return self.exec_oc_cmd(command, timeout=timeout)
+        cmd_output = self.exec_oc_cmd(command, timeout=timeout)
+        if original_context:
+            config.switch_ctx(original_context)
+        return cmd_output
 
     def apply(self, yaml_file):
         """
