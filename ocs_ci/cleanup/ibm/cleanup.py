@@ -95,6 +95,7 @@ class IbmClusterDeleteion(object):
 
     def determine_cluster_deletion(self):
         resource_group_names = self.ibm_cloud_ipi_obj.get_resource_groups()
+        logger.info(resource_group_names)
         for resource_group_name in resource_group_names:
             created_time = self.ibm_cloud_ipi_obj.get_created_time(resource_group_name)
             for prefix, hours in CLUSTER_PREFIXES_SPECIAL_RULES.items():
