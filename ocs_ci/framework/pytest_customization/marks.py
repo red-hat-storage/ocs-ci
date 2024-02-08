@@ -185,6 +185,11 @@ skipif_mcg_only = pytest.mark.skipif(
     reason="This test cannot run on MCG-Only deployments",
 )
 
+fips_required = pytest.mark.skipif(
+    config.ENV_DATA.get("fips") != "true",
+    reason="Test runs only on FIPS enabled cluster",
+)
+
 stretchcluster_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("arbiter_deployment") is False,
     reason="Test runs only on Stretch cluster with arbiter deployments",

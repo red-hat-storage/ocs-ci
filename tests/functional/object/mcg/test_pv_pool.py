@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    fips_required,
 )
 
 from ocs_ci.ocs.bucket_utils import (
@@ -24,6 +25,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
     get_pod_node,
     get_pod_logs,
+    get_noobaa_core_pod,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC
@@ -33,6 +35,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
 )
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
@@ -346,3 +349,36 @@ class TestPvPool:
         assert (
             "test_object" in search_output
         ), "Dummy data was not found in the node ephemeral storage!"
+
+    @fips_required
+    @tier2
+    @bugzilla("2247731")
+    @polarion_id("OCS-5422")
+    def test_pvpool_bs_in_fips(self, backingstore_factory):
+        """
+        Create PV pool based backingstore and make sure the backingstore doesn't
+        goto Rejected phase on noobaa-core pod restarts
+
+        """
+        # create pv-pool backingstore
+        pv_backingstore = backingstore_factory(
+            "OC",
+            {"pv": [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC)]},
+        )[0]
+
+        # restart noobaa-core pod
+        get_noobaa_core_pod().delete()
+
+        # wait for about 10 mins to check if
+        # the backingstore has reached Rejected state
+        pv_bs_obj = OCP(
+            kind=constants.BACKINGSTORE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            resource_name=pv_backingstore.name,
+        )
+        assert pv_bs_obj.wait_for_resource(
+            condition="Ready", column="PHASE", timeout=600, sleep=5
+        ), "Pv pool backingstore reached rejected phase after noobaa core pod restart"
+        logger.info(
+            "Pv pool backingstore didnt goto Rejected phase after noobaa-core pod restarts"
+        )
