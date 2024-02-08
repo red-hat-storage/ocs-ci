@@ -211,7 +211,6 @@ def unschedule_nodes(node_names):
     ocp = OCP(kind="node")
     node_names_str = " ".join(node_names)
     log.info(f"Unscheduling nodes {node_names_str}")
-    log.info(type(node_names_str))
     ocp.exec_oc_cmd(f"adm cordon {node_names_str}")
 
     wait_for_nodes_status(node_names, status=constants.NODE_READY_SCHEDULING_DISABLED)
@@ -1030,6 +1029,13 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
     node_util = plt.get_nodes_platform()
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    # For a stretch cluster config, we need to add the zone label too
+    if config.DEPLOYMENT.get("arbiter_deployment") is True:
+        zone = get_node_topology_zone_label(osd_node)
+    else:
+        zone = None
+
+    # remove nodes
     remove_nodes([osd_node])
 
     log.info(f"Waiting for node {osd_node_name} to be deleted")
@@ -1047,13 +1053,6 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
 
     if not use_existing_node:
         log.info("Preparing to create a new node...")
-
-        # For a stretch cluster config, we need to add the zone label too
-        if config.DEPLOYMENT.get("arbiter_deployment") is True:
-            node_obj = get_node_objs(node_names=[osd_node_name])[0]
-            zone = get_node_topology_zone_label(node_obj)
-        else:
-            zone = None
 
         new_node_names = add_new_node_and_label_upi(node_type, 1, zone=zone)
         new_node_name = new_node_names[0]
