@@ -4,7 +4,6 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     acceptance,
-    skipif_mcg_only,
     red_squad,
     rgw,
     tier1,
@@ -20,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 @rgw
 @red_squad
-@skipif_mcg_only
 class TestRGWBucketCreation:
     """
     Test creation of a bucket
