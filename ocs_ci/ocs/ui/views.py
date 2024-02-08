@@ -290,10 +290,15 @@ generic_locators = {
         "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project: {}')]",
         By.XPATH,
     ),
-    # project name in the dropdown list
+    # project name in the dropdown list, tested on OCP 4.14 and OCP 4.15
     "test-project-link": (
-        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        "//li[@class='pf-c-menu__list-item']/descendant::*//*[text()='{}'] | "
+        "//li[@class='pf-v5-c-menu__list-item']/descendant::*//*[text()='{}']",
         By.XPATH,
+    ),
+    "show_default_projects_toggle": (
+        "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input']",
+        By.CSS_SELECTOR,
     ),
 }
 

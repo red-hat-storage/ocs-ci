@@ -375,7 +375,7 @@ class PageNavigator(BaseUI):
             return True
 
         default_projects_is_checked = self.driver.find_element_by_css_selector(
-            "input[class='pf-c-switch__input']"
+            self.generic_locators["show_default_projects_toggle"]
         )
         if default_projects_is_checked.get_attribute("data-checked-state") == "false":
             logger.info("Show default projects")
@@ -391,7 +391,11 @@ class PageNavigator(BaseUI):
         )
         if wait_for_project:
             self.do_click(
-                format_locator(self.generic_locators["test-project-link"], project_name)
+                format_locator(
+                    self.generic_locators["test-project-link"],
+                    project_name,
+                    project_name,
+                )
             )
             logger.info(f"Namespace {project_name} selected")
             return True
