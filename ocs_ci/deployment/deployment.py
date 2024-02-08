@@ -1388,6 +1388,9 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"] = {
                     "storageClassName": storageclassnames["encryption"]
                 }
+        performance_profile = config.ENV_DATA.get("performance_profile")
+        if performance_profile:
+            cluster_data["spec"]["resourceProfile"] = performance_profile
         # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards
         if (
             (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
