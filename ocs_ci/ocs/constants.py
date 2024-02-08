@@ -296,6 +296,8 @@ DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
 DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 DEFAULT_OCS_STORAGECLASS = "default-ocs-storage-class"
 
+THIN_CSI_STORAGECLASS = "thin-csi"
+
 # Independent mode default StorageClasses
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rgw"
 
@@ -1892,6 +1894,18 @@ BACKINGSTORE_TYPE_AWS = "aws-s3"
 BACKINGSTORE_TYPE_AZURE = "azure-blob"
 BACKINGSTORE_TYPE_S3_COMP = "s3-compatible"
 BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
+BACKINGSTORE_TYPE_PV_POOL = "pv-pool"
+BACKINGSTORE_TYPE_IBMCOS = "ibm-cos"
+
+BS_TYPE_TO_PLATFORM_NAME_MAPPING = {
+    BACKINGSTORE_TYPE_AWS: "aws",
+    BACKINGSTORE_TYPE_AZURE: "azure",
+    BACKINGSTORE_TYPE_GOOGLE: "gcp",
+    BACKINGSTORE_TYPE_PV_POOL: "pv",
+    BACKINGSTORE_TYPE_S3_COMP: "rgw",
+    BACKINGSTORE_TYPE_IBMCOS: "ibmcos",
+}
+
 
 # Squads assignment
 # Tests are assigned to Squads based on patterns matching test path.

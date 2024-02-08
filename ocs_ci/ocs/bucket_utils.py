@@ -15,7 +15,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import templating
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.helpers.helpers import create_resource
@@ -818,12 +818,54 @@ def cli_create_ibmcos_backingstore(
     )
 
 
-def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with RGW underlying storage using oc create command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": "s3-compatible",
+        "s3Compatible": {
+            "targetBucket": uls_name,
+            "endpoint": cld_mgr.rgw_client.endpoint,
+            "signatureVersion": "v2",
+            "secret": {
+                "name": cld_mgr.rgw_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
 
 
-def cli_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with IBM COS underlying storage using a NooBaa CLI command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create s3-compatible {backingstore_name} "
+        f"--endpoint {cld_mgr.rgw_client.endpoint} "
+        f"--access-key {cld_mgr.rgw_client.access_key} "
+        f"--secret-key {cld_mgr.rgw_client.secret_key} "
+        f"--target-bucket {uls_name}",
+        use_yes=True,
+    )
 
 
 def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
@@ -1851,16 +1893,9 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
         rule_id (str): The ID of the replication rule
         destination_bucket_name (str): The name of the replication destination bucket
     """
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
-        replication_policy = {
-            "rules": [
-                {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
-            ]
-        }
-    else:
-        replication_policy = [
-            {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
-        ]
+    replication_policy = {
+        "rules": [{"rule_id": rule_id, "destination_bucket": destination_bucket_name}]
+    }
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {"replicationPolicy": json.dumps(replication_policy)}
@@ -1893,6 +1928,31 @@ def update_replication_policy(bucket_name, replication_policy_dict):
         kind="obc",
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=bucket_name,
+    ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+
+
+def patch_replication_policy_to_bucketclass(
+    bucketclass_name, rule_id, destination_bucket_name
+):
+    """
+    Patches replication policy to a bucket
+
+    Args:
+        bucketclass_name (str): The name of the bucketclass to patch
+        rule_id (str): The ID of the replication rule
+        destination_bucket_name (str): The name of the replication destination bucket
+    """
+
+    replication_policy = {
+        "rules": [{"rule_id": rule_id, "destination_bucket": destination_bucket_name}]
+    }
+    replication_policy_patch_dict = {
+        "spec": {"replicationPolicy": json.dumps(replication_policy)}
+    }
+    OCP(
+        kind="bucketclass",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucketclass_name,
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
@@ -2123,3 +2183,66 @@ def sample_if_objects_expired(mcg_obj, bucket_name, prefix="", timeout=600, slee
 
     assert sampler.wait_for_func_status(result=True), f"{message} are not expired"
     logger.info(f"{message} are expired")
+
+
+def delete_all_noobaa_buckets(mcg_obj, request):
+    """
+    Deletes all the buckets in noobaa and restores the first.bucket after the current test
+
+    Args:
+        mcg_obj: MCG object
+        request: pytest request object
+    """
+
+    logger.info("Listing all buckets in the cluster")
+    buckets = mcg_obj.s3_client.list_buckets()
+
+    logger.info("Deleting all buckets and its objects")
+    for bucket in buckets["Buckets"]:
+        logger.info(f"Deleting {bucket} and its objects")
+        s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
+        s3_bucket.objects.all().delete()
+        s3_bucket.delete()
+
+    def finalizer():
+        if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
+            logger.info("Creating the default bucket: first.bucket")
+            mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
+        else:
+            logger.info("Skipping creation of first.bucket as it already exists")
+
+    request.addfinalizer(finalizer)
+
+
+def get_nb_bucket_stores(mcg_obj, bucket_name):
+    """
+    Query the noobaa-db for the backingstores/namespacestores
+    that a given bucket is using for its data placement
+
+    Args:
+        mcg_obj: MCG object
+        bucket_name: name of the bucket
+
+    Returns:
+        list: list of backingstores/namespacestores names
+
+    """
+    stores = set()
+    bucket_data = bucket_read_api(mcg_obj, bucket_name)
+
+    # Namespacestore bucket
+    if "namespace" in bucket_data:
+        read_srcs_list = [
+            d["resource"] for d in bucket_data["namespace"]["read_resources"]
+        ]
+        write_src = bucket_data["namespace"]["write_resource"]["resource"]
+        stores.update(read_srcs_list + [write_src])
+
+    # Data bucket
+    else:
+        tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
+        for tier in tiers:
+            tier_data = mcg_obj.send_rpc_query("tier_api", "read_tier", {"name": tier})
+            stores.update(tier_data["reply"]["attached_pools"])
+
+    return list(stores)
