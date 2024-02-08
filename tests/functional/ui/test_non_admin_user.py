@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud_managed,
     black_squad,
+    runs_on_provider,
 )
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import ObjectBucketClaimsTab
@@ -24,6 +25,8 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@ui
+@runs_on_provider
 @black_squad
 class TestOBCUi(ManageTest):
     """
@@ -45,7 +48,6 @@ class TestOBCUi(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    @ui
     @tier2
     @skipif_ibm_cloud_managed
     @bugzilla("2031705")

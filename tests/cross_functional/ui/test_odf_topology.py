@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     ui,
     skipif_hci_provider_or_client,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_node_names
@@ -69,6 +70,7 @@ def teardown_depl_busybox(request):
 
 @ui
 @black_squad
+@runs_on_provider
 @skipif_ibm_cloud_managed
 @skipif_managed_service
 @skipif_external_mode

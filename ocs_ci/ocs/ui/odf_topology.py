@@ -276,7 +276,31 @@ class OdfTopologyHelper:
         node_to_depls = dict()
         for depl_name in depl_names:
 
+            # exclude catching the rook-ceph-osd-10<pod suffix>, rook-ceph-osd-11<pod suffix>,
+            # etc. as they are not the requested pods
+            if depl_name == "rook-ceph-osd-1":
+                depl_name = "rook-ceph-osd-1-"
+
             pods_names = get_pod_name_by_pattern(depl_name)
+
+            # for the depl suc as rook-ceph-crashcollector-a7.a1.7434.ip4.static.sl-reverse.com there is an exclusion -
+            # deployment name will be trimmed by '.com' and it will be the prefix of the pod name
+            if (
+                not pods_names
+                and "rook-ceph-crashcollector" in depl_name
+                and ".com" in depl_name
+            ):
+                ocp = OCP(namespace=config.ENV_DATA["cluster_namespace"])
+                pods_names_all = str(
+                    ocp.exec_oc_cmd(
+                        "get pods -o custom-columns=:metadata.name --no-headers"
+                    )
+                ).split()
+                pods_names = [
+                    pod
+                    for pod in pods_names_all
+                    if depl_name[: depl_name.index(".com")] in pod
+                ]
 
             for pod_name in pods_names:
                 ocp = OCP(

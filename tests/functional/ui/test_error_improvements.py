@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     ui,
     skipif_hci_provider_or_client,
+    runs_on_provider,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 @ui
 @tier3
 @black_squad
+@runs_on_provider
 @skipif_ibm_cloud_managed
 @skipif_managed_service
 @skipif_ocs_version("<4.13")

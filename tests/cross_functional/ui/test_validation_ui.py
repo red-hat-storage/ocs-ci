@@ -18,6 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     skipif_ibm_cloud_managed,
     skipif_hci_provider_or_client,
+    runs_on_provider,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
@@ -34,6 +35,7 @@ class TestUserInterfaceValidation(object):
     """
 
     @ui
+    @runs_on_provider
     @tier1
     @polarion_id("OCS-4925")
     @skipif_ui_not_support("validation")
@@ -49,6 +51,7 @@ class TestUserInterfaceValidation(object):
         validation_ui_obj.validate_storage_cluster_ui()
 
     @ui
+    @runs_on_provider
     @tier1
     @bugzilla("2155743")
     @polarion_id("OCS-2575")
@@ -85,6 +88,7 @@ class TestUserInterfaceValidation(object):
             validation_ui_obj.verification_ui()
 
     @ui
+    @runs_on_provider
     @tier1
     @polarion_id("OCS-4642")
     @skipif_ocs_version("<4.9")
@@ -140,6 +144,7 @@ class TestUserInterfaceValidation(object):
         )
 
     @ui
+    @runs_on_provider
     @pytest.mark.bugzilla("1994584")
     def test_ocs_operator_is_not_present(self, setup_ui_class):
         """
