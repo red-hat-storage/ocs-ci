@@ -341,3 +341,20 @@ class TestNodeReplacementTwice(ManageTest):
             assert (
                 verify_storagecluster_nodetopology
             ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+
+
+class TestNodeReplacementStretchCluster:
+    def test_node_replacement_stretch_cluster(self):
+        """
+        1) Select osd node randomly
+        2) Run IO
+        3) Perform node replacement
+        4) Validate cluster health
+        5) Validate Ios
+
+        """
+
+        osd_node_name = select_osd_node_name()
+        log.info(f"OSD node selected for replacement: {osd_node_name}")
+
+        delete_and_create_osd_node(osd_node_name)
