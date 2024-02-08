@@ -479,6 +479,12 @@ class IBMCloudIPI(CloudDeploymentBase):
                         "Leftovers detected, you can use the details below to report support case in IBM Cloud:\n"
                         f"{leftovers}"
                     )
+            # vpc_leftovers = _get_vpc(resource_group_id)
+            # instances_leftovers = _get_instances_id(resource_group_id)
+            # load_balancer_leftovers = _get_load_balancer(resource_group_id)
+            # subnet_name_leftovers = _get_subnet_name(resource_group_id)
+            # subnet_id_leftovers = _get_subnet_id(resource_group_id)
+            # pgw_name_leftovers = _get_pgw_name(resource_group_id)
 
     def delete_resource_group(self, resource_group):
         """
