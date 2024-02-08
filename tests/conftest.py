@@ -5778,7 +5778,7 @@ def nsfs_bucket_factory_fixture(
 
             # Allow access to the export dir by adding a bucket policy
             bucket_policy = gen_bucket_policy(
-                user_list=["*"],
+                user_list="*",
                 actions_list=["*"],
                 resources_list=["*"],
             )
