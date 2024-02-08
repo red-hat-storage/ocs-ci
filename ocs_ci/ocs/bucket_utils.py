@@ -2342,69 +2342,6 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
     return list(stores)
 
 
-def delete_all_noobaa_buckets(mcg_obj, request):
-    """
-    Deletes all the buckets in noobaa and restores the first.bucket after the current test
-
-    Args:
-        mcg_obj: MCG object
-        request: pytest request object
-    """
-
-    logger.info("Listing all buckets in the cluster")
-    buckets = mcg_obj.s3_client.list_buckets()
-
-    logger.info("Deleting all buckets and its objects")
-    for bucket in buckets["Buckets"]:
-        logger.info(f"Deleting {bucket} and its objects")
-        s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
-        s3_bucket.objects.all().delete()
-        s3_bucket.delete()
-
-    def finalizer():
-        if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
-            logger.info("Creating the default bucket: first.bucket")
-            mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
-        else:
-            logger.info("Skipping creation of first.bucket as it already exists")
-
-    request.addfinalizer(finalizer)
-
-
-def get_nb_bucket_stores(mcg_obj, bucket_name):
-    """
-    Query the noobaa-db for the backingstores/namespacestores
-    that a given bucket is using for its data placement
-
-    Args:
-        mcg_obj: MCG object
-        bucket_name: name of the bucket
-
-    Returns:
-        list: list of backingstores/namespacestores names
-
-    """
-    stores = set()
-    bucket_data = bucket_read_api(mcg_obj, bucket_name)
-
-    # Namespacestore bucket
-    if "namespace" in bucket_data:
-        read_srcs_list = [
-            d["resource"] for d in bucket_data["namespace"]["read_resources"]
-        ]
-        write_src = bucket_data["namespace"]["write_resource"]["resource"]
-        stores.update(read_srcs_list + [write_src])
-
-    # Data bucket
-    else:
-        tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
-        for tier in tiers:
-            tier_data = mcg_obj.send_rpc_query("tier_api", "read_tier", {"name": tier})
-            stores.update(tier_data["reply"]["attached_pools"])
-
-    return list(stores)
-
-
 def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):
     """
     Get the total number of objects in a bucket
