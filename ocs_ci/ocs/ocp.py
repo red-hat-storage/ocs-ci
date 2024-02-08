@@ -153,6 +153,15 @@ class OCP(object):
             str: If out_yaml_format is False.
 
         """
+        # switch to a context where the resource was created
+        original_context = None
+        if (
+            config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            != self.cluster_context
+        ):
+            original_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            config.switch_ctx(self.cluster_context)
+
         oc_cmd = "oc "
         env_kubeconfig = None
         if not cluster_config:
@@ -195,6 +204,9 @@ class OCP(object):
 
         if out_yaml_format:
             return yaml.safe_load(out)
+
+        if original_context:
+            config.switch_ctx(original_context)
         return out
 
     def exec_oc_debug_cmd(self, node, cmd_list, timeout=300, namespace=None):
@@ -396,14 +408,6 @@ class OCP(object):
             raise CommandFailed(
                 "At least one of resource_name or yaml_file have to " "be provided"
             )
-        # switch to a context where the resource was created
-        original_context = None
-        if (
-            config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
-            != self.cluster_context
-        ):
-            original_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
-            config.switch_ctx(self.cluster_context)
 
         command = "delete "
         if resource_name:
@@ -415,10 +419,7 @@ class OCP(object):
         # oc default for wait is True
         if not wait:
             command += " --wait=false"
-        cmd_output = self.exec_oc_cmd(command, timeout=timeout)
-        if original_context:
-            config.switch_ctx(original_context)
-        return cmd_output
+        return self.exec_oc_cmd(command, timeout=timeout)
 
     def apply(self, yaml_file):
         """
