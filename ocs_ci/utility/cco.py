@@ -122,3 +122,40 @@ def delete_service_id(cluster_name, credentials_requests_dir):
         f"--name {cluster_name}"
     )
     exec_cmd(cmd)
+
+
+def get_cco_container_image(release_image, pull_secret_path):
+    """
+    Obtain the CCO container image from the OCP release image.
+
+    Args:
+        release_image (str): Release image from the openshift installer
+        pull_secret_path (str): Path to the pull secret
+
+    Returns:
+
+    """
+    logger.info("Obtaining the cco container image from the OCP release image")
+    cmd = f"oc adm release info --image-for='cloud-credential-operator' {release_image} -a {pull_secret_path}"
+    return exec_cmd(cmd)
+
+
+def extract_ccoctl_binary(cco_image, pull_secret_path):
+    """
+    Extract the ccoctl binary from the CCO container image within the OCP release image.
+
+    Args:
+        cco_image (str): Release image from the openshift installer
+        pull_secret_path (str): Path to the pull secret
+
+    """
+    logger.info("Extracting ccoctl from the CCO container image")
+    bin_dir = config.RUN["bin_dir"]
+    ccoctl_path = os.path.join(bin_dir, "ccoctl")
+    if not os.path.isfile(ccoctl_path):
+        extract_cmd = (
+            f"oc extract {cco_image} --file='{ccoctl_path}' -a {pull_secret_path}"
+        )
+        exec_cmd(extract_cmd)
+        chmod_cmd = f"chmod 775 {ccoctl_path}"
+        exec_cmd(chmod_cmd)
