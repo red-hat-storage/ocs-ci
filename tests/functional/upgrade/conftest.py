@@ -593,14 +593,14 @@ def block_pod(pvc_factory_session, pod_factory_session):
     """
     pvc = pvc_factory_session(size=5, interface=constants.CEPHBLOCKPOOL)
     pod = pod_factory_session(pvc=pvc, interface=constants.CEPHBLOCKPOOL)
-    logger.info(f"Utilization of RBD PVC {pvc.name} with pod {pod.name} starts")
+    log.info(f"Utilization of RBD PVC {pvc.name} with pod {pod.name} starts")
     pod.run_io(
         storage_type="fs",
         size="4G",
         fio_filename="fio-rand-write",
     )
     pod.get_fio_results()
-    logger.info(f"IO finished on pod {pod.name}")
+    log.info(f"IO finished on pod {pod.name}")
     return pod
 
 
@@ -616,7 +616,7 @@ def block_md5(block_pod):
         file_name="fio-rand-write",
         block=False,
     )
-    logger.info(f"RBD md5: {md5}")
+    log.info(f"RBD md5: {md5}")
     return md5
 
 
@@ -629,14 +629,14 @@ def fs_pod(pvc_factory_session, pod_factory_session):
     """
     pvc = pvc_factory_session(size=5, interface=constants.CEPHFILESYSTEM)
     pod = pod_factory_session(pvc=pvc, interface=constants.CEPHFILESYSTEM)
-    logger.info(f"Utilization of Ceph FS PVC {pvc.name} with pod {pod.name} starts")
+    log.info(f"Utilization of Ceph FS PVC {pvc.name} with pod {pod.name} starts")
     pod.run_io(
         storage_type="fs",
         size="4G",
         fio_filename="fio-rand-write",
     )
     pod.get_fio_results()
-    logger.info(f"IO finished on pod {pod.name}")
+    log.info(f"IO finished on pod {pod.name}")
     return pod
 
 
@@ -652,5 +652,5 @@ def fs_md5(fs_pod):
         file_name="fio-rand-write",
         block=False,
     )
-    logger.info(f"Ceph FS md5: {md5}")
+    log.info(f"Ceph FS md5: {md5}")
     return md5
