@@ -1,7 +1,6 @@
 import pytest
 import logging
 import time
-import yaml
 import os
 
 
@@ -1148,7 +1147,6 @@ class TestNfsEnable(ManageTest):
             # Create deployment config for app pod
             log.info("----create deployment config----")
             deployment_config_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
-            deployment_config_data = yaml.safe_load(deployment_config)
             helpers.create_resource(**deployment_config_data)
             time.sleep(60)
 
