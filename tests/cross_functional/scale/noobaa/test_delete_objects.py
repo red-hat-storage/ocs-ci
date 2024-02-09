@@ -8,7 +8,13 @@ from ocs_ci.ocs.bucket_utils import (
     list_objects_in_batches,
     s3_delete_object,
 )
-from ocs_ci.framework.pytest_customization.marks import bugzilla, polarion_id, scale
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    polarion_id,
+    scale,
+    mcg,
+    orange_squad,
+)
 
 log = logging.getLogger(__name__)
 
@@ -28,17 +34,20 @@ def s3bench(request):
 
 
 @scale
+@orange_squad
+@mcg
 class TestDeleteObjects:
     @bugzilla("2181535")
     @polarion_id("OCS-4916")
     @pytest.mark.parametrize(
         argnames=["delete_mode"],
         argvalues=[
-            # uncomment the blow params when we have stable noobaa db
-            # or work around for memory issue caused during single deletion
+            # Below parameter is commented now because single deletion is causing
+            # heavy toll on memory consumption for the jenkins agent and test run time,
+            # as we have to delete one object at a time, till 2 million objects are deleted.
             # pytest.param("single"),
             pytest.param("batch"),
-            # pytest.param("whole"),
+            pytest.param("whole"),
         ],
     )
     def test_delete_objects(
