@@ -2437,7 +2437,9 @@ ARBITER_ZONE = "a"
 DATA_ZONE_1 = "b"
 DATA_ZONE_2 = "c"
 
-ZONES_LABELS = ["data-1", "data-2", "arbiter"]
+DATA_ZONE_LABELS = ["data-1", "data-2"]
+ARBITER_ZONE_LABEL = ["arbiter"]
+ZONES_LABELS = DATA_ZONE_LABELS.extend(ARBITER_ZONE_LABEL)
 
 RGW_SVC_TOPOLOGY_ANNOTATIONS = "service.kubernetes.io/topology-mode: Auto"
 
