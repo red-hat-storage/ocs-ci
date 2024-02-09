@@ -8,8 +8,6 @@ import os
 import shlex
 import time
 
-# import gc
-
 from uuid import uuid4
 
 import boto3
