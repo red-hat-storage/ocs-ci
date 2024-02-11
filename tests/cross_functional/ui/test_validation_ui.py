@@ -144,6 +144,7 @@ class TestUserInterfaceValidation(object):
         )
 
     @ui
+    @tier1
     @runs_on_provider
     @pytest.mark.bugzilla("1994584")
     def test_ocs_operator_is_not_present(self, setup_ui_class):
@@ -152,4 +153,14 @@ class TestUserInterfaceValidation(object):
         """
 
         validation_ui_obj = ValidationUI()
-        assert validation_ui_obj.verify_odf_without_ocs_in_installed_operator()
+        (
+            odf_operator_present,
+            ocs_operator_present,
+        ) = validation_ui_obj.verify_odf_without_ocs_in_installed_operator()
+        assert (
+            odf_operator_present
+        ), "ODF operator is not present in the installed operator tab"
+        assert not ocs_operator_present, (
+            "OCS operator is present in the installed operator tab, expected to see only ODF "
+            "operator"
+        )

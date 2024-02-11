@@ -212,9 +212,9 @@ deployment_4_15 = {
 
 generic_locators = {
     "project_selector": (
-        'button[class="pf-c-dropdown__toggle pf-m-plain"],'
-        'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
-        By.CSS_SELECTOR,
+        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        By.XPATH,
     ),
     "select_openshift-storage_project": (
         'a[id="openshift-storage-link"]',
@@ -300,6 +300,8 @@ generic_locators = {
         "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input']",
         By.CSS_SELECTOR,
     ),
+    "developer_selected": ("//h2[.='Developer']", By.XPATH),
+    "administrator_selected": ("//h2[.='Administrator']", By.XPATH),
 }
 
 ocs_operator_locators = {
@@ -377,7 +379,8 @@ obc = {
         By.CSS_SELECTOR,
     ),
     "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
+        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator'] | "
+        "//h2[.='Administrator']",
         By.XPATH,
     ),
     "obc_menu_name": (
@@ -421,10 +424,6 @@ obc = {
 }
 
 pvc = {
-    "pvc_project_selector": (
-        'button[class="pf-c-dropdown__toggle pf-m-plain"]',
-        By.CSS_SELECTOR,
-    ),
     "select_openshift-storage_project": (
         'a[id="openshift-storage-link"]',
         By.CSS_SELECTOR,
@@ -551,7 +550,6 @@ pvc_4_8 = {
 }
 
 pvc_4_9 = {
-    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "test-project-link": ("//span[contains(text(),'{}')]", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
 }
@@ -569,11 +567,6 @@ pvc_4_12 = {
 }
 
 pvc_4_14 = {
-    "pvc_project_selector": (
-        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
-        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
-        By.XPATH,
-    ),
     # tested on both for 4.14 and 4.15
     "create_pvc_dropdown_item": (
         "//button[(@class='pf-c-dropdown__menu-item' or @class='pf-v5-c-dropdown__menu-item') "
@@ -582,12 +575,6 @@ pvc_4_14 = {
     ),
 }
 
-pvc_4_15 = {
-    "pvc_project_selector": (
-        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
-        By.XPATH,
-    ),
-}
 
 page_nav = {
     "page_navigator_sidebar": ("page-sidebar", By.ID),
@@ -1449,7 +1436,6 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
-    "pvc_project_selector": (".pf-c-menu-toggle__text", By.CSS_SELECTOR),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "developer_dropdown": (
         'button[data-test-id="perspective-switcher-toggle"]',
@@ -1550,19 +1536,6 @@ validation_4_14 = {
     "system-capacity": ("//div[contains(text(),'System raw capacity')]", By.XPATH),
     "storagesystems_overview": (
         "//button[@data-test='horizontal-link-Overview']",
-        By.XPATH,
-    ),
-    "pvc_project_selector": (
-        "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
-        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
-        By.XPATH,
-    ),
-}
-
-
-validation_4_15 = {
-    "pvc_project_selector": (
-        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
         By.XPATH,
     ),
 }
@@ -1776,7 +1749,6 @@ locators = {
             **pvc_4_9,
             **pvc_4_12,
             **pvc_4_14,
-            **pvc_4_15,
         },
         "acm_page": {
             **acm_page_nav,
@@ -1794,7 +1766,6 @@ locators = {
             **validation_4_12,
             **validation_4_13,
             **validation_4_14,
-            **validation_4_15,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},

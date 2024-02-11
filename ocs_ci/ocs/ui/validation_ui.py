@@ -559,11 +559,7 @@ class ValidationUI(PageNavigator):
         if self.ocp_version_semantic >= version.VERSION_4_9:
             self.navigate_installed_operators_page()
             logger.info("Search and select openshift-storage namespace")
-            self.do_click(self.validation_loc["pvc_project_selector"])
-            self.do_send_keys(
-                self.validation_loc["search-project"], text="openshift-storage"
-            )
-            self.wait_for_namespace_selection(project_name="openshift-storage")
+            self.select_namespace(project_name="openshift-storage")
             logger.info(
                 "Click on Storage System under Provided APIs on Installed Operators Page"
             )
@@ -608,8 +604,8 @@ class ValidationUI(PageNavigator):
         """
         Function to verify the unprivileged users can't access ODF dashbaord
         """
-        self.do_click(self.validation_loc["developer_dropdown"])
-        self.do_click(self.validation_loc["select_administrator"], timeout=5)
+
+        self.select_administrator_user()
         try:
             self.nav_odf_default_page()
         except TimeoutException:
@@ -619,18 +615,20 @@ class ValidationUI(PageNavigator):
         else:
             raise UnexpectedODFAccessException
 
-    def verify_odf_without_ocs_in_installed_operator(self) -> bool:
+    def verify_odf_without_ocs_in_installed_operator(self) -> tuple:
         """
         Function to validate ODF operator is present post ODF installation,
         expectation is only ODF operator should be present in Installed operators tab and
         OCS operator shouldn't be present. This function is only written for 4.9+ versions
 
-        Returns:
-        True: If only odf operator is present in the UI
-        False: If ocs operator is also present in the UI
+        :returns: tuple of two boolean values, first value is for ODF operator presence and
+        second value is for OCS operator presence
         """
         logger.info("Navigating to Installed Operator Page")
         self.navigate_installed_operators_page()
+
+        self.select_namespace(project_name="openshift-storage")
+
         logger.info("Searching for Openshift Data Foundation Operator")
         odf_operator_presence = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["odf-operator"],
@@ -643,4 +641,4 @@ class ValidationUI(PageNavigator):
             timeout=1,
             expected_text="OpenShift Container Storage",
         )
-        return odf_operator_presence and not ocs_operator_presence
+        return odf_operator_presence, ocs_operator_presence

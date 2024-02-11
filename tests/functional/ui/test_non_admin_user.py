@@ -49,6 +49,7 @@ class TestOBCUi(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier2
+    @runs_on_provider
     @skipif_ibm_cloud_managed
     @bugzilla("2031705")
     @polarion_id("OCS-4620")
@@ -73,6 +74,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
 
     @ui
     @tier1
+    @runs_on_provider
     @skipif_ibm_cloud_managed
     @bugzilla("2103975")
     @polarion_id("OCS-4667")

@@ -928,7 +928,11 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
     confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
     confirm_login_el.click()
 
-    if config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
+    hci_platform_conf_confirmed = (
+        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+    )
+
+    if hci_platform_conf_confirmed:
         dashboard_url = console_url + "/dashboards"
         # automatically proceed to load-cluster if test marked with provider decorator
         if (
@@ -951,7 +955,7 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
     if default_console is True and username is constants.KUBEADMIN:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
-    if username is not constants.KUBEADMIN:
+    if username is not constants.KUBEADMIN and not hci_platform_conf_confirmed:
         skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
         skip_tour_el.click()
     return driver
