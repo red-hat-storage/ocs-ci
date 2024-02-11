@@ -409,6 +409,19 @@ class BaseUI:
         wait = WebDriverWait(self.driver, timeout)
         return wait.until(ec.visibility_of_element_located((locator[1], locator[0])))
 
+    def wait_for_element_to_be_present(self, locator, timeout=30):
+        """
+        Wait for element to be present. Use when Web element should be present, but may be placed above another element
+        on the z-layer
+        Method does not fail when Web element not found
+
+        Args:
+             locator (tuple): (GUI element needs to operate on (str), type (By)).
+             timeout (int): Looks for a web element until timeout (sec) occurs
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        return wait.until(ec.presence_of_element_located((locator[1], locator[0])))
+
     def get_element_attribute(self, locator, attribute, safe: bool = False):
         """
         Get attribute from WebElement

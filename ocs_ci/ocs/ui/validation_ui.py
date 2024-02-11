@@ -497,6 +497,8 @@ class ValidationUI(PageNavigator):
         if not (
             config.DEPLOYMENT.get("external_mode")
             or config.ENV_DATA["mcg_only_deployment"]
+            or config.ENV_DATA["platform"].lower()
+            == constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             storage_system_details.nav_cephblockpool_verify_statusready()
 

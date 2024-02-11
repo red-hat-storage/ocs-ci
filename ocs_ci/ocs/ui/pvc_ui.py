@@ -54,7 +54,7 @@ class PvcUI(PageNavigator):
         logger.info("Select the Storage Class type")
         self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
 
-        logger.info("Enter PVC name")
+        logger.info(f"Enter PVC name: '{pvc_name}'")
         self.do_send_keys(self.pvc_loc["pvc_name"], pvc_name)
 
         logger.info("Select Access Mode")
@@ -101,10 +101,6 @@ class PvcUI(PageNavigator):
             project_name (str): name of test project
         """
         self.navigate_persistentvolumeclaims_page()
-
-        logger.info(f"Search and Select test project {project_name}")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
 
         self.wait_for_namespace_selection(project_name=project_name)
 

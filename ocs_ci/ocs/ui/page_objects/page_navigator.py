@@ -369,12 +369,9 @@ class PageNavigator(BaseUI):
         ):
             self.take_screenshot("namespace_selected")
             logger.info("Project already selected")
-            self.do_click(
-                format_locator(self.generic_locators["project_selected"], project_name)
-            )
             return True
 
-        default_projects_is_checked = self.driver.find_element_by_css_selector(
+        default_projects_is_checked = self.wait_for_element_to_be_present(
             self.generic_locators["show_default_projects_toggle"]
         )
         if default_projects_is_checked.get_attribute("data-checked-state") == "false":
@@ -384,7 +381,7 @@ class PageNavigator(BaseUI):
         logger.info(f"Wait and select namespace {project_name}")
         wait_for_project = self.wait_until_expected_text_is_found(
             locator=format_locator(
-                self.generic_locators["test-project-link"], project_name
+                self.generic_locators["test-project-link"], project_name, project_name
             ),
             expected_text=f"{project_name}",
             timeout=10,

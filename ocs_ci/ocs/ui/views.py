@@ -1769,7 +1769,15 @@ locators = {
             **deployment_4_15,
         },
         "obc": obc,
-        "pvc": {**pvc, **pvc_4_7, **pvc_4_8, **pvc_4_9, **pvc_4_12, **pvc_4_15},
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+            **pvc_4_15,
+        },
         "acm_page": {
             **acm_page_nav,
             **acm_configuration,
