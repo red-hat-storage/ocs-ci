@@ -433,7 +433,8 @@ pvc = {
         'button[data-test="storageclass-dropdown"]',
         By.CSS_SELECTOR,
     ),
-    "storage_class_name": ('//*[text()="{}"]', By.XPATH),
+    # works for ODF 4.14 and 4.15; OCP 4.14 and 4.15
+    "storage_class_name": ('//a[@id="{}-link"]', By.XPATH),
     "ocs-storagecluster-ceph-rbd": (
         'a[id="ocs-storagecluster-ceph-rbd-link"]',
         By.CSS_SELECTOR,

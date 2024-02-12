@@ -621,8 +621,8 @@ class ValidationUI(PageNavigator):
         expectation is only ODF operator should be present in Installed operators tab and
         OCS operator shouldn't be present. This function is only written for 4.9+ versions
 
-        :returns: tuple of two boolean values, first value is for ODF operator presence and
-        second value is for OCS operator presence
+        Returns: tuple: odf_operator_presence, ocs_operator_presence
+
         """
         logger.info("Navigating to Installed Operator Page")
         self.navigate_installed_operators_page()

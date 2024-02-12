@@ -956,6 +956,7 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
     if username is not constants.KUBEADMIN and not hci_platform_conf_confirmed:
+        # OCP 4.14 and OCP 4.15 observed default user role is an admin
         skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
         skip_tour_el.click()
     return driver
