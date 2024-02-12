@@ -32,6 +32,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
+from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
@@ -1421,11 +1422,19 @@ def service_account_factory_fixture(request):
         Delete the service account
         """
         for instance in instances:
+            original_cluster = None
+            if instance.ocp.cluster_context:
+                original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER.get(
+                    "multicluster_index"
+                )
+                ocsci_config.switch_ctx(instance.ocp.cluster_context)
             helpers.remove_scc_policy(
                 sa_name=instance.name, namespace=instance.namespace
             )
             instance.delete()
             instance.ocp.wait_for_delete(resource_name=instance.name)
+            if original_cluster:
+                ocsci_config.switch_ctx(original_cluster)
 
     request.addfinalizer(finalizer)
     return factory
@@ -2446,6 +2455,57 @@ def awscli_pod(request, awscli_pod_session):
     return awscli_pod_session
 
 
+@pytest.fixture(scope="session")
+def awscli_pod_client_session(
+    request, project_factory_session, service_account_factory_session
+):
+    """
+    Creates a new AWSCLI pod for relaying commands on a client cluster.
+
+    Args:
+        scope_name (str): The name of the fixture's scope,
+        used for giving a descriptive name to the pod and configmap
+
+    Returns:
+        pod: A pod running the AWS CLI
+        int: Index of client cluster where the awscli pod is running
+
+    """
+    original_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+    ocsci_config.switch_to_consumer()
+    log.info(
+        f"Creating namespace {constants.AWSCLI_NAMESPACE} on client for aws cli pod"
+    )
+    project = project_factory_session(constants.AWSCLI_NAMESPACE)
+    log.info("Creating service account on client for aws cli pod")
+    sa = service_account_factory_session(project=project)
+    client_cluster = ocsci_config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+    ocsci_config.switch_ctx(original_cluster)
+
+    def _create_awscli_pod():
+        ocsci_config.switch_ctx(client_cluster)
+        log.info(f"Switched to client with index {client_cluster}")
+        awscli_pod = create_awscli_pod(
+            namespace=constants.AWSCLI_NAMESPACE, service_account=sa.name
+        )
+        ocsci_config.switch_ctx(original_cluster)
+        log.info(f"Switched to provider with index {original_cluster}")
+        return awscli_pod
+
+    def _awscli_pod_cleanup():
+        ocsci_config.switch_ctx(client_cluster)
+        log.info(f"Switched to client with index {client_cluster}")
+        awscli_pod_cleanup(namespace=constants.AWSCLI_NAMESPACE)
+        ocsci_config.switch_ctx(original_cluster)
+        log.info(f"Switched to provider with index {original_cluster}")
+
+    request.addfinalizer(_awscli_pod_cleanup)
+
+    log.info("Cleaning up any previous AWS CLI resources on client")
+    _awscli_pod_cleanup()
+    return _create_awscli_pod(), client_cluster
+
+
 def awscli_pod_fixture(request, scope_name):
     """
     Creates a new AWSCLI pod for relaying commands
@@ -2458,87 +2518,11 @@ def awscli_pod_fixture(request, scope_name):
 
     """
 
-    def _create_awscli_pod():
-        # Create the service-ca configmap to be mounted upon pod creation
-        service_ca_data = templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
-        service_ca_configmap_name = create_unique_resource_name(
-            constants.AWSCLI_SERVICE_CA_CONFIGMAP_NAME, scope_name
-        )
-        service_ca_data["metadata"]["name"] = service_ca_configmap_name
-        service_ca_data["metadata"]["namespace"] = ocsci_config.ENV_DATA[
-            "cluster_namespace"
-        ]
-        s3cli_label_k, s3cli_label_v = constants.S3CLI_APP_LABEL.split("=")
-        service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
-        log.info("Trying to create the AWS CLI service CA")
-        service_ca_configmap = helpers.create_resource(**service_ca_data)
-        OCP(
-            namespace=ocsci_config.ENV_DATA["cluster_namespace"], kind="ConfigMap"
-        ).wait_for_resource(
-            resource_name=service_ca_configmap.name, column="DATA", condition="1"
-        )
-
-        log.info("Creating the AWS CLI StatefulSet")
-        awscli_sts_dict = templating.load_yaml(constants.S3CLI_MULTIARCH_STS_YAML)
-        awscli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
-            "name"
-        ] = service_ca_configmap_name
-        awscli_sts_dict["metadata"]["namespace"] = ocsci_config.ENV_DATA[
-            "cluster_namespace"
-        ]
-        update_container_with_mirrored_image(awscli_sts_dict)
-        update_container_with_proxy_env(awscli_sts_dict)
-        s3cli_sts_obj = helpers.create_resource(**awscli_sts_dict)
-
-        log.info("Verifying the AWS CLI StatefulSet is running")
-        assert s3cli_sts_obj, "Failed to create S3CLI STS"
-        awscli_pod_obj = retry(IndexError, tries=3, delay=15)(
-            lambda: Pod(
-                **get_pods_having_label(
-                    constants.S3CLI_LABEL, ocsci_config.ENV_DATA["cluster_namespace"]
-                )[0]
-            )
-        )()
-        helpers.wait_for_resource_state(
-            awscli_pod_obj, constants.STATUS_RUNNING, timeout=180
-        )
-        return awscli_pod_obj
-
-    def _awscli_pod_cleanup():
-        log.info("Deleting the AWS CLI StatefulSet")
-        ocp_sts = OCP(
-            kind="StatefulSet",
-            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-        )
-        try:
-            ocp_sts.delete(resource_name=constants.S3CLI_STS_NAME)
-        except CommandFailed as e:
-            if "NotFound" not in str(e):
-                log.info(
-                    "The AWS CLI STS was not found, assuming it was already deleted"
-                )
-        except TimeoutError:
-            log.warning(
-                "Standard deletion of the AWS CLI STS timed-out, forcing deletion"
-            )
-            ocp_sts.delete(resource_name=constants.S3CLI_STS_NAME, force=True)
-
-        log.info("Deleting the AWS CLI service CA")
-        ocp_cm = OCP(
-            kind="ConfigMap",
-            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-        )
-        awscli_service_ca_query = ocp_cm.get(selector=constants.S3CLI_APP_LABEL).get(
-            "items"
-        )
-        if awscli_service_ca_query:
-            ocp_cm.delete(resource_name=awscli_service_ca_query[0]["metadata"]["name"])
-
-    request.addfinalizer(_awscli_pod_cleanup)
+    request.addfinalizer(awscli_pod_cleanup)
 
     log.info("Cleaning up any previous AWS CLI resources")
-    _awscli_pod_cleanup()
-    return _create_awscli_pod()
+    awscli_pod_cleanup()
+    return create_awscli_pod(scope_name)
 
 
 @pytest.fixture(scope="session")

@@ -207,6 +207,7 @@ OCSINIT = "ocsinit"
 SUBSCRIPTION_WITH_ACM = "Subscription.operators.coreos.com"
 
 # Other
+AWSCLI_NAMESPACE = "awscli"
 SECRET = "Secret"
 TEST = "test"
 NAMESPACE = "Namespace"
