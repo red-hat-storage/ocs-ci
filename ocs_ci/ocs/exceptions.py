@@ -602,3 +602,7 @@ class ArchitectureNotSupported(Exception):
 
 class TerrafromFileNotFoundException(Exception):
     pass
+
+
+class MissingDecoratorError(Exception):
+    pass

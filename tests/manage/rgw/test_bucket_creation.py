@@ -2,7 +2,13 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import acceptance, tier1, tier3
+from ocs_ci.framework.pytest_customization.marks import (
+    acceptance,
+    red_squad,
+    rgw,
+    tier1,
+    tier3,
+)
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
 import botocore
@@ -11,6 +17,8 @@ import re
 logger = logging.getLogger(__name__)
 
 
+@rgw
+@red_squad
 class TestRGWBucketCreation:
     """
     Test creation of a bucket

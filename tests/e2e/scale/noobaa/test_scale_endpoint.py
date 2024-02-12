@@ -1,6 +1,7 @@
 import pytest
 import logging
 import time
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import MCGTest, scale, skipif_ocs_version
 from ocs_ci.ocs import constants, defaults, ocp, scale_pgsql
 from ocs_ci.utility import utils
@@ -49,6 +50,7 @@ def worker_node(request):
     return worker_node
 
 
+@mcg
 @scale
 @skipif_ocs_version("<4.5")
 @pytest.mark.parametrize(

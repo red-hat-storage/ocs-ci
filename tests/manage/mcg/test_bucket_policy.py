@@ -45,13 +45,20 @@ from ocs_ci.ocs.constants import (
     bucket_website_action_list,
     bucket_version_action_list,
 )
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service, bugzilla
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    bugzilla,
+    red_squad,
+    mcg,
+)
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
 
+@mcg
+@red_squad
 @skipif_managed_service
 @skipif_ocs_version("<4.3")
 class TestS3BucketPolicy(MCGTest):
@@ -242,12 +249,16 @@ class TestS3BucketPolicy(MCGTest):
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
             user_list=[obc_obj.obc_account],
-            actions_list=["PutObject"]
-            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
-            else ["GetObject", "DeleteObject"],
-            effect="Allow"
-            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
-            else "Deny",
+            actions_list=(
+                ["PutObject"]
+                if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
+                else ["GetObject", "DeleteObject"]
+            ),
+            effect=(
+                "Allow"
+                if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
+                else "Deny"
+            ),
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)

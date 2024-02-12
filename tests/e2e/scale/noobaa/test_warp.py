@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     bugzilla,
+    mcg,
 )
 
 log = logging.getLogger(__name__)
@@ -17,7 +18,6 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(scope="function")
 def warps3(request):
-
     warps3 = warp.Warp()
     warps3.create_resource_warp()
 
@@ -28,6 +28,7 @@ def warps3(request):
     return warps3
 
 
+@mcg
 @scale
 @ignore_leftovers
 class TestWarp(E2ETest):

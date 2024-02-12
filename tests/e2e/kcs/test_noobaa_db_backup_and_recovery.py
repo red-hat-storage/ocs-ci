@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import mcg
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -15,6 +16,7 @@ from ocs_ci.ocs.resources.pod import wait_for_storage_pods
 log = logging.getLogger(__name__)
 
 
+@mcg
 @tier3
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2605")

@@ -1,8 +1,11 @@
 import logging
 
 from ocs_ci.framework.pytest_customization import marks
-from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_managed_service,
+    tier1,
+    mcg,
+)
 from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.version import get_ocp_version
@@ -11,6 +14,7 @@ from ocs_ci.utility.version import get_semantic_version, VERSION_4_10
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @tier1
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")

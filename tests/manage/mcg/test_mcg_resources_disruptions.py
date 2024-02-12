@@ -13,6 +13,8 @@ from ocs_ci.framework.testlib import (
     tier4c,
     tier3,
     skipif_managed_service,
+    red_squad,
+    mcg,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -30,6 +32,8 @@ def setup(request):
     request.cls.cl_obj = cluster.CephCluster()
 
 
+@mcg
+@red_squad
 @ignore_leftovers()
 @pytest.mark.usefixtures(setup.__name__)
 class TestMCGResourcesDisruptions(MCGTest):

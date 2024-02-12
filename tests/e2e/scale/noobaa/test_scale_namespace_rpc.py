@@ -6,12 +6,14 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     on_prem_platform_required,
     scale,
+    mcg,
 )
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
 
+@mcg
 @skipif_ocs_version("!=4.6")
 @scale
 class TestScaleNamespace(E2ETest):
