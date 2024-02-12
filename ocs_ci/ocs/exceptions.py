@@ -606,3 +606,7 @@ class ArchitectureNotSupported(Exception):
 
 class TerrafromFileNotFoundException(Exception):
     pass
+
+
+class UnknownOperationForTerraformVariableUpdate(Exception):
+    pass
