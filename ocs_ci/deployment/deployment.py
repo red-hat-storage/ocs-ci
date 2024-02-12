@@ -2868,7 +2868,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         multicluster_engine._has_phase = True
         resource = multicluster_engine.get()
         for item in resource["spec"]["overrides"]["components"]:
-            if item["name"] == "managedserviceaccount-preview":
+            if item["name"] == "managedserviceaccount":
                 item["enabled"] = True
         multicluster_engine_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="multiengine", delete=False
