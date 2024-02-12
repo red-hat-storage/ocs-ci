@@ -133,9 +133,9 @@ class TestS3BucketPolicy(MCGTest):
         modified_policy = json.loads(get_modified_policy["Policy"])
         logger.info(f"Got modified bucket policy: {modified_policy}")
 
-        actions_from_modified_policy = modified_policy["statement"][0]["action"]
+        actions_from_modified_policy = modified_policy["Statement"][0]["Action"]
         modified_actions = list(map(str, actions_from_modified_policy))
-        initial_actions = list(map(str.lower, actions))
+        initial_actions = actions
         logger.info(f"Actions from modified_policy: {modified_actions}")
         logger.info(f"User provided actions actions: {initial_actions}")
         if modified_actions == initial_actions:
@@ -251,12 +251,16 @@ class TestS3BucketPolicy(MCGTest):
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
             user_list=[obc_obj.obc_account],
-            actions_list=["PutObject"]
-            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
-            else ["GetObject", "DeleteObject"],
-            effect="Allow"
-            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
-            else "Deny",
+            actions_list=(
+                ["PutObject"]
+                if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
+                else ["GetObject", "DeleteObject"]
+            ),
+            effect=(
+                "Allow"
+                if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_6
+                else "Deny"
+            ),
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
         )
         bucket_policy = json.dumps(bucket_policy_generated)
@@ -364,7 +368,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin sets policy all users '*' (Public access)
         bucket_policy_generated = gen_bucket_policy(
-            user_list=["*"],
+            user_list="*",
             actions_list=["GetObject"],
             resources_list=[f'{s3_bucket.name}/{"*"}'],
         )
@@ -690,7 +694,7 @@ class TestS3BucketPolicy(MCGTest):
         # Statement_1 public read access to a bucket
         single_statement_policy = gen_bucket_policy(
             sid="statement-1",
-            user_list=["*"],
+            user_list="*",
             actions_list=["GetObject"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
             effect="Allow",
@@ -702,14 +706,14 @@ class TestS3BucketPolicy(MCGTest):
             "statement_2": {
                 "Action": "s3:PutObject",
                 "Effect": "Allow",
-                "Principal": obc_obj.obc_account,
+                "Principal": {"AWS": obc_obj.obc_account},
                 "Resource": [f'arn:aws:s3:::{obc_obj.bucket_name}/{"*"}'],
                 "Sid": "Statement-2",
             },
             "statement_3": {
                 "Action": "s3:DeleteObject",
                 "Effect": "Deny",
-                "Principal": [obc_obj.obc_account],
+                "Principal": {"AWS": [obc_obj.obc_account]},
                 "Resource": [f'arn:aws:s3:::{"*"}'],
                 "Sid": "Statement-3",
             },
