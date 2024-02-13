@@ -213,13 +213,14 @@ class BusyBox(DRWorkload):
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
 
-    def delete_workload(self, force=False, rbd_name="rbd"):
+    def delete_workload(self, force=False, rbd_name="rbd", switch_ctx=None):
         """
         Delete busybox workload
 
         Args:
             force (bool): If True, force remove the stuck resources, default False
             rbd_name (str): Name of the pool
+            switch_ctx (int): The cluster index by the cluster name
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -227,7 +228,7 @@ class BusyBox(DRWorkload):
         """
         image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
         try:
-            config.switch_acm_ctx()
+            config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             run_cmd(
                 f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
             )
@@ -277,7 +278,7 @@ class BusyBox(DRWorkload):
             raise ResourceNotDeleted(err_msg)
 
         finally:
-            config.switch_acm_ctx()
+            config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             run_cmd(f"oc delete -k {self.workload_subscription_dir}")
 
 
@@ -433,13 +434,14 @@ class BusyBox_AppSet(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def delete_workload(self, force=False, rbd_name="rbd"):
+    def delete_workload(self, force=False, rbd_name="rbd", switch_ctx=None):
         """
         Delete busybox workload
 
         Args:
             force (bool): If True, force remove the stuck resources, default False
             rbd_name (str): Name of the pool, default "rbd"
+            switch_ctx (int): The cluster index by the cluster name
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -447,7 +449,7 @@ class BusyBox_AppSet(DRWorkload):
         """
         image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
         try:
-            config.switch_acm_ctx()
+            config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             run_cmd(cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900)
 
             for cluster in get_non_acm_cluster_config():

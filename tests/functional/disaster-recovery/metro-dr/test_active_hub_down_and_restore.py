@@ -1,5 +1,6 @@
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -19,7 +20,6 @@ from ocs_ci.helpers.dr_helpers import (
     restore_backup,
     create_backup_schedule,
     set_current_primary_cluster_context,
-    set_current_secondary_cluster_context,
     get_current_primary_cluster_name,
     get_current_secondary_cluster_name,
     get_passive_acm_index,
@@ -27,11 +27,12 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_deletion,
     gracefully_reboot_ocp_nodes,
     verify_drpolicy_cli,
+    verify_restore_is_completed,
+    verify_fence_state,
 )
 from ocs_ci.helpers.dr_helpers_ui import (
     check_cluster_status_on_acm_console,
     failover_relocate_ui,
-    verify_failover_relocate_status_ui,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -45,9 +46,9 @@ logger = logging.getLogger(__name__)
 
 @tier4a
 @turquoise_squad
-class TestApplicationFailoverAndRelocateWhenZoneDown:
+class TestActiveHubDownAndRestore:
     """
-    Test failover and relocate all apps in a single zone after a zone disruption
+    Test failover and relocate all apps when active hub down and restored
     """
 
     @pytest.fixture(autouse=True)
@@ -69,20 +70,17 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                     drcluster_name=self.primary_cluster_name,
                     switch_ctx=get_passive_acm_index(),
                 )
-                gracefully_reboot_ocp_nodes(self.namespace, self.primary_cluster_name)
+                gracefully_reboot_ocp_nodes(self.primary_cluster_name)
 
         request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-XXXX")
     def test_application_failover_and_relocate(
-        self,
-        setup_acm_ui,
-        nodes_multicluster,
-        dr_workload,
+        self, setup_acm_ui, nodes_multicluster, dr_workload
     ):
 
         """
-        Tests to verify failover and relocate all apps in a single zone after a zone disruption
+        Tests to verify failover and relocate all appswhen active hub down and restored
 
         """
 
@@ -95,22 +93,29 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                 raise NotImplementedError
 
         acm_obj = AcmAddClusters()
-        # ToDO: Create appset and multiple apps
-        workload = dr_workload(num_of_subscription=1)[0]
-        self.namespace = workload.workload_namespace
+        # Deploy Subscription based application
+        sub = dr_workload(num_of_subscription=1, switch_ctx=get_passive_acm_index())[0]
+        self.namespace = sub.workload_namespace
+        self.workload_type = sub.workload_type
+
+        # Deploy AppSet based application
+        appset = dr_workload(
+            num_of_subscription=0, num_of_appset=1, switch_ctx=get_passive_acm_index()
+        )[0]
+
+        # Workloads list
+        workloads = [sub, appset]
 
         # Create application on Primary managed cluster
-        set_current_primary_cluster_context(workload.workload_namespace)
+        set_current_primary_cluster_context(self.namespace)
         self.primary_cluster_name = get_current_primary_cluster_name(
-            namespace=workload.workload_namespace
+            namespace=self.namespace
         )
-        secondary_cluster_name = get_current_secondary_cluster_name(
-            workload.workload_namespace
-        )
+        secondary_cluster_name = get_current_secondary_cluster_name(self.namespace)
 
         # Create backup-schedule on active hub
         create_backup_schedule()
-        # ToDo: To verfiy all the backups are taken
+        # ToDo: To verify all the backups are taken Need to find a exact way to verify backups
         wait_time = 300
         logger.info(f"Wait {wait_time} until backup is taken ")
         time.sleep(wait_time)
@@ -136,6 +141,8 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         restore_backup()
         logger.info(f"Wait {wait_time} until restores are taken ")
         time.sleep(wait_time)
+        # Verify the restore is completed
+        verify_restore_is_completed()
 
         # Validate the clusters are imported
         clusters = [self.primary_cluster_name, secondary_cluster_name]
@@ -151,30 +158,22 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                     logger.info(
                         f"Cluster: {cluster} successfully imported post hub recovery"
                     )
+                    # Validate klusterlet addons are running on managed cluster
+                    config.switch_to_cluster_by_name(cluster)
+                    wait_for_pods_to_be_running(
+                        namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
+                    )
+                    break
                 else:
                     logger.error(
                         f"import of cluster: {cluster} failed post hub recovery"
                     )
-
-            # Validate klusterlet addons are running on managed cluster
-            config.switch_to_cluster_by_name(cluster)
-            wait_for_pods_to_be_running(
-                namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
-            )
+                    raise UnexpectedBehaviour(
+                        f"import of cluster: {cluster} failed post hub recovery"
+                    )
 
         # Wait or verify the drpolicy is in validated state
-        for sample in TimeoutSampler(
-            timeout=1800,
-            sleep=60,
-            func=verify_drpolicy_cli(switch_ctx=get_passive_acm_index()),
-        ):
-            if sample:
-                logger.info("Post hub recovery: DRPolicy validation succeeded")
-            else:
-                logger.error("Post hub recoevry: DRPolicy validation failed")
-                raise UnexpectedBehaviour(
-                    "Post hub recovery: DRPolicy is not in validated state"
-                )
+        verify_drpolicy_cli(switch_ctx=get_passive_acm_index())
 
         # ToDo: Deploy application in both managed cluster and
         #  to verify the applications are present in secondary cluster
@@ -184,99 +183,132 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
             drcluster_name=self.primary_cluster_name,
             switch_ctx=get_passive_acm_index(),
         )
+        # Verify the primary managed cluster is in Fenced state
+        verify_fence_state(
+            drcluster_name=self.primary_cluster_name,
+            state=constants.ACTION_FENCE,
+            switch_ctx=get_passive_acm_index(),
+        )
 
         # Application Failover to Secondary managed cluster
-        if config.RUN.get("mdr_failover_via_ui"):
+        if (
+            config.RUN.get("mdr_failover_via_ui")
+            and self.workload_type == constants.SUBSCRIPTION
+        ):
             logger.info("Start the process of Failover from ACM UI")
             config.switch_ctx(get_passive_acm_index())
             failover_relocate_ui(
                 acm_obj,
-                workload_to_move=f"{workload.workload_name}-1",
-                policy_name=workload.dr_policy_name,
+                workload_to_move=f"{workloads[0].workload_name}-1",
+                policy_name=workloads[0].dr_policy_name,
                 failover_or_preferred_cluster=secondary_cluster_name,
             )
         else:
-            failover(
-                failover_cluster=secondary_cluster_name,
-                namespace=workload.workload_namespace,
-                switch_ctx=get_passive_acm_index(),
+            failover_results = []
+            with ThreadPoolExecutor() as executor:
+                for wl in workloads:
+                    failover_results.append(
+                        executor.submit(
+                            failover,
+                            failover_cluster=secondary_cluster_name,
+                            namespace=wl.workload_namespace,
+                            switch_ctx=get_passive_acm_index(),
+                        )
+                    )
+                    time.sleep(5)
+
+            # Wait for failover results
+            for fl in failover_results:
+                fl.result()
+
+        # Verify resources creation on secondary cluster (failoverCluster)
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        for wl in workloads:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
             )
 
-        # Verify application are running in other managedcluster
-        # And not in previous cluster
-        set_current_primary_cluster_context(workload.workload_namespace)
-        wait_for_all_resources_creation(
-            workload.workload_pvc_count,
-            workload.workload_pod_count,
-            workload.workload_namespace,
-        )
-
-        # Verify the failover status from UI
-        if config.RUN.get("mdr_failover_via_ui"):
-            config.switch_ctx(get_passive_acm_index())
-            verify_failover_relocate_status_ui(acm_obj)
-
         # Verify application are deleted from old cluster
-        set_current_secondary_cluster_context(workload.workload_namespace)
-        wait_for_all_resources_deletion(workload.workload_namespace)
+        config.switch_to_cluster_by_name(self.primary_cluster_name)
+        for wl in workloads:
+            wait_for_all_resources_deletion(wl.workload_namespace)
 
         # Validate data integrity
-        set_current_primary_cluster_context(workload.workload_namespace)
-        validate_data_integrity(workload.workload_namespace)
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        for wl in workloads:
+            validate_data_integrity(wl.workload_namespace)
 
         # Unfenced the managed cluster which was Fenced earlier
         enable_unfence(
             drcluster_name=self.primary_cluster_name,
             switch_ctx=get_passive_acm_index(),
         )
+        # Verify the primary managed cluster is in Unfenced state
+        verify_fence_state(
+            drcluster_name=self.primary_cluster_name,
+            state=constants.ACTION_UNFENCE,
+            switch_ctx=get_passive_acm_index(),
+        )
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_ocp_nodes(
-            workload.workload_namespace, self.primary_cluster_name
-        )
+        gracefully_reboot_ocp_nodes(self.primary_cluster_name)
 
         # Application Relocate to Primary managed cluster
-        secondary_cluster_name = get_current_secondary_cluster_name(
-            workload.workload_namespace
-        )
-        if config.RUN.get("mdr_relocate_via_ui"):
+        secondary_cluster_name = get_current_secondary_cluster_name(self.namespace)
+        if (
+            config.RUN.get("mdr_relocate_via_ui")
+            and self.workload_type == constants.SUBSCRIPTION
+        ):
             logger.info("Start the process of Relocate from ACM UI")
             # Relocate via ACM UI
             config.switch_ctx(get_passive_acm_index())
             check_cluster_status_on_acm_console(acm_obj)
             failover_relocate_ui(
                 acm_obj,
-                workload_to_move=f"{workload.workload_name}-1",
-                policy_name=workload.dr_policy_name,
+                workload_to_move=f"{workloads[0].workload_name}-1",
+                policy_name=workloads[0].dr_policy_name,
                 failover_or_preferred_cluster=secondary_cluster_name,
                 action=constants.ACTION_RELOCATE,
             )
         else:
-            relocate(
-                secondary_cluster_name,
-                workload.workload_namespace,
-                switch_ctx=get_passive_acm_index(),
-            )
+            relocate_results = []
+            with ThreadPoolExecutor() as executor:
+                for wl in workloads:
+                    relocate_results.append(
+                        executor.submit(
+                            relocate,
+                            preferred_cluster=secondary_cluster_name,
+                            namespace=wl.workload_namespace,
+                            switch_ctx=get_passive_acm_index(),
+                        )
+                    )
+                    time.sleep(5)
+
+            # Wait for relocate results
+            for rl in relocate_results:
+                rl.result()
 
         # Verify resources deletion from previous primary or current secondary cluster
-        set_current_secondary_cluster_context(workload.workload_namespace)
-        wait_for_all_resources_deletion(workload.workload_namespace)
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        for wl in workloads:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+            )
 
         # Verify resources creation on preferredCluster
-        set_current_primary_cluster_context(workload.workload_namespace)
-        wait_for_all_resources_creation(
-            workload.workload_pvc_count,
-            workload.workload_pod_count,
-            workload.workload_namespace,
-        )
-
-        # Verify Relocate status from UI
-        if config.RUN.get("mdr_relocate_via_ui"):
-            config.switch_ctx(get_passive_acm_index())
-            verify_failover_relocate_status_ui(
-                acm_obj, action=constants.ACTION_RELOCATE
+        config.switch_to_cluster_by_name(self.primary_cluster_name)
+        for wl in workloads:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
             )
 
         # Validate data integrity
-        set_current_primary_cluster_context(workload.workload_namespace)
-        validate_data_integrity(workload.workload_namespace)
+        config.switch_to_cluster_by_name(self.primary_cluster_name)
+        for wl in workloads:
+            validate_data_integrity(wl.workload_namespace)
