@@ -1,29 +1,29 @@
-import pytest
 import logging
 
-from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.ocs.bucket_utils import (
-    compare_bucket_object_list,
-    update_replication_policy,
-)
-from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
+import pytest
 
-from ocs_ci.ocs import constants
-
-from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import mcg, red_squad
 from ocs_ci.framework.testlib import (
-    skipif_aws_creds_are_missing,
-    skipif_vsphere_ipi,
+    MCGTest,
     ignore_leftover_label,
     polarion_id,
     runs_on_provider,
+    skipif_aws_creds_are_missing,
+    skipif_disconnected_cluster,
+    skipif_vsphere_ipi,
     tier1,
     tier2,
     tier3,
     tier4b,
 )
-from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import (
+    compare_bucket_object_list,
+    update_replication_policy,
+)
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
+from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
+from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 @runs_on_provider
 @ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
 @skipif_aws_creds_are_missing
+@skipif_disconnected_cluster
 class TestLogBasedBucketReplication(MCGTest):
     """
     Test log-based replication with deletion sync.
