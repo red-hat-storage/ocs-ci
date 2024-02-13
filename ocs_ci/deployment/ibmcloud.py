@@ -463,7 +463,7 @@ class IBMCloudIPI(CloudDeploymentBase):
             vpn_ids = []
             for vpn_obj in vpn_objs:
                 vpn_ids.append(vpn_obj["id"])
-            return vpn_obj
+            return vpn_ids
 
         def _get_pgw_ids(resource_group_id):
             cmd = f"ibmcloud is public-gateways --resource-group-id {resource_group_id} --output json"
