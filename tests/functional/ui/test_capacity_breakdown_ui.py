@@ -127,6 +127,7 @@ class TestCapacityBreakdownUI(ManageTest):
             project_name=project_name, pod_name=pod_name
         ), "The Project/Pod not created on Capacity Breakdown"
 
+    @ui
     @black_squad
     @tier3
     @bugzilla("2225223")
