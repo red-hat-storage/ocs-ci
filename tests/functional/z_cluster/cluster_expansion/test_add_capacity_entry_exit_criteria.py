@@ -78,7 +78,7 @@ class TestAddCapacity(ManageTest):
         # Perform Health checks:
         # Make sure cluster is healthy
         assert ceph_health_check(
-            config.ENV_DATA["cluster_namespace"]
+            namespace=config.ENV_DATA["cluster_namespace"]
         ), "Entry criteria FAILED: Cluster is Unhealthy"
 
         # All OCS pods are in running state:

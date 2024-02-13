@@ -42,7 +42,7 @@ class FlowOperations:
         """
         logger.info(f"{operation_name}: Verifying cluster health")
         assert ceph_health_check(
-            config.ENV_DATA["cluster_namespace"], tries=100
+            namespace=config.ENV_DATA["cluster_namespace"], tries=100
         ), "Entry criteria FAILED: Cluster is Unhealthy"
         if cluster_check:
             self.sanity_helpers.health_check(tries=100)

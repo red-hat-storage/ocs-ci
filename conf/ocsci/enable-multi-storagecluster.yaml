@@ -1,0 +1,13 @@
+DEPLOYMENT:
+  multi_storagecluster: True
+
+ENV_DATA:
+  storage_cluster_name: 'ocs-storagecluster'
+  external_storage_cluster_name: 'ocs-external-storagecluster'
+  external_storage_cluster_namespace: 'openshift-storage-extended'
+
+EXTERNAL_MODE:
+  # base64 encoded data of json output
+  # from exporter script
+  # https://github.com/rook/rook/blob/master/cluster/examples/kubernetes/ceph/create-external-cluster-resources.py
+  external_cluster_details: PLACE_HOLDER
