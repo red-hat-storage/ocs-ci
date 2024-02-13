@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
-
+from ocs_ci.framework.pytest_customization.marks import purple_squad, brown_squad
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class TestMgrPods(BaseTest):
     4. Check Active MGR pod reboot
     """
 
+    @purple_squad
     def test_two_mgr_pods_and_metadata(self):
         """
         Testing two mgr pods exists or not
@@ -78,6 +79,7 @@ class TestMgrPods(BaseTest):
         )
         log.info(f"Name entries in mgr metadata: {mgr_metadata_names}")
 
+    @brown_squad
     def test_two_mgr_daemons_and_failure(self):
         """
         Testing two mgr pods exists or not
