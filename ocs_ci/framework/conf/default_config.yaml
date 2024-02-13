@@ -271,6 +271,9 @@ ENV_DATA:
 
   # Assisted Installer related settings
 
+  # STS in CCO manual mode
+  sts_enabled: false
+
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
