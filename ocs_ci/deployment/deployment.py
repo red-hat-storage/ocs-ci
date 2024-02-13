@@ -38,6 +38,7 @@ from ocs_ci.ocs.cluster import (
     validate_pdb_creation,
     CephClusterExternal,
     get_lvm_full_version,
+    check_cephcluster_status,
 )
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -96,6 +97,7 @@ from ocs_ci.ocs.utils import (
     get_all_acm_indexes,
     get_active_acm_index,
     enable_mco_console_plugin,
+    label_pod_security_admission,
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
@@ -134,6 +136,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
     get_oadp_version,
+    ceph_health_check_multi_storagecluster_external,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -282,6 +285,7 @@ class Deployment(object):
         # Multicluster operations
         if config.multicluster:
             config.switch_acm_ctx()
+
             self.deploy_gitops_operator()
 
             logger.info("Creating GitOps CLuster Resource")
@@ -1507,30 +1511,33 @@ class Deployment(object):
         external/indpendent RHCS cluster
 
         """
-        live_deployment = config.DEPLOYMENT.get("live_deployment")
-        logger.info("Deploying OCS with external mode RHCS")
-        ui_deployment = config.DEPLOYMENT.get("ui_deployment")
-        if not ui_deployment:
-            logger.info("Creating namespace and operator group.")
-            run_cmd(f"oc create -f {constants.OLM_YAML}")
-        if not live_deployment:
-            create_catalog_source()
-        self.subscribe_ocs()
-        operator_selector = get_selector_for_ocs_operator()
-        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_operator_names = get_required_csvs()
-        channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        for ocs_operator_name in ocs_operator_names:
-            package_manifest = PackageManifest(
-                resource_name=ocs_operator_name,
-                selector=operator_selector,
-                subscription_plan_approval=subscription_plan_approval,
-            )
-            package_manifest.wait_for_resource(timeout=300)
-            csv_name = package_manifest.get_current_csv(channel=channel)
-            csv = CSV(resource_name=csv_name, namespace=self.namespace)
-            csv.wait_for_phase("Succeeded", timeout=720)
 
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            live_deployment = config.DEPLOYMENT.get("live_deployment")
+            logger.info("Deploying OCS with external mode RHCS")
+            ui_deployment = config.DEPLOYMENT.get("ui_deployment")
+            if not ui_deployment:
+                logger.info("Creating namespace and operator group.")
+                run_cmd(f"oc create -f {constants.OLM_YAML}")
+            if not live_deployment:
+                create_catalog_source()
+            self.subscribe_ocs()
+            operator_selector = get_selector_for_ocs_operator()
+            subscription_plan_approval = config.DEPLOYMENT.get(
+                "subscription_plan_approval"
+            )
+            ocs_operator_names = get_required_csvs()
+            channel = config.DEPLOYMENT.get("ocs_csv_channel")
+            for ocs_operator_name in ocs_operator_names:
+                package_manifest = PackageManifest(
+                    resource_name=ocs_operator_name,
+                    selector=operator_selector,
+                    subscription_plan_approval=subscription_plan_approval,
+                )
+                package_manifest.wait_for_resource(timeout=300)
+                csv_name = package_manifest.get_current_csv(channel=channel)
+                csv = CSV(resource_name=csv_name, namespace=self.namespace)
+                csv.wait_for_phase("Succeeded", timeout=720)
         # Set rook log level
         self.set_rook_log_level()
 
@@ -1542,12 +1549,27 @@ class Deployment(object):
         # get admin keyring
         external_cluster.get_admin_keyring()
 
+        cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
+
+        if config.DEPLOYMENT.get("multi_storagecluster"):
+            cluster_data["metadata"]["namespace"] = config.ENV_DATA[
+                "external_storage_cluster_namespace"
+            ]
+            cluster_data["metadata"]["name"] = config.ENV_DATA[
+                "external_storage_cluster_name"
+            ]
+            exec_cmd(
+                f"oc create -f {constants.MULTI_STORAGECLUSTER_EXTERNAL_NAMESPACE}"
+            )
+            label_pod_security_admission(
+                namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
+            )
+            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
+        else:
+            cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+
         # Create secret for external cluster
         create_external_secret()
-
-        cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
-        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
-
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
@@ -1610,8 +1632,26 @@ class Deployment(object):
         # enable secure connection mode for in-transit encryption
         if config.ENV_DATA.get("in_transit_encryption"):
             external_cluster.enable_secure_connection_mode()
-
-        setup_ceph_toolbox()
+        if config.DEPLOYMENT.get("multi_storagecluster"):
+            logger.info("not setting toolbox in multi-storagecluster")
+        else:
+            setup_ceph_toolbox()
+        logger.info("Checking ceph health for external cluster")
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            try:
+                ceph_health_check(
+                    tries=30,
+                    delay=10,
+                )
+            except CephHealthException:
+                raise CephHealthException("External ceph cluster not healthy")
+        else:
+            try:
+                ceph_health_check_multi_storagecluster_external()
+            except CephHealthException:
+                raise CephHealthException(
+                    "External multi-storagecluster external ceph cluster not healthy"
+                )
 
     def set_rook_log_level(self):
         rook_log_level = config.DEPLOYMENT.get("rook_log_level")
@@ -1717,6 +1757,17 @@ class Deployment(object):
                     defaults.CEPHFILESYSTEM_NAME = cfs_name
                 else:
                     logger.error("MDS deployment Failed! Please check logs!")
+            if config.DEPLOYMENT.get("multi_storagecluster"):
+                self.deploy_with_external_mode()
+                # Checking external cephcluster health
+                retry((CephHealthException, CommandFailed), tries=5, delay=20,)(
+                    check_cephcluster_status(
+                        desired_phase="Connected",
+                        desired_health="HEALTH_OK",
+                        name=constants.EXTERNAL_CEPHCLUSTER_NAME,
+                        namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
+                    )
+                )
 
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(

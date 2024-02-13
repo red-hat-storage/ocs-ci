@@ -139,6 +139,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
     skipif_ui_not_support,
     run_cmd,
+    ceph_health_check_multi_storagecluster_external,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
@@ -1647,6 +1648,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
 
     def finalizer():
         if not skipped:
+            multi_storagecluster_external_health_passed = False
             try:
                 teardown = ocsci_config.RUN["cli_params"]["teardown"]
                 skip_ocs_deployment = ocsci_config.ENV_DATA["skip_ocs_deployment"]
@@ -1664,6 +1666,13 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         namespace=ocsci_config.ENV_DATA["cluster_namespace"]
                     )
                     log.info("Ceph health check passed at teardown!")
+                    if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
+                        ceph_health_check_multi_storagecluster_external()
+                        log.info(
+                            "Ceph health check for multi-storagecluster external cluster passed at teardown!"
+                        )
+                        multi_storagecluster_external_health_passed = True
+
             except CephHealthException:
                 if not ocsci_config.RUN["skip_reason_test_found"]:
                     squad_name = None
@@ -1679,6 +1688,12 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
                 ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+
+                if (
+                    not multi_storagecluster_external_health_passed
+                    and ocsci_config.DEPLOYMENT.get("multi_storagecluster")
+                ):
+                    ceph_health_check_multi_storagecluster_external()
                 raise
 
     request.addfinalizer(finalizer)
@@ -1687,15 +1702,26 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             "cephcluster"
         ):
             log.info("Checking for Ceph Health OK ")
+            external_multi_storagecluster_status = False
             try:
                 status = ceph_health_check(
                     namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                     tries=10,
                     delay=15,
                 )
-                if status:
-                    log.info("Ceph health check passed at setup")
-                    return
+                if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
+                    if status:
+                        log.info("Ceph health check passed at setup")
+                        return
+                else:
+                    external_multi_storagecluster_status = (
+                        ceph_health_check_multi_storagecluster_external()
+                    )
+                    if status and external_multi_storagecluster_status:
+                        log.info(
+                            "Ceph health check passed for internal and multi-storagecluster external at setup"
+                        )
+                        return
             except CephHealthException:
                 ocsci_config.RUN["skipped_tests_ceph_health"] += 1
                 skipped = True
