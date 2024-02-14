@@ -15,7 +15,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import drain_nodes
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import cco, templating, version
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
     create_and_attach_volume_for_all_workers,
@@ -33,6 +33,7 @@ from ocs_ci.utility.utils import (
     delete_file,
     get_cluster_name,
     get_infra_id,
+    get_infra_id_from_openshift_install_state,
     get_ocp_repo,
     run_cmd,
     TimeoutSampler,
@@ -186,11 +187,55 @@ class AWSIPI(AWSBase):
     A class to handle AWS IPI specific deployment
     """
 
-    OCPDeployment = IPIOCPDeployment
-
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
+
+    class OCPDeployment(IPIOCPDeployment):
+        def deploy_prereq(self):
+            super().deploy_prereq()
+            if config.ENV_DATA.get("sts_enabled"):
+                self.sts_setup()
+
+        def sts_setup(self):
+            """
+            Perform setup procedure for STS Mode deployments.
+            """
+            cluster_path = config.ENV_DATA["cluster_path"]
+            output_dir = os.path.join(cluster_path, "output-dir")
+            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+            credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
+            install_config = os.path.join(cluster_path, "install-config.yaml")
+
+            release_image = cco.get_release_image(self.installer)
+            cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
+            cco.extract_ccoctl_binary(cco_image, pull_secret_path)
+            cco.extract_credentials_requests_aws(
+                release_image,
+                install_config,
+                pull_secret_path,
+                credentials_requests_dir,
+            )
+            cco.set_credentials_mode_manual(install_config)
+            cco.create_manifests(self.installer, cluster_path)
+            infra_id = get_infra_id_from_openshift_install_state(cluster_path)
+            cco.process_credentials_requests_aws(
+                infra_id,
+                config.ENV_DATA.get("region"),
+                credentials_requests_dir,
+                output_dir,
+            )
+            manifests_source_dir = os.path.join(output_dir, "manifests")
+            manifests_target_dir = os.path.join(cluster_path, "manifests")
+            file_names = os.listdir(manifests_source_dir)
+            for file_name in file_names:
+                shutil.move(
+                    os.path.join(manifests_source_dir, file_name), manifests_target_dir
+                )
+
+            tls_source_dir = os.path.join(output_dir, "tls")
+            tls_target_dir = os.path.join(cluster_path, "tls")
+            shutil.move(tls_source_dir, tls_target_dir)
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
@@ -201,6 +246,7 @@ class AWSIPI(AWSBase):
                 (default: "DEBUG")
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
+
         if config.DEPLOYMENT.get("infra_nodes"):
             num_nodes = config.ENV_DATA.get("infra_replicas", 3)
             ms_list = machine.create_ocs_infra_nodes(num_nodes)

@@ -3,6 +3,9 @@ Cloud Credential Operator utility functions
 """
 import logging
 import os
+import shutil
+import yaml
+
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import (
     delete_file,
@@ -55,17 +58,17 @@ def get_release_image(openshift_installer):
             return line.split(" ")[2].strip()
 
 
-def create_manifests(openshift_installer, cluster_path):
+def create_manifests(openshift_installer, output_dir):
     """
     Create manifests.
 
     Args:
         openshift_installer (str): Path to the openshift installer
-        cluster_path (str): Path to the cluster directory
+        output_dir (str): Path to the output directory
 
     """
     logger.info("Creating manifests")
-    cmd = f"{openshift_installer} create manifests --dir {cluster_path}"
+    cmd = f"{openshift_installer} create manifests --dir {output_dir}"
     exec_cmd(cmd)
 
 
@@ -84,13 +87,13 @@ def extract_credentials_requests_ibmcloud(
     logger.info("Extracting CredentialsRequests")
     cmd = (
         f"oc adm release extract --cloud=ibmcloud --credentials-requests {release_image} "
-        f"--to={credentials_requests_dir} --registry-config={pull_secret_path}"
+        + f"--to={credentials_requests_dir} --registry-config={pull_secret_path}"
     )
     exec_cmd(cmd)
 
 
 def extract_credentials_requests_aws(
-    release_image, install_config, credentials_requests_dir
+    release_image, install_config, pull_secret, credentials_requests_dir
 ):
     """
     Extract the CredentialsRequests (AWS STS variant).
@@ -103,7 +106,7 @@ def extract_credentials_requests_aws(
     logger.info("Extracting CredentialsRequests")
     cmd = (
         f"oc adm release extract --from={release_image} --credentials-requests --included "
-        f"--install-config={install_config} --to={credentials_requests_dir}"
+        f"--install-config={install_config} --to={credentials_requests_dir} -a {pull_secret}"
     )
     exec_cmd(cmd)
 
@@ -156,7 +159,8 @@ def get_cco_container_image(release_image, pull_secret_path):
     """
     logger.info("Obtaining the cco container image from the OCP release image")
     cmd = f"oc adm release info --image-for='cloud-credential-operator' {release_image} -a {pull_secret_path}"
-    return exec_cmd(cmd)
+    result = exec_cmd(cmd)
+    return result.stdout.decode()
 
 
 def extract_ccoctl_binary(cco_image, pull_secret_path):
@@ -172,16 +176,15 @@ def extract_ccoctl_binary(cco_image, pull_secret_path):
     bin_dir = config.RUN["bin_dir"]
     ccoctl_path = os.path.join(bin_dir, "ccoctl")
     if not os.path.isfile(ccoctl_path):
-        extract_cmd = (
-            f"oc extract {cco_image} --file='{ccoctl_path}' -a {pull_secret_path}"
-        )
+        extract_cmd = f"oc image extract {cco_image} --file='/usr/bin/ccoctl' -a {pull_secret_path}"
         exec_cmd(extract_cmd)
-        chmod_cmd = f"chmod 775 {ccoctl_path}"
+        chmod_cmd = "chmod 775 ccoctl"
         exec_cmd(chmod_cmd)
+        shutil.move("ccoctl", ccoctl_path)
 
 
 def process_credentials_requests_aws(
-    name, aws_region, credentials_requests_dir, cluster_path
+    name, aws_region, credentials_requests_dir, output_dir
 ):
     """
     Process all CredentialsRequest objects.
@@ -190,13 +193,25 @@ def process_credentials_requests_aws(
         name (str): Name used to tag any created cloud resources
         aws_region (str): Region to create cloud resources
         credentials_requests_dir (str): Path to the CredentialsRequest directory
-        cluster_path (str): Path to the cluster directory
+        output_dir (str): Path to the output directory
 
     """
     logger.info("Processing all CredentialsRequest objects")
     cmd = (
         f"ccoctl aws create-all --name={name} --region={aws_region} "
-        f"--credentials-requests-dir={credentials_requests_dir} --output-dir={cluster_path} "
+        f"--credentials-requests-dir={credentials_requests_dir} --output-dir={output_dir} "
         "--create-private-s3-bucket"
     )
     exec_cmd(cmd)
+
+
+def set_credentials_mode_manual(install_config):
+    """
+    Set credentialsMode to Manual in the install-config.yaml
+    """
+    logger.info("Set credentialsMode to Manual")
+    with open(install_config, "r") as f:
+        install_config_data = yaml.safe_load(f)
+        install_config_data["credentialsMode"] = "Manual"
+    with open(install_config, "w") as f:
+        yaml.dump(install_config_data, f)
