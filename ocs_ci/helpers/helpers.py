@@ -14,10 +14,13 @@ import tempfile
 import threading
 import time
 import inspect
+import stat
+import platform
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from subprocess import PIPE, run
 from uuid import uuid4
+
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
@@ -44,6 +47,9 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
+    create_directory_path,
+    get_ocs_build_number,
+    exec_cmd,
 )
 from ocs_ci.utility.utils import convert_device_size
 
@@ -4486,3 +4492,84 @@ def verify_log_exist_in_pods_logs(
         if expected_log in pod_logs:
             return True
     return False
+
+
+def retrieve_cli_binary(cli_type="mcg"):
+    """
+    Download the MCG-CLI binary and store it locally.
+
+    Raises:
+        AssertionError: In the case the CLI binary is not executable.
+
+    """
+    semantic_version = version.get_semantic_ocs_version_from_config()
+    remote_path = get_architecture_path(cli_type)
+    remote_cli_basename = os.path.basename(remote_path)
+    if cli_type == "mcg":
+        local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+    elif cli_type == "odf":
+        local_cli_path = constants.CLI_TOOL_LOCAL_PATH
+    local_cli_dir = os.path.dirname(local_cli_path)
+    if (
+        config.DEPLOYMENT["live_deployment"]
+        and semantic_version >= version.VERSION_4_13
+    ):
+        image = f"{constants.MCG_CLI_IMAGE}:v{semantic_version}"
+    else:
+        image = f"{constants.MCG_CLI_IMAGE_PRE_4_13}:{get_ocs_build_number()}"
+
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    # create DATA_DIR if it doesn't exist
+    if not os.path.exists(constants.DATA_DIR):
+        create_directory_path(constants.DATA_DIR)
+
+    if not os.path.isfile(pull_secret_path):
+        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
+        exec_cmd(
+            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+            shell=True,
+        )
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    )
+    os.rename(
+        os.path.join(local_cli_dir, remote_cli_basename),
+        local_cli_path,
+    )
+    # Add an executable bit in order to allow usage of the binary
+    current_file_permissions = os.stat(local_cli_path)
+    os.chmod(
+        local_cli_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    # Make sure the binary was copied properly and has the correct permissions
+    assert os.path.isfile(
+        local_cli_path
+    ), f"{cli_type} CLI file not found at {local_cli_path}"
+    assert os.access(
+        local_cli_path, os.X_OK
+    ), f"The {cli_type} CLI binary does not have execution permissions"
+
+
+def get_architecture_path(cli_type):
+    """
+    Return path of MCG CLI Binary in the image.
+    """
+    system = platform.system()
+    machine = platform.machine()
+    path = f"/usr/share/{cli_type}/"
+    if system == "Linux":
+        path = os.path.join(path, "linux")
+        if machine == "x86_64":
+            path = os.path.join(path, f"{cli_type}-amd64")
+        elif machine == "ppc64le":
+            path = os.path.join(path, f"{cli_type}-ppc64le")
+        elif machine == "s390x":
+            path = os.path.join(path, f"{cli_type}-s390x")
+    elif system == "Darwin":  # Mac
+        path = os.path.join(path, "macosx", cli_type)
+    return path
