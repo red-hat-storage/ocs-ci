@@ -1760,6 +1760,7 @@ def get_pod_logs(
 
     Returns:
         str: Output from 'oc get logs <pod_name> command
+
     """
     pod = OCP(kind=constants.POD, namespace=namespace)
     cmd = f"logs {pod_name}"

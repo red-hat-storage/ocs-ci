@@ -7,7 +7,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.pod import get_csi_provisioner_pod
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.helpers.helpers import (
     create_reclaim_space_job,
     verify_log_exist_in_pods_logs,
@@ -22,11 +22,11 @@ from ocs_ci.framework.testlib import (
 log = logging.getLogger(__name__)
 
 
-@brown_squad
+@green_squad
 @tier2
 @bugzilla("2214838")
 @skipif_ocs_version("<4.13")
-@pytest.mark.polarion_id("OCS-OCS-5424")
+@pytest.mark.polarion_id("OCS-5424")
 class TestRookReclaimNamespace(ManageTest):
     """
     Test Rook Reclaim Namespace
