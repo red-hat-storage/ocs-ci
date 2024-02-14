@@ -4571,14 +4571,18 @@ def get_architecture_path(cli_type):
     system = platform.system()
     machine = platform.machine()
     path = f"/usr/share/{cli_type}/"
+    if cli_type == "mcg":
+        image_prefix = "noobaa"
+    elif cli_type == "odf":
+        image_prefix = "odf"
     if system == "Linux":
         path = os.path.join(path, "linux")
         if machine == "x86_64":
-            path = os.path.join(path, f"{cli_type}-amd64")
+            path = os.path.join(path, f"{image_prefix}-amd64")
         elif machine == "ppc64le":
-            path = os.path.join(path, f"{cli_type}-ppc64le")
+            path = os.path.join(path, f"{image_prefix}-ppc64le")
         elif machine == "s390x":
-            path = os.path.join(path, f"{cli_type}-s390x")
+            path = os.path.join(path, f"{image_prefix}-s390x")
     elif system == "Darwin":  # Mac
-        path = os.path.join(path, "macosx", cli_type)
+        path = os.path.join(path, "macosx", image_prefix)
     return path
