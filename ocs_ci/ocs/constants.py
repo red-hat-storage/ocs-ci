@@ -83,6 +83,9 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+PROVIDER_CLIENT_DEPLOYMENT_DIR = os.path.join(
+    TEMPLATE_DIR, "provider-client-deployment"
+)
 
 # OCP Deployment constants
 CHRONY_TEMPLATE = os.path.join(
@@ -227,6 +230,8 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
+OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
+OPENSHIFT_INGRESS_OPERATOR_NAMESPACE = "openshift-ingress-operator"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
 MANAGED_FUSION_NAMESPACE = "managed-fusion"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
@@ -300,6 +305,8 @@ JENKINS_BUILD = "jax-rs-build"
 JENKINS_BUILD_COMPLETE = "Complete"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
+SCHEDULERS_CONFIG = "schedulers.config.openshift.io/cluster"
+CONSOLE_CONFIG = "console.v1.operator.openshift.io/cluster"
 
 # Default pools
 DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
@@ -821,10 +828,28 @@ OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
 
 # Provider-Client yamls
-MACHINE_CONFIG = os.path.join(TEMPLATE_DIR, "machine_config")
-STORAGE_PROFILES = os.path.join(TEMPLATE_DIR, "storage_profile")
-STORAGE_CLUSTER = os.path.join(TEMPLATE_DIR, "storage_cluster")
-STORAGE_CLASSCLAIM = os.path.join(TEMPLATE_DIR, "storageclassclaim")
+MACHINE_CONFIG_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "machineconfig_to_enable_nested_virtualization.yaml"
+)
+OCS_STORAGE_CLUSTER_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "ocs_storagecluster.yaml"
+)
+STORAGE_PROFILE_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_profiles.yaml"
+)
+STORAGE_CLASS_CLAIM_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_class_claims.yaml"
+)
+PROVIDER_SUBSCRIPTION_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "provider_subscription.yaml"
+)
+STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_client_subscription.yaml"
+)
+NETWORK_POLICY_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "network_policy.yaml"
+)
+
 
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml")
@@ -1416,6 +1441,8 @@ MANAGED_ALERTMANAGER_SECRET = "alertmanager-managed-ocs-alertmanager-generated"
 MANAGED_ONBOARDING_SECRET = "onboarding-ticket-key"
 MANAGED_PROVIDER_SERVER_SECRET = "ocs-provider-server"
 MANAGED_MON_SECRET = "rook-ceph-mon"
+ONBOARDING_PRIVATE_KEY = "onboarding_private_key"
+ONBOARDING_TICKET_KEY = "onboarding_ticket_key"
 
 # JSON Schema
 OSD_TREE_ROOT = {
