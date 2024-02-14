@@ -92,7 +92,7 @@ class MCG:
                 "The expected MCG CLI binary could not be found,"
                 " downloading the expected version"
             )
-            retrieve_cli_binary()
+            retrieve_cli_binary(cli_type="mcg")
 
         """
         The certificate will be copied on each mcg_obj instantiation since

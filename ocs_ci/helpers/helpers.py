@@ -4496,7 +4496,10 @@ def verify_log_exist_in_pods_logs(
 
 def retrieve_cli_binary(cli_type="mcg"):
     """
-    Download the MCG-CLI binary and store it locally.
+    Download the MCG-CLI/ODF-CLI binary and store it locally.
+
+    Args:
+        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
 
     Raises:
         AssertionError: In the case the CLI binary is not executable.
@@ -4557,7 +4560,13 @@ def retrieve_cli_binary(cli_type="mcg"):
 
 def get_architecture_path(cli_type):
     """
-    Return path of MCG CLI Binary in the image.
+    Get Architcture path
+
+    Args:
+        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+
+    Returns:
+        (str): path of MCG/ODF CLI Binary in the image.
     """
     system = platform.system()
     machine = platform.machine()
