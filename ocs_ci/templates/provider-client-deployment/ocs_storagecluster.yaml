@@ -25,7 +25,8 @@ spec:
       disableStorageClass: true
     cephNonResilientPools: {}
     cephObjectStoreUsers: {}
-    cephObjectStores: {}
+    cephObjectStores:
+      hostNetwork: false
     cephRBDMirror: {}
     cephToolbox: {}
   mirroring: {}
@@ -34,7 +35,7 @@ spec:
   providerAPIServerServiceType: ClusterIP
   storageDeviceSets:
   - config: {}
-    count: 1
+    count: 2
     dataPVCTemplate:
       metadata: {}
       spec:
@@ -43,12 +44,12 @@ spec:
         resources:
           requests:
             storage: 256Gi
-        storageClassName: lso-storageclass
+        storageClassName: localblock
         volumeMode: Block
       status: {}
     deviceClass: ssd
     name: local-storage-deviceset
     placement: {}
     preparePlacement: {}
-    replica: 3
+    replica: 6
     resources: {}
