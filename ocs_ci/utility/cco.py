@@ -69,11 +69,11 @@ def create_manifests(openshift_installer, cluster_path):
     exec_cmd(cmd)
 
 
-def extract_credentials_requests(
+def extract_credentials_requests_ibmcloud(
     release_image, credentials_requests_dir, pull_secret_path
 ):
     """
-    Extract the CredentialsRequests.
+    Extract the CredentialsRequests (IBM Cloud variant).
 
     Args:
         release_image (str): Release image from the openshift installer
@@ -85,6 +85,25 @@ def extract_credentials_requests(
     cmd = (
         f"oc adm release extract --cloud=ibmcloud --credentials-requests {release_image} "
         f"--to={credentials_requests_dir} --registry-config={pull_secret_path}"
+    )
+    exec_cmd(cmd)
+
+
+def extract_credentials_requests_aws(
+    release_image, install_config, credentials_requests_dir
+):
+    """
+    Extract the CredentialsRequests (AWS STS variant).
+
+    Args:
+        release_image (str): Release image from the openshift installer
+        install_config (str): Location of the install-config.yaml
+        credentials_requests_dir (str): Path to the CredentialsRequests directory
+    """
+    logger.info("Extracting CredentialsRequests")
+    cmd = (
+        f"oc adm release extract --from={release_image} --credentials-requests --included "
+        f"--install-config={install_config} --to={credentials_requests_dir}"
     )
     exec_cmd(cmd)
 
@@ -159,3 +178,25 @@ def extract_ccoctl_binary(cco_image, pull_secret_path):
         exec_cmd(extract_cmd)
         chmod_cmd = f"chmod 775 {ccoctl_path}"
         exec_cmd(chmod_cmd)
+
+
+def process_credentials_requests_aws(
+    name, aws_region, credentials_requests_dir, cluster_path
+):
+    """
+    Process all CredentialsRequest objects.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        aws_region (str): Region to create cloud resources
+        credentials_requests_dir (str): Path to the CredentialsRequest directory
+        cluster_path (str): Path to the cluster directory
+
+    """
+    logger.info("Processing all CredentialsRequest objects")
+    cmd = (
+        f"ccoctl aws create-all --name={name} --region={aws_region} "
+        f"--credentials-requests-dir={credentials_requests_dir} --output-dir={cluster_path} "
+        "--create-private-s3-bucket"
+    )
+    exec_cmd(cmd)

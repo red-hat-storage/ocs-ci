@@ -215,7 +215,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         """
         cco.create_manifests(self.ocp_deployment.installer)
         release_image = cco.get_release_image(self.ocp_deployment.installer)
-        cco.extract_credentials_requests(
+        cco.extract_credentials_requests_ibmcloud(
             release_image, self.credentials_requests_dir, self.pull_secret_path
         )
         # get infraID
