@@ -3,7 +3,6 @@ import logging
 from ocs_ci.framework.testlib import (
     tier1,
     skipif_ocs_version,
-    skipif_ocp_version,
     BaseTest,
     post_upgrade,
     post_ocs_upgrade,
@@ -17,7 +16,6 @@ log = logging.getLogger(__name__)
 
 @tier1
 @skipif_ocs_version("<4.15")
-@skipif_ocp_version("<4.15")
 @post_upgrade
 @post_ocs_upgrade
 class TestMgrPods(BaseTest):
@@ -91,7 +89,7 @@ class TestMgrPods(BaseTest):
         - fail mgr daemon
             ceph mgr fail <daemon name>
             ex. ceph mgr fail a
-        - check mgr stat again and the active passive should bea ctive
+        - check mgr stat again and the passive(standby) should be active.
             ceph mgr stat
         """
         log.info("Testing the mgr daemon stats")
