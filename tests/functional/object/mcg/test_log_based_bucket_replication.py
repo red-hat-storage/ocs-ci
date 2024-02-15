@@ -1,29 +1,35 @@
-import pytest
 import logging
 
-from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.ocs.bucket_utils import (
-    compare_bucket_object_list,
-    update_replication_policy,
-)
-from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
+import pytest
 
-from ocs_ci.ocs import constants
-
-from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import mcg, red_squad
 from ocs_ci.framework.testlib import (
-    skipif_aws_creds_are_missing,
-    skipif_vsphere_ipi,
+    MCGTest,
     ignore_leftover_label,
     polarion_id,
     runs_on_provider,
+    skipif_aws_creds_are_missing,
+    skipif_vsphere_ipi,
     tier1,
     tier2,
     tier3,
     tier4b,
 )
-from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import (
+    compare_bucket_object_list,
+    update_replication_policy,
+)
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
+from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
+from ocs_ci.ocs.resources.pod import (
+    Pod,
+    get_noobaa_pods,
+    get_pod_node,
+    get_pods_having_label,
+    wait_for_pods_to_be_running,
+)
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
 logger = logging.getLogger(__name__)
@@ -346,6 +352,13 @@ class TestLogBasedBucketReplication(MCGTest):
 
         logger.info(f"Restarting {target_pod_name}'s node")
         noobaa_running_node_restart(pod_name=target_pod_name)
+        mcg_obj_session.wait_for_health_ok()
+        wait_for_pods_to_be_running(pod_names=[constants.AWSCLI_POD])
+        mockup_logger.awscli_pod = Pod(
+            **get_pods_having_label(
+                constants.S3CLI_LABEL, config.ENV_DATA["cluster_namespace"]
+            )[0]
+        )
 
         delete_objects_from_source_and_wait_for_deletion_sync(
             mcg_obj_session,
