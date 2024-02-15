@@ -114,12 +114,12 @@ class TestRookReclaimNamespace(ManageTest):
             pvc_name=pvc_obj.name
         )
 
-        log.info(f"Sleep 70 seconds so the logs in {pod_names} will be updated")
-        time.sleep(70)
+        log.info(f"Sleep 120 seconds so the logs in {pod_names} will be updated")
+        time.sleep(120)
 
         log.info("Verify logs does not show 'skipping sparsify operation' message.")
         log_exist = verify_log_exist_in_pods_logs(
-            pod_names=pod_names, expected_log=expected_log, since="70s"
+            pod_names=pod_names, expected_log=expected_log, since="120s"
         )
         if log_exist:
             raise ValueError(
