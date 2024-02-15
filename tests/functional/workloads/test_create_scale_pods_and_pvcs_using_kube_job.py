@@ -253,7 +253,6 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
 @magenta_squad
 @tier1
-@ignore_leftovers
 @hci_provider_and_client_required
 class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
     """
@@ -304,6 +303,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
 
         log.info("All the pods and PVCs were deleted successfully on the clients")
 
+    @pytest.mark.polarion_id("OCS-5428")
     def test_create_scale_pods_and_pvcs_with_hci_clients(
         self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
     ):
@@ -339,6 +339,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
             "The scale pods and PVCs using a kube job with HCI clients created successfully"
         )
 
+    @pytest.mark.polarion_id("OCS-5429")
     def test_create_and_delete_scale_pods_and_pvcs_with_hci_clients(
         self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
     ):

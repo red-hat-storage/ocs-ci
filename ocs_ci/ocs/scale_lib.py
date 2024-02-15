@@ -285,7 +285,7 @@ class FioPodScale(object):
 
         # Check for expected worker count
         if is_hci_cluster():
-            expected_worker_count = 2
+            expected_worker_count = config.ENV_DATA["worker_replicas"]
         elif is_managed_service_cluster():
             expected_worker_count = 3
         else:
