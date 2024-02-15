@@ -23,6 +23,7 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CredReqSecretNotFound,
+    NoobaaHealthException,
     TimeoutExpiredError,
     UnsupportedPlatformError,
 )
@@ -656,9 +657,12 @@ class MCG:
         if replication_policy:
             bc_data["spec"].setdefault(
                 "replicationPolicy",
-                json.dumps(replication_policy)
-                if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
-                else json.dumps({"rules": replication_policy}),
+                (
+                    json.dumps(replication_policy)
+                    if version.get_semantic_ocs_version_from_config()
+                    < version.VERSION_4_12
+                    else json.dumps({"rules": replication_policy})
+                ),
             )
 
         return create_resource(**bc_data)
@@ -979,6 +983,26 @@ class MCG:
             == get_default_bc["status"]["phase"]
             == STATUS_READY
         )
+
+    def health_check(self):
+        """
+        Check Noobaa health
+
+        """
+        if not self.status:
+            raise NoobaaHealthException("Noobaa health is NOT OK")
+
+    def wait_for_health_ok(self, tries=60, delay=5):
+        """
+        Wait for Noobaa health to be OK
+
+        """
+        return retry(
+            (NoobaaHealthException, CommandFailed),
+            tries=tries,
+            delay=delay,
+            backoff=1,
+        )(self.health_check)()
 
     def get_mcg_cli_version(self):
         """
