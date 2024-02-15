@@ -63,6 +63,20 @@ class DRPC(OCP):
             result=True
         ), "PeerReady status is not true, failover or relocate action can not be performed"
 
+    def get_sync_time(self):
+        try:
+            self.get()["status"]["lastGroupSyncTime"]
+            return True
+        except KeyError:
+            return False
+
+    def wait_for_sync(self, timeout=800):
+        logger.info("Wating for sync to be completed")
+        sample = TimeoutSampler(timeout=timeout, sleep=20, func=self.get_sync_time)
+        assert sample.wait_for_func_status(
+            result=True
+        ), "lastGroupSyncTime was not updated in given timeout"
+
 
 def get_drpc_name(namespace):
     """

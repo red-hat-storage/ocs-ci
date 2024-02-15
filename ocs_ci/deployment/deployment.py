@@ -30,7 +30,10 @@ from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.helpers.dr_helpers import configure_drcluster_for_fencing
+from ocs_ci.helpers.dr_helpers import (
+    configure_drcluster_for_fencing,
+    validate_bluestore_rdr_osd,
+)
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -82,7 +85,6 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
-    get_osd_count,
     StorageCluster,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
@@ -557,7 +559,11 @@ class Deployment(object):
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_ocs()
-        self.do_deploy_rdr()
+        if (
+            config.ENV_DATA.get("rdr_osd_deployment_mode")
+            == constants.RDR_OSD_MODE_GREENFIELD
+        ):
+            self.do_deploy_rdr()
         self.do_deploy_fusion()
         if config.DEPLOYMENT.get("cnv_deployment"):
             CNVInstaller().deploy_cnv()
@@ -1735,26 +1741,7 @@ class Deployment(object):
             == constants.RDR_OSD_MODE_GREENFIELD
         ):
             if not ceph_cluster:
-                ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
-            store_type = ceph_cluster.get().get("items")[0]["status"]["storage"]["osd"][
-                "storeType"
-            ]
-            if "bluestore-rdr" in store_type.keys():
-                logger.info("OSDs with bluestore-rdr found ")
-            else:
-                raise UnexpectedDeploymentConfiguration(
-                    f"OSDs were not brought up with Regional DR bluestore! instead we have {store_type} "
-                )
-
-            if store_type["bluestore-rdr"] == get_osd_count():
-                logger.info(
-                    f"OSDs found matching with bluestore-rdr count {store_type['bluestore-rdr']}"
-                )
-            else:
-                raise UnexpectedDeploymentConfiguration(
-                    f"OSDs count mismatch! bluestore-rdr count = {store_type['bluestore-rdr']} "
-                    f"actual osd count = {get_osd_count()}"
-                )
+                validate_bluestore_rdr_osd()
 
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()

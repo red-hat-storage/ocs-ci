@@ -116,7 +116,7 @@ class DRWorkload(object):
 
 class BusyBox(DRWorkload):
     """
-    Class handling everything related to busybox workload
+    Class handling everything related to busybox workload for subscription workloads
 
     """
 
@@ -130,6 +130,7 @@ class BusyBox(DRWorkload):
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
+        self.workload_pvc_interface = kwargs.get("workload_pvc_interface")
         self.dr_policy_name = kwargs.get(
             "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
         ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
@@ -261,7 +262,7 @@ class BusyBox(DRWorkload):
                 )
                 for image_uuid in image_uuids:
                     # TODO: Add a better condition to identify CephFS or RBD
-                    if "cephfs" in self.workload_namespace:
+                    if self.workload_pvc_interface == constants.CEPHFILESYSTEM:
                         status = verify_volume_deleted_in_backend(
                             interface=constants.CEPHFILESYSTEM, image_uuid=image_uuid
                         )
@@ -308,9 +309,14 @@ class BusyBox_AppSet(DRWorkload):
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
-        self.dr_policy_name = kwargs.get(
-            "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
-        ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
+        self.dr_enable = kwargs.get("workload_dr_protect")
+        self.workload_pvc_interface = kwargs.get("workload_pvc_interface")
+        if self.dr_enable:
+            self.dr_policy_name = kwargs.get(
+                "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
+            ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
+        else:
+            self.dr_policy_name = None
         self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster") or (
             get_primary_cluster_config().ENV_DATA["cluster_name"]
         )
@@ -337,18 +343,6 @@ class BusyBox_AppSet(DRWorkload):
         """
         self._deploy_prereqs()
         self.workload_namespace = self._get_workload_namespace()
-        # load drpc.yaml
-        drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
-        drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
-        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
-        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
-        drpc_yaml_data["spec"]["placementRef"]["name"] = self.appset_placement_name
-        drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"] = self.appset_pvc_selector
-        drcp_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="drpc", delete=False
-        )
-        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
-
         app_set_yaml_data_list = list(
             templating.load_yaml(self.appset_yaml_file, multi_document=True)
         )
@@ -362,9 +356,10 @@ class BusyBox_AppSet(DRWorkload):
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {self.appset_yaml_file}")
         self.check_pod_pvc_status(skip_replication_resources=True)
-        self.add_annotation_to_placement()
-        run_cmd(f"oc create -f {drcp_data_yaml.name}")
-        self.verify_workload_deployment()
+        if self.dr_enable:
+            self.add_annotation_to_placement()
+            self.apply_dr_policy()
+            self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
         """
@@ -393,6 +388,27 @@ class BusyBox_AppSet(DRWorkload):
         placcement_obj.annotate(
             annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
         )
+
+    def apply_dr_policy(self):
+        """
+        Apply DR policy for the given workload
+
+        """
+        config.switch_acm_ctx()
+        if not self.dr_policy_name:
+            self.dr_policy_name = dr_helpers.get_all_drpolicy()[0]["metadata"]["name"]
+
+        drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
+        drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        drpc_yaml_data["spec"]["placementRef"]["name"] = self.appset_placement_name
+        drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"] = self.appset_pvc_selector
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        run_cmd(f"oc create -f {drcp_data_yaml.name}")
 
     def _get_workload_namespace(self):
         """
@@ -469,8 +485,7 @@ class BusyBox_AppSet(DRWorkload):
                     namespace=self.workload_namespace,
                     check_replication_resources_state=False,
                 )
-
-            log.info("Verify backend RBD images are deleted")
+            log.info("Verify backend images or subvolumes are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 rbd_pool_name = (
@@ -479,14 +494,19 @@ class BusyBox_AppSet(DRWorkload):
                     else constants.DEFAULT_CEPHBLOCKPOOL
                 )
                 for image_uuid in image_uuids:
-                    status = verify_volume_deleted_in_backend(
-                        interface=constants.CEPHBLOCKPOOL,
-                        image_uuid=image_uuid,
-                        pool_name=rbd_pool_name,
-                    )
+                    if self.workload_pvc_interface == constants.CEPHFILESYSTEM:
+                        status = verify_volume_deleted_in_backend(
+                            interface=constants.CEPHFILESYSTEM, image_uuid=image_uuid
+                        )
+                    else:
+                        status = verify_volume_deleted_in_backend(
+                            interface=constants.CEPHBLOCKPOOL,
+                            image_uuid=image_uuid,
+                            pool_name=rbd_pool_name,
+                        )
                     if not status:
                         raise UnexpectedBehaviour(
-                            "RBD image(s) still exists on backend"
+                            "Images/subvolumes still exists on backend"
                         )
 
         except (

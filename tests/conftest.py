@@ -6436,6 +6436,7 @@ def dr_workload(request):
         num_of_appset=0,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        dr_enable=True,
     ):
         """
         Args:
@@ -6444,6 +6445,7 @@ def dr_workload(request):
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             switch_ctx (int): The cluster index by the cluster name
+            dr_enable (bool): Make Workload DR protected. True is default
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -6454,8 +6456,10 @@ def dr_workload(request):
         """
         total_pvc_count = 0
         workload_key = "dr_workload_subscription"
+        workload_key_appset = "dr_workload_appset"
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_subscription_cephfs"
+            workload_key_appset = "dr_workload_appset_cephfs"
 
         for index in range(num_of_subscription):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
@@ -6463,13 +6467,15 @@ def dr_workload(request):
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
+                workload_dr_protect=dr_enable,
+                workload_pvc_interface=pvc_interface,
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
 
         for index in range(num_of_appset):
-            workload_details = ocsci_config.ENV_DATA["dr_workload_appset"][index]
+            workload_details = ocsci_config.ENV_DATA[workload_key_appset][index]
             workload = BusyBox_AppSet(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -6478,11 +6484,16 @@ def dr_workload(request):
                     "dr_workload_app_placement_name"
                 ],
                 workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
+                workload_dr_protect=dr_enable,
+                workload_pvc_interface=pvc_interface,
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        if (
+            ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr"
+            and not dr_enable
+        ):
             if pvc_interface != constants.CEPHFILESYSTEM:
                 dr_helpers.wait_for_mirroring_status_ok(
                     replaying_images=total_pvc_count

@@ -35,5 +35,19 @@ ENV_DATA:
     { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/app-busybox-1", pod_count: 20, pvc_count: 20 },
     { name: "busybox-2", workload_dir: "rdr/busybox/cephfs/app-busybox-2", pod_count: 20, pvc_count: 4 },
   ]
+  dr_workload_appset_cephfs: [
+    { name: "appset-busybox-1-cephfs", workload_dir: "rdr/busybox/cephfs/AppSet/appset-busybox-1-cephfs",
+      dr_workload_app_placement_name: "busybox-1-placement-cephfs",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app1_cephfs'}, pod_count: 20, pvc_count: 20
+    },
+    { name: "appset-busybox-2-cephfs", workload_dir: "rdr/busybox/cephfs/AppSet/appset-busybox-2-cephfs",
+      dr_workload_app_placement_name: "busybox-2-placement-cephfs",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app2_cephfs'}, pod_count: 20, pvc_count: 4
+    },
+    { name: "appset-busybox-3-cephfs", workload_dir: "rdr/busybox/cephfs/AppSet/appset-busybox-3-cephfs",
+      dr_workload_app_placement_name: "busybox-3-placement-cephfs",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app3_cephfs'}, pod_count: 20, pvc_count: 20
+    },
+  ]
 
   # dr_policy_name: PLACEHOLDER

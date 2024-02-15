@@ -7,12 +7,13 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour, UnexpectedDeploymentConfiguration
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
+from ocs_ci.ocs.resources.storage_cluster import get_osd_count
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
@@ -21,7 +22,12 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    CommandFailed,
+    ceph_health_check,
+    run_cmd,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -814,18 +820,7 @@ def get_managed_cluster_node_ips():
         cluster (list): Returns list of managed cluster, indexes and their node IPs
 
     """
-    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
-    secondary_index = [
-        s.MULTICLUSTER["multicluster_index"]
-        for s in get_non_acm_cluster_config()
-        if s.MULTICLUSTER["multicluster_index"] != primary_index
-    ][0]
-    cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
-    cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
-    cluster_data = [
-        [cluster_name_primary, primary_index],
-        [cluster_name_secondary, secondary_index],
-    ]
+    cluster_data = get_managed_clusters_index()
     for cluster in cluster_data:
         config.switch_ctx(cluster[1])
         logger.info(f"Getting node IPs on managed cluster: {cluster[0]}")
@@ -1082,3 +1077,99 @@ def verify_drpolicy_cli(switch_ctx=None):
         raise UnexpectedBehaviour(
             f"DRPolicy is not in succeeded or validated state: {status}"
         )
+
+
+def get_managed_clusters_index():
+    """
+    Get managed Cluster Index
+
+    Return:
+        list: cluster_data
+            eg:  [['<c1>', 1], ['<c2>', 2]]
+
+    """
+    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+    secondary_index = [
+        s.MULTICLUSTER["multicluster_index"]
+        for s in get_non_acm_cluster_config()
+        if s.MULTICLUSTER["multicluster_index"] != primary_index
+    ][0]
+    cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
+    cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
+    cluster_data = [
+        [cluster_name_primary, primary_index],
+        [cluster_name_secondary, secondary_index],
+    ]
+    return cluster_data
+
+
+def brown_field_migation():
+    """
+    Perform Brown Field Miration by adding annotation in storagecluster
+
+    """
+
+    cluster_data = get_managed_clusters_index()
+    logger.info(cluster_data)
+
+    brown_field_annotation_patch_cmd = """oc patch storagecluster ocs-storagecluster -n openshift-storage
+--type json --patch
+'[{ "op": "add", "path": "/metadata/annotations", "value":
+{ocs.openshift.io/clusterIsDisasterRecoveryTarget: "true"}  }]'"""
+    for cluster in cluster_data:
+        config.switch_ctx(cluster[1])
+        run_cmd(brown_field_annotation_patch_cmd)
+
+
+@retry(UnexpectedDeploymentConfiguration, tries=2000, delay=10)
+def validate_bluestore_rdr_osd():
+    """
+    Validate if OSD are compatible for RDR
+
+    """
+
+    cluster_data = get_managed_clusters_index()
+    for cluster in cluster_data:
+        config.switch_ctx(cluster[1])
+        ceph_cluster = ocp.OCP(
+            kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        store_type = ceph_cluster.get().get("items")[0]["status"]["storage"]["osd"][
+            "storeType"
+        ]
+        if "bluestore-rdr" in store_type.keys():
+            logger.info("OSDs with bluestore-rdr found ")
+        else:
+            raise UnexpectedDeploymentConfiguration(
+                f"OSDs were not brought up with Regional DR bluestore! instead we have {store_type} "
+            )
+
+        if store_type["bluestore-rdr"] == get_osd_count():
+            logger.info(
+                f"OSDs found matching with bluestore-rdr count {store_type['bluestore-rdr']}"
+            )
+        else:
+            raise UnexpectedDeploymentConfiguration(
+                f"OSDs count mismatch! bluestore-rdr count = {store_type['bluestore-rdr']} "
+                f"actual osd count = {get_osd_count()}"
+            )
+        ceph_health_check(
+            namespace=config.ENV_DATA["cluster_namespace"], tries=30, delay=10
+        )
+
+
+def wait_for_groupsync(workload_type, workload_placement_name=None, timeout=1000):
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+
+    drpc_obj.wait_for_sync(timeout=timeout)
+
+    logger.info(f"Wait for Sync {constants.DRPC}: {drpc_obj.resource_name} Completed")
+    config.switch_ctx(restore_index)

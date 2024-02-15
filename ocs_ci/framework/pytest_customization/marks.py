@@ -30,6 +30,7 @@ from ocs_ci.ocs.constants import (
     HCI_CLIENT,
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
+    RDR_OSD_MODE_BROWNFIELD,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -365,6 +366,11 @@ kms_config_required = pytest.mark.skipif(
 external_mode_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is not True,
     reason="Test will run on External Mode cluster only",
+)
+
+brownfield_mode_required = pytest.mark.skipif(
+    config.ENV_DATA.get("rdr_osd_deployment_mode") != RDR_OSD_MODE_BROWNFIELD,
+    reason="Test will run on BrownField Mode cluster only",
 )
 
 skipif_aws_i3 = pytest.mark.skipif(
