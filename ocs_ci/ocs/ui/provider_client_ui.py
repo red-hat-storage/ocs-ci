@@ -10,9 +10,9 @@ from ocs_ci.ocs.resources.storageconsumer import (
 logger = logging.getLogger(__name__)
 
 
-class ClientUI(PageNavigator):
+class StorageClientUI(PageNavigator):
     """
-    User Interface Selenium for Clients page
+    User Interface Selenium for Storage Clients page of Provider cluster UI
     """
 
     def __init__(self):
@@ -36,7 +36,7 @@ class ClientUI(PageNavigator):
         self, client_name, cluster_id, ocp_version, odf_version, heartbeat
     ):
         """
-        Verify client details on Clients page
+        Verify client details on Storage Clients page
 
         Args:
             client_name (str): name of the client
@@ -83,7 +83,7 @@ class ClientUI(PageNavigator):
         clients_with_heartbeat = 0
         for consumer_name in consumer_names:
             client = StorageConsumer(consumer_name)
-            if client.is_heartbeat_ok:
+            if client.is_heartbeat_ok():
                 clients_with_heartbeat += 1
         assert clients_with_heartbeat == int(connected_clients), (
             f"Number of connected clients on the dashboard: {connected_clients}",
