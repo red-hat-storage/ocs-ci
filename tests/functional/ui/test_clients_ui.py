@@ -4,7 +4,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     ui,
     runs_on_provider,
-    hci_provider_and_client_required,
+    hci_provider_required,
 )
 from ocs_ci.framework.pytest_customization.marks import black_squad
 from ocs_ci.ocs.ui.provider_client_ui import StorageClientUI
@@ -20,7 +20,7 @@ class TestStorageClientUI(ManageTest):
 
     """
 
-    @hci_provider_and_client_required
+    @hci_provider_required
     @runs_on_provider
     def test_clients_on_dashboard(self, setup_ui_class):
         """
