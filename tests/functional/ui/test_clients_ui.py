@@ -30,4 +30,4 @@ class TestStorageClientUI(ManageTest):
         """
         logger.info("Verifying number of clients on the dashboard")
         storageclient_obj = StorageClientUI()
-        StorageClientUI.verify_clients_on_dashboard()
+        storageclient_obj.verify_clients_on_dashboard()
