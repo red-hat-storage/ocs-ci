@@ -690,3 +690,7 @@ class NoRunningCephToolBoxException(Exception):
 
 class UsernameNotFoundException(Exception):
     pass
+
+
+class ProviderModeNotFoundException(Exception):
+    pass

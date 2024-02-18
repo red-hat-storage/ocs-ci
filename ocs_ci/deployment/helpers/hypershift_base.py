@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -10,26 +11,6 @@ from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
-
-# TODO: create networkpolicy for each Client cluster namespace
-"""
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: openshift-storage-egress
-  namespace: clusters-hcp-98
-spec:
-  podSelector:
-    matchLabels:
-      kubevirt.io: virt-launcher
-  egress:
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: openshift-storage
-  policyTypes:
-  - Egress
-"""
 
 
 class HyperShiftBase:
@@ -81,10 +62,10 @@ class HyperShiftBase:
                     f"hcp binary download failed to path:{self.hcp_binary_path}"
                 )
 
-    def create_kubevirt_cluster(
+    def create_kubevirt_OCP_cluster(
         self,
-        name,
-        nodepool_replicas,
+        name: str = None,
+        nodepool_replicas: int = 2,
         memory: str = "12Gi",
         cpu_cores: int = 6,
         root_volume_size: str = "12Gi",
@@ -101,24 +82,36 @@ class HyperShiftBase:
             ocp_version (str): OCP version of the cluster, if not specified, will use the version from Hosting Platform
             root_volume_size (str): Root volume size of the cluster, default 40 Gi (Gi is not required)
         """
+        logger.debug("create_kubevirt_OCP_cluster method is called")
+
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        icsp_file_path = self.get_ICSP_list()
+        logger.debug(f"ICSP file path: {icsp_file_path}")
+
+        # If ocp_version is not provided, get the version from Hosting Platform
+        if not ocp_version:
+            index_image = f"{constants.REGISTRY_SVC}:{get_ocp_version()}"
+        else:
+            index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
+
+        if not name:
+            name = "hcp-".join(datetime.utcnow().strftime("%Y%m%d%H%M%S"))
+
         logger.info(
             f"Creating HyperShift hosted cluster with specs: name:{name}, "
             f"nodepool_replicas:{nodepool_replicas}, memory_size:{memory}, cpu_cores:{cpu_cores}, "
-            f"ocp_version:{ocp_version}, root_volume_size:{root_volume_size}"
+            f"ocp image:'{index_image}', root_volume_size:{root_volume_size}"
         )
-        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        icsp_file_path = self.get_ICSP_list()
-        index_image = f"{constants.REGISTRY_SVC}:{get_ocp_version()}"
 
         create_hcp_cluster_cmd = (
             f"{self.hcp_binary_path} create cluster kubevirt "
-            f"--release-image {index_image} "
             f"--name {name} "
+            f"--release-image {index_image} "
             f"--nodepool-replicas {nodepool_replicas} "
             f"--memory {memory} "
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
-            f"--pull-secret {pull_secret_path}"
+            f"--pull-secret {pull_secret_path} "
             f"--image-content-sources {icsp_file_path}"
         )
 
