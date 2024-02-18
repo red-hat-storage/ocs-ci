@@ -12,7 +12,7 @@ class TestMetalLB(object):
     """
 
     metallb = MetalLBInstaller()
-    config.ENV_DATA.update({"reserved_ips_num": 2})
+    config.ENV_DATA.update({"ips_to_reserve": 2})
 
     @pytest.fixture(autouse=True)
     def tearDown_fixture(self, request):
@@ -32,4 +32,4 @@ class TestMetalLB(object):
         """
         Test MetalLB installation
         """
-        self.metallb.deploy()
+        self.metallb.deploy_lb()

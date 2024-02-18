@@ -198,6 +198,8 @@ WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
 REPLICATION_SOURCE = "ReplicationSource"
 REPLICATIONDESTINATION = "ReplicationDestination"
+IP_ADDRESS_POOL = "IPAddressPool"
+L2_ADVERTISEMENT = "L2Advertisement"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
