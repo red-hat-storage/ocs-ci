@@ -57,6 +57,7 @@ class HyperShiftBase:
                 logger.info(
                     f"hcp binary downloaded successfully to path:{self.hcp_binary_path}"
                 )
+                os.chmod(self.hcp_binary_path, 0o755)
             else:
                 raise CommandFailed(
                     f"hcp binary download failed to path:{self.hcp_binary_path}"
