@@ -57,7 +57,7 @@ class TestRookReclaimNamespace(ManageTest):
         7.Delete pod
         8.Delete reclaimspacejob CR
         9.Recreate reclaimspacejob CR
-        10.Sleep 70 seconds so the logs in csi-rbdplugin-provisioner-xxx/csi-rbdplugin will be updated
+        10.Sleep 120 seconds so the logs in csi-rbdplugin-provisioner-xxx/csi-rbdplugin will be updated
         11.Verify logs does not show 'skipping sparsify operation' message.
         """
         log.info("Create RBD PVC with filesystem mode")
