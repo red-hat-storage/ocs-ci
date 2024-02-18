@@ -233,6 +233,16 @@ class CNVInstaller(object):
             )
             logger.info("successfully enabled software emulation on the cluster")
 
+    def cnv_hyperconverged_installed(self):
+        """
+        Check if CNV HyperConverged is already installed.
+        :return: True if CNV HyperConverged is installed, False otherwise
+        """
+        ocp = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        return ocp.check_resource_existence(
+            should_exist=True, resource_name=constants.CNV_OPERATORNAME
+        )
+
     def post_install_verification(self):
         """
         Performs CNV post-installation verification.

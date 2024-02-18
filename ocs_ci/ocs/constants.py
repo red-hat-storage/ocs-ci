@@ -346,7 +346,8 @@ CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
 HYPERCONVERGED = "HyperConverged"
 KUBEVIRT_HCO_PREFIX = "kubevirt-hyperconverged-operator"
 KUBEVIRT_HYPERCONVERGED = "kubevirt-hyperconverged"
-CNV_SELECTOR = "operators.coreos.com/kubevirt-hyperconverged.openshift-cnv"
+CNV_OPERATORNAME = "kubevirt-hyperconverged.openshift-cnv"
+CNV_SELECTOR = f"operators.coreos.com/{CNV_OPERATORNAME}"
 
 # CNV VM constants
 VIRTUAL_MACHINE = "VirtualMachine"
