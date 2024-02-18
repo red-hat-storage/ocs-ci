@@ -502,11 +502,17 @@ class CNVInstaller(object):
         archive_file_binary_object.extractall(path=bin_dir)
         logger.info(f"virtctl binary extracted successfully to path:{bin_dir}")
 
-    def deploy_cnv(self):
+    def deploy_cnv(self, check_cnv_deployed=False):
         """
         Installs CNV enabling software emulation.
 
+        Args:
+            check_cnv_deployed (bool): If True, check if CNV is already deployed. If so, skip the deployment.
         """
+        if check_cnv_deployed and self.cnv_hyperconverged_installed():
+            logger.info("CNV operator is already deployed, skipping the deployment")
+            return
+
         logger.info("Installing CNV")
         # Create CNV catalog source
         self.create_cnv_catalog_source()

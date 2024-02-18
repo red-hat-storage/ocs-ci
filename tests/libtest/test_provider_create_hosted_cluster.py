@@ -13,10 +13,22 @@ class TestProviderHosted(object):
     """
 
     @hci_provider_required
-    def test_provider_hosted(self):
+    def test_provider_deploy_OCP_hosted(self):
         """
-        Test provider hosted
+        Test deploy hosted OCP
         """
 
-        logger.info("Test provider hosted")
+        logger.info("Test deploy hosted OCP on provider platform")
         HypershiftHostedOCP().deploy_ocp()
+
+    @hci_provider_required
+    def test_provider_deploy_OCP_hosted_skip_cnv_and_lb(self):
+        """
+        Test deploy hosted OCP on provider platform with cnv and metallb ready beforehand
+        """
+        logger.info(
+            "Test deploy hosted OCP on provider platform with metallb and cnv ready"
+        )
+        HypershiftHostedOCP().deploy_ocp(
+            deploy_cnv=False, deploy_metallb=False, download_hcp_binary=True
+        )

@@ -16,23 +16,25 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller):
         super(HyperShiftBase, self).__init__()
         super(MetalLBInstaller, self).__init__()
 
-    def deploy_ocp(self):
+    def deploy_ocp(
+        self, deploy_cnv=True, deploy_metallb=True, download_hcp_binary=True
+    ):
+        """
+        Deploy hosted OCP cluster on provisioned Provider platform
+        :param deploy_cnv: (bool) Deploy CNV
+        :param deploy_metallb: (bool) Deploy MetalLB
+        :param download_hcp_binary: (bool) Download HCP binary
+        """
         if (
             not config.default_cluster_ctx.ENV_DATA["platform"].lower()
             in HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             raise ProviderModeNotFoundException()
 
-        cnv_installer = CNVInstaller()
-        if (
-            config.DEPLOYMENT.get("cnv_deployment")
-            and not cnv_installer.cnv_hyperconverged_installed()
-        ):
-            CNVInstaller().deploy_cnv()
-            logger.info("CNV deployment is completed")
-        else:
-            logger.info("CNV operator is already deployed, skipping the deployment")
-
-        self.deploy_lb()
-        self.download_hcp_binary()
+        if deploy_cnv:
+            CNVInstaller().deploy_cnv(check_cnv_deployed=True)
+        if deploy_metallb:
+            self.deploy_lb()
+        if download_hcp_binary:
+            self.download_hcp_binary()
         self.create_kubevirt_OCP_cluster()
