@@ -23,9 +23,15 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller):
         ):
             raise ProviderModeNotFoundException()
 
-        if config.DEPLOYMENT.get("cnv_deployment"):
+        cnv_installer = CNVInstaller()
+        if (
+            config.DEPLOYMENT.get("cnv_deployment")
+            and not cnv_installer.cnv_hyperconverged_installed()
+        ):
             CNVInstaller().deploy_cnv()
             logger.info("CNV deployment is completed")
+        else:
+            logger.info("CNV operator is already deployed, skipping the deployment")
 
         self.deploy_lb()
         self.download_hcp_binary()
