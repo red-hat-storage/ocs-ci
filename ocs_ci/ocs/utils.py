@@ -1119,7 +1119,13 @@ def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
 
 
 def _collect_ocs_logs(
-    cluster_config, dir_name, ocp=True, ocs=True, mcg=False, status_failure=True
+    cluster_config,
+    dir_name,
+    ocp=True,
+    ocs=True,
+    mcg=False,
+    status_failure=True,
+    ocs_flags=None,
 ):
     """
     This function runs in thread
@@ -1174,6 +1180,7 @@ def _collect_ocs_logs(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
             cluster_config=cluster_config,
+            command=ocs_flags,
         )
         if (
             ocsci_config.DEPLOYMENT.get("disconnected")
@@ -1250,7 +1257,9 @@ def _collect_ocs_logs(
         log.info(out)
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
+def collect_ocs_logs(
+    dir_name, ocp=True, ocs=True, mcg=False, status_failure=True, ocs_flags=None
+):
     """
     Collects OCS logs
 
@@ -1262,6 +1271,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
         mcg (bool): True for collecting MCG logs (noobaa db dump)
         status_failure (bool): Whether the collection is after success or failure,
             allows better naming for folders under logs directory
+        ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
 
     """
     results = None
@@ -1275,6 +1285,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
                 ocs=ocs,
                 mcg=mcg,
                 status_failure=status_failure,
+                ocs_flags=ocs_flags,
             )
             for cluster in ocsci_config.clusters
         ]

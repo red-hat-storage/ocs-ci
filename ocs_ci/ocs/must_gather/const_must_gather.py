@@ -986,3 +986,27 @@ GATHER_COMMANDS_VERSION = {
         ),
     },
 }
+
+CEPH_ONLY = [
+    "/ceph/logs/",
+    "/ceph/must_gather_commands/",
+    "/ceph/must_gather_commands_json_output/",
+    "/ceph/namespaces/",
+]
+CEPH_LOGS_ONLY = [
+    "/ceph_logs/journal_",
+    "/ceph_logs/ceph_daemon_log",
+    "/ceph_logs/kernel",
+]
+NAMESPACED_ONLY = ["/namespaces/all/"]
+CLUSTERSCOPED_ONLY = [
+    "/cluster-scoped-resources/oc_output/",
+    "/cluster-scoped-resources/core/",
+]
+NOOBAA_ONLY = [
+    "/noobaa/raw_output",
+    "/noobaa/namespaces",
+    "/noobaa/logs/openshift-storage",
+]
+DR_ONLY = ["/namespaces/openshift-dr-system/"]
+PROVIDER_ONLY = [""]
