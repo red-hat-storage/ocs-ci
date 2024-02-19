@@ -359,6 +359,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         """
         This method verifies provider mode deployment
 
+        Returns:
+        onboarding_token(str): client onboarding token
+
         """
 
         # Check ux server pod, ocs-provider server pod and rgw pods are up and running
