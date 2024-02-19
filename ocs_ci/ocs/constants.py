@@ -445,6 +445,7 @@ MUST_GATHER_HELPER_LABEL = "must-gather-helper-pod="
 MANAGED_FUSION_ALERTMANAGER_LABEL = "alertmanager=managed-fusion-alertmanager"
 MANAGED_FUSION_AWS_DATA_GATHER = "name=aws-data-gather"
 MANAGED_FUSION_PROMETHEUS_LABEL = "prometheus=managed-fusion-prometheus"
+UX_BACKEND_SERVER_LABEL = "app=ux-backend-server"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -848,6 +849,9 @@ STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
 )
 NETWORK_POLICY_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "network_policy.yaml"
+)
+STORAGE_CLIENT_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_client.yaml"
 )
 
 
@@ -1441,8 +1445,8 @@ MANAGED_ALERTMANAGER_SECRET = "alertmanager-managed-ocs-alertmanager-generated"
 MANAGED_ONBOARDING_SECRET = "onboarding-ticket-key"
 MANAGED_PROVIDER_SERVER_SECRET = "ocs-provider-server"
 MANAGED_MON_SECRET = "rook-ceph-mon"
-ONBOARDING_PRIVATE_KEY = "onboarding_private_key"
-ONBOARDING_TICKET_KEY = "onboarding_ticket_key"
+ONBOARDING_PRIVATE_KEY = "onboarding-private-key"
+
 
 # JSON Schema
 OSD_TREE_ROOT = {
