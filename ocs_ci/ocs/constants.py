@@ -1579,8 +1579,9 @@ SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 MCG_CLI_IMAGE_PRE_4_13 = "quay.io/rhceph-dev/mcg-cli"
-ODF_CLI_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
 MCG_CLI_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
+ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
+ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf4-odf-cli-rhel9"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [

@@ -35,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedBehaviour,
+    NotSupportedException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -4508,7 +4509,9 @@ def retrieve_cli_binary(cli_type="mcg"):
     """
     semantic_version = version.get_semantic_ocs_version_from_config()
     if cli_type == "odf" and semantic_version < version.VERSION_4_15:
-        raise Exception(f"odf cli tool not supported on ODF {semantic_version}")
+        raise NotSupportedException(
+            f"odf cli tool not supported on ODF {semantic_version}"
+        )
 
     remote_path = get_architecture_path(cli_type)
     remote_cli_basename = os.path.basename(remote_path)
@@ -4520,11 +4523,17 @@ def retrieve_cli_binary(cli_type="mcg"):
 
     if (
         config.DEPLOYMENT["live_deployment"]
+        and semantic_version >= version.VERSION_4_15
+    ):
+        image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+    elif (
+        config.DEPLOYMENT["live_deployment"]
         and semantic_version >= version.VERSION_4_13
     ):
         image = f"{constants.MCG_CLI_IMAGE}:v{semantic_version}"
+
     elif semantic_version >= version.VERSION_4_15:
-        image = f"{constants.ODF_CLI_IMAGE}:v{semantic_version}"
+        image = f"{constants.ODF_CLI_DEV_IMAGE}:v{semantic_version}"
     else:
         image = f"{constants.MCG_CLI_IMAGE_PRE_4_13}:{get_ocs_build_number()}"
 
