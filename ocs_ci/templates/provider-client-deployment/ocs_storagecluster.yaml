@@ -45,6 +45,7 @@ spec:
           requests:
             storage: 256Gi
         storageClassName: localblock
+
         volumeMode: Block
       status: {}
     deviceClass: ssd
