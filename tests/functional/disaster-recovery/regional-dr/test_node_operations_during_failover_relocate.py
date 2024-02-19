@@ -148,6 +148,8 @@ class TestNodeDrainDuringFailoverRelocate:
         sleep(wait_time * 60)
         nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
         wait_for_nodes_status([node.name for node in primary_cluster_nodes])
+        logger.info("Wait for 180 seconds for pods to stabilize")
+        sleep(180)
         logger.info("Wait for all the pods in storage namespace to be in running state")
         assert wait_for_pods_to_be_running(
             timeout=720

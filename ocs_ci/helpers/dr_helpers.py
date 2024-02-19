@@ -779,7 +779,8 @@ def get_image_uuids(namespace):
         )
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            image_uuids.append(pvc_obj.image_uuid)
+            if pvc_obj.backed_sc != constants.RDR_VOLSYNC_CEPHFILESYSTEM_SC:
+                image_uuids.append(pvc_obj.image_uuid)
     image_uuids = list(set(image_uuids))
     logger.info(f"All image UUIDs from managed clusters: {image_uuids}")
     return image_uuids
