@@ -1,0 +1,8 @@
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: VolumeImportSource
+metadata:
+  name: fedora-source
+spec:
+  source:
+    registry:
+      url: "docker://quay.io/kubevirt/centos8-container-disk-images"

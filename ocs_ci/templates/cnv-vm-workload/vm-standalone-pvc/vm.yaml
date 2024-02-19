@@ -3,22 +3,7 @@ kind: VirtualMachine
 metadata:
   name: centos-stream8
   namespace: default
-
 spec:
-  dataVolumeTemplates:
-    - metadata:
-        name: centos-stream8
-      spec:
-        preallocation: false
-        sourceRef:
-          kind: DataSource
-          name: centos-stream8
-          namespace: openshift-virtualization-os-images
-        storage:
-          resources:
-            requests:
-              storage: 30Gi
-          storageClassName: ocs-storagecluster-ceph-rbd-virtualization
   running: true
   template:
     metadata:
@@ -64,9 +49,9 @@ spec:
           pod: {}
       terminationGracePeriodSeconds: 180
       volumes:
-        - dataVolume:
-            name: centos-stream8
-          name: rootdisk
+        -  name: rootdisk
+           persistentVolumeClaim:
+             claimName: sample-vm-pvc
         - cloudInitNoCloud:
             userData: |-
               #cloud-config

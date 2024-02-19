@@ -70,6 +70,9 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
 TEMPLATE_CNV_VM_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "cnv-vm-workload")
+TEMPLATE_CNV_VM_STANDALONE_PVC_DIR = os.path.join(
+    TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm-standalone-pvc"
+)
 DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -334,8 +337,9 @@ CNV_SELECTOR = "operators.coreos.com/kubevirt-hyperconverged.openshift-cnv"
 VIRTUAL_MACHINE = "VirtualMachine"
 VIRTUAL_MACHINE_INSTANCE = "VirtualMachineInstance"
 VM_RUNNING = "Running"
-VM_STOPPED = "Stopped"
+CNV_VM_STOPPED = "Stopped"
 VM_PAUSED = "Paused"
+DEFAULT_CNV_CEPH_RBD_SC = "ocs-storagecluster-ceph-rbd-virtualization"
 
 
 # Virtctl constants
@@ -761,8 +765,15 @@ CNV_HYPERCONVERGED_YAML = os.path.join(
 CNV_VM_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "vm-secret.yaml")
 
 # CNV VM workload yamls
-CNV_VM_CENTOS_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm_centos.yaml")
-CNV_VM_FEDORA_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm_fedora.yaml")
+CNV_VM_STANDALONE_PVC_SOURCE_YAML = os.path.join(
+    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "source.yaml"
+)
+CNV_VM_STANDALONE_PVC_PVC_YAML = os.path.join(
+    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "pvc.yaml"
+)
+CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
+    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
+)
 
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")

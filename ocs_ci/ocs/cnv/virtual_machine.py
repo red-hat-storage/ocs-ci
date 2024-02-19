@@ -8,6 +8,8 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.cnv.virtctl import Virtctl
 from ocs_ci.ocs.cnv.virtual_machine_instance import VirtualMachineInstance
 from ocs_ci.ocs import constants
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import UsernameNotFoundException
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +72,10 @@ class VirtualMachine(Virtctl):
         Retrieve the operating system username from the cloud-init data associated with the virtual machine
 
         Returns:
-            str or None: The operating system username if found, otherwise None
+            str: The operating system username
+
+        Raises:
+            UsernameNotFoundException: If the 'user' key is not present in the VM userData
 
         """
         vm_get_out = self.get()
@@ -87,8 +92,13 @@ class VirtualMachine(Virtctl):
             if cloud_init_data:
                 user_data = cloud_init_data.get("userData", {})
                 user_data_dict = yaml.safe_load(user_data)
-                return user_data_dict.get("user")
-        return None
+                username = user_data_dict.get("user")
+                if username is not None:
+                    return username
+                else:
+                    raise UsernameNotFoundException(
+                        f"Username not found in the {self.name} user data"
+                    )
 
     def wait_for_vm_status(self, status=constants.VM_RUNNING, timeout=600):
         """
@@ -116,22 +126,20 @@ class VirtualMachine(Virtctl):
 
         """
         if (
-            self.printableStatus() == constants.VM_STOPPED
+            self.printableStatus() == constants.CNV_VM_STOPPED
             and self.check_if_vmi_does_not_exist()
         ):
             logger.info(
                 f"{self._vm_name} is in stopped state and vmi does not exists, starting {self._vm_name}"
             )
-            self.start_vm(self._vm_name)
-            logger.info(f"Successfully started VM: {self._vm_name}")
-        else:
+        elif not self.check_if_vmi_does_not_exist():
             logger.info(
                 f"VMI for this {self._vm_name} is still running, waiting for the vmi to "
                 f"delete before starting the {self._vm_name}"
             )
             self.vmi_obj.wait_for_vmi_delete()
-            self.start_vm(self._vm_name)
-            logger.info(f"Successfully started VM: {self._vm_name}")
+        self.start_vm(self._vm_name)
+        logger.info(f"Successfully started VM: {self._vm_name}")
 
         if wait:
             self.wait_for_vm_status(status=constants.VM_RUNNING, timeout=timeout)
@@ -148,6 +156,30 @@ class VirtualMachine(Virtctl):
         status_conditions_out = self.get().get("status").get("conditions")[0]
         return status_conditions_out["reason"] == "VMINotExists"
 
+    def wait_for_ssh_connectivity(self, username=None, timeout=600):
+        """
+        Wait for the SSH connectivity to establish to the virtual machine
+
+        Args:
+            vm_obj (vm object): The virtual machine object.
+            username (str): The username to use for SSH. If None, it will use the OS username from vm_obj if exists
+            timeout (int): The maximum time to wait for SSH connectivity in seconds
+
+        """
+        username = username if username else self.get_os_username()
+        logger.info(f"Waiting for the SSH connectivity to establish to {self.name} ")
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=self.run_ssh_cmd,
+            username=username,
+            command="exit",
+            use_sudo=False,
+        ):
+            if sample == "":
+                logger.info(f"{self.name} is ready for SSH connection")
+                return
+
     def stop(self, force=False, wait=True):
         """
         Stop the VirtualMachine.
@@ -162,7 +194,7 @@ class VirtualMachine(Virtctl):
         if wait:
             self.vmi_obj.wait_for_virt_launcher_pod_delete()
             self.vmi_obj.wait_for_vmi_delete()
-            self.wait_for_vm_status(status=constants.VM_STOPPED)
+            self.wait_for_vm_status(status=constants.CNV_VM_STOPPED)
             logger.info(f"VM: {self._vm_name} reached Stopped state")
 
     def restart(self, wait=True):
@@ -182,10 +214,49 @@ class VirtualMachine(Virtctl):
                 f"VM: {self._vm_name} reached Running state state after restart operation"
             )
 
+    def addvolme(self, volume_name, persist=True, serial=None):
+        """
+        Add a volume to a VM
+
+        Args:
+            volume_name (str): Name of the volume/PVC to add.
+            persist (bool): True to persist the volume.
+            serial (str): Serial number for the volume.
+
+        Returns:
+             str: stdout of command
+
+        """
+        logger.info(f"Adding {volume_name} to {self._vm_name}")
+        self.add_volume(
+            vm_name=self._vm_name,
+            volume_name=volume_name,
+            persist=persist,
+            serial=serial,
+        )
+        logger.info(f"Successfully HotPlugged disk {volume_name} to {self._vm_name}")
+
+    def removevolume(self, volume_name):
+        """
+        Remove a volume from a VM
+
+        Args:
+            volume_name (str): Name of the volume to remove.
+
+        Returns:
+             str: stdout of command
+
+        """
+        logger.info(f"Removing {volume_name} from {self._vm_name}")
+        self.remove_volume(vm_name=self._vm_name, volume_name=volume_name)
+        logger.info(
+            f"Successfully HotUnplugged disk {volume_name} from {self._vm_name}"
+        )
+
     def scp_to_vm(
         self,
         local_path,
-        vm_username,
+        vm_username=None,
         identity_file=None,
         vm_dest_path=None,
         recursive=False,
@@ -204,6 +275,7 @@ class VirtualMachine(Virtctl):
              str: stdout of command
 
         """
+        vm_username = vm_username if vm_username else self.get_os_username()
         vm_dest_path = vm_dest_path if vm_dest_path else "."
         logger.info(
             f"Starting scp from local machine path: {local_path} to VM path: {vm_dest_path}"
@@ -219,7 +291,12 @@ class VirtualMachine(Virtctl):
         )
 
     def scp_from_vm(
-        self, local_path, vm_username, vm_src_path, identity_file=None, recursive=False
+        self,
+        local_path,
+        vm_src_path,
+        vm_username=None,
+        identity_file=None,
+        recursive=False,
     ):
         """
         Copy files/directories from the VirtualMachine to the local machine using SCP.
@@ -235,6 +312,7 @@ class VirtualMachine(Virtctl):
              str: stdout of command
 
         """
+        vm_username = vm_username if vm_username else self.get_os_username()
         logger.info(
             f"Starting scp from VM path: {vm_src_path} to local machine path: {local_path}"
         )
@@ -248,7 +326,7 @@ class VirtualMachine(Virtctl):
             recursive=recursive,
         )
 
-    def run_ssh_cmd(self, username, command, use_sudo=True, identity_file=None):
+    def run_ssh_cmd(self, command, username=None, use_sudo=True, identity_file=None):
         """
         Connect to the VirtualMachine using SSH and execute a command.
 
@@ -263,6 +341,7 @@ class VirtualMachine(Virtctl):
 
         """
         logger.info(f"Executing {command} command on the {self._vm_name} VM using SSH")
+        username = username if username else self.get_os_username()
         return self.run_ssh_command(
             self._vm_name,
             username,
@@ -318,3 +397,10 @@ class VirtualMachine(Virtctl):
 
         """
         return self.get().get("status").get("printableStatus")
+
+    def delete(self):
+        """
+        Delete the VirtualMachine
+        """
+        self.vm_ocp_obj.delete(resource_name=self._vm_name)
+        self.vm_ocp_obj.wait_for_delete(resource_name=self._vm_name, timeout=180)
