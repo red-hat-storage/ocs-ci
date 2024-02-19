@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     runs_on_provider,
     skipif_aws_creds_are_missing,
+    skipif_disconnected_cluster,
     skipif_vsphere_ipi,
     tier1,
     tier2,
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 @runs_on_provider
 @ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
 @skipif_aws_creds_are_missing
+@skipif_disconnected_cluster
 class TestLogBasedBucketReplication(MCGTest):
     """
     Test log-based replication with deletion sync.
