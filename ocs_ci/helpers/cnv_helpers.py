@@ -9,7 +9,10 @@ from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
-from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state,
+    create_ocs_object_from_kind_and_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -230,14 +233,16 @@ def get_pvc_from_vm(vm_obj):
     Get the PVC name from VM obj
 
     Returns:
-        str: pvc name
+        ocs_ci.ocs.resources.ocs.OCS (obj): PVC in the form of ocs object
 
     """
     vm_data = vm_obj.get()
     pvc_name = vm_data["spec"]["template"]["spec"]["volumes"][0][
         "persistentVolumeClaim"
     ]["claimName"]
-    return pvc_name
+    return create_ocs_object_from_kind_and_name(
+        kind=constants.PVC, resource_name=pvc_name, namespace=vm_obj.namespace
+    )
 
 
 def get_secret_from_vm(vm_obj):
@@ -245,14 +250,16 @@ def get_secret_from_vm(vm_obj):
     Get the secret name from VM obj
 
     Returns:
-        str: secret name
+        ocs_ci.ocs.resources.ocs.OCS (obj): Secret in the form of ocs object
 
     """
     vm_data = vm_obj.get()
     secret_name = vm_data["spec"]["template"]["spec"]["accessCredentials"][0][
         "sshPublicKey"
     ]["source"]["secret"]["secretName"]
-    return secret_name
+    return create_ocs_object_from_kind_and_name(
+        kind=constants.SECRET, resource_name=secret_name, namespace=vm_obj.namespace
+    )
 
 
 def get_volumeimportsource(pvc_obj):
@@ -260,9 +267,13 @@ def get_volumeimportsource(pvc_obj):
     Get the volumeimportsource name from PVC obj
 
     Returns:
-        str: volumeimportsource name
+        ocs_ci.ocs.resources.ocs.OCS (obj): volumeimportsource in the form of ocs object
 
     """
     pvc_data = pvc_obj.get()
     volumeimportsource_name = pvc_data["spec"]["dataSource"]["name"]
-    return volumeimportsource_name
+    return create_ocs_object_from_kind_and_name(
+        kind=constants.VOLUME_IMPORT_SOURCE,
+        resource_name=volumeimportsource_name,
+        namespace=pvc_obj.namespace,
+    )

@@ -340,6 +340,7 @@ VM_RUNNING = "Running"
 CNV_VM_STOPPED = "Stopped"
 VM_PAUSED = "Paused"
 DEFAULT_CNV_CEPH_RBD_SC = "ocs-storagecluster-ceph-rbd-virtualization"
+VOLUME_IMPORT_SOURCE = "VolumeImportSource"
 
 
 # Virtctl constants
