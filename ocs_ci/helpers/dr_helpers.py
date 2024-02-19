@@ -899,7 +899,7 @@ def get_all_drclusters():
         list: List of all DRClusters
     """
     config.switch_acm_ctx()
-    drclusters_obj = ocp.OCP(kind="DRCluster")
+    drclusters_obj = ocp.OCP(kind=constants.DRCLUSTER)
     drclusters = []
     for cluster in drclusters_obj.get().get("items"):
         drclusters.append(cluster.get("metadata").get("name"))

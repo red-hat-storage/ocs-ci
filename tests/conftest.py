@@ -35,7 +35,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
-from ocs_ci.ocs.acm.acm import login_to_acm
+from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
@@ -155,7 +155,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
 )
-from ocs_ci.helpers import helpers, dr_helpers
+from ocs_ci.helpers import helpers, dr_helpers, dr_helpers_ui
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
@@ -6598,34 +6598,6 @@ def dr_workload(request):
     ):
         """
         Args:
-            num_of_subscription (int): Number of Subscription type workload to be created on each cluster
-            num_of_appset (int): Number of ApplicationSet type workload to be created on each cluster
-            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
-                This decides whether a RBD based or CephFS based resource is created. RBD is default.
-            switch_ctx (int): The cluster index by the cluster name
-            appset_model (str): Appset Gitops deployment now supports "pull" model starting ACM 2.10 which is now the
-                default selection in addition to "push" model.
-                This decides whether a RBD based or CephFS based resource is created. RBD is default
-
-        Raises:
-            ResourceNotDeleted: In case workload resources not deleted properly
-
-        Returns:
-            instances (list): objects of appset workload class
-
-        """
-    instances = []
-    ctx = []
-
-    def factory(
-        num_of_subscription=1,
-        num_of_appset=0,
-        appset_model="pull",
-        pvc_interface=constants.CEPHBLOCKPOOL,
-        switch_ctx=None,
-    ):
-        """
-        Args:
             num_of_subscription (int): Number of Subscription type workload to be created
             num_of_appset (int): Number of ApplicationSet type workload to be created
             appset_model (str): GitOps ApplicationSet deployment model. Valid values include "pull" or "push".
@@ -6704,6 +6676,97 @@ def dr_workload(request):
         if failed_to_delete:
             raise ResourceNotDeleted(
                 f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
+            )
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def dr_workloads_on_managed_clusters(request):
+    """
+    Deploying subscription apps on both primary and secondary managed clusters
+    """
+
+    primary_cluster_instances = []
+    secondary_cluster_instances = []
+
+    def factory(
+        num_of_subscription=1,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        primary_cluster=None,
+        secondary_cluster=None,
+    ):
+        """
+        Args:
+            num_of_subscription (int): Number of Subscription type workload to be created on each cluster
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default
+            primary_cluster (bool): True if apps to be deployed on primary cluster, false otherwise
+            secondary_cluster (bool): True if apps to be deployed on secondary cluster, false otherwise
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            instances (list): objects of appset workload class
+            primary_cluster_instances (list): objects of subscription workload class on primary
+            secondary_cluster_instances (list): objects of subscription workload class on secondary
+
+        """
+        total_pvc_count = 0
+        workload_key = "dr_workload_subscription"
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            workload_key = "dr_workload_subscription_cephfs"
+
+        if primary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                primary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(
+                    primary_cluster=primary_cluster, secondary_cluster=None
+                )
+
+        if secondary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                secondary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload(
+                    primary_cluster=None, secondary_cluster=secondary_cluster
+                )
+
+        return primary_cluster_instances, secondary_cluster_instances
+
+    def teardown():
+        failed_to_delete = False
+        acm_obj = AcmAddClusters()
+        instances = [primary_cluster_instances, secondary_cluster_instances]
+        for instance in instances:
+            for workload in instance:
+                try:
+                    dr_helpers_ui.delete_application_ui(
+                        acm_obj, workload_to_delete=workload.name
+                    )
+                except ResourceNotDeleted:
+                    failed_to_delete = True
+
+        if failed_to_delete:
+            raise ResourceNotDeleted(
+                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
             )
 
     request.addfinalizer(teardown)

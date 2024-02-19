@@ -426,6 +426,7 @@ def verify_failover_relocate_status_ui(
         log.info("Data policy modal page closed")
 
 
+<<<<<<< HEAD
 def check_cluster_operator_status(acm_obj, timeout=30):
     """
     The function verifies the cluster operator status on the DR monitoring dashboard
@@ -641,4 +642,45 @@ def check_apps_running_on_selected_cluster(
         else:
             log.error(f"App {app} not found on cluster {cluster_name} on DR dashboard")
             return False
+def delete_application_ui(acm_obj, workload_to_delete=None, timeout=60):
+    """
+    Function to delete specified workloads on ACM UI
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_to_delete (str): Specify the workload to delete, otherwise none will be deleted
+        timeout (int): timeout to wait for certain elements to be found on the ACM UI
+
+    """
+    if workload_to_delete:
+        ocp_version = get_ocp_version()
+        acm_loc = locators[ocp_version]["acm_page"]
+        acm_obj.navigate_applications_page()
+        log.info("Click on search bar")
+        acm_obj.do_click(acm_loc["search-bar"])
+        log.info("Clear existing text from search bar if any")
+        acm_obj.do_clear(acm_loc["search-bar"])
+        log.info("Enter the workload to be searched")
+        acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_delete)
+        log.info("Click on kebab menu option")
+        acm_obj.do_click(acm_loc["kebab-action"], enable_screenshot=True)
+        acm_obj.do_click(acm_loc["delete-app"], enable_screenshot=True, timeout=timeout)
+        if not acm_obj.get_checkbox_status(acm_loc["remove-app-resources"]):
+            acm_obj.select_checkbox_status(acm_loc["remove-app-resources"], status=True)
+        initiate_btn = acm_obj.find_an_element_by_xpath(
+            "//button[@id='modal-intiate-action']"
+        )
+        aria_disabled = initiate_btn.get_attribute("aria-disabled")
+        if aria_disabled == "false":
+            acm_obj.do_click(acm_loc["delete"], enable_screenshot=True, timeout=timeout)
+        close_action_modal = acm_obj.wait_until_expected_text_is_found(
+            acm_loc["close-action-modal"], expected_text="Close", timeout=timeout
+        )
+        if close_action_modal:
+            log.info("Close button found")
+            acm_obj.do_click_by_xpath("//*[text()='Close']")
+            log.info("Closed deletion of application page")
+    else:
+        log.error("No workload specified to delete, Please specify")
+        return False
     return True

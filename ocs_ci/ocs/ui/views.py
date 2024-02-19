@@ -1026,6 +1026,12 @@ acm_configuration_4_12 = {
     ),
     "failover-app": ("//button[normalize-space()='Failover application']", By.XPATH),
     "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
+    "delete-app": ("//button[normalize-space()='Delete application']", By.XPATH),
+    # "remove-app-resources": (
+    #     "//button[@type='checkbox'][@class='pf-c-check__input'][@id='remove-app-resources']", By.XPATH
+    # ),
+    "remove-app-resources": ("@id='remove-app-resources'", By.ID),
+    "delete": ("//button[@type='button'][@class='pf-c-button pf-m-danger']", By.XPATH),
     "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
     "select-policy": ('//*[text()="{}"]', By.XPATH),
     "target-cluster-dropdown": (

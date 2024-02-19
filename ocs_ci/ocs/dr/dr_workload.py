@@ -116,6 +116,9 @@ class BusyBox(DRWorkload):
         self.drpc_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "drpc.yaml"
         )
+        self.app_yaml_file = os.path.join(
+            self.workload_subscription_dir, self.workload_name, "app.yaml"
+        )
         self.namespace_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "namespace.yaml"
         )
@@ -183,13 +186,12 @@ class BusyBox(DRWorkload):
         clusters = []
         if primary_cluster:
             clusters = [self.preferred_primary_cluster]
+        # By default, it deploys apps on primary cluster if not set to false
+        clusters = [self.preferred_primary_cluster]
         if secondary_cluster:
             clusters = [self.preferred_secondary_cluster]
         if primary_cluster and secondary_cluster:
-            clusters = [
-                self.preferred_primary_cluster,
-                self.preferred_secondary_cluster,
-            ]
+            clusters.append(self.preferred_secondary_cluster)
 
         for cluster in clusters:
             # load workload-repo namespace.yaml
@@ -272,6 +274,12 @@ class BusyBox(DRWorkload):
             ] = placementrule_yaml_data["metadata"]["name"]
             templating.dump_data_to_temp_yaml(
                 subscription_yaml_data, self.subscription_yaml_file
+            )
+
+            # load app yaml
+            app_yaml_data = templating.load_yaml(self.app_yaml_file)
+            app_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
+                resource_type="app", resource_description="busybox"
             )
 
             # load workload kustomization.yaml
