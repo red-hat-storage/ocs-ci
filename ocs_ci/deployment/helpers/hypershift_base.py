@@ -287,10 +287,10 @@ class HyperShiftBase:
             )
             return
         logger.info(f"Saving ICSP mirrors list to '{self.icsp_mirrors_path}'")
-        self.ocp.exec_oc_cmd(
-            "get imagecontentsourcepolicy -o json | jq -r '.items[].spec.repositoryDigestMirrors[] | "
-            f"- mirrors:\n  - \\(.mirrors[0])\n  source: \\(.source)'> {self.icsp_mirrors_path}"
-        )
+
+        jq_filter = r'.items[].spec.repositoryDigestMirrors[] | "mirrors: \(.mirrors[0])\nsource: \(.source)"'
+        create_ICSP_list_cmd = f"get imagecontentsourcepolicy -o json | jq -r {jq_filter} > {self.icsp_mirrors_path}"
+        self.ocp.exec_oc_cmd(create_ICSP_list_cmd)
 
     def update_ICSP_list(self):
         """
