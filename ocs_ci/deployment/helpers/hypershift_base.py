@@ -293,7 +293,7 @@ class HyperShiftBase:
         jq_filter = r'.items[].spec.repositoryDigestMirrors[] | "mirrors: \(.mirrors[0])\nsource: \(.source)"'
         # create_ICSP_list_cmd = f"get imagecontentsourcepolicy -o json | jq -r {jq_filter} > {self.icsp_mirrors_path}"
 
-        occmd = "get imagecontentsourcepolicy -o json"
+        occmd = "oc get imagecontentsourcepolicy -o json"
         jq_cmd = f"jq -r {jq_filter}"
         json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
         mirrors_list = subprocess.Popen(
