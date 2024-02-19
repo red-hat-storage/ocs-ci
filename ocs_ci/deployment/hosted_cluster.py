@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller):
     def __init__(self):
-        super(HyperShiftBase, self).__init__()
-        super(MetalLBInstaller, self).__init__()
+        HyperShiftBase.__init__(self)
+        MetalLBInstaller.__init__(self)
 
     def deploy_ocp(
         self, deploy_cnv=True, deploy_metallb=True, download_hcp_binary=True
