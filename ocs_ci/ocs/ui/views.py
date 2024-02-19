@@ -634,6 +634,7 @@ page_nav_4_10 = {
 
 page_nav_4_14 = {
     "object_storage_page": ("Object Storage", By.LINK_TEXT),
+    "storageclients_page": ("Storage Clients", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -1539,6 +1540,12 @@ validation_4_14 = {
         "//button[@data-test='horizontal-link-Overview']",
         By.XPATH,
     ),
+    "generate_client_onboarding_token_button": (
+        "//button[text()='Generate client onboarding token']",
+        By.XPATH,
+    ),
+    "copy to clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
+    "onboarding_token": ("//*[@class='odf-onboarding-modal__text-area']", By.XPATH),
 }
 
 

@@ -641,4 +641,34 @@ class ValidationUI(PageNavigator):
             timeout=1,
             expected_text="OpenShift Container Storage",
         )
-        return odf_operator_presence, ocs_operator_presence
+        return odf_operator_presence and not ocs_operator_presence
+
+    def verify_storage_clients_page(self):
+        """
+        Verify storage clients page in UI
+        and generate client onboarding token from Storage Clients page
+
+        Returns:
+        onboarding_token(str): client onboarding token
+
+        """
+        self.navigate_to_storageclients_page()
+        self.do_click(
+            self.validation_loc["generate_client_onboarding_token_button"],
+            enable_screenshot=True,
+        )
+        strings_object_service_tab = [
+            "Client onboarding token",
+            "How to use this token",
+        ]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_object_service_tab,
+            page_name="client_onboarding_token_page",
+        )
+        # onboarding_token = self.do_click(self.validation_loc["copy to clipboard"],enable_screenshot=True).text
+        onboarding_token = self.find_an_element_by_xpath(
+            "//*[@class='odf-onboarding-modal__text-area']"
+        ).text
+        logger.info(f"Onboarding token generated successfully: {onboarding_token}")
+
+        return onboarding_token
