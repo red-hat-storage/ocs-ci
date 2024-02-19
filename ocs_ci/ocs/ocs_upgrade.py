@@ -356,7 +356,7 @@ class OCSUpgrade(object):
             config.REPORTING["ocs_must_gather_image"] = must_gather_image
             config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
-    def get_csv_name_pre_upgrade(self):
+    def get_csv_name_pre_upgrade(self, resource_name=OCS_OPERATOR_NAME):
         """
         Getting OCS operator name as displayed in CSV
 
@@ -364,9 +364,12 @@ class OCSUpgrade(object):
             str: OCS operator name, as displayed in CSV
 
         """
+        import ipdb
+
+        ipdb.set_trace()
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
@@ -474,7 +477,13 @@ class OCSUpgrade(object):
             log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
             return True
 
-    def get_images_post_upgrade(self, channel, pre_upgrade_images, upgrade_version):
+    def get_images_post_upgrade(
+        self,
+        channel,
+        pre_upgrade_images,
+        upgrade_version,
+        resource_name=OCS_OPERATOR_NAME,
+    ):
         """
         Checks if all images of OCS cluster upgraded,
             and return list of all images if upgrade success
@@ -490,7 +499,7 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
