@@ -20,7 +20,12 @@ from ocs_ci.utility.utils import (
     load_config_file,
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
-from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    CephClusterMultiCluster,
+    CephHealthMonitor,
+    MulticlusterCephHealthMonitor,
+)
 from ocs_ci.ocs.utils import is_acm_cluster, get_non_acm_cluster_config
 from ocs_ci.utility.ocp_upgrade import (
     pause_machinehealthcheck,
@@ -104,10 +109,13 @@ class TestUpgradeOCP(ManageTest):
             for cluster in get_non_acm_cluster_config():
                 if config.ENV_DATA["zone"] == cluster.ENV_DATA["zone"]:
                     local_zone_odf = cluster
-            ceph_cluster = CephCluster(local_zone_odf)
+            ceph_cluster = CephClusterMultiCluster(local_zone_odf)
+            health_monitor = MulticlusterCephHealthMonitor
         else:
             ceph_cluster = CephCluster()
-        with CephHealthMonitor(ceph_cluster):
+            health_monitor = CephHealthMonitor
+
+        with health_monitor(ceph_cluster):
             ocp_channel = config.UPGRADE.get(
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )

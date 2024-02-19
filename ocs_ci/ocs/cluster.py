@@ -78,7 +78,7 @@ class CephClusterMultiCluster(object):
 
     """
 
-    def __init__(self):
+    def __init__(self, cluster_conf=None):
         pass
 
 
@@ -1056,10 +1056,10 @@ class CephCluster(object):
 
 class MulticlusterCephHealthMonitor(object):
     # TODO: This will be a placeholder for now
-    def __init__(self):
+    def __init__(self, ceph_cluster=None):
         pass
 
-    def __entry__(self):
+    def __enter__(self):
         pass
 
     def __exit__(self):
