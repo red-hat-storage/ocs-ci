@@ -118,7 +118,7 @@ class HyperShiftBase:
             f"{self.hcp_binary_path} create cluster kubevirt "
             f"--name {name} "
             f"--release-image {index_image} "
-            f"--nodepool-replicas {nodepool_replicas} "
+            f"--node-pool-replicas {nodepool_replicas} "
             f"--memory {memory} "
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
@@ -278,7 +278,10 @@ class HyperShiftBase:
         Get list of ICSP clusters
 
         """
-        if not os.path.getsize(self.icsp_mirrors_path):
+        if (
+            not os.path.getsize(self.icsp_mirrors_path)
+            and not os.path.getsize(self.icsp_mirrors_path) == 0
+        ):
             logger.info(
                 f"ICSP mirrors list already exists at '{self.icsp_mirrors_path}'"
             )
