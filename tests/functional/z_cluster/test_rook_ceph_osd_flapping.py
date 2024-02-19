@@ -9,7 +9,7 @@ from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     clear_crash_warning_and_osd_removal_leftovers,
-    verify_log_exist_in_pod_logs,
+    verify_log_exist_in_pods_logs,
 )
 from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources import pod
@@ -93,8 +93,8 @@ class TestRookCephOsdFlapping(ManageTest):
         sample = TimeoutSampler(
             timeout=60,
             sleep=5,
-            func=verify_log_exist_in_pod_logs,
-            pod_name=self.osd_pod_obj.name,
+            func=verify_log_exist_in_pods_logs,
+            pod_names=[self.osd_pod_obj.name],
             expected_log=expected_log,
         )
 

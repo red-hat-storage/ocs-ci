@@ -1746,6 +1746,7 @@ def get_pod_logs(
     namespace=config.ENV_DATA["cluster_namespace"],
     previous=False,
     all_containers=False,
+    since=None,
 ):
     """
     Get logs from a given pod
@@ -1755,9 +1756,11 @@ def get_pod_logs(
     namespace (str): Namespace of the pod
     previous (bool): True, if pod previous log required. False otherwise.
     all_containers (bool): fetch logs from all containers of the resource
+    since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
 
     Returns:
         str: Output from 'oc get logs <pod_name> command
+
     """
     pod = OCP(kind=constants.POD, namespace=namespace)
     cmd = f"logs {pod_name}"
@@ -1767,6 +1770,8 @@ def get_pod_logs(
         cmd += " --previous"
     if all_containers:
         cmd += " --all-containers=true"
+    if since:
+        cmd += f" --since={since}"
 
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
