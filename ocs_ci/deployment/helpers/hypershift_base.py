@@ -25,44 +25,55 @@ class HyperShiftBase:
         self.hcp_binary_path = os.path.join(self.bin_dir, "hcp")
         # ocp instance for running oc commands
         self.ocp = OCP()
+        self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="icsp_mirrors-", delete=False
+        ).name
 
     def download_hcp_binary(self):
         """
         Download hcp binary to bin_dir
 
         """
-        # Prepare bin directory for hcp
         if os.path.isfile(self.hcp_binary_path):
             logger.info(
                 f"hcp binary already exists {self.hcp_binary_path}, skipping download."
             )
-        else:
+            return
 
-            hcp_version = config.ENV_DATA["hcp_version"]
+        hcp_version = config.ENV_DATA["hcp_version"]
 
+        logger.info(
+            f"Downloading hcp archive file from quay.io, version: {hcp_version}"
+        )
+
+        exec_cmd(
+            f"podman create --authfile {os.path.join(constants.DATA_DIR, 'pull-secret')} --name hcp "
+            f"quay.io/hypershift/hypershift-operator:{hcp_version}",
+        )
+        logger.info("wait for 20 seconds to download the hcp binary file")
+        # I was unable to wait until the file is downloaded in subprocess and decided not to invest in
+        # finding the solution and adjust exec_cmd. This 20 sec is a workaround.
+        time.sleep(20)
+        exec_cmd(f"podman cp hcp:/bin/hcp {self.bin_dir}")
+        # check hcp binary is downloaded
+        if os.path.isfile(self.hcp_binary_path):
             logger.info(
-                f"Downloading hcp archive file from quay.io, version: {hcp_version}"
+                f"hcp binary downloaded successfully to path:{self.hcp_binary_path}"
+            )
+            os.chmod(self.hcp_binary_path, 0o755)
+        else:
+            raise CommandFailed(
+                f"hcp binary download failed to path:{self.hcp_binary_path}"
             )
 
-            exec_cmd(
-                f"podman create --authfile {os.path.join(constants.DATA_DIR, 'pull-secret')} --name hcp "
-                f"quay.io/hypershift/hypershift-operator:{hcp_version}",
-            )
-            logger.info("wait for 20 seconds to download the hcp binary file")
-            # I was unable to wait until the file is downloaded in subprocess and decided not to invest in
-            # finding the solution and adjust exec_cmd. This 20 sec is a workaround.
-            time.sleep(20)
-            exec_cmd(f"podman cp hcp:/bin/hcp {self.bin_dir}")
-            # check hcp binary is downloaded
-            if os.path.isfile(self.hcp_binary_path):
-                logger.info(
-                    f"hcp binary downloaded successfully to path:{self.hcp_binary_path}"
-                )
-                os.chmod(self.hcp_binary_path, 0o755)
-            else:
-                raise CommandFailed(
-                    f"hcp binary download failed to path:{self.hcp_binary_path}"
-                )
+    def update_hcp_binary(self):
+        """
+        Update hcp binary
+        """
+        if os.path.isfile(self.hcp_binary_path):
+            logger.info(f"Updating hcp binary {self.hcp_binary_path}")
+            exec_cmd(f"rm -f {self.hcp_binary_path}")
+        self.download_hcp_binary()
 
     def create_kubevirt_OCP_cluster(
         self,
@@ -86,8 +97,7 @@ class HyperShiftBase:
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
-        icsp_file_path = self.get_ICSP_list()
-        logger.debug(f"ICSP file path: {icsp_file_path}")
+        self.get_ICSP_list()
 
         # If ocp_version is not provided, get the version from Hosting Platform
         if not ocp_version:
@@ -113,7 +123,7 @@ class HyperShiftBase:
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
             f"--pull-secret {os.path.join(constants.DATA_DIR, 'pull-secret')} "
-            f"--image-content-sources {icsp_file_path}"
+            f"--image-content-sources {self.icsp_mirrors_path}"
         )
 
         logger.info(
@@ -263,28 +273,34 @@ class HyperShiftBase:
             f"get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
         )
 
-    def get_ICSP_list(self, output_file: str = None):
+    def get_ICSP_list(self):
         """
         Get list of ICSP clusters
 
-        Args:
-            output_file (str): full Path to the file where the list will be saved, if not will be saved in tmp dir
-
-        Returns:
-            str: Path to the file where the list is saved
         """
-        logger.info("Getting list of ICSP clusters")
-
-        if not os.path.isfile(output_file):
-            output_file = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="icsp_mirrors", delete=False
-            ).name
-
+        if not os.path.getsize(self.icsp_mirrors_path):
+            logger.info(
+                f"ICSP mirrors list already exists at '{self.icsp_mirrors_path}'"
+            )
+            return
+        logger.info(f"Saving ICSP mirrors list to '{self.icsp_mirrors_path}'")
         self.ocp.exec_oc_cmd(
             "get imagecontentsourcepolicy -o json | jq -r '.items[].spec.repositoryDigestMirrors[] | "
-            f"- mirrors:\n  - \\(.mirrors[0])\n  source: \\(.source)'> {output_file}"
+            f"- mirrors:\n  - \\(.mirrors[0])\n  source: \\(.source)'> {self.icsp_mirrors_path}"
         )
-        return output_file
+
+    def update_ICSP_list(self):
+        """
+        Update ICSP list
+        """
+        if os.path.isfile(self.icsp_mirrors_path):
+            logger.info(f"Updating ICSP list from '{self.icsp_mirrors_path}'")
+            exec_cmd(f"rm -f {self.icsp_mirrors_path}")
+        else:
+            self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="icsp_mirrors-", delete=False
+            ).name
+        self.get_ICSP_list()
 
     def destroy_kubevirt_cluster(self, name):
         """
