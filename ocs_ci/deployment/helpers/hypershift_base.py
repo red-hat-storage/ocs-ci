@@ -19,7 +19,9 @@ class HyperShiftBase:
     """
 
     def __init__(self):
-        self.hcp_binary_path = None
+        bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
+        self.bin_dir = os.path.abspath(bin_dir_rel_path)
+        self.hcp_binary_path = os.path.join(self.bin_dir, "hcp")
         # ocp instance for running oc commands
         self.ocp = OCP()
 
@@ -29,9 +31,6 @@ class HyperShiftBase:
 
         """
         # Prepare bin directory for hcp
-        bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
-        bin_dir = os.path.abspath(bin_dir_rel_path)
-
         if os.path.isfile(self.hcp_binary_path):
             logger.info(
                 f"hcp binary already exists {self.hcp_binary_path}, skipping download."
@@ -43,12 +42,11 @@ class HyperShiftBase:
             logger.info(
                 f"Downloading hcp archive file from quay.io, version: {hcp_version}"
             )
-            bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
-            bin_dir = os.path.abspath(bin_dir_rel_path)
+
             exec_cmd(
                 f"podman create --authfile {os.path.join(constants.DATA_DIR, 'pull-secret')} --name hcp "
                 f"quay.io/hypershift/hypershift-operator:{hcp_version} "
-                f"&& podman cp hcp:/bin/hcp {bin_dir}"
+                f"&& podman cp hcp:/bin/hcp {self.bin_dir}"
             )
             # check hcp binary is downloaded
             if os.path.isfile(self.hcp_binary_path):
