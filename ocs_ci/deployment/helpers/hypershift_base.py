@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+import time
 from datetime import datetime
 
 from ocs_ci.framework import config
@@ -47,8 +48,11 @@ class HyperShiftBase:
                 f"podman create --authfile {os.path.join(constants.DATA_DIR, 'pull-secret')} --name hcp "
                 f"quay.io/hypershift/hypershift-operator:{hcp_version} "
                 f"&& podman cp hcp:/bin/hcp {self.bin_dir}",
-                close_fds=True,
             )
+            logger.info("wait for 20 seconds to download the hcp binary file")
+            # I was unable to wait until the file is downloaded in subprocess and decided not to invest in
+            # finding the solution and adjust exec_cmd. This 20 sec is a workaround.
+            time.sleep(20)
             # check hcp binary is downloaded
             if os.path.isfile(self.hcp_binary_path):
                 logger.info(
