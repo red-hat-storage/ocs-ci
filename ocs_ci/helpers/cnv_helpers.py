@@ -226,7 +226,13 @@ def create_pvc_using_data_source(
 
 
 def get_pvc_from_vm(vm_obj):
+    """
+    Get the PVC name from VM obj
 
+    Returns:
+        str: pvc name
+
+    """
     vm_data = vm_obj.get()
     pvc_name = vm_data["spec"]["template"]["spec"]["volumes"][0][
         "persistentVolumeClaim"
@@ -235,6 +241,13 @@ def get_pvc_from_vm(vm_obj):
 
 
 def get_secret_from_vm(vm_obj):
+    """
+    Get the secret name from VM obj
+
+    Returns:
+        str: secret name
+
+    """
     vm_data = vm_obj.get()
     secret_name = vm_data["spec"]["template"]["spec"]["accessCredentials"][0][
         "sshPublicKey"
@@ -243,6 +256,13 @@ def get_secret_from_vm(vm_obj):
 
 
 def get_volumeimportsource(pvc_obj):
+    """
+    Get the volumeimportsource name from PVC obj
+
+    Returns:
+        str: volumeimportsource name
+
+    """
     pvc_data = pvc_obj.get()
     volumeimportsource_name = pvc_data["spec"]["dataSource"]["name"]
     return volumeimportsource_name

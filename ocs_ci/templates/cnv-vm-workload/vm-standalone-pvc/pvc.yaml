@@ -7,7 +7,7 @@ spec:
   dataSourceRef:
     apiGroup: cdi.kubevirt.io
     kind: VolumeImportSource
-    name: fedora-source
+    name: centos-source
   accessModes:
   - ReadWriteMany
   resources:
