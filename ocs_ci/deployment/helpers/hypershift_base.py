@@ -1,17 +1,26 @@
 import logging
 import os
-import shlex
-import subprocess
 import tempfile
 import time
 from datetime import datetime
 
+from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_file
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+
+"""
+This module contains the base class for HyperShift hosted cluster management.
+Main tasks include:
+- Downloading hcp binary
+- Creating HyperShift hosted cluster
+- Destroying HyperShift hosted cluster
+
+"""
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +92,7 @@ class HyperShiftBase:
         nodepool_replicas: int = 2,
         memory: str = "12Gi",
         cpu_cores: int = 6,
-        root_volume_size: str = "12Gi",
+        root_volume_size: str = 40,
         ocp_version=None,
     ):
         """
@@ -95,7 +104,7 @@ class HyperShiftBase:
             memory (str): Memory size of the cluster, minimum 12Gi
             cpu_cores (str): CPU cores of the cluster, minimum 6
             ocp_version (str): OCP version of the cluster, if not specified, will use the version from Hosting Platform
-            root_volume_size (str): Root volume size of the cluster, default 40 Gi (Gi is not required)
+            root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
@@ -290,33 +299,8 @@ class HyperShiftBase:
             return
         logger.info(f"Saving ICSP mirrors list to '{self.icsp_mirrors_path}'")
 
-        jq_filter = r'.items[].spec.repositoryDigestMirrors[] | "mirrors: \(.mirrors[0])\nsource: \(.source)"'
-        # create_ICSP_list_cmd = f"get imagecontentsourcepolicy -o json | jq -r {jq_filter} > {self.icsp_mirrors_path}"
-
-        occmd = "oc get imagecontentsourcepolicy -o json"
-        jq_cmd = f"jq -r {jq_filter}"
-        json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
-        mirrors_list = subprocess.Popen(
-            shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
-        )
-        # write content into self.icsp_mirrors_path file
-        with open(self.icsp_mirrors_path, "w") as file:
-            file.write(mirrors_list.communicate()[0].decode())
-
-        json_out.stdout.close()
-
-        """
-        occmd = "oc get mch multiclusterhub -n open-cluster-management -o json"
-        jq_cmd = "jq -r .status.currentVersion"
-        json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
-        acm_version = subprocess.Popen(
-            shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
-        )
-        json_out.stdout.close()
-        return acm_version.communicate()[0].decode()
-        """
-
-        # self.ocp.exec_oc_cmd(create_ICSP_list_cmd)
+        icsp_json = self.ocp.exec_oc_cmd("get imagecontentsourcepolicy -o json")
+        parse_ICSP_json_to_mirrors_file(icsp_json, self.icsp_mirrors_path)
 
     def update_ICSP_list(self):
         """
