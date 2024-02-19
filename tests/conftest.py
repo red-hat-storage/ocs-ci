@@ -501,12 +501,13 @@ def pytest_collection_modifyitems(session, config, items):
                 )
                 # Apply all the markers now
                 for mark, param in markers_update:
-                    # if mark.name == 'run':
-                    #     for m in item.iter_markers():
-                    #         if m.name == 'run':
-                    #             m.kwargs['order'] = param
-                    # else:
-                    item.add_marker(mark(param))
+                    if mark.name == "run":
+                        for m in item.iter_markers():
+                            if m.name == "run":
+                                # m.kwargs['order'] = param
+                                item.add_marker(pytest.mark.run(order=param))
+                    else:
+                        item.add_marker(mark(param))
                 log.info(f"TEST={item.name}")
                 log.info(
                     f"MARKERS = {[(i.name, i.args, i.kwargs) for i in item.iter_markers()]}"
