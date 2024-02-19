@@ -47,9 +47,6 @@ class HyperShiftBase:
                 f"podman create --authfile {os.path.join(constants.DATA_DIR, 'pull-secret')} --name hcp "
                 f"quay.io/hypershift/hypershift-operator:{hcp_version} "
                 f"&& podman cp hcp:/bin/hcp {self.bin_dir}",
-                stdin=None,
-                stdout=None,
-                stderr=None,
                 close_fds=True,
             )
             # check hcp binary is downloaded
