@@ -67,14 +67,12 @@ class TestMultipleApplicationFailoverAndRelocate:
         self,
         setup_acm_ui,
         nodes_multicluster,
-        dr_workload,
+        dr_workloads_on_managed_clusters,
         workload_type,
     ):
         """
         Tests to failover and relocate of applications from both the managed clusters
 
-        This test is also compatible to be run from UI,
-        pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
         """
         self.workload_namespaces = []
         if config.RUN.get("mdr_failover_via_ui"):
@@ -90,7 +88,7 @@ class TestMultipleApplicationFailoverAndRelocate:
         secondary_instances = []
 
         if workload_type == constants.SUBSCRIPTION:
-            instances, primary_instances, secondary_instances = dr_workload(
+            primary_instances, secondary_instances = dr_workloads_on_managed_clusters(
                 num_of_subscription=1, primary_cluster=True, secondary_cluster=True
             )
 
