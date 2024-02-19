@@ -28,7 +28,11 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    Pod,
+    wait_for_pods_by_label_count,
+)
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -1040,6 +1044,10 @@ class MCG:
         """
 
         self.core_pod.delete(wait=True)
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_CORE_POD_LABEL,
+            exptected_count=1,
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
