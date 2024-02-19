@@ -22,6 +22,7 @@ class HyperShiftBase:
         self.hcp_binary_path = None
         # ocp instance for running oc commands
         self.ocp = OCP()
+        self.pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
     def download_hcp_binary(self):
         """
@@ -37,10 +38,7 @@ class HyperShiftBase:
                 f"hcp binary already exists {self.hcp_binary_path}, skipping download."
             )
         else:
-            endpoint_url = "quay.io"
-            exec_cmd(
-                f"podman login {endpoint_url} -u {constants.QUAY_SUPERUSER} -p {constants.QUAY_PW} --tls-verify=false"
-            )
+
             hcp_version = config.ENV_DATA["hcp_version"]
 
             logger.info(
@@ -49,7 +47,8 @@ class HyperShiftBase:
             bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
             bin_dir = os.path.abspath(bin_dir_rel_path)
             exec_cmd(
-                f"podman create --name hcp quay.io/hypershift/hypershift-operator:{hcp_version} "
+                f"podman create --authfile {self.pull_secret_path} --name hcp "
+                f"quay.io/hypershift/hypershift-operator:{hcp_version} "
                 f"&& podman cp hcp:/bin/hcp {bin_dir}"
             )
             # check hcp binary is downloaded
@@ -85,7 +84,6 @@ class HyperShiftBase:
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
-        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         icsp_file_path = self.get_ICSP_list()
         logger.debug(f"ICSP file path: {icsp_file_path}")
 
@@ -112,7 +110,7 @@ class HyperShiftBase:
             f"--memory {memory} "
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
-            f"--pull-secret {pull_secret_path} "
+            f"--pull-secret {self.pull_secret_path} "
             f"--image-content-sources {icsp_file_path}"
         )
 
