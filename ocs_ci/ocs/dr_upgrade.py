@@ -33,31 +33,32 @@ class DRUpgrade(OCSUpgrade):
     def __init__(
         self,
         namespace=constants.OPENSHIFT_OPERATORS,
-        version_before_upgrade=config.ENV_DATA.get("ocs_version"),
-        ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
+        version_before_upgrade=None,
+        ocs_registry_image=None,
         upgrade_in_current_source=config.UPGRADE.get(
             "upgrade_in_current_source", False
         ),
+        resource_name=None,
     ):
-        self.namespace = (
-            namespace if namespace else config.ENV_DATA["cluster_namespace"]
-        )
-        self.version_before_upgrade = version_before_upgrade
-        self.ocs_registry_image = ocs_registry_image
-        self.upgrade_in_current_source = upgrade_in_current_source
+        if not version_before_upgrade:
+            version_before_upgrade = config.ENV_DATA.get("ocs_version")
+        if not ocs_registry_image:
+            ocs_registry_image = config.UPGRADE.get("upgrade_ocs_registry_image")
         self.external_cluster = None
         self.operator_name = None
         self.subscription_name = None
-        self.pre_upgrade_data = None
-        self.post_upgrade_data = None
+        self.pre_upgrade_data = dict()
+        self.post_upgrade_data = dict()
         # Upgraded phases [pre_upgrade, post_upgrade]
         self.upgrade_phase = "pre_upgrade"
+        if resource_name:
+            self.resource_name = resource_name
 
-        super.__init__(
-            self.namespace,
-            self.version_before_upgrade,
-            self.ocs_registry_image,
-            self.upgrade_in_current_source,
+        super().__init__(
+            namespace,
+            version_before_upgrade,
+            ocs_registry_image,
+            upgrade_in_current_source,
         )
 
     def run_upgrade(self):
@@ -72,7 +73,9 @@ class DRUpgrade(OCSUpgrade):
         if config.DEPLOYMENT["external_mode"]:
             host, user, password, ssh_key = get_external_cluster_client()
             self.external_cluster = ExternalCluster(host, user, password, ssh_key)
-        self.csv_name_pre_upgrade = self.get_csv_name_pre_upgrade()
+        self.csv_name_pre_upgrade = self.get_csv_name_pre_upgrade(
+            resource_name=self.resource_name
+        )
         self.pre_upgrade_images = self.get_pre_upgrade_image(self.csv_name_pre_upgrade)
         self.load_version_config_file(self.upgrade_version)
 
@@ -104,7 +107,10 @@ class DRUpgrade(OCSUpgrade):
             except TimeoutException:
                 raise TimeoutException("No new CSV found after upgrade!")
         old_image = self.get_images_post_upgrade(
-            self.channel, self.pre_upgrade_images, self.upgrade_version
+            self.channel,
+            self.pre_upgrade_images,
+            self.upgrade_version,
+            self.resource_name,
         )
         verify_image_versions(
             old_image,
@@ -115,7 +121,7 @@ class DRUpgrade(OCSUpgrade):
     def update_subscription(self, channel, subscription_name):
         subscription = OCP(
             resource_name=subscription_name,
-            kind="subscription",
+            kind="subscription.operators.coreos.com",
             # namespace could be different on managed clusters
             # TODO: Handle different namespaces
             namespace=constants.OPENSHIFT_OPERATORS,
@@ -128,7 +134,7 @@ class DRUpgrade(OCSUpgrade):
             else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
-            f"patch subscription {subscription_name} "
+            f"patch subscription.operators.coreos.com {subscription_name} "
             f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
             f'"{self.channel}", "source": "{mco_source}"}}}}\''
         )
@@ -138,13 +144,14 @@ class DRUpgrade(OCSUpgrade):
         # In case of both MCO and DRhub operator, validation steps are similar
         # just the resource names changes
         assert (
-            self.post_upgrade_data["pod_status"] == "Running"
+            self.post_upgrade_data.get("pod_status", "") == "Running"
         ), f"Pod {self.pod_name_pattern} not in Running state post upgrade"
         assert (
-            self.post_upgrade_data["age"] <= self.pre_upgrade_data["age"]
+            self.post_upgrade_data.get("age", "") <= self.pre_upgrade_data["age"]
         ), f"{self.pod_name_pattern} didn't restart after upgrade"
         assert (
-            self.post_upgrade_data["version"] != self.pre_upgrade_data["version"]
+            self.post_upgrade_data.get("version", "")
+            != self.pre_upgrade_data["version"]
         ), "CSV version not upgraded"
         check_all_csvs_are_succeeded(namespace=self.namespace)
 
@@ -154,33 +161,41 @@ class DRUpgrade(OCSUpgrade):
         """
         pod_data = pod.get_all_pods(namespace=self.namespace)
         for p in pod_data:
-            if self.pod_name_pattern in p["metadata"]["name"]:
+            if self.pod_name_pattern in p.get()["metadata"]["name"]:
                 pod_obj = OCP(
                     namespace=self.namespace,
-                    resource_name=p["metadata"]["name"],
+                    resource_name=p.get()["metadata"]["name"],
                     kind="Pod",
                 )
                 if self.upgrade_phase == "pre_upgrade":
-                    self.pre_upgrade_data["age"] = pod_obj.get_resource(column="AGE")
-                    self.pre_upgrade_data["pod_status"] = pod_obj.get_resource_status()
-                if self.upgrade_phse == "post_upgrade":
-                    self.post_upgrade_data["age"] = pod_obj.get_resource(column="AGE")
-                    self.post_upgrade_data["pod_status"] = pod_obj.get_resource_status()
+                    self.pre_upgrade_data["age"] = pod_obj.get_resource(
+                        resource_name=p.get()["metadata"]["name"], column="AGE"
+                    )
+                    self.pre_upgrade_data["pod_status"] = pod_obj.get_resource_status(
+                        resource_name=p.get()["metadata"]["name"]
+                    )
+                if self.upgrade_phase == "post_upgrade":
+                    self.post_upgrade_data["age"] = pod_obj.get_resource(
+                        resource_name=p.get()["metadata"]["name"], column="AGE"
+                    )
+                    self.post_upgrade_data["pod_status"] = pod_obj.get_resource_status(
+                        resource_name=p.get()["metadata"]["name"]
+                    )
 
         # get pre-upgrade csv for MCO
         csv_objs = CSV(namespace=self.namespace)
-        for csv in csv_objs:
+        for csv in csv_objs.get()["items"]:
             if self.operator_name in csv["metadata"]["name"]:
                 csv_obj = CSV(
                     namespace=self.namespace, resource_name=csv["metadata"]["name"]
                 )
                 if self.upgrade_phase == "pre_upgrade":
                     self.pre_upgrade_data["version"] = csv_obj.get_resource(
-                        column="VERSION"
+                        resource_name=csv_obj.resource_name, column="VERSION"
                     )
                 if self.upgrade_phase == "post_upgrade":
                     self.post_upgrade_data["version"] = csv_obj.get_resource(
-                        column="VERSION"
+                        resource_name=csv_obj.resource_name, column="VERSION"
                     )
         # Make sure all csvs are in succeeded state
         check_all_csvs_are_succeeded(namespace=self.namespace)
@@ -193,20 +208,20 @@ class MultiClusterOrchestratorUpgrade(DRUpgrade):
     """
 
     def __init__(self):
-        super.__init__()
+        super().__init__(resource_name=defaults.MCO_OPERATOR_NAME)
         self.operator_name = defaults.MCO_OPERATOR_NAME
         self.subscription_name = constants.MCO_SUBSCRIPTION
 
     def run_upgrade(self):
         # Collect some pre-upgrade data for comparision after the upgrade
-        self.pod_name_pattern = "odfmo-contoller-manager"
+        self.pod_name_pattern = "odfmo-controller-manager"
         self.collect_data()
         assert (
-            self.pre_upgrade_data["pod_status"] == "Running"
+            self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "odfmo-controller pod is not in Running status"
         super().run_upgrade()
+        self.upgrade_phase = "post_upgrade"
         self.collect_data()
-        self.upgrade_phase = "post-upgrade"
         self.validate_upgrade()
 
     def validate_upgrade(self):
@@ -222,7 +237,7 @@ class DRHubUpgrade(DRUpgrade):
     """
 
     def __init__(self):
-        super.__init__()
+        super().__init__(resource_name=defaults.DR_HUB_OPERATOR_NAME)
         self.operator_name = defaults.DR_HUB_OPERATOR_NAME
         self.subscription_name = constants.DR_HUB_OPERATOR_SUBSCRIPTION
 
@@ -233,7 +248,7 @@ class DRHubUpgrade(DRUpgrade):
             self.pre_upgrade_data["pod_status"] == "Running"
         ), "ramen-hub-operator pod is not in Running status"
         super().run_upgrade()
-        self.upgrade_phase = "post-upgrade"
+        self.upgrade_phase = "post_upgrade"
         self.collect_data()
         self.validate_upgrade()
 
@@ -250,7 +265,7 @@ class DRClusterOperatorUpgrade(DRUpgrade):
     """
 
     def __init__(self):
-        super.__init__()
+        super().__init__(resource_name=defaults.DR_CLUSTER_OPERATOR_NAME)
         self.operator_name = defaults.DR_CLUSTER_OPERATOR_NAME
         self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION
 
@@ -261,7 +276,7 @@ class DRClusterOperatorUpgrade(DRUpgrade):
             self.pre_upgrade_data["pod_status"] == "Running"
         ), "ramen-dr-operator pod is not in Running status"
         super().run_upgrade()
-        self.upgrade_phase = "post-upgrade"
+        self.upgrade_phase = "post_upgrade"
         self.collect_data()
         self.validate_upgrade()
 
