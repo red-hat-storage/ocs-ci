@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import boto3
 from botocore.handlers import disable_signing
-from datetime import date
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
@@ -2604,4 +2604,3 @@ def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
             Bucket=bucket.name, LifecycleConfiguration=lifecycle_config
         )
     logger.info("Applied lifecyle rule on all the buckets")
-
