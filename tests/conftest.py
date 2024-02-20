@@ -94,7 +94,7 @@ from ocs_ci.ocs.resources.pod import (
     verify_data_integrity_for_multi_pvc_objs,
     get_noobaa_pods,
     get_pod_count,
-    wait_for_pods_by_label_count, get_noobaa_core_pod,
+    wait_for_pods_by_label_count,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version

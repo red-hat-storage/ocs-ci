@@ -1517,7 +1517,12 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
     return used_percentage
 
 
-def get_pods_having_label(label, namespace, cluster_config=None, statuses=None):
+def get_pods_having_label(
+    label,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    cluster_config=None,
+    statuses=None,
+):
     """
     Fetches pod resources with given label in given namespace
 
@@ -2081,7 +2086,7 @@ def wait_for_storage_pods(timeout=200):
         helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=timeout)
 
 
-def wait_for_noobaa_pods(timeout=300):
+def wait_for_noobaa_pods_running(timeout=300, sleep=10):
     """
     Wait until all the noobaa pods have reached status RUNNING
 
@@ -2090,12 +2095,23 @@ def wait_for_noobaa_pods(timeout=300):
 
     """
 
-    all_pod_objs = get_noobaa_pods()
+    def _check_nb_pods_status():
+        nb_pod_labels = [
+            constants.NOOBAA_CORE_POD_LABEL,
+            constants.NOOBAA_ENDPOINT_POD_LABEL,
+            constants.NOOBAA_OPERATOR_POD_LABEL,
+            constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        ]
+        nb_pods_running = list()
+        for pod_label in nb_pod_labels:
+            pods = get_pods_having_label(pod_label, statuses=[constants.STATUS_RUNNING])
+            if len(pods) == 0:
+                return False
+            nb_pods_running.append(pod_label)
+        return set(nb_pod_labels) == set(nb_pods_running)
 
-    for pod in all_pod_objs:
-        helpers.wait_for_resource_state(
-            resource=pod, state=constants.STATUS_RUNNING, timeout=timeout
-        )
+    sampler = TimeoutSampler(timeout=timeout, sleep=10, func=_check_nb_pods_status)
+    sampler.wait_for_func_status(True)
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):

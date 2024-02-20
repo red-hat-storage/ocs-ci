@@ -25,7 +25,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.resources.pod import (
     get_noobaa_core_pod,
     get_noobaa_db_pod,
-    wait_for_noobaa_pods,
+    wait_for_noobaa_pods_running,
 )
 from ocs_ci.ocs.node import (
     drain_nodes,
@@ -121,8 +121,6 @@ class TestObjectExpiration:
         ), "Failed: Put Object"
 
         expire_objects_in_bucket(bucket)
-
-        logger.info(f"Getting {object_key} from bucket: {bucket} after 1 day + 8 hours")
 
         sampler = TimeoutSampler(
             timeout=600,
@@ -401,7 +399,7 @@ class TestObjectExpiration:
             status=constants.NODE_READY,
             timeout=300,
         )
-        wait_for_noobaa_pods(timeout=1200)
+        wait_for_noobaa_pods_running(timeout=1200)
 
         # check if the objects are expired
         sample_if_objects_expired()
@@ -411,7 +409,7 @@ class TestObjectExpiration:
 
         # Perform noobaa db backup and recovery
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
-        wait_for_noobaa_pods(timeout=1200)
+        wait_for_noobaa_pods_running(timeout=1200)
 
         sample_if_objects_expired()
 
