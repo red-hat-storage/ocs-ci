@@ -6,7 +6,6 @@ import tempfile
 
 import boto3
 import botocore
-import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
@@ -191,11 +190,9 @@ class ObjectBucket(ABC):
                         "rule_id": replication_policy[0],
                         "destination_bucket": replication_policy[1],
                         "filter": {
-                            "prefix": (
-                                replication_policy[2]
-                                if replication_policy[2] is not None
-                                else ""
-                            )
+                            "prefix": replication_policy[2]
+                            if replication_policy[2] is not None
+                            else ""
                         },
                     }
                 ]
@@ -226,12 +223,7 @@ class ObjectBucket(ABC):
             logger.warning(f"{self.name} deletion timed out. Verifying deletion.")
             verify = True
         if verify:
-            timeout = 60
-            # Double the timeout for tier4 tests
-            markers = pytest.config.getini("markers")
-            if any("tier4" in marker for marker in markers):
-                timeout *= 2
-            self.verify_deletion(timeout=timeout)
+            self.verify_deletion()
         if original_context:
             config.switch_ctx(original_context)
 
