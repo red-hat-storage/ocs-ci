@@ -19,7 +19,8 @@ class ImageContentSourcePolicy:
 
 
 class ImageContentItem:
-    def __init__(self, apiVersion, kind, metadata, spec):
+    def __init__(self, annotations, apiVersion, kind, metadata, spec):
+        self.annotations = annotations
         self.apiVersion = apiVersion
         self.kind = kind
         self.metadata = ImageContentMetadata(**metadata)
