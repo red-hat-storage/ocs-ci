@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
-    post_ocp_upgrade,
     bugzilla,
 )
 from ocs_ci.ocs.cluster import CephCluster
@@ -65,7 +64,6 @@ class TestToCheckPDBPostUpgrade(ManageTest):
                 max_unavailable_mon == 1
             ), "Maximum unavailable mon count is not matching"
 
-    @post_ocp_upgrade
     @post_ocs_upgrade
     @bugzilla("1861104")
     @pytest.mark.polarion_id("OCS-2626")
