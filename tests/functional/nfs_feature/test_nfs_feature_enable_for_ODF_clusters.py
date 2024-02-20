@@ -369,7 +369,7 @@ class TestNfsEnable(ManageTest):
         # Run IO
         pod_obj.run_io(
             storage_type="fs",
-            size="4G",
+            size="4Gi",
             fio_filename=file_name,
             runtime=60,
         )
