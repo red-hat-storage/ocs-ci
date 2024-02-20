@@ -37,7 +37,6 @@ class MockupBucketLogger:
 
         self.awscli_pod = awscli_pod
         self.mcg_obj = mcg_obj
-        self.log_files_dir = setup_pod_directories(awscli_pod, ["bucket_logs_dir"])[0]
 
         logger.info("Creating the AWS logs bucket Namespacestore")
 
@@ -55,6 +54,22 @@ class MockupBucketLogger:
         self._standard_test_obj_list = self.awscli_pod.exec_cmd_on_pod(
             f"ls -A1 {constants.AWSCLI_TEST_OBJ_DIR}"
         ).split(" ")
+
+    @property
+    def awscli_pod(self):
+        return self._awscli_pod
+
+    @awscli_pod.setter
+    def awscli_pod(self, awscli_pod):
+        """
+        Make sure the required directories are available on the awscli_pod
+
+        Args:
+            awscli_pod(Pod): A pod running the AWS CLI
+
+        """
+        self._awscli_pod = awscli_pod
+        self.log_files_dir = setup_pod_directories(awscli_pod, ["bucket_logs_dir"])[0]
 
     def upload_test_objs_and_log(self, bucket_name):
         """
