@@ -11,5 +11,6 @@ DEPLOYMENT:
 ENV_DATA:
   # TODO: replace with 4.16 once template is available
   vm_template: "rhcos-415.92.202311241643-0-vmware.x86_64"
-  acm_hub_channel: release-2.9
-  acm_version: "2.9"
+  acm_hub_channel: release-2.10
+  acm_version: "2.10"
+  submariner_version: "0.17.0"
