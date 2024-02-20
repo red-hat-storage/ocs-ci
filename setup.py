@@ -40,7 +40,7 @@ setup(
         "pyvmomi==7.0",
         "python-hcl2==3.0.1",
         "python-dateutil==2.8.2",
-        "pytest-ordering==0.6",
+        "pytest-order==1.2.0",
         "funcy==1.14",
         "semantic-version==2.8.5",
         "jsonschema>=3.2.0",
