@@ -14,8 +14,7 @@ from pathlib import Path
 import base64
 import yaml
 
-from botocore.exceptions import EndpointConnectionError, BotoCoreError
-import boto3
+from botocore.exceptions import EndpointConnectionError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -30,7 +29,15 @@ from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.helpers.dr_helpers import configure_drcluster_for_fencing
+from ocs_ci.helpers.dr_helpers import (
+    build_bucket_name,
+    configure_drcluster_for_fencing,
+    create_dpa,
+    create_generic_credentials,
+    create_s3_bucket,
+    enable_cluster_backup,
+    enable_managed_serviceaccount,
+)
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
     validate_cluster_on_pvc,
@@ -50,7 +57,6 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
-    MDRDeploymentException,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -131,7 +137,6 @@ from ocs_ci.utility.utils import (
     load_auth_config,
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
-    get_oadp_version,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2807,6 +2812,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         RDR specific steps for deploy
         """
         # current CTX: ACM
+        acm_indexes = get_all_acm_indexes()
+        logger.info(acm_indexes)
         config.switch_acm_ctx()
         super().deploy()
         # RBD specific dr deployment
@@ -2815,6 +2822,31 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.configure_mirror_peer()
             rbddops.deploy()
         self.deploy_dr_policy()
+
+        # Enable cluster backup on both ACMs
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            enable_cluster_backup()
+        # Configuring s3 bucket
+        self.meta_obj.get_meta_access_secret_keys()
+        # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
+        self.meta_obj.bucket_name = build_bucket_name(acm_indexes)
+        # create s3 bucket
+        create_s3_bucket(
+            self.meta_obj.access_key,
+            self.meta_obj.secret_key,
+            self.meta_obj.bucket_name,
+        )
+        create_generic_credentials(
+            self.meta_obj.access_key, self.meta_obj.access_key, acm_indexes
+        )
+        # Reconfigure OADP on all ACM clusters
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            create_dpa(self.meta_obj.bucket_name)
+        # Only on the active hub enable managedserviceaccount-preview
+        config.switch_acm_ctx()
+        enable_managed_serviceaccount()
 
 
 class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
@@ -2843,177 +2875,28 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
             config.switch_ctx(i)
-            self.enable_cluster_backup()
+            enable_cluster_backup()
         # Configuring s3 bucket
         self.meta_obj.get_meta_access_secret_keys()
         # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
-        self.meta_obj.bucket_name = self.build_bucket_name()
+        self.meta_obj.bucket_name = build_bucket_name(acm_indexes)
         # create s3 bucket
-        self.create_s3_bucket()
-        self.create_generic_credentials()
+        create_s3_bucket(
+            self.meta_obj.access_key,
+            self.meta_obj.secret_key,
+            self.meta_obj.bucket_name,
+        )
+        create_generic_credentials(
+            self.meta_obj.access_key, self.meta_obj.access_key, acm_indexes
+        )
         # Reconfigure OADP on all ACM clusters
         old_ctx = config.cur_index
         for i in acm_indexes:
             config.switch_ctx(i)
-            self.create_dpa()
+            create_dpa(self.meta_obj.bucket_name)
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
-        self.enable_managed_serviceaccount()
-
-    def enable_managed_serviceaccount(self):
-        """
-        update MultiClusterEngine
-
-        - enabled: true
-          name: managedserviceaccount-preview
-
-        """
-        old_ctx = config.cur_index
-        config.switch_ctx(get_active_acm_index())
-
-        multicluster_engine = ocp.OCP(
-            kind="MultiClusterEngine",
-            resource_name=constants.MDR_MULTICLUSTER_ENGINE,
-        )
-        multicluster_engine._has_phase = True
-        resource = multicluster_engine.get()
-        for item in resource["spec"]["overrides"]["components"]:
-            if item["name"] == "managedserviceaccount":
-                item["enabled"] = True
-        multicluster_engine_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="multiengine", delete=False
-        )
-        yaml_serialized = yaml.dump(resource)
-        multicluster_engine_yaml.write(yaml_serialized)
-        multicluster_engine_yaml.flush()
-        run_cmd(f"oc apply -f {multicluster_engine_yaml.name}")
-        multicluster_engine.wait_for_phase("Available")
-        config.switch_ctx(old_ctx)
-
-    def create_dpa(self):
-        """
-        create DPA
-        OADP will be already installed when we enable backup flag
-        Here we will create dataprotection application and
-        update bucket name and s3 storage link
-
-        """
-        oadp_data = templating.load_yaml(constants.ACM_DPA)
-        oadp_data["spec"]["backupLocations"][0]["velero"]["objectStorage"][
-            "bucket"
-        ] = self.meta_obj.bucket_name
-        oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
-        templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
-        run_cmd(f"oc create -f {oadp_yaml.name}")
-        # Validation
-        self.validate_dpa()
-
-    @retry((CommandFailed, MDRDeploymentException), tries=10, delay=10)
-    def validate_dpa(self):
-        """
-        Validate
-        1. 3 restic pods
-        2. 1 velero pod
-        3. backupstoragelocation resource in "Available" phase
-
-        """
-        # Check restic pods.
-        # Restic pods have been renamed to node-agent after oadp 1.2
-        oadp_version = get_oadp_version()
-
-        if version.compare_versions(f"{oadp_version} >= 1.2"):
-            restic_pod_prefix = "node-agent"
-        else:
-            restic_pod_prefix = "restic"
-        restic_list = get_pods_having_label(
-            f"name={restic_pod_prefix}", constants.ACM_HUB_BACKUP_NAMESPACE
-        )
-        if len(restic_list) != constants.MDR_RESTIC_POD_COUNT:
-            raise MDRDeploymentException("restic pod count mismatch")
-        for pod in restic_list:
-            if pod["status"]["phase"] != "Running":
-                raise MDRDeploymentException("restic pod not in 'Running' phase")
-
-        # Check velero pod
-        veleropod = get_pods_having_label(
-            "app.kubernetes.io/name=velero", constants.ACM_HUB_BACKUP_NAMESPACE
-        )
-        if len(veleropod) != constants.MDR_VELERO_POD_COUNT:
-            raise MDRDeploymentException("Velero pod count mismatch")
-        if veleropod[0]["status"]["phase"] != "Running":
-            raise MDRDeploymentException("Velero pod not in 'Running' phase")
-
-        # Check backupstoragelocation resource in "Available" phase
-        backupstorage = ocp.OCP(
-            kind="BackupStorageLocation",
-            resource_name="default",
-            namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
-        )
-        resource = backupstorage.get()
-        if resource["status"].get("phase") != "Available":
-            raise MDRDeploymentException(
-                "Backupstoragelocation resource is no in 'Avaialble' phase"
-            )
-        logger.info("Dataprotection application successful")
-
-    def create_generic_credentials(self):
-        s3_cred_str = (
-            "[default]\n"
-            f"aws_access_key_id={self.meta_obj.access_key}\n"
-            f"aws_secret_access_key={self.meta_obj.secret_key}\n"
-        )
-        cred_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="s3_creds", delete=False
-        )
-        cred_file.write(s3_cred_str)
-        cred_file.flush()
-
-        cmd = (
-            f"oc create secret generic cloud-credentials --namespace {constants.ACM_HUB_BACKUP_NAMESPACE} "
-            f"--from-file cloud={cred_file.name}"
-        )
-        old_index = config.cur_index
-        # Create on all ACM clusters
-        for index in get_all_acm_indexes():
-            config.switch_ctx(index)
-            try:
-                run_cmd(f"oc create namespace {constants.ACM_HUB_BACKUP_NAMESPACE}")
-            except CommandFailed as ex:
-                if "already exists" in str(ex):
-                    logger.warning("Namespace already exists!")
-                else:
-                    raise
-            try:
-                run_cmd(cmd)
-            except CommandFailed:
-                logger.error("Failed to create generic secrets cloud-credentials")
-        config.switch_ctx(old_index)
-
-    def create_s3_bucket(self):
-        client = boto3.resource(
-            "s3",
-            verify=True,
-            endpoint_url="https://s3.amazonaws.com",
-            aws_access_key_id=self.meta_obj.access_key,
-            aws_secret_access_key=self.meta_obj.secret_key,
-        )
-        try:
-            client.create_bucket(
-                Bucket=self.meta_obj.bucket_name,
-                CreateBucketConfiguration={"LocationConstraint": constants.AWS_REGION},
-            )
-            logger.info(
-                f"Successfully created backup bucket: {self.meta_obj.bucket_name}"
-            )
-        except BotoCoreError as e:
-            logger.error(f"Failed to create s3 bucket {e}")
-            raise
-
-    def build_bucket_name(self):
-        bucket_name = ""
-        for index in get_all_acm_indexes():
-            bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
-        return bucket_name
+        enable_managed_serviceaccount()
 
     def deploy_multicluster_orchestrator(self):
         super().deploy()
@@ -3027,41 +2910,6 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_ctx(active_acm_index)
         super().deploy_dr_policy()
         config.switch_ctx(old_ctx)
-
-    def enable_cluster_backup(self):
-        """
-        set cluster-backup to True in mch resource
-        Note: changing this flag automatically installs OADP operator
-        """
-        mch_resource = ocp.OCP(
-            kind="MultiClusterHub",
-            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
-            namespace=constants.ACM_HUB_NAMESPACE,
-        )
-        mch_resource._has_phase = True
-        resource_dict = mch_resource.get()
-        for components in resource_dict["spec"]["overrides"]["components"]:
-            if components["name"] == "cluster-backup":
-                components["enabled"] = True
-        mch_resource_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="mch", delete=False
-        )
-        yaml_serialized = yaml.dump(resource_dict)
-        mch_resource_yaml.write(yaml_serialized)
-        mch_resource_yaml.flush()
-        run_cmd(f"oc apply -f {mch_resource_yaml.name}")
-        mch_resource.wait_for_phase("Running")
-        self.backup_pod_status_check()
-
-    @retry((TimeoutExpiredError, MDRDeploymentException), tries=20, delay=10)
-    def backup_pod_status_check(self):
-        pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        if len(pods_list) != 3:
-            raise MDRDeploymentException("backup pod count mismatch ")
-        for pod in pods_list:
-            # check pod status Running
-            if not pod.data["status"]["phase"] == "Running":
-                raise MDRDeploymentException("backup pods not in Running state")
 
 
 MULTICLUSTER_DR_MAP = {
