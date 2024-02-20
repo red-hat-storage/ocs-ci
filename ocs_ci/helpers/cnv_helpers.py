@@ -13,6 +13,7 @@ from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     create_ocs_object_from_kind_and_name,
 )
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -97,42 +98,48 @@ def create_vm_using_standalone_pvc(
     return vm_obj
 
 
-def get_ssh_pub_key(path=None):
+def get_ssh_pub_key_with_filename(path=None):
     """
-    Retrieve the content of the SSH public key.
+    Retrieve the content of the SSH public key and its file name
 
     Args:
         path (str): Path to the SSH public key file - Optional
 
     Returns:
-        str: The content of the SSH public key.
+        tuple: A tuple containing the content of the SSH public key and the file name
 
     """
-    logger.info("Retrieving the content of the SSH public key from the client machine")
-    username = os.getlogin()
+    logger.info(
+        "Retrieving the content and file name of the SSH public key from the client machine"
+    )
     ssh_dir = os.path.expanduser("~/.ssh/")
-    if path and os.path.exists(path):
-        ssh_key_path = path
-        logger.info(f"The provided ssh pub key path:{path} exists")
+    if path:
+        if os.path.exists(path):
+            ssh_key_path = path
+            logger.info(f"The provided ssh pub key path:{path} exists")
+        else:
+            raise FileNotFoundError(
+                f"The provided ssh pub key path:{path} does not exist"
+            )
     else:
         id_rsa_path = os.path.join(ssh_dir, "id_rsa.pub")
+        config_ssh_key = config.DEPLOYMENT.get("ssh_key")
         if os.path.exists(id_rsa_path):
             ssh_key_path = id_rsa_path
-            logger.info("id_rsa.pub exists")
+            logger.info("Default id_rsa.pub exists")
+        elif config_ssh_key and os.path.exists(config_ssh_key):
+            ssh_key_path = config_ssh_key
+            logger.info(f"Using ssh key from ocs-ci default config: {config_ssh_key}")
         else:
-            logger.info(
-                "id_rsa.pub does not exist, filtering the pub key based on username"
+            raise FileNotFoundError(
+                "Neither id_rsa.pub nor ssh_key in ocs-ci default config is present"
             )
-            ssh_key_path_list = [
-                file
-                for file in os.listdir(ssh_dir)
-                if file.endswith(".pub") and username in file
-            ]
-            ssh_key_path = os.path.join(ssh_dir, ssh_key_path_list[0])
 
     with open(ssh_key_path, "r") as ssh_key:
         content = ssh_key.read().strip()
-        return content
+        key_name = os.path.basename(ssh_key_path)
+
+        return content, key_name
 
 
 def convert_ssh_key_to_base64(ssh_key):
@@ -165,7 +172,7 @@ def create_vm_secret(path=None, namespace=constants.CNV_NAMESPACE):
     secret_data = templating.load_yaml(constants.CNV_VM_SECRET_YAML)
     secret_data["metadata"]["name"] = create_unique_resource_name("vm-test", "secret")
     secret_data["metadata"]["namespace"] = namespace
-    ssh_pub_key = get_ssh_pub_key(path=path)
+    ssh_pub_key, _ = get_ssh_pub_key_with_filename(path=path)
     base64_key = convert_ssh_key_to_base64(ssh_key=ssh_pub_key)
     secret_data["data"]["key"] = base64_key
     secret_obj = create_resource(**secret_data)

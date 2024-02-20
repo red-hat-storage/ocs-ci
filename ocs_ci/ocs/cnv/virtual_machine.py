@@ -1,6 +1,7 @@
 """
 Virtual machine class
 """
+import os
 import yaml
 import logging
 
@@ -47,6 +48,35 @@ class VirtualMachine(Virtctl):
         self.vmi_obj = VirtualMachineInstance(
             vmi_name=self._vm_name, namespace=namespace
         )
+        self.ssh_private_key_path = self._get_ssh_private_key_path()
+
+    def _get_ssh_private_key_path(self):
+        """
+        Get the full path of the derived private key file from the associated SSH public key file
+
+        Returns:
+            str: The full path of the derived private key file
+
+        """
+        # To handle circular imports
+        from ocs_ci.helpers.cnv_helpers import get_ssh_pub_key_with_filename
+
+        ssh_dir = os.path.expanduser("~/.ssh/")
+        _, ssh_pub_key_name = get_ssh_pub_key_with_filename()
+
+        # Derive private key path by replacing the extension (if present)
+        private_key_name, _ = os.path.splitext(ssh_pub_key_name)
+        private_key_path = os.path.join(ssh_dir, private_key_name)
+
+        # Handling both with and without .pem file extension case
+        pem_private_key_path = private_key_path + ".pem"
+        if os.path.exists(pem_private_key_path):
+            private_key_path = pem_private_key_path
+        logger.info(
+            f"The private key used for authenticating to the server: {private_key_path}"
+        )
+
+        return private_key_path
 
     @property
     def name(self):
@@ -277,6 +307,7 @@ class VirtualMachine(Virtctl):
         """
         vm_username = vm_username if vm_username else self.get_os_username()
         vm_dest_path = vm_dest_path if vm_dest_path else "."
+        identity_file = identity_file if identity_file else self.ssh_private_key_path
         logger.info(
             f"Starting scp from local machine path: {local_path} to VM path: {vm_dest_path}"
         )
@@ -313,6 +344,7 @@ class VirtualMachine(Virtctl):
 
         """
         vm_username = vm_username if vm_username else self.get_os_username()
+        identity_file = identity_file if identity_file else self.ssh_private_key_path
         logger.info(
             f"Starting scp from VM path: {vm_src_path} to local machine path: {local_path}"
         )
@@ -342,6 +374,7 @@ class VirtualMachine(Virtctl):
         """
         logger.info(f"Executing {command} command on the {self._vm_name} VM using SSH")
         username = username if username else self.get_os_username()
+        identity_file = identity_file if identity_file else self.ssh_private_key_path
         return self.run_ssh_command(
             self._vm_name,
             username,

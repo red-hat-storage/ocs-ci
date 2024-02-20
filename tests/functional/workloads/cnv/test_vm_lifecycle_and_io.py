@@ -24,12 +24,18 @@ class TestVmOperations(E2ETest):
 
     @pytest.fixture(autouse=True)
     def setup(self, request):
+        """
+        Setup function
+        """
         self.proj_obj = create_project()
         self.vm_obj = create_vm_using_standalone_pvc(
             running=True, namespace=self.proj_obj.namespace
         )
 
         def finalizer():
+            """
+            teardown function
+            """
             pvc_obj = get_pvc_from_vm(self.vm_obj)
             secret_obj = get_secret_from_vm(self.vm_obj)
             volumeimportsource_obj = get_volumeimportsource(pvc_obj=pvc_obj)
