@@ -812,6 +812,12 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
     def validate_node_group_names(
         self, cluster_app_name_cli, topology_deviation, zoom_out_times
     ):
+        """
+        Validates the node group names (such as rack or zone) from the ODF Topology UI against names taken from CLI.
+        :param cluster_app_name_cli: cluster name visible in Topology UI
+        :param topology_deviation: dictionary to store deviations if found
+        :param zoom_out_times: number of times to zoom out the Topology view to see whole cluster representation
+        """
         storage_cluster = OCP(
             kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
