@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @workloads
-@pytest.mark.polarion_id("OCS-5436")
+@pytest.mark.polarion_id("OCS-5243")
 class TestVmOperations(E2ETest):
     """
     Tests for VM operations
@@ -39,7 +39,7 @@ class TestVmOperations(E2ETest):
             pvc_obj.delete()
             secret_obj.delete()
             volumeimportsource_obj.delete()
-            self.proj_obj.delete()
+            self.proj_obj.delete(resource_name=self.proj_obj.namespace)
 
         request.addfinalizer(finalizer)
 
