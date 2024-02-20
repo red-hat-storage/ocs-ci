@@ -11,45 +11,68 @@ logger = logging.getLogger(__name__)
 
 
 class ImageContentSourcePolicy:
-    def __init__(self, apiVersion, items, kind=None, metadata=None):
-        self.apiVersion = apiVersion
+    def __init__(self, apiVersion=None, items=None, kind=None, metadata=None, **kwargs):
+        self.apiVersion = apiVersion if apiVersion is not None else ""
         self.items = [ImageContentItem(**item) for item in items]
-        self.kind = kind
-        self.metadata = metadata
+        self.kind = kind if kind is not None else ""
+        self.metadata = metadata if metadata is not None else {}
+        # process other arguments if needed
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 class ImageContentItem:
-    def __init__(self, annotations, apiVersion, kind, metadata, spec):
-        self.annotations = annotations
-        self.apiVersion = apiVersion
-        self.kind = kind
+    def __init__(self, apiVersion=None, kind=None, metadata=None, spec=None, **kwargs):
+        self.apiVersion = apiVersion if apiVersion is not None else ""
+        self.kind = kind if kind is not None else ""
         self.metadata = ImageContentMetadata(**metadata)
         self.spec = ImageContentSpec(**spec)
+        # process other arguments if needed
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 class ImageContentMetadata:
     def __init__(
-        self, annotations, creationTimestamp, generation, name, resourceVersion, uid
+        self,
+        annotations=None,
+        creationTimestamp=None,
+        generation=None,
+        name=None,
+        resourceVersion=None,
+        uid=None,
+        **kwargs,
     ):
-        self.annotations = annotations
-        self.creationTimestamp = creationTimestamp
-        self.generation = generation
-        self.name = name
-        self.resourceVersion = resourceVersion
-        self.uid = uid
+        self.annotations = annotations if annotations is not None else {}
+        self.creationTimestamp = (
+            creationTimestamp if creationTimestamp is not None else ""
+        )
+        self.generation = generation if generation is not None else -1
+        self.name = name if name is not None else ""
+        self.resourceVersion = resourceVersion if resourceVersion is not None else ""
+        self.uid = uid if uid is not None else ""
+        # process other arguments if needed
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 class ImageContentSpec:
-    def __init__(self, repositoryDigestMirrors):
+    def __init__(self, repositoryDigestMirrors, **kwargs):
         self.repositoryDigestMirrors = [
             RepositoryDigestMirror(**mirror) for mirror in repositoryDigestMirrors
         ]
+        # process other arguments if needed
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 class RepositoryDigestMirror:
-    def __init__(self, mirrors, source):
-        self.mirrors = mirrors
-        self.source = source
+    def __init__(self, mirrors=None, source=None, **kwargs):
+        self.mirrors = mirrors if mirrors is not None else []
+        self.source = source if source is not None else ""
+        # process other arguments if needed
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 def parse_image_content_source_policy(image_content_source_policy):
@@ -73,7 +96,7 @@ def write_mirrors_to_file(file_path, mirrors_to_source_list):
         for mirror in mirrors_source.mirrors:
             result += f"  - {mirror}\n"
         result += f"  source: {mirrors_source.source}\n"
-    with open(file_path, "w") as f:
+    with open(file_path, "a") as f:
         f.write(result)
 
 
@@ -85,5 +108,8 @@ def parse_ICSP_json_to_mirrors_file(icsp_json_dict, file_path):
     """
     icsp_obj = parse_image_content_source_policy(icsp_json_dict)
     logger.info("ImageContentSourcePolicy object parsed")
-    write_mirrors_to_file(file_path, icsp_obj.items[0].spec.repositoryDigestMirrors)
+
+    for item in icsp_obj.items:
+        logger.info(f"Processing item {item.metadata.name}")
+        write_mirrors_to_file(file_path, item.spec.repositoryDigestMirrors)
     logger.info(f"Mirrors were written to file {file_path}")
