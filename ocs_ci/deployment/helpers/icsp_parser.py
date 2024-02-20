@@ -1,4 +1,3 @@
-import json
 import logging
 
 """
@@ -83,8 +82,7 @@ def parse_ICSP_json_to_mirrors_file(icsp_json_dict, file_path):
     :param icsp_json_dict: ImageContentSourcePolicy CR in dict format
     :param file_path: file path to write the mirrors to
     """
-    icsp_json = json.dumps(icsp_json_dict)
-    icsp_obj = parse_image_content_source_policy(icsp_json)
+    icsp_obj = parse_image_content_source_policy(icsp_json_dict)
     logger.info("ImageContentSourcePolicy object parsed")
     write_mirrors_to_file(file_path, icsp_obj.items[0].spec.repositoryDigestMirrors)
     logger.info(f"Mirrors were written to file {file_path}")
