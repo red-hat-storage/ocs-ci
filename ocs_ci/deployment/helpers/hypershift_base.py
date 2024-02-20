@@ -117,7 +117,7 @@ class HyperShiftBase:
             index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
 
         if not name:
-            name = "hcp-".join(datetime.utcnow().strftime("%Y%m%d%H%M%S"))
+            name = "hcp-" + datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
         logger.info(
             f"Creating HyperShift hosted cluster with specs: name:{name}, "
@@ -145,7 +145,7 @@ class HyperShiftBase:
         namespace = f"clusters-{name}"
 
         logger.info("Waiting for HyperShift hosted cluster pods to be ready...")
-        app_selectors_to_resource_count = [
+        app_selectors_to_resource_count_list = [
             {"app=capi-provider-controller-manager": 1},
             {"app=catalog-operator": 2},
             {"app=certified-operators-catalog": 1},
@@ -155,13 +155,14 @@ class HyperShiftBase:
 
         pod = OCP(kind=constants.POD, namespace=namespace)
 
-        for app_selector, resource_count in app_selectors_to_resource_count:
-            assert pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=app_selector,
-                resource_count=resource_count,
-                timeout=300,
-            ), f"pods with label {app_selector} are not in running state"
+        for item in app_selectors_to_resource_count_list:
+            for app_selector, resource_count in item.items():
+                assert pod.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=app_selector,
+                    resource_count=resource_count,
+                    timeout=600,
+                ), f"pods with label {app_selector} are not in running state"
 
         self.wait_hosted_cluster_completed(name)
 
