@@ -90,6 +90,7 @@ class TestMonFailuresWithIntransitEncryption:
         time.sleep(10)
 
         def restart_mgr_pod():
+            ceph_obj.scan_cluster()
             mgr_pod = ceph_obj.mgrs[0]
             mgr_pod.delete(wait=True)
 
