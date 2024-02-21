@@ -298,7 +298,7 @@ def get_volumeimportsource(pvc_obj):
     )
 
 
-def get_ssh_private_key_path(self):
+def get_ssh_private_key_path():
     """
     Get the full path of the derived private key file from the associated SSH public key file
 
