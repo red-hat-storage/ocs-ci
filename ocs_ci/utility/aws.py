@@ -1902,37 +1902,56 @@ class AWS(object):
         """
         return self.s3_client.list_buckets()["Buckets"]
 
-    def get_buckets_with_prefix_(self, bucket_prefix, days):
+    def get_buckets_to_delete(self, bucket_prefix, hours):
         """
         Get the bucket with prefix which are older than given days
 
         Args:
             bucket_prefix (str): prefix for the buckets to fetch
-            days (int): fetch buckets that are older than to the specified number of days
+            hours (int): fetch buckets that are older than to the specified number of hours
 
         """
-        buckets_with_prefix = []
+        buckets_to_delete = []
         # Get the current date in UTC
         current_date = datetime.now(timezone.utc)
         all_buckets = self.list_buckets()
         for bucket in all_buckets:
             bucket_name = bucket["Name"]
-            if bucket_name.startswith(bucket_prefix):
-                # Get the creation date of the bucket in UTC
-                bucket_creation_date = bucket["CreationDate"].replace(
-                    tzinfo=timezone.utc
+
+            bucket_delete_time = self.get_bucket_time_based_rules(
+                bucket_prefix, bucket_name, hours
+            )
+            # Get the creation date of the bucket in UTC
+            bucket_creation_date = bucket["CreationDate"].replace(tzinfo=timezone.utc)
+
+            # Calculate the age of the bucket
+            age_of_bucket = current_date - bucket_creation_date
+
+            # Check if the bucket is older than given days
+            if (age_of_bucket.days) * 24 >= bucket_delete_time:
+                logger.info(
+                    f"{bucket_name} (Created on {bucket_creation_date} and age is {age_of_bucket}) can be deleted"
                 )
+                buckets_to_delete.append(bucket_name)
+        return buckets_to_delete
 
-                # Calculate the age of the bucket
-                age_of_bucket = current_date - bucket_creation_date
+    def get_bucket_time_based_rules(self, bucket_prefixes, bucket_name, hours):
+        """
+        Get the time bucket based prefix and hours
 
-                # Check if the bucket is older than given days
-                if age_of_bucket.days >= days:
-                    logger.info(
-                        f"{bucket_name} (Created on {bucket_creation_date} and age is {age_of_bucket}) can be deleted"
-                    )
-                    buckets_with_prefix.append(bucket_name)
-        return buckets_with_prefix
+        Args:
+            bucket_prefixes (dict): The rules according to them determine the number of hours the bucket can exist
+            bucket_name (str): bucket name
+            hours (int): The number of hours bucket can exist if there is no compliance with one of the rules
+
+        Returns:
+            int: The number of hours bucket can exist
+
+        """
+        for bucket_prefix in bucket_prefixes:
+            if bool(re.match(bucket_prefix, bucket_name, re.I)):
+                return bucket_prefixes[bucket_prefix]
+        return hours
 
     def delete_objects_in_bucket(self, bucket):
         """
@@ -2277,7 +2296,7 @@ def create_and_attach_ebs_volumes(
                     instance_id=worker["id"],
                     name=f"{worker['name']}_extra_volume_{number}",
                     size=size,
-                    device=f"/dev/{device_names[number-1]}",
+                    device=f"/dev/{device_names[number - 1]}",
                 )
 
 
