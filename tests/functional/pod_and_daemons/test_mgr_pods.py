@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import (
     BaseTest,
     post_upgrade,
     post_ocs_upgrade,
+    polarion_id,
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
@@ -20,7 +21,7 @@ log = logging.getLogger(__name__)
 @post_ocs_upgrade
 class TestMgrPods(BaseTest):
     """
-    This test class contains tests that would check mon pods from odf-version 4.15
+    This test class contains tests that would check mgr pods from odf-version 4.15
     1. Check if two MGR pods are deployed or not (mgr-a and mgr-b)
     2. Check that two MGR daemons are present
     3. Check for active MGR and try failing it to see active-standby MGR reaction.
@@ -28,6 +29,7 @@ class TestMgrPods(BaseTest):
     """
 
     @purple_squad
+    @polarion_id("OCS-5437")
     def test_two_mgr_pods_and_metadata(self):
         """
         Testing two mgr pods exists or not
@@ -78,6 +80,7 @@ class TestMgrPods(BaseTest):
         log.info(f"Name entries in mgr metadata: {mgr_metadata_names}")
 
     @brown_squad
+    @polarion_id("OCS-5438")
     def test_two_mgr_daemons_and_failure(self):
         """
         Testing two mgr pods exists or not
@@ -132,3 +135,47 @@ class TestMgrPods(BaseTest):
             f"before failure: {before_mgr_stat.get('active_name')}"
             f"after failure: {after_mgr_stat.get('active_name')}"
         )
+
+    @polarion_id("OCS-5439")
+    @brown_squad
+    def test_mgr_pod_reboot(self):
+        """
+        - Deoloy OCP and ODF
+        - Check if two mgr pods are deployed
+                oc get pods | grep mgr
+        - Enable ceph tool and rsh to it
+        - Check for the acitve mgr
+                ceph mgr stat
+        - reboot active pod
+        - Enable ceph tool and rsh to it
+        - Check for the acitve mgr
+                ceph mgr stat
+        """
+        log.info("Testing the mgr daemon stats")
+
+        log.info("Checking mgr stat.")
+        toolbox = pod.get_ceph_tools_pod()
+        try:
+            before_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
+            active_mgr_pod_output = toolbox.exec_cmd_on_pod("ceph mgr stat")
+            active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
+        except exceptions.CommandFailed:
+            log.error("Unable to run command on toolbox")
+
+        log.info(f"The active MGR pod is {active_mgr_pod_suffix}")
+        log.info(f"Ceph health Status is at: {before_ceph_health}")
+
+        log.info(f"Restarting mgr pod, rook-ceph-mgr-{active_mgr_pod_suffix}")
+        mgr_pod = pod.get_mgr_pods()
+        try:
+            for index, pod_name in enumerate(mgr_pod):
+                if f"rook-ceph-mgr-{active_mgr_pod_suffix}" in pod_name.name:
+                    mgr_pod[index].delete(wait=True)
+        except exceptions.CommandFailed:
+            log.error("Unable to restart mgr pod")
+
+        try:
+            after_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
+        except exceptions.CommandFailed:
+            log.error("Unable to run command on toolbox")
+        log.info(f"Ceph health after reboot {after_ceph_health}")
