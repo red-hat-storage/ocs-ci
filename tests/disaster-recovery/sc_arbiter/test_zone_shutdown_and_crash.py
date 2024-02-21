@@ -3,12 +3,13 @@ import logging
 import time
 import random
 import concurrent.futures as futures
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_from_ceph_stuck,
     recover_workload_pods_post_recovery,
 )
+from ocs_ci.utility.utils import wait_for_ceph_health_not_ok
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -192,6 +193,7 @@ class TestZoneShutdownsAndCrashes:
             log.info(f"------ Iteration {i+1} ------")
             if not immediate:
                 start_time = datetime.now(timezone.utc)
+            end_time = start_time + timedelta(minutes=sc_obj.default_shutdown_durarion)
 
             # note the file names created
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -213,6 +215,13 @@ class TestZoneShutdownsAndCrashes:
             )
             log.info(f"Nodes of zone {zone} are shutdown successfully")
 
+            # wait for the ceph to be unhealthy
+            wait_for_ceph_health_not_ok()
+
+            # get the nodes which are present in the
+            # out of quorum zone
+            retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
+
             # check ceph accessibility while the nodes are down
             if not sc_obj.check_ceph_accessibility(
                 timeout=sc_obj.default_shutdown_durarion
@@ -221,11 +230,9 @@ class TestZoneShutdownsAndCrashes:
                     sc_obj,
                 ), "Something went wrong. not expected. please check rook-ceph logs"
             log.info("There is no issue with ceph access seen")
-            duration = sc_obj.default_shutdown_durarion
-            end_time = datetime.now(timezone.utc)
-            time_passed = (end_time - start_time).total_seconds()
-            if int(time_passed) < duration:
-                time.sleep(duration - int(time_passed))
+            time_now = datetime.now(timezone.utc)
+            if time_now < end_time:
+                time.sleep((end_time - time_now).total_seconds())
 
             # start the nodes
             try:
@@ -245,9 +252,15 @@ class TestZoneShutdownsAndCrashes:
                 delay=15,
             )(wait_for_nodes_status(timeout=1800))
             log.info(f"Nodes of zone {zone} are started successfully")
-
-            end_time = datetime.now(timezone.utc)
             log.info(f"Failure started at {start_time} and ended at {end_time}")
+
+            if not immediate:
+                sc_obj.post_failure_checks(
+                    start_time, end_time, wait_for_read_completion=False
+                )
+                log.info(
+                    "Successfully verified with post failure checks for the workloads"
+                )
 
             try:
                 sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -265,16 +278,6 @@ class TestZoneShutdownsAndCrashes:
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE
                 )
                 recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-
-            if not immediate:
-                sc_obj.post_failure_checks(
-                    start_time, end_time, wait_for_read_completion=False
-                )
-                log.info(
-                    "Successfully verified with post failure checks for the workloads"
-                )
-
-            # TODO: Read pause and Write pause is only expected in the pods that are impacted by the failure
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
@@ -418,6 +421,13 @@ class TestZoneShutdownsAndCrashes:
                 )
                 log.info(f"Crashed {node.name}")
 
+            # wait for the ceph to be unhealthy
+            wait_for_ceph_health_not_ok()
+
+            # get the nodes which are present in the
+            # out of quorum zone
+            retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
+
             # wait for the crash tasks to complete
             log.info("Wait for the crash tasks to complete!")
             futures.wait(futures_obj)
@@ -448,6 +458,11 @@ class TestZoneShutdownsAndCrashes:
             end_time = datetime.now(timezone.utc)
             log.info(f"Start time : {start_time} & End time : {end_time}")
 
+            # check the ceph access again after the nodes are completely up
+            sc_obj.post_failure_checks(
+                start_time, end_time, wait_for_read_completion=False
+            )
+
             try:
                 sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
                 sc_obj.get_logwriter_reader_pods(
@@ -464,11 +479,6 @@ class TestZoneShutdownsAndCrashes:
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE
                 )
                 recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-
-            # check the ceph access again after the nodes are completely up
-            sc_obj.post_failure_checks(
-                start_time, end_time, wait_for_read_completion=False
-            )
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)

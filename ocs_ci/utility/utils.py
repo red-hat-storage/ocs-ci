@@ -2267,6 +2267,28 @@ def get_az_count():
         return 1
 
 
+def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
+    """
+    Wait until the ceph health is NOT OK
+
+    """
+
+    def check_ceph_health_not_ok():
+        """
+        Check if ceph health is NOT OK
+
+        """
+        if run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE) != "HEALTH_OK":
+            return True
+        else:
+            return False
+
+    sampler = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_ceph_health_not_ok
+    )
+    sampler.wait_for_func_status(False)
+
+
 def ceph_health_check(namespace=None, tries=20, delay=30):
     """
     Args:
