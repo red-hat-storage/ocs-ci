@@ -244,9 +244,14 @@ def get_pvc_from_vm(vm_obj):
 
     """
     vm_data = vm_obj.get()
-    pvc_name = vm_data["spec"]["template"]["spec"]["volumes"][0][
-        "persistentVolumeClaim"
-    ]["claimName"]
+    pvc_name = (
+        vm_data.get("spec")
+        .get("template")
+        .get("spec")
+        .get("volumes")[0]
+        .get("persistentVolumeClaim")
+        .get("claimName")
+    )
     return create_ocs_object_from_kind_and_name(
         kind=constants.PVC, resource_name=pvc_name, namespace=vm_obj.namespace
     )
@@ -261,9 +266,16 @@ def get_secret_from_vm(vm_obj):
 
     """
     vm_data = vm_obj.get()
-    secret_name = vm_data["spec"]["template"]["spec"]["accessCredentials"][0][
-        "sshPublicKey"
-    ]["source"]["secret"]["secretName"]
+    secret_name = (
+        vm_data.get("spec")
+        .get("template")
+        .get("spec")
+        .get("accessCredentials")[0]
+        .get("sshPublicKey")
+        .get("source")
+        .get("secret")
+        .get("secretName")
+    )
     return create_ocs_object_from_kind_and_name(
         kind=constants.SECRET, resource_name=secret_name, namespace=vm_obj.namespace
     )
@@ -278,7 +290,7 @@ def get_volumeimportsource(pvc_obj):
 
     """
     pvc_data = pvc_obj.get()
-    volumeimportsource_name = pvc_data["spec"]["dataSource"]["name"]
+    volumeimportsource_name = pvc_data.get("spec").get("dataSource").get("name")
     return create_ocs_object_from_kind_and_name(
         kind=constants.VOLUME_IMPORT_SOURCE,
         resource_name=volumeimportsource_name,

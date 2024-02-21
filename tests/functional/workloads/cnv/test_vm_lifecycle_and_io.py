@@ -23,19 +23,12 @@ class TestVmOperations(E2ETest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, request):
+    def teardown(self, request):
         """
-        Setup function
+        teardown function
         """
-        self.proj_obj = create_project()
-        self.vm_obj = create_vm_using_standalone_pvc(
-            running=True, namespace=self.proj_obj.namespace
-        )
 
         def finalizer():
-            """
-            teardown function
-            """
             pvc_obj = get_pvc_from_vm(self.vm_obj)
             secret_obj = get_secret_from_vm(self.vm_obj)
             volumeimportsource_obj = get_volumeimportsource(pvc_obj=pvc_obj)
@@ -64,6 +57,10 @@ class TestVmOperations(E2ETest):
         6) Delete the VM (as part of teardown)
 
         """
+        self.proj_obj = create_project()
+        self.vm_obj = create_vm_using_standalone_pvc(
+            running=True, namespace=self.proj_obj.namespace
+        )
         self.vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/dd_file.txt bs=1024 count=102400"
         )
