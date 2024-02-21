@@ -296,3 +296,29 @@ def get_volumeimportsource(pvc_obj):
         resource_name=volumeimportsource_name,
         namespace=pvc_obj.namespace,
     )
+
+
+def get_ssh_private_key_path(self):
+    """
+    Get the full path of the derived private key file from the associated SSH public key file
+
+    Returns:
+        str: The full path of the derived private key file
+
+    """
+    ssh_dir = os.path.expanduser("~/.ssh/")
+    _, ssh_pub_key_name = get_ssh_pub_key_with_filename()
+
+    # Derive private key path by replacing the extension (if present)
+    private_key_name, _ = os.path.splitext(ssh_pub_key_name)
+    private_key_path = os.path.join(ssh_dir, private_key_name)
+
+    # Handling both with and without .pem file extension case
+    pem_private_key_path = private_key_path + ".pem"
+    if os.path.exists(pem_private_key_path):
+        private_key_path = pem_private_key_path
+    logger.info(
+        f"The private key used for authenticating to the server: {private_key_path}"
+    )
+
+    return private_key_path
