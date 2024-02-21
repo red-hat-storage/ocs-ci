@@ -124,11 +124,12 @@ def get_ssh_pub_key_with_filename(path=None):
     else:
         id_rsa_path = os.path.join(ssh_dir, "id_rsa.pub")
         config_ssh_key = config.DEPLOYMENT.get("ssh_key")
+        config_ssh_key_path = os.path.expanduser(config_ssh_key)
         if os.path.exists(id_rsa_path):
             ssh_key_path = id_rsa_path
             logger.info("Default id_rsa.pub exists")
-        elif config_ssh_key and os.path.exists(config_ssh_key):
-            ssh_key_path = config_ssh_key
+        elif config_ssh_key and os.path.exists(config_ssh_key_path):
+            ssh_key_path = config_ssh_key_path
             logger.info(f"Using ssh key from ocs-ci default config: {config_ssh_key}")
         else:
             raise FileNotFoundError(
