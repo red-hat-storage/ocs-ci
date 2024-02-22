@@ -4690,6 +4690,7 @@ def exec_nb_db_query(query):
 
     return output
 
+
 def is_z_stream_upgrade():
     """
     Check whether this is a z-stream upgrade scenario
