@@ -23,6 +23,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -240,7 +241,7 @@ class CNVInstaller(object):
         """
         ocp = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
         return ocp.check_resource_existence(
-            should_exist=True, resource_name=constants.CNV_OPERATORNAME
+            timeout=12, should_exist=True, resource_name=constants.CNV_OPERATORNAME
         )
 
     def post_install_verification(self):
@@ -271,6 +272,14 @@ class CNVInstaller(object):
         )
 
         # validate that HyperConverged systemHealthStatus is healthy
+        self.check_hyperconverged_healthy()
+
+    @retry(exceptions.HyperConvergedHealthException, tries=5, delay=60, backoff=1)
+    def check_hyperconverged_healthy(self):
+        """
+        Validate that HyperConverged systemHealthStatus is healthy.
+        Method throws an exception if the status is not healthy.
+        """
         logger.info("Validate that HyperConverged systemHealthStatus is healthy")
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
         health = (
@@ -502,15 +511,24 @@ class CNVInstaller(object):
         archive_file_binary_object.extractall(path=bin_dir)
         logger.info(f"virtctl binary extracted successfully to path:{bin_dir}")
 
-    def deploy_cnv(self, check_cnv_deployed=False):
+    def deploy_cnv(self, check_cnv_deployed=False, check_cnv_ready=False):
         """
         Installs CNV enabling software emulation.
 
         Args:
             check_cnv_deployed (bool): If True, check if CNV is already deployed. If so, skip the deployment.
+            check_cnv_ready (bool): If True, check if CNV is ready. If so, skip the deployment.
         """
         if check_cnv_deployed and self.cnv_hyperconverged_installed():
             logger.info("CNV operator is already deployed, skipping the deployment")
+            return
+
+        if (
+            check_cnv_ready
+            and self.cnv_hyperconverged_installed()
+            and self.post_install_verification()
+        ):
+            logger.info("CNV operator ready, skipping the deployment")
             return
 
         logger.info("Installing CNV")
