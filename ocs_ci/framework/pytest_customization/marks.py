@@ -119,6 +119,12 @@ order_pre_upgrade = pytest.mark.order(ORDER_BEFORE_UPGRADE)
 order_pre_ocp_upgrade = pytest.mark.order(ORDER_BEFORE_OCP_UPGRADE)
 order_pre_ocs_upgrade = pytest.mark.order(ORDER_BEFORE_OCS_UPGRADE)
 order_ocp_upgrade = pytest.mark.order(ORDER_OCP_UPGRADE)
+order_mco_upgrade = pytest.mark.order(ORDER_MCO_UPGRADE)
+order_dr_hub_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
+# dr cluster operator order is same as hub operator order except that
+# it's applicable only on the managed clusters
+order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
+order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
