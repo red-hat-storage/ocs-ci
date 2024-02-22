@@ -1650,6 +1650,10 @@ def add_squad_analysis_to_email(session, soup):
         skips_h3_tag = soup.new_tag("h3")
         skips_h3_tag.string = "Skips:"
         skips_div_tag.append(skips_h3_tag)
+        if config.RUN.get("display_skipped_msg_in_email"):
+            skip_reason_h4_tag = soup.new_tag("h4")
+            skip_reason_h4_tag.string = config.RUN.get("display_skipped_msg_in_email")
+            skips_div_tag.append(skip_reason_h4_tag)
         for squad in skipped:
             skips_h4_tag = soup.new_tag("h4")
             skips_h4_tag.string = f"{squad} squad"
