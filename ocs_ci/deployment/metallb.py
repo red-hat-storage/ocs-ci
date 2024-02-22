@@ -244,7 +244,7 @@ class MetalLBInstaller:
             )
             return
 
-        if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+        if config.ENV_DATA["platform"] == constants.HCI_VSPHERE:
 
             # due to circular import error, import is here
             from ocs_ci.deployment.vmware import assign_ips
@@ -255,7 +255,7 @@ class MetalLBInstaller:
             ip_addresses_with_mask = [ip + "/32" for ip in self.addresses_reserved]
             ipaddresspool_data.get("spec").update({"addresses": ip_addresses_with_mask})
 
-        elif config.ENV_DATA["platform"] == constants.IBM_CLOUD_BAREMETAL_PLATFORM:
+        elif config.ENV_DATA["platform"] == constants.HCI_BAREMETAL:
             cidr = config.ENV_DATA["machine_cidr"]
             network = ipaddress.ip_network(cidr)
             ip_list_by_cidr = list(network)
