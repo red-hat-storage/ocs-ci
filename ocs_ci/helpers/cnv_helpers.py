@@ -34,8 +34,10 @@ def create_vm_using_standalone_pvc(
     Args:
         namespace (str): The namespace in which to create the VM.
         vm_name (str): Name for the VM. If not provided, a unique name will be generated.
-        existing_data_volume_name (str): Existing DataVolume name to attach to the VM
+        pvc_size (str): The size of the PVC to create
+        sc_name (str): Storageclass name to use
         ssh (bool): If set to True, it adds a statically manged public SSH key during the VM creation at the first boot
+        running (bool): Set to True for the VM to start upon it's creation, False otherwise
         wait_for_vm_boot (bool): If True and running is True, wait for the VM to finish booting and
         ensure SSH connectivity
         vm_dict_path (str): Path to the VM YAML file
