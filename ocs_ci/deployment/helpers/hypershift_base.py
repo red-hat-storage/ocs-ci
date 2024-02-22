@@ -4,6 +4,7 @@ import tempfile
 import time
 from datetime import datetime
 
+from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_file
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -25,12 +26,13 @@ Main tasks include:
 logger = logging.getLogger(__name__)
 
 
-class HyperShiftBase:
+class HyperShiftBase(Deployment):
     """
     Class to handle HyperShift hosted cluster management
     """
 
     def __init__(self):
+        super().__init__()
         bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
         self.bin_dir = os.path.abspath(bin_dir_rel_path)
         self.hcp_binary_path = os.path.join(self.bin_dir, "hcp")
