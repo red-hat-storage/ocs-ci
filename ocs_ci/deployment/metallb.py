@@ -45,6 +45,7 @@ class MetalLBInstaller:
         self.operatorgroup_name = None
         self.catalog_source_name = None
         self.hostnames = []
+        self.timeout_check_resources_existence = 6
 
     def create_metallb_namespace(self):
         """
@@ -55,8 +56,8 @@ class MetalLBInstaller:
 
         ocp = OCP(kind="namespace", resource_name=self.namespace)
         if ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
             resource_name=self.namespace,
-            timeout=120,
             should_exist=True,
         ):
             logger.info(f"Namespace {self.namespace} already exists")
@@ -79,6 +80,7 @@ class MetalLBInstaller:
             resource_name=self.catalog_source_name,
             namespace=MARKETPLACE_NAMESPACE,
         ).check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
             should_exist=True,
             resource_name=self.catalog_source_name,
         )
@@ -128,6 +130,7 @@ class MetalLBInstaller:
             namespace=self.namespace,
             resource_name=self.operatorgroup_name,
         ).check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
             should_exist=True,
             resource_name=self.operatorgroup_name,
         )
@@ -293,7 +296,9 @@ class MetalLBInstaller:
             namespace=self.namespace,
             resource_name=self.ip_address_pool_name,
         ).check_resource_existence(
-            should_exist=True, resource_name=self.ip_address_pool_name
+            timeout=self.timeout_check_resources_existence,
+            should_exist=True,
+            resource_name=self.ip_address_pool_name,
         )
 
     def update_ip_address_pool_cr(self, ipaddresspool_data):
@@ -329,7 +334,9 @@ class MetalLBInstaller:
             namespace=self.namespace,
             resource_name=self.l2Advertisement_name,
         ).check_resource_existence(
-            should_exist=True, resource_name=self.l2Advertisement_name
+            timeout=self.timeout_check_resources_existence,
+            should_exist=True,
+            resource_name=self.l2Advertisement_name,
         )
 
     def create_l2advertisement(self):
