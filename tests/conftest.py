@@ -491,10 +491,15 @@ def pytest_collection_modifyitems(session, config, items):
                 else:
                     continue
                 markers_update = []
-                for m in item.iter_markers():
+                item_markers = copy(item.own_markers)
+                if not item_markers:
+                    # If testcase is in a class then own_markers will be empty
+                    # hence we need to check item.instance.pytestmark
+                    item_markers = copy(item.instance.pytestmark)
+                for m in item_markers:
                     # fetch already marked 'order' value
-                    if m.name == "run":
-                        val = m.kwargs.get("order")
+                    if m.name == "order":
+                        val = m.args[0]
                         # Sum of the base order value along with
                         # zone in which the cluster is and the cluster's role rank
                         # determines the order in which tests need to be executed
@@ -503,17 +508,16 @@ def pytest_collection_modifyitems(session, config, items):
                         newval = val + zone_rank + role_rank
                         log.info(f"ORIGINAL = {val}, NEW={newval}")
                         markers_update.append((pytest.mark.order, newval))
+                        if item.own_markers:
+                            item.own_markers.remove(m)
                         break
                 markers_update.append(
                     (config_index, item.callspec.params["config_index"])
                 )
                 # Apply all the markers now
                 for mark, param in markers_update:
-                    if mark.name == "run":
-                        for m in item.iter_markers():
-                            if m.name == "run":
-                                # m.kwargs['order'] = param
-                                item.add_marker(pytest.mark.run(order=param))
+                    if mark.name == "order":
+                        item.add_marker(pytest.mark.order(param))
                     else:
                         item.add_marker(mark(param))
                 log.info(f"TEST={item.name}")
