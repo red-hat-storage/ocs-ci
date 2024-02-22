@@ -146,18 +146,18 @@ class TestS3Routes:
         """
 
         def finalizer():
-            noobaa_ocp_obj = ocp.OCP(
-                kind="noobaa",
+            storagecluster_obj = ocp.OCP(
+                kind=constants.STORAGECLUSTER,
                 namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name="noobaa",
+                resource_name=constants.DEFAULT_CLUSTERNAME,
             )
             try:
-                if noobaa_ocp_obj.data["spec"]["disableLoadBalancerService"]:
-                    lb_param = (
-                        '[{"op": "remove", "path": "/spec/disableLoadBalancerService"}]'
-                    )
+                if storagecluster_obj.data["spec"]["multiCloudGateway"][
+                    "disableLoadBalancerService"
+                ]:
+                    lb_param = '[{"op": "remove", "path": "/spec/multiCloudGateway/disableLoadBalancerService"}]'
                     logger.info("Revert disableLoadBalancerService")
-                    noobaa_ocp_obj.patch(params=lb_param, format_type="json")
+                    storagecluster_obj.patch(params=lb_param, format_type="json")
             except KeyError:
                 logger.info(
                     "disableLoadBalancerService param does not exist, no need to revert"
@@ -206,21 +206,16 @@ class TestS3Routes:
     def test_disable_nb_lb(self, revert_lb_service):
         """
         Validates the functionality of disableLoadBalancerService param
-
         """
-        noobaa_ocp_obj = ocp.OCP(
-            kind="noobaa",
+        storagecluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name="noobaa",
+            resource_name=constants.DEFAULT_CLUSTERNAME,
         )
+        lb_param = '[{"op": "add", "path": "/spec/multiCloudGateway/disableLoadBalancerService", "value": true}]'
         logger.info("Patching noobaa resource to enable disableLoadBalancerService")
-        noobaa_ocp_obj.patch(
-            resource_name="noobaa",
-            params='{"spec": {"disableLoadBalancerService": true }}',
-            format_type="merge",
-        )
+        storagecluster_obj.patch(params=lb_param, format_type="json")
 
-        logger.info("Validating service type changed to ClusterIP")
         nb_mgmt_svc_obj = ocp.OCP(
             kind=constants.SERVICE,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -232,6 +227,7 @@ class TestS3Routes:
             resource_name="s3",
         )
         sleep(10)
+        logger.info("Validating service type changed to ClusterIP")
         if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
             assert (
                 nb_mgmt_svc_obj.data["spec"]["type"]
