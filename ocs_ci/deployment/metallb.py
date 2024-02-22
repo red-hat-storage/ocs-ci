@@ -266,7 +266,9 @@ class MetalLBInstaller:
                 if i < 10 or i == len(ip_list_by_cidr) - 1:
                     continue
                 ip_list_for_hosted_clusters.append(f"{ip}/{network.prefixlen}")
-
+            ipaddresspool_data.get("spec").update(
+                {"addresses": ip_list_for_hosted_clusters}
+            )
         else:
             raise NotImplementedError(
                 f"Platform {config.ENV_DATA['platform']} is not supported yet"
@@ -280,8 +282,7 @@ class MetalLBInstaller:
 
         exec_cmd(
             f"oc apply -f {ipaddresspool_file.name}",
-            timeout=2400,
-            secrets=["*"],
+            timeout=240,
         )
 
         return self.ip_address_pool_created()
