@@ -32,3 +32,11 @@ class TestProviderHosted(object):
         HypershiftHostedOCP().deploy_ocp(
             deploy_cnv=False, deploy_metallb=False, download_hcp_binary=True
         )
+
+    @hci_provider_required
+    def test_provider_deploy_OCP_hosted_skip_cnv(self):
+        """
+        Test deploy hosted OCP on provider platform with cnv ready beforehand
+        """
+        logger.info("Test deploy hosted OCP on provider platform with cnv ready")
+        HypershiftHostedOCP().deploy_ocp(deploy_cnv=False)
