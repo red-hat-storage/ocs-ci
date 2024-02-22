@@ -2625,6 +2625,7 @@ class MultiClusterDROperatorsDeploy(object):
             ]
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
             dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
 
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
@@ -2860,7 +2861,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         multicluster_engine._has_phase = True
         resource = multicluster_engine.get()
         for item in resource["spec"]["overrides"]["components"]:
-            if item["name"] == "managedserviceaccount-preview":
+            if item["name"] == "managedserviceaccount":
                 item["enabled"] = True
         multicluster_engine_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="multiengine", delete=False
@@ -2928,7 +2929,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Check backupstoragelocation resource in "Available" phase
         backupstorage = ocp.OCP(
             kind="BackupStorageLocation",
-            resource_name=constants.MDR_DPA,
+            resource_name="default",
             namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
         )
         resource = backupstorage.get()
