@@ -239,6 +239,8 @@ ENV_DATA:
 
   # used in external mode deployment
   restricted-auth-permission: false
+  # k8s_cluster_name should be used with restricted-auth-permission
+  use_k8s_cluster_name: true
 
   # used in heterogeneous architecture
   num_workers_additional: 0
