@@ -2018,7 +2018,7 @@ class Deployment(object):
             f"--request-timeout=120s"
         )
 
-    def acm_hub_installed(self):
+    def acm_operator_installed(self):
         """
         Check if ACM HUB is already installed
         :return: bool True if ACM HUB is installed, False otherwise
@@ -2026,7 +2026,7 @@ class Deployment(object):
 
         ocp_obj = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
         return ocp_obj.check_resource_existence(
-            timeout=12,
+            timeout=6,
             should_exist=True,
             resource_name=constants.ACM_HUB_OPERATOR_NAME_WITH_NS,
         )
@@ -2035,7 +2035,7 @@ class Deployment(object):
         """
         Handle ACM HUB deployment
         """
-        if not self.acm_hub_installed():
+        if self.acm_operator_installed():
             logger.info("ACM Operator is already installed")
             self.deploy_multicluster_hub()
             return
