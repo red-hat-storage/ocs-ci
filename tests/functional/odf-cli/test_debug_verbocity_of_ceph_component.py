@@ -2,13 +2,13 @@ import pytest
 import logging
 
 from ocs_ci.helpers.helpers import odf_cli_set_log_level, get_ceph_log_level
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
 
-@green_squad
+@brown_squad
 class TestDebugVerbosityOfCephComponents:
     @pytest.mark.polarion_id("OCS-5417")
     @pytest.mark.parametrize(
