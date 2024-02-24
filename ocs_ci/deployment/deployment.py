@@ -2188,7 +2188,11 @@ class Deployment(object):
         # check if MCH is already installed
         if OCP(
             kind=constants.ACM_MULTICLUSTER_HUB, namespace=constants.ACM_HUB_NAMESPACE
-        ).check_resource_existence(should_exist=True, timeout=6):
+        ).check_resource_existence(
+            should_exist=True,
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            timeout=6,
+        ):
             logger.info("MultiClusterHub already installed")
             return
 
