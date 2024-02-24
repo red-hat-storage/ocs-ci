@@ -125,6 +125,9 @@ class MetalLBInstaller:
         Check if MetalLB operator group is created
         :return: True if operator group is created, False otherwise
         """
+        if not self.operatorgroup_name:
+            return False
+
         return OCP(
             kind=constants.OPERATOR_GROUP,
             namespace=self.namespace,
@@ -143,17 +146,16 @@ class MetalLBInstaller:
         logger.info("Creating MetalLB operator group")
         operator_group_data = templating.load_yaml(METALLB_OPERATOR_GROUP_YAML)
 
-        # update namespace and target namespace
-        if self.namespace != METALLB_DEFAULT_NAMESPACE:
-            operator_group_data.get("metadata").update({"namespace": self.namespace})
-            operator_group_data.get("spec").get("targetNamespaces").append(
-                self.namespace
-            )
         self.operatorgroup_name = operator_group_data.get("metadata").get("name")
 
+        # check if OperatorGroup already exists
         if self.metallb_operator_group_created():
             logger.info(f"OperatorGroup {self.operatorgroup_name} already exists")
             return
+
+        # update namespace and target namespace
+        if self.namespace != METALLB_DEFAULT_NAMESPACE:
+            operator_group_data.get("metadata").update({"namespace": self.namespace})
 
         metallb_operatorgroup_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="metallb_operatorgroup", delete=False
