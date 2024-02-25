@@ -5,6 +5,6 @@ metadata:
   namespace: openshift-marketplace
 spec:
   displayName: ''
-  image: 'registry.redhat.io/redhat/redhat-operator-index:v4.14'
+  image: 'registry.redhat.io/redhat/redhat-operator-index:v{}'
   publisher: ''
   sourceType: grpc

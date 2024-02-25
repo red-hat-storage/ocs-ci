@@ -21,8 +21,7 @@ from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import exec_cmd
-
+from ocs_ci.utility.utils import exec_cmd, get_ocp_version
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +34,10 @@ class MetalLBInstaller:
     ):
         self.addresses_reserved = None
         if not version:
-            self.version = config.ENV_DATA.get("metallb_version")
+            self.version_lb = get_ocp_version()
         else:
-            self.version = version
-        self.namespace = namespace
+            self.version_lb = version
+        self.namespace_lb = namespace
         self.l2Advertisement_name = None
         self.ip_address_pool_name = None
         self.subscription_name = None
@@ -52,21 +51,21 @@ class MetalLBInstaller:
         Create MetalLB namespace
         :return: True if namespace is created, False otherwise
         """
-        logger.info(f"Creating namespace {self.namespace} for MetalLB")
+        logger.info(f"Creating namespace {self.namespace_lb} for MetalLB")
 
-        ocp = OCP(kind="namespace", resource_name=self.namespace)
+        ocp = OCP(kind="namespace", resource_name=self.namespace_lb)
         if ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
-            resource_name=self.namespace,
+            resource_name=self.namespace_lb,
             should_exist=True,
         ):
-            logger.info(f"Namespace {self.namespace} already exists")
+            logger.info(f"Namespace {self.namespace_lb} already exists")
             return
 
-        exec_cmd(f"oc create namespace {self.namespace}")
+        exec_cmd(f"oc create namespace {self.namespace_lb}")
 
         return ocp.check_resource_existence(
-            resource_name=self.namespace,
+            resource_name=self.namespace_lb,
             timeout=120,
             should_exist=True,
         )
@@ -93,9 +92,12 @@ class MetalLBInstaller:
         logger.info("Creating catalog source for MetalLB")
         # replace latest version with specific version
         catalog_source_data = templating.load_yaml(METALLB_CATALOG_SOURCE_YAML)
-        image = catalog_source_data.get("spec").get("image")
-        image = image.replace("latest", f"v{self.version}")
-        catalog_source_data.get("spec").update({"image": image})
+
+        image_placeholder = catalog_source_data.get("spec").get("image")
+        catalog_source_data.get("spec").update(
+            {"image": image_placeholder.format("4.14")}
+        )
+
         self.catalog_source_name = catalog_source_data.get("metadata").get("name")
 
         if self.catalog_source_created():
@@ -130,7 +132,7 @@ class MetalLBInstaller:
 
         return OCP(
             kind=constants.OPERATOR_GROUP,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.operatorgroup_name,
         ).check_resource_existence(
             timeout=self.timeout_check_resources_existence,
@@ -154,8 +156,8 @@ class MetalLBInstaller:
             return
 
         # update namespace and target namespace
-        if self.namespace != METALLB_DEFAULT_NAMESPACE:
-            operator_group_data.get("metadata").update({"namespace": self.namespace})
+        if self.namespace_lb != METALLB_DEFAULT_NAMESPACE:
+            operator_group_data.get("metadata").update({"namespace": self.namespace_lb})
 
         metallb_operatorgroup_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="metallb_operatorgroup", delete=False
@@ -175,7 +177,7 @@ class MetalLBInstaller:
         """
         return OCP(
             kind=constants.SUBSCRIPTION,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.subscription_name,
         ).check_resource_existence(
             should_exist=True, resource_name=self.subscription_name
@@ -188,8 +190,8 @@ class MetalLBInstaller:
         """
         logger.info("Creating MetalLB subscription")
         subscription_data = templating.load_yaml(METALLB_SUBSCRIPTION_YAML)
-        if self.namespace != METALLB_DEFAULT_NAMESPACE:
-            subscription_data.get("metadata").update({"namespace": self.namespace})
+        if self.namespace_lb != METALLB_DEFAULT_NAMESPACE:
+            subscription_data.get("metadata").update({"namespace": self.namespace_lb})
 
         self.subscription_name = subscription_data.get("metadata").get("name")
 
@@ -207,14 +209,14 @@ class MetalLBInstaller:
         exec_cmd(f"oc apply -f {metallb_subscription_file.name}", timeout=2400)
 
         metallb_pods = get_pod_name_by_pattern(
-            METALLB_CONTROLLER_MANAGER_PREFIX, self.namespace
+            METALLB_CONTROLLER_MANAGER_PREFIX, self.namespace_lb
         )
         metallb_pods.extend(
-            get_pod_name_by_pattern(METALLB_WEBHOOK_PREFIX, self.namespace)
+            get_pod_name_by_pattern(METALLB_WEBHOOK_PREFIX, self.namespace_lb)
         )
 
         return self.subscription_created() and wait_for_pods_to_be_running(
-            namespace=self.namespace, pod_names=metallb_pods, timeout=300
+            namespace=self.namespace_lb, pod_names=metallb_pods, timeout=300
         )
 
     def create_ip_address_pool(self):
@@ -235,14 +237,14 @@ class MetalLBInstaller:
 
         # common part for both platforms
         ipaddresspool_data = templating.load_yaml(METALLB_IPADDRESSPOOL_PATH)
-        if self.namespace != METALLB_DEFAULT_NAMESPACE:
-            ipaddresspool_data.get("metadata").update({"namespace": self.namespace})
+        if self.namespace_lb != METALLB_DEFAULT_NAMESPACE:
+            ipaddresspool_data.get("metadata").update({"namespace": self.namespace_lb})
 
         self.ip_address_pool_name = ipaddresspool_data.get("metadata").get("name")
 
         if self.ip_address_pool_created():
             logger.info(
-                f"IPAddressPool {self.ip_address_pool_name} already exists in the namespace {self.namespace}"
+                f"IPAddressPool {self.ip_address_pool_name} already exists in the namespace {self.namespace_lb}"
             )
             return
 
@@ -296,7 +298,7 @@ class MetalLBInstaller:
         """
         return OCP(
             kind=constants.IP_ADDRESS_POOL,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.ip_address_pool_name,
         ).check_resource_existence(
             timeout=self.timeout_check_resources_existence,
@@ -312,7 +314,7 @@ class MetalLBInstaller:
         """
         ocp = OCP(
             kind=constants.IP_ADDRESS_POOL,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.ip_address_pool_name,
         )
         if self.ip_address_pool_created():
@@ -334,7 +336,7 @@ class MetalLBInstaller:
         """
         return OCP(
             kind=constants.L2_ADVERTISEMENT,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.l2Advertisement_name,
         ).check_resource_existence(
             timeout=self.timeout_check_resources_existence,
@@ -351,14 +353,16 @@ class MetalLBInstaller:
         logger.info("Creating L2 advertisement for IP address pool")
         # METALLB_L2_ADVERTISEMENT_PATH
         l2_advertisement_data = templating.load_yaml(METALLB_L2_ADVERTISEMENT_PATH)
-        if self.namespace != METALLB_DEFAULT_NAMESPACE:
-            l2_advertisement_data.get("metadata").update({"namespace": self.namespace})
+        if self.namespace_lb != METALLB_DEFAULT_NAMESPACE:
+            l2_advertisement_data.get("metadata").update(
+                {"namespace": self.namespace_lb}
+            )
 
         self.l2Advertisement_name = l2_advertisement_data.get("metadata").get("name")
 
         if self.l2advertisement_created():
             logger.info(
-                f"L2 advertisement {self.l2Advertisement_name} already exists in the namespace {self.namespace}"
+                f"L2 advertisement {self.l2Advertisement_name} already exists in the namespace {self.namespace_lb}"
             )
             return
 
@@ -385,8 +389,11 @@ class MetalLBInstaller:
             logger.info("MetalLB operator deployment is not requested")
             return
 
+        logger.info(
+            f"Deploying MetalLB and dependant resources to namespace: '{self.namespace_lb}'"
+        )
         if self.create_metallb_namespace():
-            logger.info(f"Namespace {self.namespace} created successfully")
+            logger.info(f"Namespace {self.namespace_lb} created successfully")
         if self.create_catalog_source():
             logger.info("MetalLB catalog source created successfully")
         if self.create_metallb_operator_group():
@@ -427,7 +434,7 @@ class MetalLBInstaller:
         """
         ocp = OCP(
             kind=constants.L2_ADVERTISEMENT,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.l2Advertisement_name,
         )
         ocp.delete(resource_name=self.l2Advertisement_name)
@@ -444,7 +451,7 @@ class MetalLBInstaller:
         """
         ocp = OCP(
             kind=constants.OPERATOR_GROUP,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.operatorgroup_name,
         )
         ocp.delete(resource_name=self.operatorgroup_name)
@@ -461,7 +468,7 @@ class MetalLBInstaller:
         """
         ocp = OCP(
             kind=constants.SUBSCRIPTION,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.subscription_name,
         )
         ocp.delete(resource_name=self.subscription_name)
@@ -478,7 +485,7 @@ class MetalLBInstaller:
         """
         ocp = OCP(
             kind=constants.IP_ADDRESS_POOL,
-            namespace=self.namespace,
+            namespace=self.namespace_lb,
             resource_name=self.ip_address_pool_name,
         )
         ocp.delete(resource_name=self.ip_address_pool_name)
@@ -510,10 +517,10 @@ class MetalLBInstaller:
         Delete MetalLB namespace
         :return: True if namespace is deleted, False otherwise
         """
-        ocp = OCP(kind="namespace", resource_name=self.namespace)
-        ocp.delete(resource_name=self.namespace)
+        ocp = OCP(kind="namespace", resource_name=self.namespace_lb)
+        ocp.delete(resource_name=self.namespace_lb)
         return ocp.check_resource_existence(
-            resource_name=self.namespace,
+            resource_name=self.namespace_lb,
             timeout=120,
             should_exist=False,
         )
