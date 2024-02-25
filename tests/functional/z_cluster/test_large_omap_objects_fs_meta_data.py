@@ -59,6 +59,9 @@ class TestLargeOmapObjectsFsMetaData(ManageTest):
             pod_dict_path=pod_dict_path,
             raw_block_pv=raw_block_pv,
         )
+        log.info(
+            "Create large number of files under a directory exceeding the mds configuration mds_bal_split_size."
+        )
         cmd = (
             "mkdir -p /var/lib/www/html/dir3/.snap; for n in {1..100}; do touch /var/lib/www/html/dir3/file{0..11000}; "
             "mkdir -p /var/lib/www/html/dir3/.snap/snap_$n; rm -f /var/lib/www/html/dir3/file{0..11000}; done"
