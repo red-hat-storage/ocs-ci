@@ -203,6 +203,7 @@ REPLICATION_SOURCE = "ReplicationSource"
 REPLICATIONDESTINATION = "ReplicationDestination"
 IP_ADDRESS_POOL = "IPAddressPool"
 L2_ADVERTISEMENT = "L2Advertisement"
+METALLB_INSTANCE = "MetalLB"
 NETWORK_POLICY = "NetworkPolicy"
 
 # Provisioners
@@ -829,6 +830,9 @@ METALLB_OPERATOR_GROUP_YAML = os.path.join(
 )
 METALLB_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_METALLB, "subscription.yaml"
+)
+METALLB_INSTANCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "metallb-instance.yaml"
 )
 METALLB_IPADDRESSPOOL_PATH = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_METALLB, "ipaddresspool.yaml"
