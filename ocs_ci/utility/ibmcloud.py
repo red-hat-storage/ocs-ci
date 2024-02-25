@@ -590,12 +590,13 @@ class IBMCloudIPI(object):
     ):
         """
         Restart nodes by stopping and starting VM in IBM Cloud
+
         Args:
             nodes (list): The OCS objects of the nodes
-            wait (bool): True in case wait for status is needed,
-                False otherwise
+            wait (bool): True in case wait for status is needed, False otherwise
             force (bool): True for force instance stop, False otherwise
             timeout (int): Timeout for the command, defaults to 300 seconds.
+
         """
         logger.info(f"Stopping instances {list(nodes)}")
         self.stop_nodes(nodes=nodes, force=force)
