@@ -564,11 +564,12 @@ class IBMCloudIPI(object):
     def stop_nodes(self, nodes, force=True, wait=True):
         """
         Stop the nodes on IBM Cloud
+
         Args:
             nodes (list): The OCS objects of the nodes
-            force (bool): True for VM ungraceful power off, False for
-                graceful VM shutdown
+            force (bool): True for VM ungraceful power off, False for graceful VM shutdown
             wait (bool): Wait for the VMs to stop
+
         """
         for node in nodes:
             cmd = f"ibmcloud is instance-stop {node.name} --force={force}"
@@ -680,8 +681,7 @@ class IBMCloudIPI(object):
         Terminate the Node in IBMCloud
         Args:
             nodes (list): The OCS objects of the nodes
-            wait (bool): True in case wait for status is needed,
-                False otherwise
+            wait (bool): True in case wait for status is needed, False otherwise
         """
         for node in nodes:
             cmd = f"ibmcloud is instance-delete {node.name} -f"
@@ -776,8 +776,7 @@ class IBMCloudIPI(object):
         Args:
             volume (str): The volume to wait for to be attached
         Returns:
-            bool: True if the volume has been attached to the
-                instance, False otherwise
+            bool: True if the volume has been attached to the instance, False otherwise
         """
         try:
             for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
