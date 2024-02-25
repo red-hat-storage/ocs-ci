@@ -92,6 +92,9 @@ CHRONY_TEMPLATE = os.path.join(
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 BUSYBOX_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "busybox.yaml")
+NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "provider-client_network_policy.yaml"
+)
 AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
     "ocp-deployment", "ai-host-network-config.yaml.j2"
 )
@@ -200,6 +203,7 @@ REPLICATION_SOURCE = "ReplicationSource"
 REPLICATIONDESTINATION = "ReplicationDestination"
 IP_ADDRESS_POOL = "IPAddressPool"
 L2_ADVERTISEMENT = "L2Advertisement"
+NETWORK_POLICY = "NetworkPolicy"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
