@@ -20,7 +20,7 @@ spec:
           claimName: tet-2
       containers:
       - name: fedora
-        image: quay.io/ocsci/fedora
+        image: quay.io/ocsci/fedora:fio
         resources:
           limits:
             memory: "2048Mi"
