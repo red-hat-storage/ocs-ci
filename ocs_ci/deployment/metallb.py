@@ -269,7 +269,7 @@ class MetalLBInstaller:
             for i, ip in enumerate(ip_list_by_cidr):
                 if i < 10 or i == len(ip_list_by_cidr) - 1:
                     continue
-                ip_list_for_hosted_clusters.append(f"{ip}/{network.prefixlen}")
+                ip_list_for_hosted_clusters.append(f"{ip}/32")
             ipaddresspool_data.get("spec").update(
                 {"addresses": ip_list_for_hosted_clusters}
             )
