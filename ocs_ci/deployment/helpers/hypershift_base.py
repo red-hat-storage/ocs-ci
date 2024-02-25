@@ -130,8 +130,6 @@ class HyperShiftBase(Deployment):
 
         namespace = f"clusters-{name}"
 
-        self.apply_network_policy(namespace)
-
         create_hcp_cluster_cmd = (
             f"{self.hcp_binary_path} create cluster kubevirt "
             f"--name {name} "

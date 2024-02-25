@@ -219,6 +219,44 @@ class MetalLBInstaller:
             namespace=self.namespace_lb, pod_names=metallb_pods, timeout=300
         )
 
+    def metallb_instance_created(self):
+        """
+        Check if MetalLB instance is created
+        :return: True if MetalLB instance is created, False otherwise
+        """
+        return OCP(
+            kind=constants.METALLB_INSTANCE,
+            namespace=self.namespace_lb,
+            resource_name="metallb",
+        ).check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            should_exist=True,
+            resource_name="metallb",
+        )
+
+    def create_metallb_instance(self):
+        """
+        Create MetalLB instance
+        :return: True if MetalLB instance is created, False/None otherwise
+        """
+
+        if self.metallb_instance_created():
+            logger.info("MetalLB instance already exists")
+            return
+
+        logger.info("Creating MetalLB instance")
+        metallb_inst_data = templating.load_yaml(constants.METALLB_INSTANCE_YAML)
+        metallb_inst_data.get("metadata").update({"namespace": self.namespace_lb})
+
+        metallb_inst_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="metallb_instance", delete=False
+        )
+        templating.dump_data_to_temp_yaml(metallb_inst_data, metallb_inst_file.name)
+
+        exec_cmd(f"oc create -f {metallb_inst_file.name}", timeout=240)
+
+        return self.metallb_instance_created()
+
     def create_ip_address_pool(self):
         """
         Create IP address pool for MetalLB
@@ -265,9 +303,9 @@ class MetalLBInstaller:
             ip_list_by_cidr = list(network)
             ip_list_for_hosted_clusters = list()
 
-            # remove ip addresses reserved for machines, Network, Gateway, and Broadcast
+            # skip ip addresses reserved for machines, Network, Gateway, and Broadcast; first 10
             for i, ip in enumerate(ip_list_by_cidr):
-                if i < 10 or i == len(ip_list_by_cidr) - 1:
+                if i < 10 + 1 or i == len(ip_list_by_cidr) - 1:
                     continue
                 ip_list_for_hosted_clusters.append(f"{ip}/32")
             ipaddresspool_data.get("spec").update(
@@ -400,6 +438,8 @@ class MetalLBInstaller:
             logger.info("MetalLB operator group created successfully")
         if self.create_metallb_subscription():
             logger.info("MetalLB subscription created successfully")
+        if self.create_metallb_instance():
+            logger.info("MetalLB instance created successfully")
         if self.create_ip_address_pool():
             logger.info("IP address pool created successfully")
         if self.create_l2advertisement():
