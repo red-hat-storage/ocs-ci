@@ -49,7 +49,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
     update_container_with_mirrored_image,
     create_directory_path,
-    get_ocs_build_number,
     exec_cmd,
 )
 from ocs_ci.utility.utils import convert_device_size
@@ -4520,22 +4519,19 @@ def retrieve_cli_binary(cli_type="mcg"):
     elif cli_type == "odf":
         local_cli_path = constants.CLI_TOOL_LOCAL_PATH
     local_cli_dir = os.path.dirname(local_cli_path)
-
-    if (
-        config.DEPLOYMENT["live_deployment"]
-        and semantic_version >= version.VERSION_4_15
-    ):
-        image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
-    elif (
-        config.DEPLOYMENT["live_deployment"]
-        and semantic_version >= version.VERSION_4_13
-    ):
-        image = f"{constants.MCG_CLI_IMAGE}:v{semantic_version}"
-
-    elif semantic_version >= version.VERSION_4_15:
-        image = f"{constants.ODF_CLI_DEV_IMAGE}:v{semantic_version}"
+    live_deployment = config.DEPLOYMENT["live_deployment"]
+    if semantic_version >= version.VERSION_4_15:
+        if live_deployment:
+            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+        else:
+            image = f"{constants.ODF_CLI_DEV_IMAGE}:v{semantic_version}"
+    elif semantic_version >= version.VERSION_4_13:
+        if live_deployment:
+            image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+        else:
+            image = f"{constants.MCG_CLI_DEV_IMAGE}:v{semantic_version}"
     else:
-        image = f"{constants.MCG_CLI_IMAGE_PRE_4_13}:{get_ocs_build_number()}"
+        image = f"{constants.MCG_CLI_DEV_IMAGE}:v{semantic_version}"
 
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
