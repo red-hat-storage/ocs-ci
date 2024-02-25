@@ -4,7 +4,10 @@ import pytest
 from ocs_ci.framework.testlib import tier1, skipif_ui_not_support, ui
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
 from ocs_ci.framework.testlib import skipif_ocs_version
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    runs_on_provider,
+)
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
@@ -18,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @ui
+@runs_on_provider
 @skipif_ocs_version("<4.6")
 @skipif_ui_not_support("pvc")
 @green_squad

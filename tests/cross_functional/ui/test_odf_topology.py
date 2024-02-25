@@ -13,9 +13,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud_managed,
     skipif_ocs_version,
     skipif_managed_service,
-    skipif_hci_provider_and_client,
     tier4a,
     ignore_leftovers,
+    ui,
+    skipif_hci_provider_or_client,
+    runs_on_provider,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_node_names
@@ -66,10 +68,11 @@ def teardown_depl_busybox(request):
     request.addfinalizer(finalizer)
 
 
+@ui
 @black_squad
+@runs_on_provider
 @skipif_ibm_cloud_managed
 @skipif_managed_service
-@skipif_hci_provider_and_client
 @skipif_external_mode
 @skipif_ocs_version("<4.13")
 class TestODFTopology(object):
@@ -231,6 +234,7 @@ class TestODFTopology(object):
     @bugzilla("2242132")
     @ignore_leftovers
     @polarion_id("OCS-4905")
+    @skipif_hci_provider_or_client
     def test_stop_start_node_validate_topology(
         self, nodes, setup_ui_class, teardown_nodes_job, threading_lock
     ):

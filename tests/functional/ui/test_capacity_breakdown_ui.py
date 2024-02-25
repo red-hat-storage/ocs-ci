@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier3,
     black_squad,
+    runs_on_provider,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -65,6 +66,7 @@ class TestCapacityBreakdownUI(ManageTest):
         ],
     )
     @ui
+    @runs_on_provider
     @tier2
     @bugzilla("1832297")
     @skipif_ocs_version("!=4.8")
@@ -125,8 +127,8 @@ class TestCapacityBreakdownUI(ManageTest):
             project_name=project_name, pod_name=pod_name
         ), "The Project/Pod not created on Capacity Breakdown"
 
-    @black_squad
     @ui
+    @black_squad
     @tier3
     @bugzilla("2225223")
     @polarion_id("OCS-5122")
