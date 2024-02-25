@@ -1,5 +1,6 @@
 import random
 import string
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -47,8 +48,9 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         """
 
         sc_name = create_unique_resource_name("namespace-", "interface")
-        self.do_click(self.sc_loc["Developer_dropdown"])
-        self.do_click(self.sc_loc["select_administrator"], timeout=5)
+
+        self.select_administrator_user()
+
         self.do_click(self.sc_loc["create_project"])
         self.do_send_keys(self.sc_loc["project_name"], sc_name)
         self.do_click(self.sc_loc["save_project"])
@@ -56,6 +58,10 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         ocp_obj.exec_oc_cmd(
             f"adm policy add-role-to-user admin {username} -n {sc_name}"
         )
+        logger.info(
+            f"Waiting for project {sc_name} to be created and roles assigned 10sec"
+        )
+        time.sleep(10)
         self.navigate_object_bucket_claims_page()
         obc_found = self.wait_until_expected_text_is_found(
             locator=self.sc_loc["obc_menu_name"], expected_text=text, timeout=10
@@ -163,11 +169,8 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
 
         Notice: the func works from PersistantVolumeClaims, VolumeSnapshots and OBC pages
         """
-        logger.info("Select openshift-storage project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(
-            project_name=config.ENV_DATA["cluster_namespace"]
-        )
+        logger.info("Select 'openshift-storage' project")
+        self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
 
     def delete_obc_ui(self, obc_name, delete_via):
         """

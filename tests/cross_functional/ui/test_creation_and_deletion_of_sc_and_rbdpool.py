@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ui,
     skipif_ibm_cloud_managed,
     green_squad,
+    skipif_hci_provider_or_client,
 )
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.9")
 @skipif_ibm_cloud_managed
+@skipif_hci_provider_or_client
 class TestRbDPool(ManageTest):
     """
     Create a new  Storage Class on a new rbd pool with

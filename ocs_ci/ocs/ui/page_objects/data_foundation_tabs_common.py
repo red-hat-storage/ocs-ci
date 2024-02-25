@@ -224,6 +224,8 @@ class CreateResourceForm(PageNavigator):
             )
             self._remove_text_from_input()
             self.do_send_keys(self.name_input_loc, text_input)
+            logger.info("sleep 1s to get management-console apply input rules")
+            time.sleep(1)
         # reload popup to process all input, but not a part
         self.do_click(self.validation_loc["input_value_validator_icon"])
         self.do_click(self.validation_loc["input_value_validator_icon"])

@@ -10,7 +10,11 @@ from selenium.webdriver.remote.errorhandler import ErrorHandler
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.constants import ON_PREM_PLATFORMS, CLOUD_PLATFORMS
+from ocs_ci.ocs.constants import (
+    ON_PREM_PLATFORMS,
+    CLOUD_PLATFORMS,
+    HCI_PROVIDER_CLIENT_PLATFORMS,
+)
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.node import get_node_names
 from ocs_ci.ocs.ocp import OCP
@@ -711,32 +715,13 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
             )
             topology_deviation["cluster_app_name_not_equal"] = True
 
-        storage_cluster = OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        groups_cli = (
-            storage_cluster.get()
-            .get("items")[0]
-            .get("status")
-            .get("failureDomainValues")
-        )
-
         # zoom out to read rack/zone label
         zoom_out_times = 1 if len(node_names) < 4 else 2
-        for i in range(1, zoom_out_times + 1):
-            self.nodes_view.zoom_out_view()
-        groups_ui = self.nodes_view.get_group_names()
 
-        # check group names such as racks or zones from ODF Topology UI and CLI are identical
-        if not sorted(groups_cli) == sorted(groups_ui):
-            logger.error(
-                f"group names for worker nodes (labels) of the cluster {cluster_app_name_cli} "
-                "from UI and from CLI are not identical\n"
-                f"groups_cli = {sorted(groups_cli)}\n"
-                f"groups_ui = {sorted(groups_ui)}"
+        if config.ENV_DATA["platform"] != constants.HCI_BAREMETAL:
+            self.validate_node_group_names(
+                cluster_app_name_cli, topology_deviation, zoom_out_times
             )
-            topology_deviation["worker_group_labels_not_equal"] = True
 
         # check node names from ODF Topology UI and CLI are identical
         if not sorted(list(topology_ui_df["entity_name"])) == sorted(
@@ -823,6 +808,38 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                     topology_deviation[f"{busybox_depl_name}__not_removed"] = True
                 deployment_topology.nav_back_main_topology_view()
         return topology_deviation
+
+    def validate_node_group_names(
+        self, cluster_app_name_cli, topology_deviation, zoom_out_times
+    ):
+        """
+        Validates the node group names (such as rack or zone) from the ODF Topology UI against names taken from CLI.
+        :param cluster_app_name_cli: cluster name visible in Topology UI
+        :param topology_deviation: dictionary to store deviations if found
+        :param zoom_out_times: number of times to zoom out the Topology view to see whole cluster representation
+        """
+        storage_cluster = OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        groups_cli = (
+            storage_cluster.get()
+            .get("items")[0]
+            .get("status")
+            .get("failureDomainValues")
+        )
+        for i in range(1, zoom_out_times + 1):
+            self.nodes_view.zoom_out_view()
+        groups_ui = self.nodes_view.get_group_names()
+        # check group names such as racks or zones from ODF Topology UI and CLI are identical
+        if not sorted(groups_cli) == sorted(groups_ui):
+            logger.error(
+                f"group names for worker nodes (labels) of the cluster {cluster_app_name_cli} "
+                "from UI and from CLI are not identical\n"
+                f"groups_cli = {sorted(groups_cli)}\n"
+                f"groups_ui = {sorted(groups_ui)}"
+            )
+        topology_deviation["worker_group_labels_not_equal"] = True
 
     def validate_topology_navigation_bar(self, entity_name):
         """
@@ -1018,6 +1035,14 @@ class OdfTopologyNodesView(TopologyTab):
                     detail_name == "details_sidebar_node_rack"
                     and config.ENV_DATA["platform"].lower() in CLOUD_PLATFORMS
                 ):
+                    continue
+                elif (
+                    detail_name == "details_sidebar_node_zone"
+                    or detail_name == "details_sidebar_node_rack"
+                ) and config.ENV_DATA[
+                    "platform"
+                ].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
+                    # based on https://bugzilla.redhat.com/show_bug.cgi?id=2263826 parsing excluded
                     continue
                 else:
                     details_dict[

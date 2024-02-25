@@ -4578,7 +4578,7 @@ def login_factory_fixture(request):
     drivers = []
 
     def factory(username, password):
-        driver = login_ui(username=username, password=password)
+        driver = login_ui(username=username, password=password, request=request)
         drivers.append(driver)
         return driver
 
@@ -4815,7 +4815,7 @@ def setup_ui(request):
 
 
 def setup_ui_fixture(request):
-    driver = login_ui()
+    driver = login_ui(request=request)
 
     def finalizer():
         close_browser()

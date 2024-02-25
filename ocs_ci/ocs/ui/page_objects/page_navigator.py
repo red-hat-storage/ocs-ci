@@ -201,14 +201,8 @@ class PageNavigator(BaseUI):
         Navigate to the OCS Operator management page
         """
         self.navigate_installed_operators_page()
-        logger.info("Select openshift-storage project")
-        self.do_click(
-            self.generic_locators["project_selector"], enable_screenshot=False
-        )
-        self.do_click(
-            self.generic_locators["select_openshift-storage_project"],
-            enable_screenshot=False,
-        )
+        logger.info("Select 'openshift-storage' project")
+        self.select_namespace(config.ENV_DATA["cluster_namespace"])
 
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
@@ -347,11 +341,9 @@ class PageNavigator(BaseUI):
         storage_system_details.nav_ceph_blockpool()
         logger.info("Now at Block pool page")
 
-    def wait_for_namespace_selection(self, project_name):
+    def select_namespace(self, project_name):
         """
-        If you have already navigated to namespace drop-down, this function waits for namespace selection on UI.
-        It would be useful to avoid test failures in case of delays/latency in populating the list of projects under the
-        namespace drop-down.
+        This function selects the namespace on UI.
         The timeout is hard-coded to 10 seconds in the below function call which is more than sufficient.
 
         Args:
@@ -363,19 +355,20 @@ class PageNavigator(BaseUI):
 
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
+        self.do_click(self.generic_locators["project_selector"])
+
         # if project is already selected, skip and proceed further
         if self.get_elements(
             format_locator(self.generic_locators["project_selected"], project_name)
         ):
             self.take_screenshot("namespace_selected")
             logger.info("Project already selected")
-            self.do_click(
-                format_locator(self.generic_locators["project_selected"], project_name)
-            )
+
+            self.do_click(self.generic_locators["project_selector"])
             return True
 
-        default_projects_is_checked = self.driver.find_element_by_css_selector(
-            "input[class='pf-c-switch__input']"
+        default_projects_is_checked = self.wait_for_element_to_be_present(
+            self.generic_locators["show_default_projects_toggle"]
         )
         if default_projects_is_checked.get_attribute("data-checked-state") == "false":
             logger.info("Show default projects")
@@ -384,14 +377,18 @@ class PageNavigator(BaseUI):
         logger.info(f"Wait and select namespace {project_name}")
         wait_for_project = self.wait_until_expected_text_is_found(
             locator=format_locator(
-                self.generic_locators["test-project-link"], project_name
+                self.generic_locators["test-project-link"], project_name, project_name
             ),
             expected_text=f"{project_name}",
             timeout=10,
         )
         if wait_for_project:
             self.do_click(
-                format_locator(self.generic_locators["test-project-link"], project_name)
+                format_locator(
+                    self.generic_locators["test-project-link"],
+                    project_name,
+                    project_name,
+                )
             )
             logger.info(f"Namespace {project_name} selected")
             return True
@@ -416,3 +413,17 @@ class PageNavigator(BaseUI):
         return self.wait_until_expected_text_is_found(
             self.generic_locators["resource_status"], status_to_check, timeout
         )
+
+    def select_administrator_user(self):
+        """
+        Select the administrator user role from the dropdown
+        """
+        logger.info("Select the OCP administrator user role from the dropdown")
+        if self.get_elements(self.generic_locators["developer_selected"]):
+            self.do_click(self.sc_loc["Developer_dropdown"])
+            self.do_click(self.sc_loc["select_administrator"], timeout=5)
+            logger.info("Administrator user is selected")
+        elif self.get_elements(self.generic_locators["administrator_selected"]):
+            logger.info("Administrator user was already selected")
+        else:
+            logger.error("Unknown user role selected by default")

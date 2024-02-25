@@ -9,6 +9,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_ocs_version,
     mcg,
+    ui,
+    skipif_hci_provider_or_client,
+    runs_on_provider,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -17,8 +20,10 @@ from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 logger = logging.getLogger(__name__)
 
 
+@ui
 @tier3
 @black_squad
+@runs_on_provider
 @skipif_ibm_cloud_managed
 @skipif_managed_service
 @skipif_ocs_version("<4.13")
@@ -106,6 +111,7 @@ class TestErrorMessageImprovements(ManageTest):
     @bugzilla("2215910")
     @bugzilla("2193109")
     @polarion_id("OCS-4873")
+    @skipif_hci_provider_or_client
     def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
         """
         Test to verify
@@ -134,6 +140,7 @@ class TestErrorMessageImprovements(ManageTest):
 
     @bugzilla("2193109")
     @polarion_id("OCS-4875")
+    @skipif_hci_provider_or_client
     def test_storage_class_creation_rules(self, setup_ui_class):
         """
         Test to verify error rules for the name when creating a new storage class

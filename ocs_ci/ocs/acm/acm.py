@@ -30,7 +30,10 @@ from ocs_ci.utility.utils import (
     run_cmd,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
-from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
+from ocs_ci.ocs.ui.base_ui import (
+    login_ui,
+    SeleniumDriver,
+)
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import (
