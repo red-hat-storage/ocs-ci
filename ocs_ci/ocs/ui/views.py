@@ -1252,6 +1252,11 @@ storageclient = {
         "div[data-status-id='Storage Clients-secondary-status']",
         By.CSS_SELECTOR,
     ),
+    "client_name": ("name", By.ID),
+    "cluster_id": ("clusterID", By.ID),
+    "ocp_version": ("openshiftVersion", By.ID),
+    "odf_version": ("dataFoundationVersion", By.ID),
+    "heartbeat": ("lastHeartbeat", By.ID),
 }
 
 validation = {
