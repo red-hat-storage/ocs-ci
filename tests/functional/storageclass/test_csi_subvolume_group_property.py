@@ -1,12 +1,16 @@
 import logging
 import yaml
 
-from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.framework.testlib import ManageTest, tier3, skipif_external_mode
+from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 logger = logging.getLogger(__name__)
 
 
+@green_squad
+@skipif_external_mode
+@tier3
 class TestCSISubvolumeGroup(ManageTest):
     def test_network_fence_not_editable(self):
         """
