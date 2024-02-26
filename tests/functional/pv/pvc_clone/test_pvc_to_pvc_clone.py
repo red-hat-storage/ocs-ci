@@ -28,7 +28,7 @@ class TestClone(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, interface_type, pvc_factory, pod_factory, pod_dict_path):
+    def setup(self, interface_type, pvc_factory, pod_factory, pod_dict_path, access):
         """
         create resources for the test
 
@@ -40,7 +40,10 @@ class TestClone(ManageTest):
 
         """
         self.pvc_obj = pvc_factory(
-            interface=interface_type, size=1, status=constants.STATUS_BOUND
+            interface=interface_type,
+            size=1,
+            status=constants.STATUS_BOUND,
+            access_mode=access,
         )
         self.pod_obj = pod_factory(
             interface=interface_type,
@@ -50,13 +53,19 @@ class TestClone(ManageTest):
         )
 
     @pytest.mark.parametrize(
-        argnames=["interface_type", "pod_dict_path"],
+        argnames=["interface_type", "pod_dict_path", "access"],
         argvalues=[
             pytest.param(
-                constants.CEPHBLOCKPOOL, None, marks=pytest.mark.polarion_id("OCS-2284")
+                constants.CEPHBLOCKPOOL,
+                None,
+                constants.ACCESS_MODE_RWO,
+                marks=pytest.mark.polarion_id("OCS-2284"),
             ),
             pytest.param(
-                constants.CEPHFILESYSTEM, None, marks=pytest.mark.polarion_id("OCS-256")
+                constants.CEPHFILESYSTEM,
+                None,
+                constants.ACCESS_MODE_RWO,
+                marks=pytest.mark.polarion_id("OCS-256"),
             ),
         ],
     )
@@ -144,9 +153,13 @@ class TestClone(ManageTest):
 
     @pytest.mark.polarion_id("OCS-5162")
     @pytest.mark.parametrize(
-        argnames=["interface_type", "pod_dict_path"],
+        argnames=["interface_type", "pod_dict_path", "access"],
         argvalues=[
-            pytest.param(constants.CEPHFILESYSTEM, constants.CSI_CEPHFS_ROX_POD_YAML),
+            pytest.param(
+                constants.CEPHFILESYSTEM,
+                constants.CSI_CEPHFS_ROX_POD_YAML,
+                constants.ACCESS_MODE_RWX,
+            ),
         ],
     )
     def test_pvc_to_pvc_rox_clone(
