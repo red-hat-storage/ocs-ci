@@ -32,15 +32,14 @@ class StorageClientUI(PageNavigator):
         token = self.get_element_text(self.client_loc["token"])
         return token
 
-    def verify_client_page_data(
-        self, client_name, cluster_id, ocp_version, odf_version, heartbeat
+    def verify_client_data_in_ui(
+        self, client_name, ocp_version, odf_version, heartbeat
     ):
         """
         Verify client details on Storage Clients page
 
         Args:
             client_name (str): name of the client
-            cluster_id (str): client's cluster ID
             ocp_version (str): OCP version of the client
             odf_version (str): ODF version of the client
             heartbeat (str): last heartbeat of the client in the form "X minutes ago"
@@ -50,6 +49,14 @@ class StorageClientUI(PageNavigator):
         logger.info(f"Search for {client_name} client")
         self.do_send_keys(self.client_loc["search_client"], text=client_name)
         time.sleep(2)
+        client_name_ui = self.get_element_text(self.client_loc["client_name"])
+        assert (
+            client_name_ui == client_name
+        ), f"Client name in the UI is {client_name_ui}. It should be {client_name}"
+        ocp_version_ui = self.get_element_text(self.client_loc["ocp_version"])
+        assert (
+            ocp_version_ui == ocp_version
+        ), f"OCP version in the UI is {ocp_version_ui}. It should be {ocp_version}"
 
     def get_number_of_clients_from_dashboard(self):
         """
