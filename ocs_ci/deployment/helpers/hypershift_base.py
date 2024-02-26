@@ -2,6 +2,7 @@ import logging
 import os
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from ocs_ci.deployment.deployment import Deployment
@@ -128,8 +129,6 @@ class HyperShiftBase(Deployment):
             f"ocp image:'{index_image}', root_volume_size:{root_volume_size}"
         )
 
-        namespace = f"clusters-{name}"
-
         create_hcp_cluster_cmd = (
             f"{self.hcp_binary_path} create cluster kubevirt "
             f"--name {name} "
@@ -147,35 +146,66 @@ class HyperShiftBase(Deployment):
         )
         exec_cmd(create_hcp_cluster_cmd)
 
-        logger.info("Waiting for HyperShift hosted cluster pods to be ready...")
+        self.verify_hosted_ocp_cluster_from_provider(name)
+
+        logger.info("HyperShift hosted cluster node-pool creation completed")
+
+    def verify_hosted_ocp_cluster_from_provider(self, name):
+        """
+        Verify HyperShift hosted cluster from provider
+        :param name: hosted OCP cluster name
+        :return:
+        """
+        namespace = f"clusters-{name}"
+        logger.info(
+            f"Waiting for HyperShift hosted cluster pods to be ready in the namespace: {namespace}"
+        )
+
         app_selectors_to_resource_count_list = [
             {"app=capi-provider-controller-manager": 1},
-            {"app=catalog-operator": 2},
+            {"app=catalog-operator": 1},
             {"app=certified-operators-catalog": 1},
             {"app=cluster-api": 1},
             {"app=redhat-operators-catalog": 1},
         ]
 
-        pod = OCP(kind=constants.POD, namespace=namespace)
-
-        for item in app_selectors_to_resource_count_list:
-            for app_selector, resource_count in item.items():
-                assert pod.wait_for_resource(
-                    condition=constants.STATUS_RUNNING,
-                    selector=app_selector,
-                    resource_count=resource_count,
-                    timeout=600,
-                ), f"pods with label {app_selector} are not in running state"
+        self.verify_pods_running(app_selectors_to_resource_count_list, namespace)
 
         self.wait_hosted_cluster_completed(name)
-
-        logger.info(
-            "HyperShift hosted cluster create request completed, progressing with node-pool creation"
-        )
-
+        logger.info("HyperShift hosted cluster create is OK")
         self.wait_for_worker_nodes_to_be_ready(name)
 
-        logger.info("HyperShift hosted cluster node-pool creation completed")
+    def verify_pods_running(self, app_selectors_to_resource_count_list, namespace):
+        """
+        Verify pods are running in the namespace using app selectors. THis method is using concurrent futures to
+        speed up execution
+        :param app_selectors_to_resource_count_list:
+        :param namespace: namespace of the pods expected to run
+        :return: bool True if all pods are running, False otherwise
+        """
+        pod = OCP(kind=constants.POD, namespace=namespace)
+
+        def check_pod_status(app_selector, resource_count, result, index):
+            result[index] = pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=app_selector,
+                resource_count=resource_count,
+                timeout=1200,
+            )
+
+        with ThreadPoolExecutor(
+            max_workers=len(app_selectors_to_resource_count_list)
+        ) as executor:
+            futures = []
+            for item in app_selectors_to_resource_count_list:
+                for app_selector, resource_count in item.items():
+                    future = executor.submit(
+                        check_pod_status, app_selector, resource_count
+                    )
+                    futures.append(future)
+
+            results = [future.result() for future in futures]
+        return all(results)
 
     def get_current_nodepool_size(self, name):
         """
@@ -218,9 +248,7 @@ class HyperShiftBase(Deployment):
         :param name:
         :return: True if cluster creation completed, False otherwise
         """
-        logger.info(
-            f"Waiting for HyperShift hosted cluster {name} creation to complete"
-        )
+        logger.info(f"Verifying HyperShift hosted cluster {name} creation is Completed")
         for sample in TimeoutSampler(
             timeout=3600,
             sleep=60,
@@ -239,7 +267,7 @@ class HyperShiftBase(Deployment):
 
         wait_timeout_min = 40
         logger.info(
-            f"Waiting for worker nodes to be ready for HyperShift hosted cluster {name}. "
+            f"Verifying worker nodes to be ready for HyperShift hosted cluster {name}. "
             f"Max wait time: {wait_timeout_min} min "
         )
         for sample in TimeoutSampler(
