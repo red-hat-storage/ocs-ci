@@ -68,7 +68,7 @@ class TestRGWAndKafkaNotifications(E2ETest):
         request.addfinalizer(teardown)
         return self.amq
 
-    def test_rgw_kafka_notifications(self, bucket_factory):
+    def test_rgw_kafka_notifications(self, rgw_bucket_factory):
         """
         Test to verify rgw kafka notifications
 
@@ -93,7 +93,7 @@ class TestRGWAndKafkaNotifications(E2ETest):
         kafkadrop_host = self.kafkadrop_route.get().get("spec").get("host")
 
         # Create bucket
-        bucketname = bucket_factory(amount=1, interface="RGW-OC")[0].name
+        bucketname = rgw_bucket_factory(amount=1, interface="RGW-OC")[0].name
 
         # Get RGW credentials
         rgw_obj = RGW()
