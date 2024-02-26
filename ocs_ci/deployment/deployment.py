@@ -83,6 +83,8 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     setup_ceph_debug,
     get_osd_count,
+    set_non_resilient_pool,
+    validate_non_resilient_pool,
     StorageCluster,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
@@ -1715,6 +1717,16 @@ class Deployment(object):
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+
+        # Add Replica-1 setings after deployment complition
+        if config.ENV_DATA.get("enable_non_resilient_pools"):
+            logger.info("Setting non-resilient pools")
+            storage_cluster = StorageCluster(
+                resource_name=config.ENV_DATA["storage_cluster_name"],
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            set_non_resilient_pool(storage_cluster)
+            validate_non_resilient_pool(storage_cluster)
 
         # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards
         if (
