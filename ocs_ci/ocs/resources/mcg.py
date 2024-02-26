@@ -23,11 +23,16 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CredReqSecretNotFound,
+    NoobaaHealthException,
     TimeoutExpiredError,
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    Pod,
+    wait_for_pods_by_label_count,
+)
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -656,9 +661,12 @@ class MCG:
         if replication_policy:
             bc_data["spec"].setdefault(
                 "replicationPolicy",
-                json.dumps(replication_policy)
-                if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
-                else json.dumps({"rules": replication_policy}),
+                (
+                    json.dumps(replication_policy)
+                    if version.get_semantic_ocs_version_from_config()
+                    < version.VERSION_4_12
+                    else json.dumps({"rules": replication_policy})
+                ),
             )
 
         return create_resource(**bc_data)
@@ -980,6 +988,26 @@ class MCG:
             == STATUS_READY
         )
 
+    def health_check(self):
+        """
+        Check Noobaa health
+
+        """
+        if not self.status:
+            raise NoobaaHealthException("Noobaa health is NOT OK")
+
+    def wait_for_health_ok(self, tries=60, delay=5):
+        """
+        Wait for Noobaa health to be OK
+
+        """
+        return retry(
+            (NoobaaHealthException, CommandFailed),
+            tries=tries,
+            delay=delay,
+            backoff=1,
+        )(self.health_check)()
+
     def get_mcg_cli_version(self):
         """
         Get the MCG CLI version by parsing the output of the `mcg-cli version` command.
@@ -1016,6 +1044,10 @@ class MCG:
         """
 
         self.core_pod.delete(wait=True)
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_CORE_POD_LABEL,
+            exptected_count=1,
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
