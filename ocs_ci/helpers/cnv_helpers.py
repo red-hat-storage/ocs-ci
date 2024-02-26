@@ -110,6 +110,9 @@ def get_ssh_pub_key_with_filename(path=None):
     Returns:
         tuple: A tuple containing the content of the SSH public key and the file name
 
+    Raises:
+    FileNotFoundError: If the provided ssh pub key path does not exist
+
     """
     logger.info(
         "Retrieving the content and file name of the SSH public key from the client machine"

@@ -233,7 +233,6 @@ class Virtctl(object):
         ]
 
         if identity_file:
-
             mandatory_flags.insert(1, f"--identity-file={identity_file}")
 
         full_command = f"{base_command} {' '.join(mandatory_flags)}"
