@@ -7296,3 +7296,50 @@ def override_default_backingstore_fixture(
 
     request.addfinalizer(finalizer)
     return _override_nb_default_backingstore_implementation
+
+
+@pytest.fixture(scope="session")
+def scale_noobaa_resources_session():
+    """
+    Session scoped fixture to scale noobaa resources
+
+    """
+    scale_noobaa_resources()
+
+
+@pytest.fixture()
+def scale_noobaa_resources_fixture():
+    """
+    Fixture to scale noobaa resources
+
+    """
+    scale_noobaa_resources()
+
+
+def scale_noobaa_resources():
+
+    """
+    Scale the noobaa pod resources and scale endpoint count
+
+    """
+
+    storagecluster_obj = OCP(
+        kind="storagecluster",
+        resource_name="ocs-storagecluster",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    scale_endpoint_pods_param = (
+        '{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 3,"maxCount": 10}}}}'
+    )
+    scale_noobaa_resources_param = (
+        '{"spec": {"resources": {"noobaa-core": {"limits": {"cpu": "3","memory": "4Gi"},'
+        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-db": {"limits": {"cpu": "3","memory": "4Gi"},'
+        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-endpoint": {"limits": {"cpu": "3","memory": "4Gi"},'
+        '"requests": {"cpu": "3","memory": "4Gi"}}}}}'
+    )
+    storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
+    log.info("Scaled noobaa endpoint counts")
+    storagecluster_obj.patch(params=scale_noobaa_resources_param, format_type="merge")
+    log.info("Scaled noobaa pod resources")
+    time.sleep(60)

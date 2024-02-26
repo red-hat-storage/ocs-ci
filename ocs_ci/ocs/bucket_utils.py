@@ -24,6 +24,7 @@ from ocs_ci.utility.utils import (
     exec_nb_db_query,
 )
 from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -1859,6 +1860,7 @@ def write_random_test_objects_to_bucket(
     file_dir,
     amount=1,
     pattern="ObjKey-",
+    prefix=None,
     bs="1M",
     mcg_obj=None,
     s3_creds=None,
@@ -1884,6 +1886,8 @@ def write_random_test_objects_to_bucket(
     # Verify that the needed directory exists
     io_pod.exec_cmd_on_pod(f"mkdir -p {file_dir}")
     full_object_path = f"s3://{bucket_to_write}"
+    if prefix:
+        full_object_path += f"/{prefix}/"
     obj_lst = write_random_objects_in_pod(io_pod, file_dir, amount, pattern, bs)
     sync_object_directory(
         io_pod,
@@ -1945,7 +1949,10 @@ def write_random_test_objects_to_s3_path(
     )
 
 
-def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_name):
+def patch_replication_policy_to_bucket(
+    bucket_name, rule_id, destination_bucket_name, prefix=""
+):
+
     """
     Patches replication policy to a bucket
 
@@ -1954,9 +1961,25 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
         rule_id (str): The ID of the replication rule
         destination_bucket_name (str): The name of the replication destination bucket
     """
-    replication_policy = {
-        "rules": [{"rule_id": rule_id, "destination_bucket": destination_bucket_name}]
-    }
+
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
+        replication_policy = {
+            "rules": [
+                {
+                    "rule_id": rule_id,
+                    "destination_bucket": destination_bucket_name,
+                    "filter": {"prefix": prefix},
+                }
+            ]
+        }
+    else:
+        replication_policy = [
+            {
+                "rule_id": rule_id,
+                "destination_bucket": destination_bucket_name,
+                "filter": {"prefix": prefix},
+            }
+        ]
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {"replicationPolicy": json.dumps(replication_policy)}
@@ -2024,6 +2047,7 @@ def random_object_round_trip_verification(
     download_dir,
     amount=1,
     pattern="RandomObject-",
+    prefix=None,
     wait_for_replication=False,
     second_bucket_name=None,
     mcg_obj=None,
@@ -2070,17 +2094,20 @@ def random_object_round_trip_verification(
         file_dir=upload_dir,
         amount=amount,
         pattern=pattern,
+        prefix=prefix,
         mcg_obj=mcg_obj,
         s3_creds=s3_creds,
     )
     written_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {upload_dir}").split(" ")
     if wait_for_replication:
-        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name, **kwargs)
+        assert compare_bucket_object_list(
+            mcg_obj, bucket_name, second_bucket_name, **kwargs
+        ), f"Objects in the buckets {bucket_name} and {second_bucket_name} are not same"
         bucket_name = second_bucket_name
     # Download the random objects that were uploaded to the bucket
     sync_object_directory(
         podobj=io_pod,
-        src=f"s3://{bucket_name}",
+        src=f"s3://{bucket_name}/{prefix}" if prefix else f"s3://{bucket_name}",
         target=download_dir,
         s3_obj=mcg_obj,
         signed_request_creds=s3_creds,
@@ -2175,6 +2202,25 @@ def create_aws_bs_using_cli(
     )
 
 
+def upload_bulk_buckets(s3_obj, buckets, amount=1, object_key="obj-key-0", prefix=None):
+    """
+    Upload given amount of objects with sequential keys to multiple buckets
+
+    Args:
+        s3_obj: obc/mcg object
+        buckets (list): list of bucket names to upload to
+        amount (int, optional): number of objects to upload per bucket
+        object_key (str, optional): base object key
+        prefix (str, optional): prefix for the upload path
+
+    """
+    for bucket in buckets:
+        for index in range(amount):
+            s3_put_object(
+                s3_obj, bucket.name, f"{prefix}/{object_key}-{index}", object_key
+            )
+
+
 def change_objects_creation_date_in_noobaa_db(
     bucket_name, object_keys=[], new_creation_time=0
 ):
@@ -2204,7 +2250,6 @@ def change_objects_creation_date_in_noobaa_db(
     if object_keys:
         psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
     psql_query += ";"
-
     exec_nb_db_query(psql_query)
 
 
@@ -2542,3 +2587,20 @@ def delete_object_tags(
             ),
             out_yaml_format=False,
         )
+
+
+def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
+    """
+    This method applies a lifecycle configuration to multiple buckets
+
+     Args:
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        buckets (list): list of bucket names to apply the lifecycle rule to
+        lifecycle_config (dict): a dict following the expected AWS json structure of a config file
+
+    """
+    for bucket in buckets:
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket.name, LifecycleConfiguration=lifecycle_config
+        )
+    logger.info("Applied lifecyle rule on all the buckets")

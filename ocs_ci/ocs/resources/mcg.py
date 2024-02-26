@@ -1014,8 +1014,12 @@ class MCG:
         Delete the noobaa-core pod and wait for it to come up again
 
         """
+        from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
 
         self.core_pod.delete(wait=True)
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_CORE_POD_LABEL, exptected_count=1
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
