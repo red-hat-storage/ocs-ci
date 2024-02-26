@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
@@ -57,3 +58,16 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         if download_hcp_binary:
             self.download_hcp_binary()
         self.create_kubevirt_OCP_cluster()
+
+    def deploy_multiple_ocp_clusters(
+        self,
+        cluster_count,
+    ):
+        """
+        Deploy multiple hosted OCP clusters on provisioned Provider platform
+        :param cluster_count: (int) Number of clusters to deploy
+        """
+        # TODO: finish the implementation
+        with ThreadPoolExecutor() as executor:
+            for _ in range(cluster_count):
+                executor.submit(self.deploy_ocp)
