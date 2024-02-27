@@ -70,6 +70,10 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 )
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
+TEMPLATE_CNV_VM_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "cnv-vm-workload")
+TEMPLATE_CNV_VM_STANDALONE_PVC_DIR = os.path.join(
+    TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm-standalone-pvc"
+)
 DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -327,13 +331,23 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
-# CNV constants
+# CNV deployment constants
 CNV_NAMESPACE = "openshift-cnv"
 CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
 HYPERCONVERGED = "HyperConverged"
 KUBEVIRT_HCO_PREFIX = "kubevirt-hyperconverged-operator"
 KUBEVIRT_HYPERCONVERGED = "kubevirt-hyperconverged"
 CNV_SELECTOR = "operators.coreos.com/kubevirt-hyperconverged.openshift-cnv"
+
+# CNV VM constants
+VIRTUAL_MACHINE = "VirtualMachine"
+VIRTUAL_MACHINE_INSTANCE = "VirtualMachineInstance"
+VM_RUNNING = "Running"
+CNV_VM_STOPPED = "Stopped"
+VM_PAUSED = "Paused"
+DEFAULT_CNV_CEPH_RBD_SC = "ocs-storagecluster-ceph-rbd-virtualization"
+VOLUME_IMPORT_SOURCE = "VolumeImportSource"
+
 
 # Virtctl constants
 VIRTCTL = "virtctl"
@@ -756,6 +770,19 @@ CNV_SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "subscription.
 
 CNV_HYPERCONVERGED_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_CNV, "hyperconverged.yaml"
+)
+
+CNV_VM_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "vm-secret.yaml")
+
+# CNV VM workload yamls
+CNV_VM_STANDALONE_PVC_SOURCE_YAML = os.path.join(
+    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "source.yaml"
+)
+CNV_VM_STANDALONE_PVC_PVC_YAML = os.path.join(
+    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "pvc.yaml"
+)
+CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
+    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
 )
 
 # Multus Networks
