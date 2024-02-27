@@ -563,7 +563,7 @@ class OCP(object):
             CommandFailed: When the project deletion does not succeed.
 
         """
-        command = f"oc delete project {project_name}"
+        command = f"oc delete projects.project.openshift.io {project_name}"
         if f' "{project_name}" deleted' in run_cmd(
             f"{command}", threading_lock=self.threading_lock
         ):
