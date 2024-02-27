@@ -40,7 +40,106 @@ from ocs_ci.utility.utils import (
 logger = logging.getLogger(__name__)
 
 
-class BAREMETALUPI(Deployment):
+class BAREMETALBASE(Deployment):
+    """
+    A common class for Bare metal deployments
+    """
+
+    def __init__(self):
+        super().__init__()
+
+
+class BMBaseOCPDeployment(BaseOCPDeployment):
+    def __init__(self):
+        super().__init__()
+        self.bm_config = config.ENV_DATA["baremetal"]
+        self.srv_details = config.ENV_DATA["baremetal"]["servers"]
+
+    def deploy_prereq(self):
+        """
+        Pre-Requisites for Bare Metal deployments
+        """
+        super(BMBaseOCPDeployment, self).deploy_prereq()
+        # check for BM status
+        logger.info("Checking BM Status")
+        status = self.check_bm_status_exist()
+        if status == constants.BM_STATUS_PRESENT:
+            pytest.fail(
+                f"BM Cluster still present and locked by {self.get_locked_username()}"
+            )
+
+        # update BM status
+        logger.info("Updating BM Status")
+        result = self.update_bm_status(constants.BM_STATUS_PRESENT)
+        assert (
+            result == constants.BM_STATUS_RESPONSE_UPDATED
+        ), "Failed to update request"
+
+    def check_bm_status_exist(self):
+        """
+        Check if BM Cluster already exist
+
+        Returns:
+            str: response status
+        """
+        headers = {"content-type": "application/json"}
+        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        return response.json()[0]["status"]
+
+    def get_locked_username(self):
+        """
+        Get name of user who has locked baremetal resource
+
+        Returns:
+            str: username
+        """
+        headers = {"content-type": "application/json"}
+        response = requests.get(url=self.bm_config["bm_status_check"], headers=headers)
+        return response.json()[0]["user"]
+
+    def update_bm_status(self, bm_status):
+        """
+        Update BM status when cluster is deployed/teardown
+
+        Args:
+            bm_status (str): Status to be updated
+
+        Returns:
+            str: response message
+        """
+        if bm_status == constants.BM_STATUS_PRESENT:
+            now = datetime.today().strftime("%Y-%m-%d")
+            payload = {
+                "status": bm_status,
+                "cluster_name": config.ENV_DATA["cluster_name"],
+                "creation_date": now,
+            }
+        else:
+            payload = {
+                "status": bm_status,
+                "cluster_name": "null",
+                "creation_date": "null",
+            }
+        headers = {"content-type": "application/json"}
+        response = requests.put(
+            url=self.bm_config["bm_status_check"],
+            json=payload,
+            headers=headers,
+        )
+        return response.json()["message"]
+
+    def destroy(self, log_level=""):
+        """
+        Destroy OCP cluster
+        """
+        logger.info("Updating BM status")
+        result = self.update_bm_status(constants.BM_STATUS_ABSENT)
+        assert (
+            result == constants.BM_STATUS_RESPONSE_UPDATED
+        ), "Failed to update request"
+
+
+class BAREMETALUPI(BAREMETALBASE):
     """
     A class to handle Bare metal UPI specific deployment
     """
@@ -49,11 +148,9 @@ class BAREMETALUPI(Deployment):
         logger.info("BAREMETAL UPI")
         super().__init__()
 
-    class OCPDeployment(BaseOCPDeployment):
+    class OCPDeployment(BMBaseOCPDeployment):
         def __init__(self):
             super().__init__()
-            self.helper_node_details = config.AUTH["baremetal"]
-            self.mgmt_details = config.AUTH["ipmi"]
             self.aws = aws.AWS()
 
         def deploy_prereq(self):
@@ -61,20 +158,6 @@ class BAREMETALUPI(Deployment):
             Pre-Requisites for Bare Metal UPI Deployment
             """
             super(BAREMETALUPI.OCPDeployment, self).deploy_prereq()
-            # check for BM status
-            logger.info("Checking BM Status")
-            status = self.check_bm_status_exist()
-            if status == constants.BM_STATUS_PRESENT:
-                pytest.fail(
-                    f"BM Cluster still present and locked by {self.get_locked_username()}"
-                )
-
-            # update BM status
-            logger.info("Updating BM Status")
-            result = self.update_bm_status(constants.BM_STATUS_PRESENT)
-            assert (
-                result == constants.BM_STATUS_RESPONSE_UPDATED
-            ), "Failed to update request"
             # create manifest
             self.create_manifest()
             # create chrony resource
@@ -94,16 +177,16 @@ class BAREMETALUPI(Deployment):
                 config.ENV_DATA.get("cluster_path"), constants.WORKER_IGN
             )
 
-            self.host = self.helper_node_details["bm_httpd_server"]
-            self.user = self.helper_node_details["bm_httpd_server_user"]
+            self.host = self.bm_config["bm_httpd_server"]
+            self.user = self.bm_config["bm_httpd_server_user"]
             self.private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
 
             self.helper_node_handler = Connection(
                 self.host, self.user, self.private_key
             )
-            cmd = f"rm -rf {self.helper_node_details['bm_path_to_upload']}"
+            cmd = f"rm -rf {self.bm_config['bm_path_to_upload']}"
             logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
-            cmd = f"mkdir -m 755 {self.helper_node_details['bm_path_to_upload']}"
+            cmd = f"mkdir -m 755 {self.bm_config['bm_path_to_upload']}"
             assert self.helper_node_handler.exec_cmd(
                 cmd=cmd
             ), "Failed to create required folder"
@@ -118,15 +201,13 @@ class BAREMETALUPI(Deployment):
                 upload_file(
                     self.host,
                     key,
-                    os.path.join(
-                        self.helper_node_details["bm_path_to_upload"], f"{val}"
-                    ),
+                    os.path.join(self.bm_config["bm_path_to_upload"], f"{val}"),
                     self.user,
                     key_file=self.private_key,
                 )
 
             # Perform Cleanup for stale entry's
-            cmd = f"rm -rf {self.helper_node_details['bm_tftp_base_dir']}"
+            cmd = f"rm -rf {self.bm_config['bm_tftp_base_dir']}"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Delete folder"
 
             # Installing Required packages
@@ -147,19 +228,19 @@ class BAREMETALUPI(Deployment):
                 cmd=cmd
             ), "Failed to Start dnsmasq service"
 
-            cmd = f"mkdir -m 755 -p {self.helper_node_details['bm_tftp_base_dir']}"
+            cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to create required folder"
+
+            cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}ocs4qe"
             assert self.helper_node_handler.exec_cmd(
                 cmd=cmd
             ), "Failed to create required folder"
 
             cmd = (
-                f"mkdir -m 755 -p {self.helper_node_details['bm_tftp_base_dir']}ocs4qe"
+                f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}ocs4qe/baremetal"
             )
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to create required folder"
-
-            cmd = f"mkdir -m 755 -p {self.helper_node_details['bm_tftp_base_dir']}ocs4qe/baremetal"
             assert self.helper_node_handler.exec_cmd(
                 cmd=cmd
             ), "Failed to create required folder"
@@ -171,7 +252,7 @@ class BAREMETALUPI(Deployment):
             ), "Failed to install required package"
 
             # Copy syslinux files to the tftp path
-            cmd = f"cp -ar /usr/share/syslinux/* {self.helper_node_details['bm_tftp_dir']}"
+            cmd = f"cp -ar /usr/share/syslinux/* {self.bm_config['bm_tftp_dir']}"
             assert self.helper_node_handler.exec_cmd(
                 cmd=cmd
             ), "Failed to Copy required files"
@@ -205,7 +286,7 @@ class BAREMETALUPI(Deployment):
             if check_for_rhcos_images(initramfs_image_path):
                 cmd = (
                     "wget -O "
-                    f"{self.helper_node_details['bm_tftp_dir']}"
+                    f"{self.bm_config['bm_tftp_dir']}"
                     "/rhcos-installer-initramfs.x86_64.img "
                     f"{initramfs_image_path}"
                 )
@@ -226,7 +307,7 @@ class BAREMETALUPI(Deployment):
             if check_for_rhcos_images(kernel_image_path):
                 cmd = (
                     "wget -O "
-                    f"{self.helper_node_details['bm_tftp_dir']}"
+                    f"{self.bm_config['bm_tftp_dir']}"
                     "/rhcos-installer-kernel-x86_64 "
                     f"{kernel_image_path}"
                 )
@@ -243,7 +324,7 @@ class BAREMETALUPI(Deployment):
                 if check_for_rhcos_images(metal_image_path):
                     cmd = (
                         "wget -O "
-                        f"{self.helper_node_details['bm_path_to_upload']}"
+                        f"{self.bm_config['bm_path_to_upload']}"
                         f"/{constants.BM_METAL_IMAGE} "
                         f"{metal_image_path}"
                     )
@@ -269,7 +350,7 @@ class BAREMETALUPI(Deployment):
                 if check_for_rhcos_images(rootfs_image_path):
                     cmd = (
                         "wget -O "
-                        f"{self.helper_node_details['bm_path_to_upload']}"
+                        f"{self.bm_config['bm_path_to_upload']}"
                         "/rhcos-live-rootfs.x86_64.img "
                         f"{rootfs_image_path}"
                     )
@@ -280,7 +361,7 @@ class BAREMETALUPI(Deployment):
                     raise RhcosImageNotFound
 
             # Create pxelinux.cfg directory
-            cmd = f"mkdir -m 755 {self.helper_node_details['bm_tftp_dir']}/pxelinux.cfg"
+            cmd = f"mkdir -m 755 {self.bm_config['bm_tftp_dir']}/pxelinux.cfg"
             assert self.helper_node_handler.exec_cmd(
                 cmd=cmd
             ), "Failed to create required folder"
@@ -295,29 +376,29 @@ class BAREMETALUPI(Deployment):
             logger.info("Deploying OCP cluster for Bare Metal platform")
             logger.info(f"Openshift-installer will be using log level:{log_cli_level}")
             ocp_version = get_ocp_version()
-            for machine in self.mgmt_details:
-                if self.mgmt_details[machine].get("cluster_name") or self.mgmt_details[
+            for machine in self.srv_details:
+                if self.srv_details[machine].get("cluster_name") or self.srv_details[
                     machine
                 ].get("extra_node"):
                     pxe_file_path = self.create_pxe_files(
                         ocp_version=ocp_version,
-                        role=self.mgmt_details[machine].get("role"),
-                        disk_path=self.mgmt_details[machine].get("root_disk_id"),
+                        role=self.srv_details[machine].get("role"),
+                        disk_path=self.srv_details[machine].get("root_disk_id"),
                     )
                     upload_file(
                         server=self.host,
                         localpath=pxe_file_path,
-                        remotepath=f"{self.helper_node_details['bm_tftp_dir']}"
-                        f"/pxelinux.cfg/01-{self.mgmt_details[machine]['private_mac'].replace(':', '-')}",
+                        remotepath=f"{self.bm_config['bm_tftp_dir']}"
+                        f"/pxelinux.cfg/01-{self.srv_details[machine]['private_mac'].replace(':', '-')}",
                         user=self.user,
                         key_file=self.private_key,
                     )
             # Applying Permission
-            cmd = f"chmod 755 -R {self.helper_node_details['bm_tftp_dir']}"
+            cmd = f"chmod 755 -R {self.bm_config['bm_tftp_dir']}"
             self.helper_node_handler.exec_cmd(cmd=cmd)
 
             # Applying Permission
-            cmd = f"chmod 755 -R {self.helper_node_details['bm_path_to_upload']}"
+            cmd = f"chmod 755 -R {self.bm_config['bm_path_to_upload']}"
             self.helper_node_handler.exec_cmd(cmd=cmd)
 
             # Restarting dnsmasq service
@@ -334,33 +415,30 @@ class BAREMETALUPI(Deployment):
                 cluster_name=cluster_name,
                 delete_from_base_domain=True,
             )
-            for machine in self.mgmt_details:
+            for machine in self.srv_details:
                 if (
-                    self.mgmt_details[machine].get("cluster_name")
+                    self.srv_details[machine].get("cluster_name")
                     == constants.BM_DEFAULT_CLUSTER_NAME
                 ):
-                    if (
-                        self.mgmt_details[machine]["role"]
-                        == constants.BOOTSTRAP_MACHINE
-                    ):
+                    if self.srv_details[machine]["role"] == constants.BOOTSTRAP_MACHINE:
                         self.set_pxe_boot_and_reboot(machine)
-                        bootstrap_ip = self.mgmt_details[machine]["ip"]
-                        api_record_ip_list.append(self.mgmt_details[machine]["ip"])
+                        bootstrap_ip = self.srv_details[machine]["ip"]
+                        api_record_ip_list.append(self.srv_details[machine]["ip"])
 
                     elif (
-                        self.mgmt_details[machine]["role"] == constants.MASTER_MACHINE
+                        self.srv_details[machine]["role"] == constants.MASTER_MACHINE
                         and master_count < config.ENV_DATA["master_replicas"]
                     ):
                         self.set_pxe_boot_and_reboot(machine)
-                        api_record_ip_list.append(self.mgmt_details[machine]["ip"])
+                        api_record_ip_list.append(self.srv_details[machine]["ip"])
                         master_count += 1
 
                     elif (
-                        self.mgmt_details[machine]["role"] == constants.WORKER_MACHINE
+                        self.srv_details[machine]["role"] == constants.WORKER_MACHINE
                         and worker_count < config.ENV_DATA["worker_replicas"]
                     ):
                         self.set_pxe_boot_and_reboot(machine)
-                        apps_record_ip_list.append(self.mgmt_details[machine]["ip"])
+                        apps_record_ip_list.append(self.srv_details[machine]["ip"])
                         worker_count += 1
 
             logger.info("Configuring DNS records")
@@ -554,68 +632,7 @@ class BAREMETALUPI(Deployment):
                 delete_from_base_domain=True,
             )
 
-            logger.info("Updating BM status")
-            result = self.update_bm_status(constants.BM_STATUS_ABSENT)
-            assert (
-                result == constants.BM_STATUS_RESPONSE_UPDATED
-            ), "Failed to update request"
-
-        def check_bm_status_exist(self):
-            """
-            Check if BM Cluster already exist
-
-            Returns:
-                str: response status
-            """
-            headers = {"content-type": "application/json"}
-            response = requests.get(
-                url=self.helper_node_details["bm_status_check"], headers=headers
-            )
-            return response.json()[0]["status"]
-
-        def get_locked_username(self):
-            """
-            Get name of user who has locked baremetal resource
-
-            Returns:
-                str: username
-            """
-            headers = {"content-type": "application/json"}
-            response = requests.get(
-                url=self.helper_node_details["bm_status_check"], headers=headers
-            )
-            return response.json()[0]["user"]
-
-        def update_bm_status(self, bm_status):
-            """
-            Update BM status when cluster is deployed/teardown
-
-            Args:
-                bm_status (str): Status to be updated
-
-            Returns:
-                str: response message
-            """
-            if bm_status == constants.BM_STATUS_PRESENT:
-                now = datetime.today().strftime("%Y-%m-%d")
-                payload = {
-                    "status": bm_status,
-                    "cluster_name": config.ENV_DATA["cluster_name"],
-                    "creation_date": now,
-                }
-            else:
-                payload = {
-                    "status": bm_status,
-                    "cluster_name": "null",
-                    "creation_date": "null",
-                }
-            headers = {"content-type": "application/json"}
-            response = requests.put(
-                url=self.helper_node_details["bm_status_check"],
-                json=payload,
-                headers=headers,
-            )
-            return response.json()["message"]
+            super().destroy(log_level=log_level)
 
         def create_pxe_files(self, ocp_version, role, disk_path):
             """
@@ -630,7 +647,7 @@ class BAREMETALUPI(Deployment):
 
             """
             extra_data = ""
-            bm_install_files_loc = self.helper_node_details["bm_install_files"]
+            bm_install_files_loc = self.bm_config["bm_install_files"]
             extra_data_pxe = "rhcos-live-rootfs.x86_64.img coreos.inst.insecure"
             if Version.coerce(ocp_version) <= Version.coerce("4.6"):
                 bm_metal_loc = f"coreos.inst.image_url={bm_install_files_loc}{constants.BM_METAL_IMAGE}"
@@ -670,14 +687,14 @@ LABEL disk0
 
             """
             secrets = [
-                self.mgmt_details[machine]["mgmt_username"],
-                self.mgmt_details[machine]["mgmt_password"],
+                self.srv_details[machine]["mgmt_username"],
+                self.srv_details[machine]["mgmt_password"],
             ]
             # Changes boot prioriy to pxe
             cmd = (
-                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
-                f"-P {self.mgmt_details[machine]['mgmt_password']} "
-                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis bootdev pxe"
+                f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                f"-P {self.srv_details[machine]['mgmt_password']} "
+                f"-H {self.srv_details[machine]['mgmt_console']} chassis bootdev pxe"
             )
             run_cmd(cmd=cmd, secrets=secrets)
             logger.info(
@@ -686,12 +703,12 @@ LABEL disk0
             sleep(2)
             # Power On Machine
             cmd = (
-                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
-                f"-P {self.mgmt_details[machine]['mgmt_password']} "
-                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power cycle || "
-                f"ipmitool -I lanplus -U {self.mgmt_details[machine]['mgmt_username']} "
-                f"-P {self.mgmt_details[machine]['mgmt_password']} "
-                f"-H {self.mgmt_details[machine]['mgmt_console']} chassis power on"
+                f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                f"-P {self.srv_details[machine]['mgmt_password']} "
+                f"-H {self.srv_details[machine]['mgmt_console']} chassis power cycle || "
+                f"ipmitool -I lanplus -U {self.srv_details[machine]['mgmt_username']} "
+                f"-P {self.srv_details[machine]['mgmt_password']} "
+                f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
             )
             run_cmd(cmd=cmd, secrets=secrets)
 

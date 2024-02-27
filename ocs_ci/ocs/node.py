@@ -75,7 +75,8 @@ def get_node_objs(node_names=None):
 def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
-    number of requested nodes from that type
+    number of requested nodes from that type.
+    In case of HCI provider cluster and 'node_type' is worker, it will exclude the master nodes.
 
     Args:
         node_type (str): The node type (e.g. worker, master)
@@ -85,6 +86,8 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
         list: The nodes OCP instances
 
     """
+    from ocs_ci.ocs.cluster import is_hci_provider_cluster
+
     if (
         config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS
         and node_type == constants.WORKER_MACHINE
@@ -104,9 +107,33 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
             if node_type
             in node.ocp.get_resource(resource_name=node.name, column="ROLES")
         ]
+    if is_hci_provider_cluster() and node_type == constants.WORKER_MACHINE:
+        typed_nodes = [
+            node
+            for node in typed_nodes
+            if constants.MASTER_MACHINE
+            not in node.ocp.get_resource(resource_name=node.name, column="ROLES")
+        ]
+
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
     return typed_nodes
+
+
+def get_nodes_having_label(label):
+    """
+    Gets nodes with particular label
+
+    Args:
+        label (str): Label
+
+    Return:
+        Dict: Representing nodes info
+
+    """
+    ocp_node_obj = OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get("items")
+    return nodes
 
 
 def get_all_nodes():
@@ -122,7 +149,9 @@ def get_all_nodes():
     return [node["metadata"]["name"] for node in node_items]
 
 
-def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=180):
+def wait_for_nodes_status(
+    node_names=None, status=constants.NODE_READY, timeout=180, sleep=3
+):
     """
     Wait until all nodes are in the given status
 
@@ -133,6 +162,7 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
             (e.g. 'Ready', 'NotReady', 'SchedulingDisabled')
         timeout (int): The number in seconds to wait for the nodes to reach
             the status
+        sleep (int): Time in seconds to sleep between attempts
 
     Raises:
         ResourceWrongStatusException: In case one or more nodes haven't
@@ -147,7 +177,7 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
                     break
         nodes_not_in_state = copy.deepcopy(node_names)
         log.info(f"Waiting for nodes {node_names} to reach status {status}")
-        for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
+        for sample in TimeoutSampler(timeout, sleep, get_node_objs, nodes_not_in_state):
             for node in sample:
                 try:
                     if node.ocp.get_resource_status(node.name) == status:
@@ -1150,11 +1180,14 @@ def get_master_nodes():
 def get_worker_nodes():
     """
     Fetches all worker nodes.
+    In case of HCI provider cluster, it will exclude the master nodes.
 
     Returns:
         list: List of names of worker nodes
 
     """
+    from ocs_ci.ocs.cluster import is_hci_provider_cluster
+
     label = "node-role.kubernetes.io/worker"
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
     nodes = ocp_node_obj.get(selector=label).get("items")
@@ -1170,6 +1203,9 @@ def get_worker_nodes():
             if node.get("metadata").get("name") not in infra_node_ids
         ]
     worker_nodes_list = [node.get("metadata").get("name") for node in nodes]
+    if is_hci_provider_cluster():
+        master_node_list = get_master_nodes()
+        worker_nodes_list = list(set(worker_nodes_list) - set(master_node_list))
     return worker_nodes_list
 
 
@@ -1684,14 +1720,15 @@ def verify_all_nodes_created():
                 for node_list in TimeoutSampler(
                     timeout=wait_time, sleep=60, func=get_all_nodes
                 ):
-                    if len(node_list) == expected_num_nodes:
+                    existing_num_nodes = len(node_list)
+                    if existing_num_nodes == expected_num_nodes:
                         log.info(
                             f"All {expected_num_nodes} nodes are created successfully."
                         )
                         break
                     else:
                         log.warning(
-                            f"waiting for {expected_num_nodes} nodes to create but found {len(node_list)} nodes"
+                            f"waiting for {expected_num_nodes} nodes to create but found {existing_num_nodes} nodes"
                         )
             except TimeoutExpiredError:
                 log.error(f"Expected {expected_num_nodes} nodes are not created")
@@ -2833,3 +2870,46 @@ def is_node_rack_or_zone_exist(failure_domain, node_name):
     """
     node_obj = get_node_objs([node_name])[0]
     return get_node_rack_or_zone(failure_domain, node_obj) is not None
+
+
+def list_encrypted_rbd_devices_onnode(node):
+    """
+    Get rbd crypt devices from the node
+
+    Args:
+        node: node name
+
+    Returns:
+        List of encrypted osd device names
+    """
+    node_obj = OCP(kind="node")
+    crypt_devices_out = node_obj.exec_oc_debug_cmd(
+        node=node,
+        cmd_list=["lsblk | grep crypt | awk '{print $1}'"],
+    ).split("\n")
+    crypt_devices = [device.strip() for device in crypt_devices_out if device != ""]
+    return crypt_devices
+
+
+def verify_crypt_device_present_onnode(node, vol_handle):
+    """
+    Find the crypt device maching for given volume handle.
+
+    Args:
+        node : node name
+        vol_handle : volumen handle name.
+
+    Returns:
+        True: if volume handle device found on the node.
+        False: if volume handle device not found on the node.
+    """
+    device_list = list_encrypted_rbd_devices_onnode(node)
+    crypt_device = [device for device in device_list if vol_handle in device]
+    if not crypt_device:
+        log.error(
+            f"crypt device for volume handle {vol_handle} not present on node : {node}"
+        )
+        return False
+
+    log.info(f"Crypt device for volume handle {vol_handle} present on the node: {node}")
+    return True

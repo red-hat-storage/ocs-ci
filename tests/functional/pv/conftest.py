@@ -19,7 +19,7 @@ def pytest_collection_modifyitems(items):
 
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         for item in items.copy():
-            if "manage/pv_services/pvc_snapshot" in str(item.fspath) and (
+            if "functional/pv/pvc_snapshot" in str(item.fspath) and (
                 ocs_version < version.VERSION_4_11
             ):
                 log.debug(

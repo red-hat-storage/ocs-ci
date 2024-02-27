@@ -626,8 +626,29 @@ def exec_cmd(
         cmd = shlex.split(cmd)
     if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
         kubepath = cluster_config.RUN["kubeconfig"]
-        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
-        cmd = list_insert_at_position(cmd, 2, [kubepath])
+        kube_index = 1
+        # check if we have an oc plugin in the command
+        plugin_list = "oc plugin list"
+        cp = subprocess.run(
+            shlex.split(plugin_list),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        subcmd = cmd[1].split("-")
+        if len(subcmd) > 1:
+            subcmd = "_".join(subcmd)
+            log.info(f"searching for plugin: {subcmd}")
+        if not isinstance(subcmd, str) and isinstance(subcmd, list):
+            subcmd = str(subcmd[0])
+
+        for l in cp.stdout.decode().splitlines():
+            if subcmd in l:
+                # If oc cmdline has plugin name then we need to push the
+                # --kubeconfig to next index
+                kube_index = 2
+                log.info(f"Found oc plugin {subcmd}")
+        cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
+        cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
     if threading_lock and cmd[0] == "oc":
         threading_lock.acquire()
     completed_process = subprocess.run(
@@ -4558,3 +4579,41 @@ def is_cluster_y_version_upgraded():
     ) > version_module.get_semantic_version(prev_version_num, only_major_minor=True):
         is_upgraded = True
     return is_upgraded
+
+
+def exec_nb_db_query(query):
+    """
+    Send a psql query to the Noobaa DB
+
+    Example usage:
+        exec_nb_db_query("SELECT data ->> 'key' FROM objectmds;")
+
+    Args:
+        query (str): The query to send
+
+    Returns:
+        list of str: The query result rows
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.resources import pod
+
+    nb_db_pod = pod.Pod(
+        **pod.get_pods_having_label(
+            label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )[0]
+    )
+
+    response = nb_db_pod.exec_cmd_on_pod(
+        command=f'psql -U postgres -d nbcore -c "{query}"',
+        out_yaml_format=False,
+    )
+
+    output = response.strip().split("\n")
+
+    if len(output) >= 3:
+        # Remove the two header rows and the summary row
+        output = output[2:-1]
+
+    return output

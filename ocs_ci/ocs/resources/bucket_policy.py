@@ -99,9 +99,11 @@ class NoobaaAccount(object):
                 "s3_access": s3_access,
                 "default_pool": backingstore_name,
             }
-        params_dict if (
-            version.get_semantic_ocs_version_from_config() < version.VERSION_4_9
-        ) else params_dict.pop("default_pool")
+        (
+            params_dict
+            if (version.get_semantic_ocs_version_from_config() < version.VERSION_4_9)
+            else params_dict.pop("default_pool")
+        )
         response = mcg.send_rpc_query(
             api="account_api", method="create_account", params=params_dict
         ).json()
@@ -161,7 +163,7 @@ def gen_bucket_policy(
         "Statement": [
             {
                 "Action": actions,
-                "Principal": principals,
+                "Principal": {"AWS": principals},
                 "Resource": resources,
                 "Effect": effect,
                 "Sid": sid,

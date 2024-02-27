@@ -261,6 +261,7 @@ higher priority).
 * `enable_globalnet` - enable or disable globalnet for submariner, default: true
 * `submariner_unreleased_channel` - submariner channel for unreleased downstream build
 * `enable_hw_virtualization` - enable hardware virtualization for vSphere platform.
+* `performance_profile` - performance profile to be used (balanced, lean, performance).
 
 #### UPGRADE
 

@@ -93,5 +93,4 @@ class ObjectStorage(PageNavigator, ResourceList):
 
         """
         logger.info(f"Select '{cluster_namespace}' project")
-        self.do_click(self.generic_locators["project_selector"])
-        self.wait_for_namespace_selection(project_name=cluster_namespace)
+        self.select_namespace(project_name=cluster_namespace)

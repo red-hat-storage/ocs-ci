@@ -112,8 +112,8 @@ class VSpherePreChecks(PreChecks):
             TemplateNotFound: If template not found in Datacenter.
 
         """
-        # skip the template check for vSphere IPI
-        if self.deployment_type == "ipi":
+        # skip the template check for not UPI deployments
+        if self.deployment_type != "upi":
             return
 
         is_template_found = False

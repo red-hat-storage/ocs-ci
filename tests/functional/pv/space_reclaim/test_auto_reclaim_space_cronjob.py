@@ -151,6 +151,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         logger.info("No reclaim space cron job was created for CephFS PVCs")
         pvc_obj.delete()
 
+    @pytest.mark.polarion_id("OCS-5400")
     def test_reclaim_space_cronjob(self):
         """
         Test case to check reclaim space cronjobs are created correctly for rbd pvcs in openshift-* namespace
@@ -177,6 +178,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         self.delete_namespace = True
         self.__reclaim_space_cronjob()
 
+    @pytest.mark.polarion_id("OCS-5401")
     def test_reclaim_space_cronjob_on_existing_namespace(self):
         """
         Test case to check reclaim space cronjobs are created correctly for rbd pvcs in existing openshift-* namespaces
@@ -186,6 +188,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         self.delete_namespace = False
         self.__reclaim_space_cronjob()
 
+    @pytest.mark.polarion_id("OCS-5402")
     def test_skip_reclaim_space(self):
         """
         Test case to check that no reclaim space job is created for rbd pvc

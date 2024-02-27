@@ -30,7 +30,10 @@ from ocs_ci.utility.utils import (
     run_cmd,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
-from ocs_ci.ocs.ui.base_ui import login_ui, SeleniumDriver
+from ocs_ci.ocs.ui.base_ui import (
+    login_ui,
+    SeleniumDriver,
+)
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import (
@@ -157,7 +160,7 @@ class AcmAddClusters(AcmPageNavigator):
             if s.MULTICLUSTER["multicluster_index"] != primary_index
         ][0]
         # submariner catalogsource creation
-        if config.ENV_DATA["submariner_release_type"] == "unreleased":
+        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
             submariner_downstream_unreleased = templating.load_yaml(
                 constants.SUBMARINER_DOWNSTREAM_UNRELEASED
             )

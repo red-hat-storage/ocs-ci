@@ -128,23 +128,7 @@ class MCG:
         ) + "/rpc"
         self.region = config.ENV_DATA["region"]
 
-        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
-        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
-        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
-        self.noobaa_user = admin_credentials["email"]
-        self.noobaa_password = admin_credentials["password"]
-
-        self.noobaa_token = self.retrieve_nb_token()
-
-        self.s3_resource = boto3.resource(
-            "s3",
-            verify=retrieve_verification_mode(),
-            endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key,
-        )
-
-        self.s3_client = self.s3_resource.meta.client
+        self.update_s3_creds()
 
         if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
             "create_aws_creds"
@@ -1030,8 +1014,12 @@ class MCG:
         Delete the noobaa-core pod and wait for it to come up again
 
         """
+        from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
 
         self.core_pod.delete(wait=True)
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_CORE_POD_LABEL, exptected_count=1
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
@@ -1084,6 +1072,30 @@ class MCG:
 
         return credentials_dict
 
+    def update_s3_creds(self):
+        """
+        Set the S3 credentials of the NooBaa admin user from the
+        noobaa-admin secret, and update the S3 resource and client
+
+        """
+        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
+        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
+        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
+        self.noobaa_user = admin_credentials["email"]
+        self.noobaa_password = admin_credentials["password"]
+
+        self.noobaa_token = self.retrieve_nb_token()
+
+        self.s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key,
+        )
+
+        self.s3_client = self.s3_resource.meta.client
+
     def reset_admin_pw(self, new_password):
         """
         Reset the NooBaa admin password
@@ -1108,3 +1120,42 @@ class MCG:
 
         logger.info("Waiting a bit for the change to propogate through the system...")
         sleep(15)
+
+    def get_admin_default_resource_name(self):
+        """
+        Get the default resource name of the admin account
+
+        Returns:
+            str: The default resource name
+
+        """
+
+        read_account_output = self.send_rpc_query(
+            "account_api",
+            "read_account",
+            params={
+                "email": self.noobaa_user,
+            },
+        )
+        return read_account_output.json()["reply"]["default_resource"]
+
+    def get_default_bc_backingstore_name(self):
+        """
+        Get the default backingstore name of the default bucketclass
+
+        Returns:
+            str: The default backingstore name
+
+        """
+        bucketclass_ocp_obj = OCP(
+            kind=constants.BUCKETCLASS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+        )
+        return (
+            bucketclass_ocp_obj.get()
+            .get("spec")
+            .get("placementPolicy")
+            .get("tiers")[0]
+            .get("backingStores")[0]
+        )

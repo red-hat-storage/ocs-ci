@@ -203,72 +203,64 @@ class ValidationUI(PageNavigator):
         if not, this function will enable it so as to see ODF tab under Storage section
 
         """
-        if (
-            self.ocp_version_semantic >= version.VERSION_4_9
-            and self.ocs_version_semantic >= version.VERSION_4_9
-        ):
-            self.navigate_installed_operators_page()
-            logger.info("Click on project dropdown")
-            self.do_click(self.validation_loc["project-dropdown"])
-            default_projects_is_checked = self.driver.find_element_by_xpath(
-                "//input[@type='checkbox']"
-            )
-            if (
-                default_projects_is_checked.get_attribute("data-checked-state")
-                == "false"
-            ):
-                logger.info("Show default projects")
-                self.do_click(self.validation_loc["show-default-projects"])
-            logger.info("Search for 'openshift-storage' project")
-            self.do_send_keys(
-                self.validation_loc["project-search-bar"], text="openshift-storage"
-            )
-            logger.info("Select 'openshift-storage' project")
-            time.sleep(2)
-            self.do_click(
-                self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
-            )
-            self.page_has_loaded(retries=25, sleep_time=10)
+
+        self.navigate_installed_operators_page()
+        logger.info("Click on project dropdown")
+        self.do_click(self.validation_loc["project-dropdown"])
+        default_projects_is_checked = self.driver.find_element_by_xpath(
+            "//input[@type='checkbox']"
+        )
+        if default_projects_is_checked.get_attribute("data-checked-state") == "false":
+            logger.info("Show default projects")
+            self.do_click(self.validation_loc["show-default-projects"])
+        logger.info("Search for 'openshift-storage' project")
+        self.do_send_keys(
+            self.validation_loc["project-search-bar"], text="openshift-storage"
+        )
+        logger.info("Select 'openshift-storage' project")
+        time.sleep(2)
+        self.do_click(
+            self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
+        )
+        self.page_has_loaded(retries=25, sleep_time=1)
+        logger.info(
+            "Check if 'Plugin available' option is available on the Installed Operators page"
+        )
+        plugin_availability_check = self.wait_until_expected_text_is_found(
+            locator=self.dep_loc["plugin-available"],
+            expected_text="Plugin available",
+            timeout=15,
+        )
+        if plugin_availability_check:
             logger.info(
-                "Check if 'Plugin available' option is available on the Installed Operators page"
+                "Storage plugin is disabled, navigate to Operator details page further confirmation"
             )
-            plugin_availability_check = self.wait_until_expected_text_is_found(
-                locator=self.dep_loc["plugin-available"],
-                expected_text="Plugin available",
-                timeout=15,
+            self.do_click(self.validation_loc["odf-operator"])
+            self.page_has_loaded(retries=15, sleep_time=5)
+            console_plugin_status = self.get_element_text(
+                self.validation_loc["console_plugin_option"]
             )
-            if plugin_availability_check:
+            if console_plugin_status == "Disabled":
                 logger.info(
-                    "Storage plugin is disabled, navigate to Operator details page further confirmation"
+                    "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
                 )
-                self.do_click(self.validation_loc["odf-operator"])
-                self.page_has_loaded(retries=15, sleep_time=5)
-                console_plugin_status = self.get_element_text(
-                    self.validation_loc["console_plugin_option"]
+                self.do_click(self.validation_loc["console_plugin_option"])
+                self.do_click(self.dep_loc["enable_console_plugin"])
+                self.do_click(self.validation_loc["save_console_plugin_settings"])
+                logger.info("Waiting for warning alert to refresh the web console")
+                self.refresh_web_console()
+                refresh_web_console_popup = self.wait_until_expected_text_is_found(
+                    locator=self.validation_loc["warning-alert"],
+                    expected_text="Refresh web console",
                 )
-                if console_plugin_status == "Disabled":
+                if refresh_web_console_popup:
                     logger.info(
-                        "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
+                        "Refresh web console option is now available, click on it to see the changes"
                     )
-                    self.do_click(self.validation_loc["console_plugin_option"])
-                    self.do_click(self.dep_loc["enable_console_plugin"])
-                    self.do_click(self.validation_loc["save_console_plugin_settings"])
-                    logger.info("Waiting for warning alert to refresh the web console")
-                    self.refresh_web_console()
-                    refresh_web_console_popup = self.wait_until_expected_text_is_found(
-                        locator=self.validation_loc["warning-alert"],
-                        expected_text="Refresh web console",
+                    self.do_click(
+                        self.validation_loc["refresh-web-console"],
+                        enable_screenshot=True,
                     )
-                    if refresh_web_console_popup:
-                        logger.info(
-                            "Refresh web console option is now available, click on it to see the changes"
-                        )
-                        self.do_click(
-                            self.validation_loc["refresh-web-console"],
-                            enable_screenshot=True,
-                        )
-                else:
-                    logger.info("Console plugin status Enabled")
             else:
                 logger.info("Plugin availability check skipped")
 
@@ -505,6 +497,8 @@ class ValidationUI(PageNavigator):
         if not (
             config.DEPLOYMENT.get("external_mode")
             or config.ENV_DATA["mcg_only_deployment"]
+            or config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             storage_system_details.nav_cephblockpool_verify_statusready()
 
@@ -565,11 +559,7 @@ class ValidationUI(PageNavigator):
         if self.ocp_version_semantic >= version.VERSION_4_9:
             self.navigate_installed_operators_page()
             logger.info("Search and select openshift-storage namespace")
-            self.do_click(self.validation_loc["pvc_project_selector"])
-            self.do_send_keys(
-                self.validation_loc["search-project"], text="openshift-storage"
-            )
-            self.wait_for_namespace_selection(project_name="openshift-storage")
+            self.select_namespace(project_name="openshift-storage")
             logger.info(
                 "Click on Storage System under Provided APIs on Installed Operators Page"
             )
@@ -614,8 +604,8 @@ class ValidationUI(PageNavigator):
         """
         Function to verify the unprivileged users can't access ODF dashbaord
         """
-        self.do_click(self.validation_loc["developer_dropdown"])
-        self.do_click(self.validation_loc["select_administrator"], timeout=5)
+
+        self.select_administrator_user()
         try:
             self.nav_odf_default_page()
         except TimeoutException:
@@ -625,18 +615,20 @@ class ValidationUI(PageNavigator):
         else:
             raise UnexpectedODFAccessException
 
-    def verify_odf_without_ocs_in_installed_operator(self) -> bool:
+    def verify_odf_without_ocs_in_installed_operator(self) -> tuple:
         """
         Function to validate ODF operator is present post ODF installation,
         expectation is only ODF operator should be present in Installed operators tab and
         OCS operator shouldn't be present. This function is only written for 4.9+ versions
 
-        Returns:
-        True: If only odf operator is present in the UI
-        False: If ocs operator is also present in the UI
+        Returns: tuple: odf_operator_presence, ocs_operator_presence
+
         """
         logger.info("Navigating to Installed Operator Page")
         self.navigate_installed_operators_page()
+
+        self.select_namespace(project_name="openshift-storage")
+
         logger.info("Searching for Openshift Data Foundation Operator")
         odf_operator_presence = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["odf-operator"],
@@ -649,4 +641,4 @@ class ValidationUI(PageNavigator):
             timeout=1,
             expected_text="OpenShift Container Storage",
         )
-        return odf_operator_presence and not ocs_operator_presence
+        return odf_operator_presence, ocs_operator_presence

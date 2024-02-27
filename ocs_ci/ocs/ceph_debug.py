@@ -33,7 +33,7 @@ class RookCephPlugin(object):
         self.namespace = namespace
         self.operator_namespace = operator_namespace
         self.alternate_image = alternate_image
-        self.cmd = f"rook-ceph -n {namespace} -o {operator_namespace}"
+        self.cmd = f"rook-ceph -n {namespace} --operator-namespace {operator_namespace}"
         self.deployment_in_debug = dict()
 
         if not self.check_krew_installed():

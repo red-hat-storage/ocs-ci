@@ -33,13 +33,14 @@ class DeploymentFactory(object):
                 }
             )
         elif self.deployment_platform == constants.VSPHERE_PLATFORM:
-            from .vmware import VSPHEREUPI, VSPHEREIPI, VSPHEREUPIFlexy
+            from .vmware import VSPHEREUPI, VSPHEREIPI, VSPHEREUPIFlexy, VSPHEREAI
 
             self.cls_map.update(
                 {
                     "vsphere_upi": VSPHEREUPI,
                     "vsphere_ipi": VSPHEREIPI,
                     "vsphere_upi_flexy": VSPHEREUPIFlexy,
+                    "vsphere_ai": VSPHEREAI,
                 }
             )
         elif self.deployment_platform == constants.AZURE_PLATFORM:
@@ -102,7 +103,7 @@ class DeploymentFactory(object):
         Get the exact deployment class based on ENV_DATA
         Example:
         deployment_platform may look like 'aws', 'vmware', 'baremetal'
-        deployment_type may be like 'ipi' or 'upi'
+        deployment_type may be like 'ipi', 'upi' or 'ai'
         """
         if config.ENV_DATA.get("acm_ocp_deployment"):
             logger.info("Deployment will be done through ACM platform")
@@ -110,7 +111,7 @@ class DeploymentFactory(object):
         deployment_type = config.ENV_DATA["deployment_type"]
         flexy_deployment = config.ENV_DATA["flexy_deployment"]
         deployment_cls_key = (
-            f"{self.deployment_platform.lower()}" f"_" f"{deployment_type.lower()}"
+            f"{self.deployment_platform.lower()}_{deployment_type.lower()}"
         )
         if flexy_deployment:
             deployment_cls_key = f"{deployment_cls_key}_flexy"

@@ -56,6 +56,7 @@ from ocs_ci.ocs.node import (
     verify_worker_nodes_security_groups,
     add_disk_to_node,
     get_nodes,
+    get_nodes_where_ocs_pods_running,
     get_provider_internal_node_ips,
 )
 from ocs_ci.ocs.version import get_ocp_version
@@ -77,6 +78,7 @@ from ocs_ci.utility.rgwutils import get_rgw_count
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
 
 log = logging.getLogger(__name__)
 
@@ -199,9 +201,12 @@ def ocs_install_verification(
     # Basic Verification for cluster
     if not (fusion_aas_consumer or client_cluster):
         basic_verification(ocs_registry_image)
+    if client_cluster:
+        verify_ocs_csv(ocs_registry_image=None)
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
+    exporter_pod_count = len(get_nodes_where_ocs_pods_running())
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
     storage_cluster = StorageCluster(
         resource_name=storage_cluster_name,
@@ -280,10 +285,11 @@ def ocs_install_verification(
                 constants.MGR_APP_LABEL: 1,
                 constants.MDS_APP_LABEL: 2,
                 constants.RGW_APP_LABEL: rgw_count,
+                constants.EXPORTER_APP_LABEL: exporter_pod_count,
             }
         )
 
-    if fusion_aas_consumer:
+    if fusion_aas_consumer or client_cluster:
         del resources_dict[constants.OCS_OPERATOR_LABEL]
         del resources_dict[constants.OPERATOR_LABEL]
 
@@ -291,6 +297,13 @@ def ocs_install_verification(
         resources_dict.update(
             {
                 constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
+            }
+        )
+
+    if ocs_version >= version.VERSION_4_15 and not client_cluster:
+        resources_dict.update(
+            {
+                constants.UX_BACKEND_APP_LABEL: 1,
             }
         )
 
@@ -303,7 +316,8 @@ def ocs_install_verification(
                 or hci_cluster
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service or hci_cluster):
+
+        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
             continue
         if "mds" in label and disable_cephfs:
             continue
@@ -407,7 +421,7 @@ def ocs_install_verification(
     csi_driver = OCP(kind="CSIDriver")
     csi_drivers = {item["metadata"]["name"] for item in csi_driver.get()["items"]}
     if not provider_cluster:
-        if fusion_aas_consumer:
+        if fusion_aas_consumer or client_cluster:
             {
                 f"{namespace}.cephfs.csi.ceph.com",
                 f"{namespace}.rbd.csi.ceph.com",
@@ -441,7 +455,7 @@ def ocs_install_verification(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
     if not disable_blockpools and not provider_cluster:
-        if consumer_cluster:
+        if consumer_cluster or client_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -484,7 +498,7 @@ def ocs_install_verification(
                 )
 
     if not disable_cephfs and not provider_cluster:
-        if consumer_cluster:
+        if consumer_cluster or client_cluster:
             assert (
                 "rook-ceph-client"
                 in sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
@@ -528,7 +542,7 @@ def ocs_install_verification(
     log.info("Verified node and provisioner secret names in storage class.")
 
     # TODO: Enable the tools pod check when a solution is identified for tools pod on FaaS consumer
-    if not fusion_aas_consumer:
+    if not (fusion_aas_consumer or client_cluster):
         ct_pod = get_ceph_tools_pod()
 
     # https://github.com/red-hat-storage/ocs-ci/issues/3820
@@ -678,7 +692,7 @@ def ocs_install_verification(
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
-    if not fusion_aas:
+    if not (fusion_aas or client_cluster):
         verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
@@ -694,7 +708,7 @@ def ocs_install_verification(
             if config.ENV_DATA.get("VAULT_CA_ONLY", None):
                 verify_kms_ca_only()
 
-    if not fusion_aas_consumer or client_cluster:
+    if not (fusion_aas_consumer or client_cluster):
         storage_cluster_obj = get_storage_cluster()
         is_flexible_scaling = (
             storage_cluster_obj.get()["items"][0]
@@ -748,7 +762,7 @@ def ocs_install_verification(
 
     # Verify olm.maxOpenShiftVersion property
     # check ODF version due to upgrades
-    if ocs_version >= version.VERSION_4_14:
+    if ocs_version >= version.VERSION_4_14 and not hci_cluster:
         verify_max_openshift_version()
         if config.RUN["cli_params"].get("deploy") and not (
             config.DEPLOYMENT["external_mode"]
@@ -775,6 +789,13 @@ def ocs_install_verification(
             namespace=constants.OCS_CLIENT_NAMESPACE,
             verify_sc=False,
         )
+
+    # check that noobaa root secrets are not public
+    if not (client_cluster or managed_service):
+        assert (
+            check_if_mcg_root_secret_public() is False
+        ), "Seems like MCG root secrets are public, please check"
+        log.info("Noobaa root secrets are not public")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
@@ -920,6 +941,19 @@ def verify_storage_cluster():
         timeout = 600
     storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
+    # verify storage cluster version
+    if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
+        verify_storage_cluster_version(storage_cluster)
+
+
+def verify_storage_cluster_version(storage_cluster):
+    """
+    Verifies the storage cluster version
+
+    Args:
+        storage_cluster (obj): storage cluster object
+
+    """
     # verify storage cluster version
     if config.RUN["cli_params"].get("deploy") and not config.UPGRADE.get(
         "upgrade_ocs_version"
@@ -1250,8 +1284,8 @@ def in_transit_encryption_verification():
 
     keys_found = retry(
         (ValueError),
-        tries=5,
-        delay=60,
+        tries=10,
+        delay=5,
     )(search_secure_keys)()
 
     if len(keys_to_match) != len(keys_found):
@@ -1267,22 +1301,6 @@ def in_transit_encryption_verification():
         f" {','.join(keys_found)} keys configured."
     )
 
-    # Verify ceph monitor protocol version
-    log.info("Verifying ceph monitor protocol version.")
-    ceph_mon_data = ceph_mon_dump()
-    v2_protocol_mon = sum(
-        1
-        for mon in ceph_mon_data["mons"]
-        if mon["public_addrs"]["addrvec"][0]["type"] == "v2"
-    )
-
-    if not v2_protocol_mon:
-        log.error("ceph mons are not configured with v2 protocol version. ")
-        raise ValueError(
-            "ceph mon protocol is not configured with 'v2' version which is recomended for in-transit encryption."
-        )
-
-    log.info("Ceph mons are configured with 'v2' protocol version.")
     return True
 
 

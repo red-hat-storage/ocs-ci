@@ -6,9 +6,9 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'us-east-2'
   worker_availability_zones:
-    - 'us-east-2a'
+    - 'us-east-2c'
   master_availability_zones:
-    - 'us-east-2a'
+    - 'us-east-2c'
   worker_replicas: 3
   master_replicas: 3
   worker_instance_type: 'm5.4xlarge'

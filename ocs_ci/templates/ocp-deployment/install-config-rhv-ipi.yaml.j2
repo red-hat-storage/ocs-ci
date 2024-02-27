@@ -39,7 +39,7 @@ networking:
     hostPrefix: 23
   machineNetwork:
   - cidr: {{ machine_network_cidr | default('10.0.0.0/15') }}
-  networkType: {{ network_type | default('OpenShiftSDN') }}
+  networkType: {{ network_type | default('OVNKubernetes') }}
   serviceNetwork:
   - {{ service_network_cidr | default('172.30.0.0/16') }}
 {% if fips %}

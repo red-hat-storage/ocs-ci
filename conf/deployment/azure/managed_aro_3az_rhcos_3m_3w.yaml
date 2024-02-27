@@ -8,6 +8,13 @@ ENV_DATA:
   platform: 'azure'
   deployment_type: 'managed'
   azure_aro: true
+  # Based on documentation:
+  # https://learn.microsoft.com/en-us/azure/openshift/support-policies-v4#logging-and-monitoring
+  # We should not modify monitoring
+  # Disucssed here:
+  # https://redhat-internal.slack.com/archives/CCV9YF9PD/p1702632274870529
+  persistent-monitoring: false
+  monitoring_enabled: false
   region: 'eastus'
   azure_base_domain_resource_group_name: 'odfqe'
   worker_availability_zones:

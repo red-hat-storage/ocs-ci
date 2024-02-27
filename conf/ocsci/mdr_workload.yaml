@@ -30,3 +30,15 @@ ENV_DATA:
       dr_workload_app_pvc_selector: {'appname': 'busybox_app5'}, pod_count: 2, pvc_count: 2
     },
   ]
+  dr_cnv_workload_appset: [
+    { name: "vm-appset-1", workload_dir: "mdr/cnv-workload/appset/vm-appset-1",
+      dr_workload_app_placement_name: "vm-appset-1-placement", vm_name: "vm-workload-1",
+      dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
+    },
+  ]
+  dr_cnv_workload_sub: [
+    { name: "vm-sub-1", workload_dir: "mdr/cnv-workload/subscription/vm-sub-1",
+      dr_workload_app_placement_name: "vm-sub-1-placement", vm_name: "vm-workload-1",
+      dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
+    },
+  ]

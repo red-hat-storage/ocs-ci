@@ -549,10 +549,7 @@ class Deployment(object):
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
-        if (
-            config.DEPLOYMENT.get("cnv_deployment")
-            and not config.ENV_DATA["skip_ocs_deployment"]
-        ):
+        if config.DEPLOYMENT.get("cnv_deployment"):
             CNVInstaller().deploy_cnv()
 
     def get_rdr_conf(self):
@@ -608,6 +605,12 @@ class Deployment(object):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
             create_dummy_zone_labels()
+        ibmcloud_ipi = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "ipi"
+        )
+        if ibmcloud_ipi:
+            ibmcloud.label_nodes_region()
 
     def label_and_taint_nodes(self):
         """
@@ -994,6 +997,7 @@ class Deployment(object):
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
                 create_ocs_secret(self.namespace)
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
                 logger.info("Creating secret for IBM Cloud Object Storage")
                 with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
@@ -1384,11 +1388,16 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"] = {
                     "storageClassName": storageclassnames["encryption"]
                 }
-        # Bluestore for RDR greenfield deployments: 4.14 onwards
+        performance_profile = config.ENV_DATA.get("performance_profile")
+        if performance_profile:
+            cluster_data["spec"]["resourceProfile"] = performance_profile
+        # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards
         if (
             (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+            and config.ENV_DATA.get("rdr_osd_deployment_mode")
+            == constants.RDR_OSD_MODE_GREENFIELD
         ):
             rdr_bluestore_annotation = {
                 "ocs.openshift.io/clusterIsDisasterRecoveryTarget": "true"
@@ -1417,9 +1426,11 @@ class Deployment(object):
         logger.info("Deploying odf with ocs addon.")
         clustername = config.ENV_DATA.get("cluster_name")
         ocs_version = version.get_semantic_ocs_version_from_config()
+        disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
+        noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
-            f"{ocs_version}.0"
+            f"{ocs_version}.0 {noobaa_cmd_arg}"
         )
         run_ibmcloud_cmd(cmd)
         time.sleep(120)
@@ -1705,11 +1716,13 @@ class Deployment(object):
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
-        # In case of RDR, check for bluestore on osds: 4.14 onwards
+        # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards
         if (
             (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+            and config.ENV_DATA.get("rdr_osd_deployment_mode")
+            == constants.RDR_OSD_MODE_GREENFIELD
         ):
             if not ceph_cluster:
                 ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
@@ -1717,7 +1730,7 @@ class Deployment(object):
                 "storeType"
             ]
             if "bluestore-rdr" in store_type.keys():
-                logger.info("OSDs with bluestore found ")
+                logger.info("OSDs with bluestore-rdr found ")
             else:
                 raise UnexpectedDeploymentConfiguration(
                     f"OSDs were not brought up with Regional DR bluestore! instead we have {store_type} "
@@ -2619,6 +2632,7 @@ class MultiClusterDROperatorsDeploy(object):
             ]
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+            dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
             dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
 
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
@@ -2854,7 +2868,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         multicluster_engine._has_phase = True
         resource = multicluster_engine.get()
         for item in resource["spec"]["overrides"]["components"]:
-            if item["name"] == "managedserviceaccount-preview":
+            if item["name"] == "managedserviceaccount":
                 item["enabled"] = True
         multicluster_engine_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="multiengine", delete=False
@@ -2922,7 +2936,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Check backupstoragelocation resource in "Available" phase
         backupstorage = ocp.OCP(
             kind="BackupStorageLocation",
-            resource_name=constants.MDR_DPA,
+            resource_name="default",
             namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
         )
         resource = backupstorage.get()

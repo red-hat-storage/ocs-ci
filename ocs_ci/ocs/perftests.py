@@ -19,6 +19,7 @@ from ocs_ci.helpers.performance_lib import run_oc_command
 
 from ocs_ci.ocs import benchmark_operator, constants, defaults, exceptions, node
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.defaults import ELASTICSEARCE_SCHEME
 from ocs_ci.ocs.elasticsearch import elasticsearch_load
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -282,30 +283,52 @@ class PASTest(BaseTest):
 
         # for development mode use the Dev ES server
         if self.dev_mode and config.PERF.get("dev_lab_es"):
+            url = (
+                f"{config.PERF.get('dev_es_scheme')}://{config.PERF.get('dev_es_server')}"
+                f":{config.PERF.get('dev_es_port')}"
+            )
             log.info("Using the development ES server")
             self.crd_data["spec"]["elasticsearch"] = {
                 "server": config.PERF.get("dev_es_server"),
                 "port": config.PERF.get("dev_es_port"),
-                "url": f"http://{config.PERF.get('dev_es_server')}:{config.PERF.get('dev_es_port')}",
+                "scheme": config.PERF.get("dev_es_scheme"),
+                "url": url,
                 "parallel": True,
             }
 
         # for production mode use the Lab ES server
         if not self.dev_mode and config.PERF.get("production_es"):
+            url = (
+                f"{config.PERF.get('production_es_scheme')}://{config.PERF.get('production_es_server')}"
+                f":{config.PERF.get('production_es_port')}"
+            )
             self.crd_data["spec"]["elasticsearch"] = {
                 "server": config.PERF.get("production_es_server"),
                 "port": config.PERF.get("production_es_port"),
-                "url": f"http://{config.PERF.get('production_es_server')}:{config.PERF.get('production_es_port')}",
+                "scheme": config.PERF.get("production_es_scheme"),
+                "url": url,
                 "parallel": True,
             }
 
         # backup the Main ES info (if exists)
         if not self.crd_data["spec"]["elasticsearch"] == {}:
             self.backup_es = self.crd_data["spec"]["elasticsearch"]
+            server = self.backup_es["server"]
+            port = self.backup_es["port"]
+            scheme = self.backup_es.get("scheme", ELASTICSEARCE_SCHEME)
             log.info(
                 f"Creating object for the Main ES server on {self.backup_es['url']}"
             )
-            self.main_es = Elasticsearch([self.backup_es["url"]], verify_certs=True)
+            self.main_es = Elasticsearch(
+                [
+                    {
+                        "host": server,
+                        "port": port,
+                        "scheme": scheme,
+                    }
+                ],
+                verify_certs=True,
+            )
         else:
             log.warning("Elastic Search information does not exists for this test")
 
@@ -316,24 +339,32 @@ class PASTest(BaseTest):
                 # elasticsearch is an internally deployed server (obj)
                 ip = elasticsearch.get_ip()
                 port = elasticsearch.get_port()
+                scheme = elasticsearch.get_scheme()
             else:
                 # elasticsearch is an existing server (dict)
                 ip = elasticsearch.get("server")
                 port = elasticsearch.get("port")
+                scheme = elasticsearch.get("scheme", ELASTICSEARCE_SCHEME)
 
             self.crd_data["spec"]["elasticsearch"] = {
                 "server": ip,
                 "port": port,
-                "url": f"http://{ip}:{port}",
+                "scheme": scheme,
+                "url": f"{scheme}://{ip}:{port}",
                 "parallel": True,
             }
             log.info(f"Going to use the ES : {self.crd_data['spec']['elasticsearch']}")
         elif config.PERF.get("internal_es_server"):
+            url = (
+                f"{config.PERF.get('internal_es_scheme')}://{config.PERF.get('internal_es_server')}"
+                f":{config.PERF.get('internal_es_port')}",
+            )
             # use an in-cluster elastic-search (not deployed by the test)
             self.crd_data["spec"]["elasticsearch"] = {
                 "server": config.PERF.get("internal_es_server"),
                 "port": config.PERF.get("internal_es_port"),
-                "url": f"http://{config.PERF.get('internal_es_server')}:{config.PERF.get('internal_es_port')}",
+                "scheme": config.PERF.get("internal_es_scheme"),
+                "url": url,
                 "parallel": True,
             }
 
@@ -551,7 +582,15 @@ class PASTest(BaseTest):
 
         """
 
-        con = Elasticsearch([{"host": es["server"], "port": es["port"]}])
+        con = Elasticsearch(
+            [
+                {
+                    "host": es["server"],
+                    "port": es["port"],
+                    "scheme": es.get("scheme", ELASTICSEARCE_SCHEME),
+                }
+            ]
+        )
         query = {"size": 1000, "query": {"match": {"uuid": uuid}}}
 
         try:
@@ -578,7 +617,13 @@ class PASTest(BaseTest):
         try:
             log.info(f"try to connect the ES : {self.es['server']}:{self.es['port']}")
             self.es_con = Elasticsearch(
-                [{"host": self.es["server"], "port": self.es["port"]}]
+                [
+                    {
+                        "host": self.es["server"],
+                        "port": self.es["port"],
+                        "scheme": self.es.get("scheme", ELASTICSEARCE_SCHEME),
+                    }
+                ]
             )
         except Exception:
             log.error(f"Cannot connect to ES server {self.es}")

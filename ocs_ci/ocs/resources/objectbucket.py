@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 import tempfile
 
 import boto3
+import botocore
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
@@ -14,7 +15,12 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError, UnhealthyBucket
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    NotFoundError,
+    TimeoutExpiredError,
+    UnhealthyBucket,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
 from ocs_ci.ocs.resources.rgw import RGW
@@ -155,6 +161,7 @@ class ObjectBucket(ABC):
         self.rgw = rgw
         self.bucketclass = bucketclass
         self.replication_policy = self.__parse_replication_policy(replication_policy)
+        self.cluster_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
 
         self.quota = quota
         self.namespace = config.ENV_DATA["cluster_namespace"]
@@ -200,18 +207,25 @@ class ObjectBucket(ABC):
 
         """
         logger.info(f"Deleting bucket: {self.name}")
+        # switch to a context where the resource was created
+        original_context = None
+        if (
+            config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            != self.cluster_context
+        ):
+            original_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
+            config.switch_ctx(self.cluster_context)
         try:
             self.internal_delete()
-        except CommandFailed as e:
-            if "not found" in str(e):
-                logger.warning(f"{self.name} was not found, or already deleted.")
-                return True
-            else:
-                raise e
+        except NotFoundError:
+            logger.warning(f"{self.name} was not found, or already deleted.")
+        except TimeoutError:
+            logger.warning(f"{self.name} deletion timed out. Verifying deletion.")
+            verify = True
         if verify:
             self.verify_deletion()
-        else:
-            return True
+        if original_context:
+            config.switch_ctx(original_context)
 
     @property
     def status(self):
@@ -355,8 +369,14 @@ class MCGCLIBucket(ObjectBucket):
     def internal_delete(self):
         """
         Deletes the bucket using the NooBaa CLI
+
+        Raises:
+            NotFoundError: In case the OBC was not found
+
         """
-        self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
+        result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
+        if "deleting" and self.name not in result.stderr.lower():
+            raise NotFoundError(result)
 
     @property
     def internal_status(self):
@@ -406,15 +426,27 @@ class MCGS3Bucket(ObjectBucket):
     def internal_delete(self):
         """
         Deletes the bucket using the S3 API
+
+        Raises:
+            NotFoundError: In case the bucket was not found
         """
-        response = self.s3client.get_bucket_versioning(Bucket=self.name)
-        logger.info(response)
-        if "Status" in response and response["Status"] == "Enabled":
-            for obj_version in self.s3resource.Bucket(self.name).object_versions.all():
-                obj_version.delete()
-        else:
-            self.s3resource.Bucket(self.name).objects.all().delete()
-        self.s3resource.Bucket(self.name).delete()
+        try:
+            response = self.s3client.get_bucket_versioning(Bucket=self.name)
+            logger.info(response)
+            if "Status" in response and response["Status"] == "Enabled":
+                for obj_version in self.s3resource.Bucket(
+                    self.name
+                ).object_versions.all():
+                    obj_version.delete()
+            else:
+                self.s3resource.Bucket(self.name).objects.all().delete()
+            self.s3resource.Bucket(self.name).delete()
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchBucket":
+                logger.info(f"Bucket {self.name} doesn't exist")
+                raise NotFoundError(e)
+            else:
+                raise e
 
     @property
     def internal_status(self):
@@ -448,8 +480,15 @@ class OCBucket(ObjectBucket):
     def internal_delete(self, verify=True):
         """
         Deletes the bucket using the OC CLI
+
+        Raises:
+            NotFoundError: In case the OBC was not found
         """
-        OCP(kind="obc", namespace=self.namespace).delete(resource_name=self.name)
+        try:
+            OCP(kind="obc", namespace=self.namespace).delete(resource_name=self.name)
+        except CommandFailed as e:
+            if "NotFound" or "not found" in str(e):
+                raise NotFoundError(e)
 
     @property
     def internal_status(self):

@@ -8,6 +8,7 @@ import json
 import time
 
 from elasticsearch import Elasticsearch, exceptions as ESExp
+from ocs_ci.ocs.defaults import ELASTICSEARCE_SCHEME
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class PerfResult:
         # Initialize the Elastic-search server parameters
         self.server = crd["spec"]["elasticsearch"]["server"]
         self.port = crd["spec"]["elasticsearch"]["port"]
+        self.scheme = crd["spec"]["elasticsearch"].get("scheme", ELASTICSEARCE_SCHEME)
         self.index = None  # place holder for the ES index name
         self.new_index = None  # place holder for the ES full result index name
         self.all_results = {}
@@ -52,7 +54,15 @@ class PerfResult:
         # Creating the connection to the elastic-search
         log.info(f"Connecting to ES {self.server} on port {self.port}")
         try:
-            self.es = Elasticsearch([{"host": self.server, "port": self.port}])
+            self.es = Elasticsearch(
+                [
+                    {
+                        "host": self.server,
+                        "port": self.port,
+                        "scheme": self.scheme,
+                    }
+                ]
+            )
         except ESExp.ConnectionError:
             log.warning(
                 "Cannot connect to ES server {}:{}".format(self.server, self.port)
@@ -108,16 +118,12 @@ class PerfResult:
             return False
 
         log.info(f"Writing all data to ES server {self.es}")
-        log.info(
-            f"Params : index={self.new_index}, "
-            f"doc_type=_doc, body={self.results}, id={self.uuid}"
-        )
+        log.info(f"Params : index={self.new_index} body={self.results}, id={self.uuid}")
         retry = 3
         while retry > 0:
             try:
                 self.es.index(
                     index=self.new_index,
-                    doc_type="_doc",
                     body=self.results,
                     id=self.uuid,
                 )
@@ -154,7 +160,7 @@ class PerfResult:
 
         """
 
-        res_link = f"http://{self.server}:{self.port}/{self.new_index}/"
+        res_link = f"{self.scheme}://{self.server}:{self.port}/{self.new_index}/"
         res_link += f'_search?q=uuid:"{self.uuid}"'
         return res_link
 

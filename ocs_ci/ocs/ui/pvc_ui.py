@@ -37,13 +37,13 @@ class PvcUI(PageNavigator):
         self.navigate_persistentvolumeclaims_page()
 
         logger.info(f"Search test project {project_name}")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-
-        self.wait_for_namespace_selection(project_name=project_name)
+        self.select_namespace(project_name=project_name)
 
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
+
+        logger.info("Click on Create PVC from dropdown options 'With Form'")
+        self.do_click(self.pvc_loc["create_pvc_dropdown_item"])
 
         logger.info("Click on Storage Class selection")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
@@ -51,7 +51,7 @@ class PvcUI(PageNavigator):
         logger.info("Select the Storage Class type")
         self.do_click(format_locator(self.pvc_loc["storage_class_name"], sc_name))
 
-        logger.info("Enter PVC name")
+        logger.info(f"Enter PVC name: '{pvc_name}'")
         self.do_send_keys(self.pvc_loc["pvc_name"], pvc_name)
 
         logger.info("Select Access Mode")
@@ -99,11 +99,7 @@ class PvcUI(PageNavigator):
         """
         self.navigate_persistentvolumeclaims_page()
 
-        logger.info(f"Search and Select test project {project_name}")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-
-        self.wait_for_namespace_selection(project_name=project_name)
+        self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -151,10 +147,7 @@ class PvcUI(PageNavigator):
         self.navigate_persistentvolumeclaims_page()
 
         logger.info(f"Search and Select test project {project_name}")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-
-        self.wait_for_namespace_selection(project_name=project_name)
+        self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -188,10 +181,7 @@ class PvcUI(PageNavigator):
         self.navigate_persistentvolumeclaims_page()
 
         logger.info(f"Search and Select test project {project_name}")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-
-        self.wait_for_namespace_selection(project_name=project_name)
+        self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -232,10 +222,7 @@ class PvcUI(PageNavigator):
         self.navigate_persistentvolumeclaims_page()
 
         logger.info(f"Select test project {project_name}")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-
-        self.wait_for_namespace_selection(project_name=project_name)
+        self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for {pvc_name} inside test project {project_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
@@ -273,10 +260,7 @@ class PvcUI(PageNavigator):
         self.navigate_persistentvolumeclaims_page()
 
         logger.info(f"Search and select the project {project_name}")
-        self.do_click(self.pvc_loc["pvc_project_selector"])
-        self.do_send_keys(self.pvc_loc["search-project"], text=project_name)
-
-        self.wait_for_namespace_selection(project_name=project_name)
+        self.select_namespace(project_name=project_name)
 
         logger.info(f"Search for PVC {pvc_name}")
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)

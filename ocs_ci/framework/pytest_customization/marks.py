@@ -63,7 +63,8 @@ team_marks = [manage, ecosystem, e2e]
 ocp = pytest.mark.ocp
 rook = pytest.mark.rook
 ui = pytest.mark.ui
-noobaa = pytest.mark.noobaa
+mcg = pytest.mark.mcg
+rgw = pytest.mark.rgw
 csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
@@ -104,14 +105,14 @@ tier_marks = [
 # upgrade related markers
 # Requires pytest ordering plugin installed
 # Use only one of those marker on one test case!
-order_pre_upgrade = pytest.mark.run(order=ORDER_BEFORE_UPGRADE)
-order_pre_ocp_upgrade = pytest.mark.run(order=ORDER_BEFORE_OCP_UPGRADE)
-order_pre_ocs_upgrade = pytest.mark.run(order=ORDER_BEFORE_OCS_UPGRADE)
-order_ocp_upgrade = pytest.mark.run(order=ORDER_OCP_UPGRADE)
-order_ocs_upgrade = pytest.mark.run(order=ORDER_OCS_UPGRADE)
-order_post_upgrade = pytest.mark.run(order=ORDER_AFTER_UPGRADE)
-order_post_ocp_upgrade = pytest.mark.run(order=ORDER_AFTER_OCP_UPGRADE)
-order_post_ocs_upgrade = pytest.mark.run(order=ORDER_AFTER_OCS_UPGRADE)
+order_pre_upgrade = pytest.mark.order(ORDER_BEFORE_UPGRADE)
+order_pre_ocp_upgrade = pytest.mark.order(ORDER_BEFORE_OCP_UPGRADE)
+order_pre_ocs_upgrade = pytest.mark.order(ORDER_BEFORE_OCS_UPGRADE)
+order_ocp_upgrade = pytest.mark.order(ORDER_OCP_UPGRADE)
+order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
+order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
+order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
+order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
 pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
@@ -184,6 +185,16 @@ skipif_mcg_only = pytest.mark.skipif(
     reason="This test cannot run on MCG-Only deployments",
 )
 
+fips_required = pytest.mark.skipif(
+    config.ENV_DATA.get("fips") != "true",
+    reason="Test runs only on FIPS enabled cluster",
+)
+
+stretchcluster_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("arbiter_deployment") is False,
+    reason="Test runs only on Stretch cluster with arbiter deployments",
+)
+
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(config.RUN["google_api_secret"])),
     reason="Google API credentials don't exist",
@@ -251,6 +262,11 @@ ipi_deployment_required = pytest.mark.skipif(
 managed_service_required = pytest.mark.skipif(
     (config.ENV_DATA["platform"].lower() not in MANAGED_SERVICE_PLATFORMS),
     reason="Test runs ONLY on OSD or ROSA cluster",
+)
+
+provider_client_platform_required = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() not in HCI_PROVIDER_CLIENT_PLATFORMS),
+    reason="Test runs ONLY on cluster with HCI provider-client platform",
 )
 
 provider_client_ms_platform_required = pytest.mark.skipif(
@@ -417,6 +433,13 @@ skipif_hci_provider_and_client = pytest.mark.skipif(
     and config.hci_provider_exist()
     and config.hci_client_exist(),
     reason="Test will not run on Fusion HCI provider and Client clusters",
+)
+
+skipif_hci_provider_or_client = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+    or config.hci_provider_exist()
+    or config.hci_client_exist(),
+    reason="Test will not run on Fusion HCI provider or Client clusters",
 )
 
 skipif_rosa = pytest.mark.skipif(

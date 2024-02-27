@@ -1,12 +1,13 @@
 """
 Helper functions file for working with object buckets
 """
+
 import json
 import logging
 import os
 import shlex
+import time
 from uuid import uuid4
-from datetime import date
 
 import boto3
 from botocore.handlers import disable_signing
@@ -15,10 +16,15 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import templating
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    run_cmd,
+    exec_nb_db_query,
+)
 from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +85,53 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
+def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
+    """
+    Crafts the S3cmd CLI command including the
+    login credentials amd command to be ran
+
+    Args:
+        mcg_obj: An MCG class instance
+        cmd: The s3cmd command to run
+        signed_request_creds: a dictionary containing S3 creds for a signed request
+
+    Returns:
+        str: The crafted command, ready to be executed on the pod
+
+    """
+    no_ssl = "--no-ssl"
+    if mcg_obj:
+        if mcg_obj.region:
+            region = f"--region={mcg_obj.region} "
+        else:
+            region = ""
+        base_command = (
+            f"s3cmd --access_key={mcg_obj.access_key_id} "
+            f"--secret_key={mcg_obj.access_key} "
+            f"{region}"
+            f"--host={mcg_obj.s3_external_endpoint} "
+            f"--host-bucket={mcg_obj.s3_external_endpoint} "
+            f"{no_ssl} "
+        )
+    elif signed_request_creds:
+        if signed_request_creds.get("region"):
+            region = f'--region={signed_request_creds.get("region")} '
+        else:
+            region = ""
+        base_command = (
+            f's3cmd --access_key={signed_request_creds.get("access_key_id")} '
+            f'--secret_key={signed_request_creds.get("access_key")} '
+            f"{region}"
+            f'--host={signed_request_creds.get("endpoint")} '
+            f'--host-bucket={signed_request_creds.get("endpoint")} '
+            f"{no_ssl} "
+        )
+    else:
+        base_command = f"s3cmd {no_ssl}"
+
+    return f"{base_command}{cmd}"
+
+
 def verify_s3_object_integrity(
     original_object_path, result_object_path, awscli_pod, result_pod=None
 ):
@@ -108,7 +161,13 @@ def verify_s3_object_integrity(
                 command=f"md5sum {original_object_path} {result_object_path}"
             )
         )
-    logger.info(f"\nMD5 of {md5sum[1]}: {md5sum[0]} \nMD5 of {md5sum[3]}: {md5sum[2]}")
+    try:
+        logger.info(
+            f"\nMD5 of {md5sum[1]}: {md5sum[0]} \nMD5 of {md5sum[3]}: {md5sum[2]}"
+        )
+    except IndexError as e:
+        logger.error(f"Failed to parse md5sum output: {md5sum}")
+        raise e
     if md5sum[0] == md5sum[2]:
         logger.info(
             f"Passed: MD5 comparison for {original_object_path} and {result_object_path}"
@@ -201,17 +260,21 @@ def list_objects_from_bucket(
     s3_obj=None,
     signed_request_creds=None,
     timeout=600,
+    recursive=False,
     **kwargs,
 ):
     """
     Lists objects in a bucket using s3 ls command
 
     Args:
-        podobj: Pod object that is used to perform copy operation
-        src_obj: full path to object
-        target: target bucket
-        prefix: prefix
-        s3_obj: obc/mcg object
+        pod_obj (Pod): Pod object that is used to perform copy operation
+        target (str): target bucket
+        prefix (str, optional): Prefix to perform the list operation on
+        s3_obj (MCG, optional): The MCG object to use in case the target or source
+        signed_request_creds (dictionary, optional): the access_key, secret_key,
+            endpoint and region to use when willing to send signed aws s3 requests
+        timeout (int): timeout for the exec_oc_cmd
+        recurive (bool): If true, list objects recursively using the --recursive option
 
     Returns:
         List of objects in a bucket
@@ -221,6 +284,8 @@ def list_objects_from_bucket(
         retrieve_cmd = f"ls {target}/{prefix}"
     else:
         retrieve_cmd = f"ls {target}"
+    if recursive:
+        retrieve_cmd += " --recursive"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -401,6 +466,53 @@ def sync_object_directory(
         **kwargs,
     ), "Failed to sync objects"
     # Todo: check that all objects were synced successfully
+
+
+def download_objects_using_s3cmd(
+    podobj,
+    src,
+    target,
+    s3_obj=None,
+    recursive=False,
+    signed_request_creds=None,
+    **kwargs,
+):
+    """
+    Download objects from bucket to target directories using s3cmd utility
+
+    Args:
+        podobj (OCS): The pod on which to execute the commands and download the objects to
+        src (str): Fully qualified object source path
+        target (str): Fully qualified object target path
+        s3_obj (MCG, optional): The MCG object to use in case the target or source
+                                 are in an MCG
+        signed_request_creds (dictionary, optional): the access_key, secret_key,
+            endpoint and region to use when willing to send signed aws s3 requests
+
+    """
+    logger.info(f"Download all objects from {src} to {target} using s3cmd utility")
+    if recursive:
+        retrieve_cmd = f"get --recursive {src} {target}"
+    else:
+        retrieve_cmd = f"get {src} {target}"
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+    elif signed_request_creds:
+        secrets = [
+            signed_request_creds.get("access_key_id"),
+            signed_request_creds.get("access_key"),
+            signed_request_creds.get("endpoint"),
+        ]
+    else:
+        secrets = None
+    podobj.exec_cmd_on_pod(
+        command=craft_s3cmd_command(
+            retrieve_cmd, s3_obj, signed_request_creds=signed_request_creds
+        ),
+        out_yaml_format=False,
+        secrets=secrets,
+        **kwargs,
+    ), "Failed to download objects"
 
 
 def rm_object_recursive(podobj, target, mcg_obj, option=""):
@@ -718,12 +830,54 @@ def cli_create_ibmcos_backingstore(
     )
 
 
-def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with RGW underlying storage using oc create command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": "s3-compatible",
+        "s3Compatible": {
+            "targetBucket": uls_name,
+            "endpoint": cld_mgr.rgw_client.endpoint,
+            "signatureVersion": "v2",
+            "secret": {
+                "name": cld_mgr.rgw_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
 
 
-def cli_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
-    pass
+def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with IBM COS underlying storage using a NooBaa CLI command
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create s3-compatible {backingstore_name} "
+        f"--endpoint {cld_mgr.rgw_client.endpoint} "
+        f"--access-key {cld_mgr.rgw_client.access_key} "
+        f"--secret-key {cld_mgr.rgw_client.secret_key} "
+        f"--target-bucket {uls_name}",
+        use_yes=True,
+    )
 
 
 def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
@@ -1706,6 +1860,7 @@ def write_random_test_objects_to_bucket(
     file_dir,
     amount=1,
     pattern="ObjKey-",
+    prefix=None,
     bs="1M",
     mcg_obj=None,
     s3_creds=None,
@@ -1731,6 +1886,8 @@ def write_random_test_objects_to_bucket(
     # Verify that the needed directory exists
     io_pod.exec_cmd_on_pod(f"mkdir -p {file_dir}")
     full_object_path = f"s3://{bucket_to_write}"
+    if prefix:
+        full_object_path += f"/{prefix}/"
     obj_lst = write_random_objects_in_pod(io_pod, file_dir, amount, pattern, bs)
     sync_object_directory(
         io_pod,
@@ -1742,7 +1899,60 @@ def write_random_test_objects_to_bucket(
     return obj_lst
 
 
-def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_name):
+def write_random_test_objects_to_s3_path(
+    io_pod,
+    s3_path,
+    file_dir,
+    amount=1,
+    pattern="ObjKey-",
+    bs="1M",
+    mcg_obj=None,
+    s3_creds=None,
+):
+    """
+    Write files generated by /dev/urandom to an S3 path
+
+    This is an adapter for write_random_test_objects_to_bucket to allow writing
+    random objects to a prefix or a sub-prefix of a bucket.
+
+    Args:
+        io_pod (ocs_ci.ocs.ocp.OCP): The pod which should handle all needed IO operations
+        s3_path (str): The S3 path to write the random files to
+        file_dir (str): The path to the folder where all random files will be
+        generated and copied from
+        amount (int, optional): The amount of random objects to write. Defaults to 1.
+        pattern (str, optional): The pattern of the random files' names. Defaults to ObjKey.
+        bs (str, optional): The size of the random files in bytes. Defaults to 1M.
+        mcg_obj (MCG, optional): An MCG class instance
+        s3_creds (dict, optional): A dictionary containing S3-compatible credentials
+        for writing objects directly to buckets outside of the MCG. Defaults to None.
+
+    Returns:
+        list: A list containing the names of the random files that were written
+
+    """
+
+    # Omit the s3:// prefix from the path if it exists,
+    # because write_random_test_objects_to_bucket prepends it
+    if s3_path.startswith("s3://"):
+        s3_path = s3_path.split("//")[1]
+
+    return write_random_test_objects_to_bucket(
+        io_pod,
+        s3_path,
+        file_dir,
+        amount,
+        pattern,
+        bs,
+        mcg_obj,
+        s3_creds,
+    )
+
+
+def patch_replication_policy_to_bucket(
+    bucket_name, rule_id, destination_bucket_name, prefix=""
+):
+
     """
     Patches replication policy to a bucket
 
@@ -1751,15 +1961,24 @@ def patch_replication_policy_to_bucket(bucket_name, rule_id, destination_bucket_
         rule_id (str): The ID of the replication rule
         destination_bucket_name (str): The name of the replication destination bucket
     """
+
     if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12:
         replication_policy = {
             "rules": [
-                {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
+                {
+                    "rule_id": rule_id,
+                    "destination_bucket": destination_bucket_name,
+                    "filter": {"prefix": prefix},
+                }
             ]
         }
     else:
         replication_policy = [
-            {"rule_id": rule_id, "destination_bucket": destination_bucket_name}
+            {
+                "rule_id": rule_id,
+                "destination_bucket": destination_bucket_name,
+                "filter": {"prefix": prefix},
+            }
         ]
     replication_policy_patch_dict = {
         "spec": {
@@ -1796,6 +2015,31 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+def patch_replication_policy_to_bucketclass(
+    bucketclass_name, rule_id, destination_bucket_name
+):
+    """
+    Patches replication policy to a bucket
+
+    Args:
+        bucketclass_name (str): The name of the bucketclass to patch
+        rule_id (str): The ID of the replication rule
+        destination_bucket_name (str): The name of the replication destination bucket
+    """
+
+    replication_policy = {
+        "rules": [{"rule_id": rule_id, "destination_bucket": destination_bucket_name}]
+    }
+    replication_policy_patch_dict = {
+        "spec": {"replicationPolicy": json.dumps(replication_policy)}
+    }
+    OCP(
+        kind="bucketclass",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucketclass_name,
+    ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
+
+
 def random_object_round_trip_verification(
     io_pod,
     bucket_name,
@@ -1803,6 +2047,7 @@ def random_object_round_trip_verification(
     download_dir,
     amount=1,
     pattern="RandomObject-",
+    prefix=None,
     wait_for_replication=False,
     second_bucket_name=None,
     mcg_obj=None,
@@ -1849,17 +2094,20 @@ def random_object_round_trip_verification(
         file_dir=upload_dir,
         amount=amount,
         pattern=pattern,
+        prefix=prefix,
         mcg_obj=mcg_obj,
         s3_creds=s3_creds,
     )
     written_objects = io_pod.exec_cmd_on_pod(f"ls -A1 {upload_dir}").split(" ")
     if wait_for_replication:
-        compare_bucket_object_list(mcg_obj, bucket_name, second_bucket_name, **kwargs)
+        assert compare_bucket_object_list(
+            mcg_obj, bucket_name, second_bucket_name, **kwargs
+        ), f"Objects in the buckets {bucket_name} and {second_bucket_name} are not same"
         bucket_name = second_bucket_name
     # Download the random objects that were uploaded to the bucket
     sync_object_directory(
         podobj=io_pod,
-        src=f"s3://{bucket_name}",
+        src=f"s3://{bucket_name}/{prefix}" if prefix else f"s3://{bucket_name}",
         target=download_dir,
         s3_obj=mcg_obj,
         signed_request_creds=s3_creds,
@@ -1954,29 +2202,80 @@ def create_aws_bs_using_cli(
     )
 
 
-def expire_objects_in_bucket(bucket_name):
+def upload_bulk_buckets(s3_obj, buckets, amount=1, object_key="obj-key-0", prefix=None):
     """
-    Manually expire the objects in a bucket
+    Upload given amount of objects with sequential keys to multiple buckets
 
     Args:
-        bucket_name (str): Name of the bucket
+        s3_obj: obc/mcg object
+        buckets (list): list of bucket names to upload to
+        amount (int, optional): number of objects to upload per bucket
+        object_key (str, optional): base object key
+        prefix (str, optional): prefix for the upload path
 
     """
+    for bucket in buckets:
+        for index in range(amount):
+            s3_put_object(
+                s3_obj, bucket.name, f"{prefix}/{object_key}-{index}", object_key
+            )
 
-    from ocs_ci.ocs.resources.pod import (
-        get_noobaa_db_pod,
+
+def change_objects_creation_date_in_noobaa_db(
+    bucket_name, object_keys=[], new_creation_time=0
+):
+    """
+    Change the creation date of objects at the noobaa-db.
+
+    Args:
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list, optional): A list of object keys to change their creation date
+            Note: If object_keys is empty, all objects in the bucket will be changed.
+        new_creation_time (int): The new creation time in unix timestamp in seconds
+
+    Example usage:
+        # Change the creation date of objects obj1 and obj2 in bucket my-bucket to one minute back
+        change_objects_creation_date("my-bucket", ["obj1", "obj2"], time.time() - 60)
+
+    """
+    psql_query = (
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({new_creation_time}))) "
+        "WHERE data->>'bucket' IN ( "
+        "SELECT _id "
+        "FROM buckets "
+        f"WHERE data->>'name' = '{bucket_name}')"
     )
+    if object_keys:
+        psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
+    psql_query += ";"
+    exec_nb_db_query(psql_query)
 
-    creation_time = f"{date.today().year-1}-06-25T14:18:28.712Z"
-    nb_db_pod = get_noobaa_db_pod()
-    query = (
-        'UPDATE objectmds SET "data"=jsonb_set("data", \'{create_time}\','
-        f"'\\\"{creation_time}\\\"') WHERE data ->> 'bucket' IN "
-        f"( SELECT _id FROM buckets WHERE data ->> 'name' = '{bucket_name}' );"
+
+def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
+    """
+    Expire objects in a bucket by changing their creation date to one year back.
+
+    Note that this is a workaround for the fact that the shortest expiration
+    time that expiraiton policies allows is 1 day, which is too long for the tests to wait.
+
+    Args:
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list): A list of object keys to expire
+            Note:
+                If object_keys is empty, all objects in the bucket will be expired.
+        prefix (str): The prefix of the objects to expire
+
+    """
+    logger.info(
+        f"Expiring objects in bucket {bucket_name} by changing their creation date"
     )
-    command = f'psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "{query}"'
-
-    nb_db_pod.exec_cmd_on_pod(command=command, out_yaml_format=False)
+    object_keys = [prefix + key for key in object_keys]
+    SECONDS_IN_YEAR = 60 * 60 * 24 * 365
+    change_objects_creation_date_in_noobaa_db(
+        bucket_name, object_keys, time.time() - SECONDS_IN_YEAR
+    )
 
 
 def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
@@ -2023,3 +2322,285 @@ def sample_if_objects_expired(mcg_obj, bucket_name, prefix="", timeout=600, slee
 
     assert sampler.wait_for_func_status(result=True), f"{message} are not expired"
     logger.info(f"{message} are expired")
+
+
+def delete_all_noobaa_buckets(mcg_obj, request):
+    """
+    Deletes all the buckets in noobaa and restores the first.bucket after the current test
+
+    Args:
+        mcg_obj: MCG object
+        request: pytest request object
+    """
+
+    logger.info("Listing all buckets in the cluster")
+    buckets = mcg_obj.s3_client.list_buckets()
+
+    logger.info("Deleting all buckets and its objects")
+    for bucket in buckets["Buckets"]:
+        logger.info(f"Deleting {bucket} and its objects")
+        s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
+        s3_bucket.objects.all().delete()
+        s3_bucket.delete()
+
+    def finalizer():
+        if "first.bucket" not in mcg_obj.s3_client.list_buckets()["Buckets"]:
+            logger.info("Creating the default bucket: first.bucket")
+            mcg_obj.s3_client.create_bucket(Bucket="first.bucket")
+        else:
+            logger.info("Skipping creation of first.bucket as it already exists")
+
+    request.addfinalizer(finalizer)
+
+
+def get_nb_bucket_stores(mcg_obj, bucket_name):
+    """
+    Query the noobaa-db for the backingstores/namespacestores
+    that a given bucket is using for its data placement
+
+    Args:
+        mcg_obj: MCG object
+        bucket_name: name of the bucket
+
+    Returns:
+        list: list of backingstores/namespacestores names
+
+    """
+    stores = set()
+    bucket_data = bucket_read_api(mcg_obj, bucket_name)
+
+    # Namespacestore bucket
+    if "namespace" in bucket_data:
+        read_srcs_list = [
+            d["resource"] for d in bucket_data["namespace"]["read_resources"]
+        ]
+        write_src = bucket_data["namespace"]["write_resource"]["resource"]
+        stores.update(read_srcs_list + [write_src])
+
+    # Data bucket
+    else:
+        tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
+        for tier in tiers:
+            tier_data = mcg_obj.send_rpc_query("tier_api", "read_tier", {"name": tier})
+            stores.update(tier_data["reply"]["attached_pools"])
+
+    return list(stores)
+
+
+def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):
+    """
+    Get the total number of objects in a bucket
+
+    Args:
+        io_pod (pod): The pod which should handle all needed IO operations
+        bucket_name (str): The name of the bucket to count the objects in
+        prefix (str): The prefix to start the count from
+        s3_obj (MCG or OBJ): An MCG or OBC class instance
+
+    Returns:
+        int: The total number of objects in the bucket
+
+    """
+    output = io_pod.exec_cmd_on_pod(
+        craft_s3_command(
+            cmd=f"ls s3://{bucket_name}/{prefix} --recursive", mcg_obj=s3_obj
+        ),
+        out_yaml_format=False,
+    )
+    return len(output.splitlines())
+
+
+def wait_for_object_count_in_bucket(
+    io_pod,
+    expected_count,
+    bucket_name,
+    prefix="",
+    s3_obj=None,
+    timeout=60,
+    sleep=3,
+):
+    """
+    Wait for the total number of objects in a bucket to reach the expected count
+
+    Args:
+        io_pod (pod): The pod which should handle all needed IO operations
+        expected_count (int): The expected number of objects in the bucket
+        bucket_name (str): The name of the bucket to count the objects in
+        prefix (str): The prefix to start the count from
+        s3_obj (MCG or OBJ): An MCG or OBC class instance
+        timeout (int): The maximum time in seconds to wait for the expected count
+        sleep (int): The time in seconds to wait between each count check
+
+    Returns:
+        bool: True if the expected count was reached, False otherwise
+
+    """
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_object_count_in_bucket,
+            io_pod=io_pod,
+            bucket_name=bucket_name,
+            prefix=prefix,
+            s3_obj=s3_obj,
+        ):
+            if int(sample) == expected_count:
+                return True
+    except TimeoutExpiredError:
+        logger.error(
+            f"The expected object count in bucket {bucket_name} was not reached after {timeout} seconds"
+        )
+    return False
+
+
+def tag_objects(
+    io_pod,
+    mcg_obj,
+    bucket,
+    object_keys,
+    tags,
+    prefix="",
+):
+    """
+    Apply tags to objects in a bucket via the AWS CLI
+
+    Args:
+        io_pod (pod): The pod that will execute the AWS CLI commands
+        mcg_obj (MCG): An MCG class instance
+        bucket (str): The name of the bucket to tag the objects in
+        object_keys (list): A list of object keys to tag
+        tags (dict or list of dicts):
+            - A dictionary of key-value pairs
+            - or a list of tag dicts in the form of key-value pairs (closer to the AWS CLI format)
+
+            I.E: - {"key1": "value1", "key2": "value2"}
+                 - {"key:  "value1"}
+                 - [{"key:  "value1"}, {"key2": "value2"}]
+
+        prefix (str): The prefix of the objects to tag
+
+    """
+    if not tags:
+        logger.warning("No tags were given to apply to the objects")
+        return
+
+    if isinstance(tags, dict):
+        tags_list = []
+        for key, val in tags.items():
+            tags_list.append({key: val})
+        tags = tags_list
+
+    # Convert the tags to the expected aws-cli format
+    tags_str = "'TagSet=["
+    for tag_dict in tags:
+        for key, value in tag_dict.items():
+            # Use double curly braces {{ and }} to include literal curly braces in the output
+            tags_str += f"{{Key={key}, Value={value}}}, "
+    tags_str += "]'"
+
+    # If there prefix ends with a slash, remove it
+    prefix = prefix[:-1] if prefix.endswith("/") else prefix
+
+    logger.info(f"Tagging objects in bucket {bucket} with tags {tags}")
+    for object_key in object_keys:
+        object_key = f"{prefix}/{object_key}" if prefix else object_key
+        io_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"put-object-tagging --bucket  {bucket} --key {object_key} --tagging {tags_str}",
+                mcg_obj=mcg_obj,
+                api=True,
+            ),
+            out_yaml_format=False,
+        )
+
+
+def get_object_to_tags_dict(
+    io_pod,
+    mcg_obj,
+    bucket,
+    object_keys,
+):
+    """
+    Get tags of objects in a bucket via the AWS CLI
+
+    Args:
+        io_pod (pod): The pod that will execute the AWS CLI commands
+        mcg_obj (MCG): An MCG class instance
+        bucket (str): The name of the bucket to get the tags from
+        object_keys (list): A list of object keys to get the tags from
+
+    Returns:
+        dict: A dictionary from object keys to their list of tag dicts
+            For example:
+                {"objA": [{"key1": "value1"}, {"key2": "value2"}],
+                "objB": [{"key3": "value3"}, {"key4": "value4"}]}
+
+    """
+
+    obj_to_tag_dict = {obj: [] for obj in object_keys}
+    logger.info(f"Getting tags of objects in bucket {bucket}")
+    for object_key in object_keys:
+        json_str_output = io_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"get-object-tagging --bucket  {bucket} --key {object_key}",
+                mcg_obj=mcg_obj,
+                api=True,
+            ),
+            out_yaml_format=False,
+        )
+        list_of_awscli_tag_dicts = json.loads(json_str_output)["TagSet"]
+        # Convert the tags to the expected format
+        obj_to_tag_dict[object_key] = [
+            {awscli_tag_dict["Key"]: awscli_tag_dict["Value"]}
+            for awscli_tag_dict in list_of_awscli_tag_dicts
+        ]
+    return obj_to_tag_dict
+
+
+def delete_object_tags(
+    io_pod,
+    mcg_obj,
+    bucket,
+    object_keys,
+    prefix="",
+):
+    """
+    Delete tags of objects in a bucket via the AWS CLI
+
+    Args:
+        io_pod (pod): The pod that will execute the AWS CLI commands
+        mcg_obj (MCG): An MCG class instance
+        bucket (str): The name of the bucket to delete the tags from
+        object_keys (list): A list of object keys to delete the tags from
+        prefix (str): The prefix of the objects to delete the tags from
+
+    """
+    logger.info(f"Deleting tags of objects in bucket {bucket}")
+    for object_key in object_keys:
+        object_key = f"prefix/{object_key}" if prefix else object_key
+        io_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"delete-object-tagging --bucket {bucket} --key {object_key}",
+                mcg_obj=mcg_obj,
+                api=True,
+            ),
+            out_yaml_format=False,
+        )
+
+
+def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
+    """
+    This method applies a lifecycle configuration to multiple buckets
+
+     Args:
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        buckets (list): list of bucket names to apply the lifecycle rule to
+        lifecycle_config (dict): a dict following the expected AWS json structure of a config file
+
+    """
+    for bucket in buckets:
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket.name, LifecycleConfiguration=lifecycle_config
+        )
+    logger.info("Applied lifecyle rule on all the buckets")
