@@ -87,19 +87,19 @@ class IBMCloudBM(object):
         machine_list = json.loads(self.run_ibmcloud_bm_cmd(cmd))
         return machine_list
 
-    def get_machines_by_ips(self, machine_ips):
+    def get_machines_by_names(self, machine_names):
         """
-        Get the machines in the IBMCloud Bare metal machines that have the given machine IPs
+        Get the machines in the IBMCloud Bare metal machines that have the given machine names
 
         Args:
-            machine_ips (list): The list of the machine IPs to search for.
+            machine_names (list): The list of the machine names to search for.
 
         Returns:
-            Get the machines in the IBMCloud Bare metal machines that have the given machine IPs
+            Get the machines in the IBMCloud Bare metal machines that have the given machine names
 
         """
         machine_list = self.get_all_machines()
-        return [m for m in machine_list if m["primaryIpAddress"] in machine_ips]
+        return [m for m in machine_list if m["hostname"] in machine_names]
 
     def stop_machines(self, machines):
         """
