@@ -164,7 +164,7 @@ def convert_ssh_key_to_base64(ssh_key):
     return base64_key
 
 
-def create_vm_secret(path=None, namespace=constants.CNV_NAMESPACE):
+def create_vm_secret(path=None, secret_name=None, namespace=constants.CNV_NAMESPACE):
     """
     Create an SSH secret for the VM
 
@@ -176,7 +176,12 @@ def create_vm_secret(path=None, namespace=constants.CNV_NAMESPACE):
 
     """
     secret_data = templating.load_yaml(constants.CNV_VM_SECRET_YAML)
-    secret_data["metadata"]["name"] = create_unique_resource_name("vm-test", "secret")
+    if secret_name:
+        secret_data["metadata"]["name"] = secret_name
+    else:
+        secret_data["metadata"]["name"] = create_unique_resource_name(
+            "vm-test", "secret"
+        )
     secret_data["metadata"]["namespace"] = namespace
     ssh_pub_key, _ = get_ssh_pub_key_with_filename(path=path)
     base64_key = convert_ssh_key_to_base64(ssh_key=ssh_pub_key)
@@ -328,3 +333,53 @@ def get_ssh_private_key_path():
     )
 
     return private_key_path
+
+
+def cal_md5sum_vm(vm_obj, file_name, username=None):
+    """
+    Calculate the MD5 checksum of a file via SSH on a virtual machine.
+
+    Args:
+        vm_obj (obj): The virtual machine object.
+        file_name (str): The name of the file to calculate the MD5 checksum for.
+        username (str, optional): The username to use for SSH authentication. Defaults to None.
+
+    Returns:
+        str: The MD5 checksum of the specified file.
+
+    """
+    md5sum_out = vm_obj.run_ssh_cmd(
+        command=f"md5sum {file_name}",
+        username=username,
+    )
+    return md5sum_out.split()[0]
+
+
+def run_dd_io(
+    vm_obj, file_name, bs="1024", count="102400", username=None, verify=False
+):
+    """
+    Perform input/output (I/O) operation using dd command via SSH on a virtual machine.
+
+    Args:
+        vm_obj (obj): The virtual machine object.
+        file_name (str): The name of the file to create and perform I/O operation on.
+        bs (str, optional): The block size for the I/O operation. Defaults to "1024".
+        count (str, optional): The number of blocks to write. Defaults to "102400".
+        username (str, optional): The username to use for SSH authentication. Defaults to None.
+        verify (bool, optional): Whether to verify the I/O operation by calculating MD5 checksum.
+            Defaults to False.
+
+    Returns:
+        str or None: If verify is True, returns the MD5 checksum of the written file. Otherwise, None.
+
+    """
+    vm_obj.run_ssh_cmd(
+        command=f"dd if=/dev/zero of=/{file_name} bs={bs} count={count}",
+        username=username,
+    )
+    if verify:
+        return vm_obj.cal_md5sum_vm(
+            file_name=file_name,
+            username=username,
+        )

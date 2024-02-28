@@ -11,11 +11,14 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.cnv_helpers import create_vm_secret
 from ocs_ci.helpers.helpers import (
     delete_volume_in_backend,
     verify_volume_deleted_in_backend,
+    create_project,
 )
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     CommandFailed,
@@ -515,8 +518,14 @@ class CnvWorkload(DRWorkload):
 
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
+        self.vm_secret_name = kwargs.get("vm_secret")
+        self.vm_secret_obj = None
+        self.vm_username = kwargs.get("vm_username")
         self.workload_type = kwargs.get("workload_type")
-        self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.workload_namespace = self._get_workload_namespace()
+        self.vm_obj = VirtualMachine(
+            vm_name=self.vm_name, namespace=self.workload_namespace
+        )
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
@@ -544,7 +553,18 @@ class CnvWorkload(DRWorkload):
 
         """
         self._deploy_prereqs()
-        self.workload_namespace = self._get_workload_namespace()
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            try:
+                create_project(project_name=self.workload_namespace)
+            except CommandFailed as ex:
+                if str(ex).find("(AlreadyExists)"):
+                    log.warning("The namespace already exists !")
+
+            self.vm_secret_obj = create_vm_secret(
+                secret_name=self.vm_secret_name, namespace=self.workload_namespace
+            )
 
         # Load DRPC
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -697,6 +717,8 @@ class CnvWorkload(DRWorkload):
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                if self.vm_secret_obj:
+                    self.vm_secret_obj.delete()
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
                     check_replication_resources_state=False,

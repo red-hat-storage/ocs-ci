@@ -5,6 +5,7 @@ import time
 
 from ocs_ci.framework.pytest_customization.marks import tier2
 from ocs_ci.framework import config
+from ocs_ci.helpers.cnv_helpers import run_dd_io, cal_md5sum_vm
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.helpers.dr_helpers import (
@@ -84,6 +85,9 @@ class TestCnvApplicationMDR:
 
         """
         # Create CNV applications(appset+sub)
+        md5sum_original = []
+        filename = "dd_file.txt"
+
         cnv_workloads = cnv_dr_workload(num_of_vm_subscription=1, num_of_vm_appset=1)
         self.wl_namespace = cnv_workloads[0].workload_namespace
 
@@ -95,6 +99,17 @@ class TestCnvApplicationMDR:
         self.primary_cluster_name = get_current_primary_cluster_name(
             namespace=self.wl_namespace, workload_type=cnv_workloads[0].workload_type
         )
+
+        # Creating file on VMs and calculating its MD5sum
+        for cnv_wl in cnv_workloads:
+            md5sum_original.append(
+                run_dd_io(
+                    cnv_wl.vm_obj,
+                    file_name=filename,
+                    username=cnv_wl.vm_username,
+                    verify=True,
+                )
+            )
 
         # Shutting down primary cluster nodes
         node_objs = get_node_objs()
@@ -108,8 +123,6 @@ class TestCnvApplicationMDR:
         secondary_cluster_name = get_current_secondary_cluster_name(
             self.wl_namespace, cnv_workloads[0].workload_type
         )
-
-        # TODO: Write a file or any IO inside VM
 
         # Fail-over the apps to secondary managed cluster
         for cnv_wl in cnv_workloads:
@@ -138,6 +151,15 @@ class TestCnvApplicationMDR:
                 phase=constants.STATUS_RUNNING,
             )
 
+        # Validating data integrity after failing-over VMs to secondary managed cluster
+        for count, cnv_wl in enumerate(cnv_workloads):
+            md5sum_fail_out = cal_md5sum_vm(
+                cnv_wl.vm_obj, file_name=filename, username=cnv_wl.vm_username
+            )
+            assert (
+                md5sum_original[count] == md5sum_fail_out
+            ), "Failed: MD5 comparison after Failover"
+
         # Start nodes if cluster is down
         wait_time = 120
         if primary_cluster_down:
@@ -158,8 +180,6 @@ class TestCnvApplicationMDR:
         )
         for cnv_wl in cnv_workloads:
             wait_for_all_resources_deletion(cnv_wl.workload_namespace)
-
-        # TODO: Validate Data integrity
 
         # Un-fence the managed cluster
         enable_unfence(drcluster_name=self.primary_cluster_name)
@@ -207,4 +227,11 @@ class TestCnvApplicationMDR:
                 phase=constants.STATUS_RUNNING,
             )
 
-        # TODO: Validate Data integrity
+        # Validating data integrity after relocating VMs back to primary managed cluster
+        for count, cnv_wl in enumerate(cnv_workloads):
+            md5sum_reloc = cal_md5sum_vm(
+                cnv_wl.vm_obj, file_name=filename, username=cnv_wl.vm_username
+            )
+            assert (
+                md5sum_original[count] == md5sum_reloc
+            ), "Failed: MD5 comparison after relocation"
