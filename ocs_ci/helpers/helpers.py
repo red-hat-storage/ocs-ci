@@ -1364,7 +1364,7 @@ def create_build_from_docker_image(
     install_package,
     namespace,
     source_image="quay.io/ocsci/fedora",
-    source_image_label="latest",
+    source_image_label="fio",
 ):
     """
     Allows to create a build config using a Dockerfile specified as an
