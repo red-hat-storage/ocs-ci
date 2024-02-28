@@ -1594,6 +1594,7 @@ RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
+CLI_TOOL_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
@@ -1604,8 +1605,10 @@ JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
-MCG_CLI_IMAGE_PRE_4_13 = "quay.io/rhceph-dev/mcg-cli"
-MCG_CLI_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
+MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
+MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
+ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
+ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf4-odf-cli-rhel9"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
