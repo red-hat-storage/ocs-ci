@@ -140,6 +140,10 @@ class NotSupportedFunctionError(Exception):
     pass
 
 
+class NotSupportedException(Exception):
+    pass
+
+
 class NonUpgradedImagesFoundError(Exception):
     pass
 
