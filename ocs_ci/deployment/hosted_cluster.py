@@ -33,6 +33,10 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         :param deploy_acm_hub: (bool) Deploy ACM Hub
         :param deploy_metallb: (bool) Deploy MetalLB
         :param download_hcp_binary: (bool) Download HCP binary
+
+        :returns:
+            str: Name of the hosted cluster
+            bool: True if hosted cluster is verified, False otherwise
         """
         if (
             not config.default_cluster_ctx.ENV_DATA["platform"].lower()
@@ -57,17 +61,37 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
             self.deploy_lb()
         if download_hcp_binary:
             self.download_hcp_binary()
-        self.create_kubevirt_OCP_cluster()
+        return self.create_kubevirt_OCP_cluster()
 
     def deploy_multiple_ocp_clusters(
         self,
-        cluster_count,
     ):
         """
         Deploy multiple hosted OCP clusters on provisioned Provider platform
-        :param cluster_count: (int) Number of clusters to deploy
         """
-        # TODO: finish the implementation
+        # we need to ensure that all dependencies are installed so for the first cluster we will install all operators
+        # and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP.
+
+        number_of_clusters_to_deploy = int(
+            config.default_cluster_ctx.ENV_DATA["number_of_clusters_to_deploy"]
+        )
+        logger.info(f"Deploying {number_of_clusters_to_deploy} clusters")
+        deployment_states = [self.deploy_ocp()]
+
+        number_of_clusters_to_deploy -= 1
+        if number_of_clusters_to_deploy == 0:
+            return
+
         with ThreadPoolExecutor() as executor:
-            for _ in range(cluster_count):
-                executor.submit(self.deploy_ocp)
+            for _ in range(number_of_clusters_to_deploy):
+                deployment_states.append(
+                    executor.submit(
+                        self.deploy_ocp,
+                        deploy_cnv=False,
+                        deploy_acm_hub=False,
+                        deploy_metallb=False,
+                        download_hcp_binary=False,
+                    )
+                )
+
+        logger.info(f"All deployment jobs finished: {deployment_states}")

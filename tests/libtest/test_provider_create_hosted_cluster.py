@@ -40,3 +40,11 @@ class TestProviderHosted(object):
         """
         logger.info("Test deploy hosted OCP on provider platform with cnv ready")
         HypershiftHostedOCP().deploy_ocp(deploy_cnv=False)
+
+    @hci_provider_required
+    def test_provider_deploy_OCP_hosted_multiple(self):
+        """
+        Test deploy hosted OCP on provider platform multiple times
+        """
+        logger.info("Test deploy hosted OCP on provider platform multiple times")
+        HypershiftHostedOCP().deploy_multiple_ocp_clusters()
