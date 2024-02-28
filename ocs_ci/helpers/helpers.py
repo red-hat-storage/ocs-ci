@@ -4522,16 +4522,11 @@ def retrieve_cli_binary(cli_type="mcg"):
         local_cli_path = constants.CLI_TOOL_LOCAL_PATH
     local_cli_dir = os.path.dirname(local_cli_path)
     live_deployment = config.DEPLOYMENT["live_deployment"]
-    if semantic_version >= version.VERSION_4_15:
-        if live_deployment:
+    if live_deployment and semantic_version >= version.VERSION_4_13:
+        if semantic_version >= version.VERSION_4_15:
             image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
         else:
-            image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
-    elif semantic_version >= version.VERSION_4_13:
-        if live_deployment:
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
-        else:
-            image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
     else:
         image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
