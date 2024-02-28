@@ -109,6 +109,10 @@ class HyperShiftBase(Deployment):
             cpu_cores (str): CPU cores of the cluster, minimum 6
             ocp_version (str): OCP version of the cluster, if not specified, will use the version from Hosting Platform
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
+
+        Returns:
+            str: Name of the hosted cluster
+            bool: True if hosted cluster is verified, False otherwise
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
@@ -146,15 +150,16 @@ class HyperShiftBase(Deployment):
         )
         exec_cmd(create_hcp_cluster_cmd)
 
-        self.verify_hosted_ocp_cluster_from_provider(name)
+        cluster_verified = self.verify_hosted_ocp_cluster_from_provider(name)
 
         logger.info("HyperShift hosted cluster node-pool creation completed")
+        return name, cluster_verified
 
     def verify_hosted_ocp_cluster_from_provider(self, name):
         """
         Verify HyperShift hosted cluster from provider
         :param name: hosted OCP cluster name
-        :return:
+        :return: True if hosted OCP cluster is verified, False otherwise
         """
         namespace = f"clusters-{name}"
         logger.info(
@@ -169,11 +174,31 @@ class HyperShiftBase(Deployment):
             {"app=redhat-operators-catalog": 1},
         ]
 
-        self.verify_pods_running(app_selectors_to_resource_count_list, namespace)
+        validation_passed = True
+        if not self.verify_pods_running(
+            app_selectors_to_resource_count_list, namespace
+        ):
+            logger.error(f"HyperShift hosted cluster '{name}' pods are not running")
+            validation_passed = False
+        else:
+            logger.info("HyperShift hosted cluster pods are running")
 
-        self.wait_hosted_cluster_completed(name)
-        logger.info("HyperShift hosted cluster create is OK")
-        self.wait_for_worker_nodes_to_be_ready(name)
+        if not self.wait_hosted_cluster_completed(name):
+            logger.error(
+                f"HyperShift hosted cluster '{name}' creation is not Completed"
+            )
+            validation_passed = False
+        else:
+            logger.info("HyperShift hosted cluster create is OK")
+
+        if not self.wait_for_worker_nodes_to_be_ready(name):
+            logger.error(
+                f"HyperShift hosted cluster '{name}' worker nodes are not ready"
+            )
+            validation_passed = False
+        else:
+            logger.info("HyperShift hosted cluster worker nodes are ready")
+        return validation_passed
 
     def verify_pods_running(self, app_selectors_to_resource_count_list, namespace):
         """
