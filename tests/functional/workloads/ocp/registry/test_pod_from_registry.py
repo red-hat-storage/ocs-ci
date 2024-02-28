@@ -26,7 +26,7 @@ class TestRegistryImage(E2ETest):
         pvc_obj = pvc_factory(size=self.pvc_size)
         image_obj = helpers.create_build_from_docker_image(
             namespace=pvc_obj.namespace,
-            source_image_label="latest",
+            source_image_label="fio",
             image_name="fio",
             install_package="fio",
         )
