@@ -64,7 +64,6 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
     get_nodes_in_statuses,
-    get_node_internal_ip,
 )
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
 from paramiko.ssh_exception import NoValidConnectionsError, AuthenticationException
@@ -3104,8 +3103,8 @@ class IBMCloudBMNodes(NodesBase):
             list: List of dictionaries. List of the machines associated with the given nodes
 
         """
-        node_ips = [get_node_internal_ip(n) for n in nodes]
-        return self.ibmcloud_bm.get_machines_by_ips(node_ips)
+        node_names = [n.name for n in nodes]
+        return self.ibmcloud_bm.get_machines_by_names(node_names)
 
     def stop_nodes(self, nodes, wait=True):
         """
