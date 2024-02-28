@@ -50,6 +50,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
     create_directory_path,
     exec_cmd,
+    get_ocs_build_number,
 )
 from ocs_ci.utility.utils import convert_device_size
 
@@ -4507,6 +4508,7 @@ def retrieve_cli_binary(cli_type="mcg"):
 
     """
     semantic_version = version.get_semantic_ocs_version_from_config()
+    ocs_build = get_ocs_build_number()
     if cli_type == "odf" and semantic_version < version.VERSION_4_15:
         raise NotSupportedException(
             f"odf cli tool not supported on ODF {semantic_version}"
@@ -4524,14 +4526,14 @@ def retrieve_cli_binary(cli_type="mcg"):
         if live_deployment:
             image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
         else:
-            image = f"{constants.ODF_CLI_DEV_IMAGE}:v{semantic_version}"
+            image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
     elif semantic_version >= version.VERSION_4_13:
         if live_deployment:
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
         else:
-            image = f"{constants.MCG_CLI_DEV_IMAGE}:v{semantic_version}"
+            image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
     else:
-        image = f"{constants.MCG_CLI_DEV_IMAGE}:v{semantic_version}"
+        image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
 
