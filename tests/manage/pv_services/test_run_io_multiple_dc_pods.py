@@ -42,7 +42,7 @@ class TestRunIOMultipleDcPods(ManageTest):
         Note:- Step 1,2,3,7 are not required if we deploy dc in openshift-storage namespace
     """
 
-    num_of_pvcs = 1
+    num_of_pvcs = 10
     pvc_size = 5
 
     @pytest.fixture()
