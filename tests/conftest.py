@@ -6528,6 +6528,7 @@ def cnv_dr_workload(request):
 
         Returns:
             list: objects of workload class
+
         """
         total_pvc_count = 0
         workload_types = [

@@ -170,6 +170,8 @@ def create_vm_secret(path=None, secret_name=None, namespace=constants.CNV_NAMESP
 
     Args:
         path (str): Path to the SSH public key file - optional
+        secret_name (str, optional): Name of the secret. If not provided, a unique name will be generated.
+        namespace (str, optional): Namespace in which the secret will be created. Defaults to constants.CNV_NAMESPACE.
 
     Returns:
         secret_obj: An OCS instance
