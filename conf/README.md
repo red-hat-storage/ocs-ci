@@ -263,6 +263,8 @@ higher priority).
 * `submariner_unreleased_channel` - submariner channel for unreleased downstream build
 * `enable_hw_virtualization` - enable hardware virtualization for vSphere platform.
 * `performance_profile` - performance profile to be used (balanced, lean, performance).
+* `noobaa_external_pgsql` - Set to True if external PgSQL server for noobaa should be used.
+  See AUTH and pgsql section there for additional data you need to provide via config.
 
 #### UPGRADE
 
@@ -282,6 +284,11 @@ This section of the config is used for storing secret data that is read from a l
 auth file or pulled from s3.
 
 * `test_quay_auth` - Config variable used during unit_testing
+* `pgsql` - Section for PostgreSQL section
+  * `host` - IP or hostname of PgSQL server
+  * `username` - username for database
+  * `password` - password of database user
+  * `port` - port where PgSQL server listen to
 
 #### MULTICLUSTER
 

@@ -744,6 +744,10 @@ EXTERNAL_CLUSTER_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-cluster-secret.yaml"
 )
 
+EXTERNAL_PGSQL_NOOBAA_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-pgsql-noobaa-secret.yaml"
+)
+
 OPERATOR_SOURCE_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
 )
@@ -1212,6 +1216,7 @@ config_keys_expressions_to_censor = [
     "ApplicationSecret",
     "LogsAnalyticsWorkspaceID",
     "TenantID",
+    "db_url",
 ]
 
 # packages
@@ -1259,6 +1264,7 @@ ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
+NOOBAA_POSTGRES_SECRET = "noobaa-pgsql-secret"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
 PDBSTATEMAP = "rook-ceph-pdbstatemap"

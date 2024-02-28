@@ -149,7 +149,7 @@ class PgsqlManager:
             )
             result = cursor.fetchone()
             if result is None:
-                print(f"Database '{db_name}' does not exist.")
+                logger.info(f"Database '{db_name}' does not exist.")
                 return
             # Drop the database
             cursor.execute(f"DROP DATABASE {db_name}")

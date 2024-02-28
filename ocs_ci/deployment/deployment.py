@@ -105,6 +105,7 @@ from ocs_ci.utility import (
     templating,
     ibmcloud,
     kms as KMS,
+    pgsql,
     version,
 )
 from ocs_ci.utility.aws import update_config_from_s3
@@ -1421,6 +1422,27 @@ class Deployment(object):
             merge_dict(
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
             )
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            pgsql_data = config.AUTH["pgsql"]
+            user = pgsql_data["username"]
+            password = pgsql_data["password"]
+            host = pgsql_data["host"]
+            port = pgsql_data["port"]
+            pgsql_manager = pgsql.PgsqlManager(
+                username=user,
+                password=password,
+                host=host,
+                port=port,
+            )
+            cluster_name = config.ENV_DATA["cluster_name"]
+            db_name = f"nbcore_{cluster_name.replace('-', '_')}"
+            pgsql_manager.create_database(
+                db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
+            )
+            create_external_pgsql_secret()
+            cluster_data["spec"]["multiCloudGateway"] = {
+                "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
+            }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -1433,6 +1455,26 @@ class Deployment(object):
                 command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
+
+    def cleanup_pgsql_db(self):
+        """
+        Perform cleanup for noobaa external pgsql DB in case external pgsq is enabled.
+        """
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            pgsql_data = config.AUTH["pgsql"]
+            user = pgsql_data["username"]
+            password = pgsql_data["password"]
+            host = pgsql_data["host"]
+            port = pgsql_data["port"]
+            pgsql_manager = pgsql.PgsqlManager(
+                username=user,
+                password=password,
+                host=host,
+                port=port,
+            )
+            cluster_name = config.ENV_DATA["cluster_name"]
+            db_name = f"nbcore_{cluster_name.replace('-', '_')}"
+            pgsql_manager.delete_database(db_name=db_name)
 
     def deploy_odf_addon(self):
         """
@@ -1889,7 +1931,10 @@ class Deployment(object):
             except Exception as ex:
                 logger.error(f"Failed to uninstall OCS. Exception is: {ex}")
                 logger.info("resuming teardown")
-            self.ocp_deployment.destroy(log_level)
+            try:
+                self.ocp_deployment.destroy(log_level)
+            finally:
+                self.cleanup_pgsql_db()
 
     def add_node(self):
         """
@@ -2065,6 +2110,30 @@ class Deployment(object):
             f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
         validate_acm_hub_install()
+
+
+def create_external_pgsql_secret():
+    """
+    Creates secret for external PgSQL to be used by Noobaa
+    """
+    secret_data = templating.load_yaml(constants.EXTERNAL_PGSQL_NOOBAA_SECRET_YAML)
+    secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    pgsql_data = config.AUTH["pgsql"]
+    user = pgsql_data["username"]
+    password = pgsql_data["password"]
+    host = pgsql_data["host"]
+    port = pgsql_data["port"]
+    cluster_name = config.ENV_DATA["cluster_name"].replace("-", "_")
+    secret_data["stringData"][
+        "db_url"
+    ] = f"postgres://{user}:{password}@{host}:{port}/nbcore_{cluster_name}"
+
+    secret_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="external_pgsql_noobaa_secret", delete=False
+    )
+    templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
+    logger.info("Creating external PgSQL Noobaa secret")
+    run_cmd(f"oc create -f {secret_data_yaml.name}")
 
 
 def validate_acm_hub_install():

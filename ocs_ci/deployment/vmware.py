@@ -1397,6 +1397,9 @@ class VSPHEREUPI(VSPHEREBASE):
             hosts = [f"{constants.SNO_NODE_NAME}.{config.ENV_DATA['cluster_name']}"]
             ipam.release_ips(hosts)
 
+        # Delete pgsql DB
+        self.cleanup_pgsql_db()
+
         # post destroy checks
         self.post_destroy_checks()
 
@@ -1573,6 +1576,9 @@ class VSPHEREIPI(VSPHEREBASE):
 
         # Delete DNS records
         delete_dns_records()
+
+        # Delete pgsql DB
+        self.cleanup_pgsql_db()
 
         # release the IP's
         ipam = IPAM(appiapp="address")
