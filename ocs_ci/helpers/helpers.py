@@ -14,10 +14,13 @@ import tempfile
 import threading
 import time
 import inspect
+import stat
+import platform
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from subprocess import PIPE, run
 from uuid import uuid4
+
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
@@ -32,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedBehaviour,
+    NotSupportedException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -44,8 +48,12 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
+    create_directory_path,
+    exec_cmd,
+    get_ocs_build_number,
 )
 from ocs_ci.utility.utils import convert_device_size
+
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -4486,3 +4494,104 @@ def verify_log_exist_in_pods_logs(
         if expected_log in pod_logs:
             return True
     return False
+
+
+def retrieve_cli_binary(cli_type="mcg"):
+    """
+    Download the MCG-CLI/ODF-CLI binary and store it locally.
+
+    Args:
+        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+
+    Raises:
+        AssertionError: In the case the CLI binary is not executable.
+
+    """
+    semantic_version = version.get_semantic_ocs_version_from_config()
+    ocs_build = get_ocs_build_number()
+    if cli_type == "odf" and semantic_version < version.VERSION_4_15:
+        raise NotSupportedException(
+            f"odf cli tool not supported on ODF {semantic_version}"
+        )
+
+    remote_path = get_architecture_path(cli_type)
+    remote_cli_basename = os.path.basename(remote_path)
+    if cli_type == "mcg":
+        local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+    elif cli_type == "odf":
+        local_cli_path = constants.CLI_TOOL_LOCAL_PATH
+    local_cli_dir = os.path.dirname(local_cli_path)
+    live_deployment = config.DEPLOYMENT["live_deployment"]
+    if live_deployment and semantic_version >= version.VERSION_4_13:
+        if semantic_version >= version.VERSION_4_15:
+            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+        else:
+            image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+    else:
+        image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
+
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    # create DATA_DIR if it doesn't exist
+    if not os.path.exists(constants.DATA_DIR):
+        create_directory_path(constants.DATA_DIR)
+
+    if not os.path.isfile(pull_secret_path):
+        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
+        exec_cmd(
+            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+            shell=True,
+        )
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    )
+    os.rename(
+        os.path.join(local_cli_dir, remote_cli_basename),
+        local_cli_path,
+    )
+    # Add an executable bit in order to allow usage of the binary
+    current_file_permissions = os.stat(local_cli_path)
+    os.chmod(
+        local_cli_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    # Make sure the binary was copied properly and has the correct permissions
+    assert os.path.isfile(
+        local_cli_path
+    ), f"{cli_type} CLI file not found at {local_cli_path}"
+    assert os.access(
+        local_cli_path, os.X_OK
+    ), f"The {cli_type} CLI binary does not have execution permissions"
+
+
+def get_architecture_path(cli_type):
+    """
+    Get Architcture path
+
+    Args:
+        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+
+    Returns:
+        (str): path of MCG/ODF CLI Binary in the image.
+    """
+    system = platform.system()
+    machine = platform.machine()
+    path = f"/usr/share/{cli_type}/"
+    if cli_type == "mcg":
+        image_prefix = "noobaa"
+    elif cli_type == "odf":
+        image_prefix = "odf"
+    if system == "Linux":
+        path = os.path.join(path, "linux")
+        if machine == "x86_64":
+            path = os.path.join(path, f"{image_prefix}-amd64")
+        elif machine == "ppc64le":
+            path = os.path.join(path, f"{image_prefix}-ppc64le")
+        elif machine == "s390x":
+            path = os.path.join(path, f"{image_prefix}-s390x")
+    elif system == "Darwin":  # Mac
+        path = os.path.join(path, "macosx", image_prefix)
+    return path
