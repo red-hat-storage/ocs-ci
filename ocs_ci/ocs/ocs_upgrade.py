@@ -18,7 +18,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
 )
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import (
     EXTERNAL_CLUSTER_USER,
@@ -29,7 +29,11 @@ from ocs_ci.ocs.defaults import (
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
-from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.csv import (
+    CSV,
+    check_all_csvs_are_succeeded,
+    get_csvs_start_with_prefix,
+)
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -400,7 +404,7 @@ class OCSUpgrade(object):
 
         return channel
 
-    def update_subscription(self, channel):
+    def update_subscription(self, channel, subscription_name=None):
         """
         Updating OCS operator subscription
 
@@ -408,10 +412,11 @@ class OCSUpgrade(object):
             channel: (str): OCS subscription channel
 
         """
-        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
-            subscription_name = constants.ODF_SUBSCRIPTION
-        else:
-            subscription_name = constants.OCS_SUBSCRIPTION
+        if not subscription_name:
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
+                subscription_name = constants.ODF_SUBSCRIPTION
+            else:
+                subscription_name = constants.OCS_SUBSCRIPTION
         subscription = OCP(
             resource_name=subscription_name,
             kind="subscription",
@@ -811,3 +816,87 @@ def ocs_odf_upgrade_ui():
     val_obj.take_screenshot()
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
+
+
+def client_upgrade(
+    operation=None,
+    *operation_args,
+    **operation_kwargs,
+):
+    """
+    Run upgrade procedure of OCS client cluster
+
+    Args:
+        operation: (function): Function to run if any
+        operation_args: (iterable): Function's arguments
+        operation_kwargs: (map): Function's keyword arguments
+
+    """
+
+    original_ocs_client_version = config.ENV_DATA.get("ocs_version")
+    upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
+    upgrade_client = OCSUpgrade(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        version_before_upgrade=original_ocs_client_version,
+        ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
+        upgrade_in_current_source=upgrade_in_current_source,
+    )
+    upgrade_version = upgrade_client.get_upgrade_version()
+    assert (
+        upgrade_client.get_parsed_versions()[1]
+        > upgrade_client.get_parsed_versions()[0]
+    ), f"Version to upgrade to is {upgrade_version}, which is not higher than the current version {upgrade_client.version_before_upgrade}"
+
+    csv_name_pre_upgrade = get_csvs_start_with_prefix(
+        csv_prefix=defaults.OCS_CLIENT_OPERATOR_NAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    pre_upgrade_images = upgrade_client.get_pre_upgrade_image(csv_name_pre_upgrade)
+    upgrade_client.load_version_config_file(upgrade_version)
+
+    package_manifest = PackageManifest(
+        resource_name=defaults.OCS_CLIENT_OPERATOR_NAME,
+        selector=constants.OPERATOR_INTERNAL_SELECTOR,
+    )
+    package_manifest.wait_for_resource()
+    channel = config.DEPLOYMENT.get("ocs_csv_channel")
+    if not channel:
+        channel = package_manifest.get_default_channel()
+
+    upgrade_client.set_upgrade_images()
+    upgrade_client.update_subscription(
+        channel, subscription_name=constants.OCS_CLIENT_SUBSCRIPTION
+    )
+
+    subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
+    if subscription_plan_approval == "Manual":
+        wait_for_install_plan_and_approve(config.ENV_DATA["cluster_namespace"])
+    if operation:
+        log.info(f"Calling test function: {operation}")
+        _ = operation(*operation_args, **operation_kwargs)
+        # Workaround for issue #2531
+        time.sleep(30)
+
+    # TODO: Verify CSVs are new
+    for sample in TimeoutSampler(
+        timeout=700,
+        sleep=5,
+        func=check_all_csvs_are_succeeded,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    ):
+        try:
+            if sample:
+                log.info("CSVs succeeded!")
+                break
+        except TimeoutException:
+            raise TimeoutException("CSVs not updated!")
+
+    # TODO: Verify images
+
+    ocs_install_verification(
+        timeout=600,
+        skip_osd_distribution_check=True,
+        ocs_registry_image=upgrade_client.ocs_registry_image,
+        post_upgrade_verification=True,
+        version_before_upgrade=upgrade_client.version_before_upgrade,
+    )
