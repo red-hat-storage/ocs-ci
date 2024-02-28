@@ -172,11 +172,13 @@ class AcmAddClusters(AcmPageNavigator):
                 ]
             )
 
-            resp = requests.get(submariner_full_url, verify=False)
-            raw_msg = resp.json()["raw_messages"]
-            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-                f"v{get_ocp_version()}"
-            ].split(":")[1]
+            version_tag = config.ENV_DATA.get("submariner_unreleased_image", None)
+            if version_tag is None:
+                resp = requests.get(submariner_full_url, verify=False)
+                raw_msg = resp.json()["raw_messages"]
+                version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
+                    f"v{get_ocp_version()}"
+                ].split(":")[1]
             submariner_downstream_unreleased["spec"]["image"] = ":".join(
                 [constants.SUBMARINER_BREW_REPO, version_tag]
             )
