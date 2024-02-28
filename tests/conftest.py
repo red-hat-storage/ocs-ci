@@ -6527,7 +6527,7 @@ def cnv_dr_workload(request):
             ResourceNotDeleted: In case workload resources not deleted properly
 
         Returns:
-            list: objects of workload class.
+            list: objects of workload class
         """
         total_pvc_count = 0
         workload_types = [
