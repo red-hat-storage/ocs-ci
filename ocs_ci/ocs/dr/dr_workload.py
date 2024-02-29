@@ -512,6 +512,10 @@ class CnvWorkload(DRWorkload):
     """
 
     def __init__(self, **kwargs):
+        """
+        Initialize CnvWorkload instance
+
+        """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
         super().__init__("cnv", workload_repo_url, workload_repo_branch)
@@ -520,12 +524,10 @@ class CnvWorkload(DRWorkload):
         self.vm_name = kwargs.get("vm_name")
         self.vm_secret_name = kwargs.get("vm_secret")
         self.vm_secret_obj = None
+        self.vm_obj = None
         self.vm_username = kwargs.get("vm_username")
         self.workload_type = kwargs.get("workload_type")
-        self.workload_namespace = self._get_workload_namespace()
-        self.vm_obj = VirtualMachine(
-            vm_name=self.vm_name, namespace=self.workload_namespace
-        )
+        self.workload_namespace = kwargs.get("workload_namespace", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
@@ -553,6 +555,10 @@ class CnvWorkload(DRWorkload):
 
         """
         self._deploy_prereqs()
+        self.workload_namespace = self._get_workload_namespace()
+        self.vm_obj = VirtualMachine(
+            vm_name=self.vm_name, namespace=self.workload_namespace
+        )
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])

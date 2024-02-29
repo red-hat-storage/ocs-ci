@@ -156,6 +156,9 @@ class TestCnvApplicationMDR:
             md5sum_fail_out = cal_md5sum_vm(
                 cnv_wl.vm_obj, file_name=filename, username=cnv_wl.vm_username
             )
+            logger.info(
+                f"Validating MD5sum of file {filename} on VM: {cnv_wl.workload_name}"
+            )
             assert (
                 md5sum_original[count] == md5sum_fail_out
             ), "Failed: MD5 comparison after Failover"
@@ -231,6 +234,9 @@ class TestCnvApplicationMDR:
         for count, cnv_wl in enumerate(cnv_workloads):
             md5sum_reloc = cal_md5sum_vm(
                 cnv_wl.vm_obj, file_name=filename, username=cnv_wl.vm_username
+            )
+            logger.info(
+                f"Validating MD5sum of file {filename} on VM: {cnv_wl.workload_name}"
             )
             assert (
                 md5sum_original[count] == md5sum_reloc
