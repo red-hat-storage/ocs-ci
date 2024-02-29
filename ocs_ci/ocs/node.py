@@ -231,13 +231,14 @@ def schedule_nodes(node_names):
     wait_for_nodes_status(node_names)
 
 
-def drain_nodes(node_names, timeout=1800):
+def drain_nodes(node_names, timeout=1800, disable_eviction=False):
     """
     Drain nodes
 
     Args:
         node_names (list): The names of the nodes
         timeout (int): Time to wait for the drain nodes 'oc' command
+        disable_eviction (bool): On True will delete pod that is protected by PDB, False by default
 
     Raises:
         TimeoutExpired: in case drain command fails to complete in time
@@ -253,11 +254,18 @@ def drain_nodes(node_names, timeout=1800):
             >= version.VERSION_4_7
             else "--delete-local-data"
         )
-        ocp.exec_oc_cmd(
-            f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-            f"{drain_deletion_flag}",
-            timeout=timeout,
-        )
+        if disable_eviction:
+            ocp.exec_oc_cmd(
+                f"adm drain {node_names_str} --force=true --ignore-daemonsets "
+                f"{drain_deletion_flag} --disable-eviction",
+                timeout=timeout,
+            )
+        else:
+            ocp.exec_oc_cmd(
+                f"adm drain {node_names_str} --force=true --ignore-daemonsets "
+                f"{drain_deletion_flag}",
+                timeout=timeout,
+            )
     except TimeoutExpired:
         ct_pod = pod.get_ceph_tools_pod()
         ceph_status = ct_pod.exec_cmd_on_pod("ceph status", out_yaml_format=False)
@@ -2756,10 +2764,13 @@ def generate_nodes_for_provider_worker_node_tests():
     return generated_nodes
 
 
-def gracefully_reboot_nodes():
+def gracefully_reboot_nodes(disable_eviction=False):
     """
 
     Gracefully reboot OpenShift Container Platform nodes
+
+    Args:
+        disable_eviction (bool): On True will delete pod that is protected by PDB, False by default
 
     """
     from ocs_ci.ocs import platform_nodes
@@ -2771,12 +2782,14 @@ def gracefully_reboot_nodes():
     for node in node_objs:
         node_name = node.name
         unschedule_nodes([node_name])
-        drain_nodes([node_name])
+        drain_nodes(node_names=[node_name], disable_eviction=disable_eviction)
         nodes.restart_nodes([node], wait=False)
         log.info(f"Waiting for {waiting_time} seconds")
         time.sleep(waiting_time)
         schedule_nodes([node_name])
-    wait_for_nodes_status(status=constants.NODE_READY, timeout=180)
+        wait_for_nodes_status(
+            node_names=[node], status=constants.NODE_READY, timeout=1800
+        )
 
 
 def get_num_of_racks():

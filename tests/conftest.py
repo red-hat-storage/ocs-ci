@@ -6429,9 +6429,13 @@ def dr_workload(request):
 
     """
     instances = []
+    ctx = []
 
     def factory(
-        num_of_subscription=1, num_of_appset=0, pvc_interface=constants.CEPHBLOCKPOOL
+        num_of_subscription=1,
+        num_of_appset=0,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        switch_ctx=None,
     ):
         """
         Args:
@@ -6439,6 +6443,7 @@ def dr_workload(request):
             num_of_appset (int): Number of ApplicationSet type workload to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
+            switch_ctx (int): The cluster index by the cluster name
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -6482,13 +6487,14 @@ def dr_workload(request):
                 dr_helpers.wait_for_mirroring_status_ok(
                     replaying_images=total_pvc_count
                 )
+        ctx.append(switch_ctx)
         return instances
 
     def teardown():
         failed_to_delete = False
         for instance in instances:
             try:
-                instance.delete_workload(force=True)
+                instance.delete_workload(switch_ctx=ctx[0], force=True)
             except ResourceNotDeleted:
                 failed_to_delete = True
 

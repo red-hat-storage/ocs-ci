@@ -919,6 +919,7 @@ DR_AWS_S3_PROFILE_YAML = os.path.join(
 DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
 DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
+DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
 MDR_MODE = "metro-dr"
 MDR_DR_POLICY = "odr-policy-mdr"
@@ -2273,6 +2274,7 @@ GITOPS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
 ACM_HUB_BACKUP_NAMESPACE = "open-cluster-management-backup"
+ACM_HUB_RESTORE = "Restore"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
