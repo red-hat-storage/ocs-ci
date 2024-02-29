@@ -45,11 +45,17 @@ def test_change_client_ocs_version_and_stop_heartbeat(
         {
             "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
             "msg": f"Storage Client ({client_name}) heartbeat missed for more than 120 (s)",
+            "severity": "warning",
+        },
+        {
+            "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
+            "msg": f"Storage Client ({client_name}) heartbeat missed for more than 300 (s)",
+            "severity": "error",
         },
         {
             "label": constants.ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION,
-            "msg": f"Storage Client Operator ({client_name}) differs by more "
-            "than 1 minor version. Client configuration may be incompatible and unsupported",
+            "msg": f"Storage Client Operator ({client_name}) differs by more than 1 minor version",
+            "severity": "error",
         },
     ]
     states = ["firing"]
@@ -60,14 +66,7 @@ def test_change_client_ocs_version_and_stop_heartbeat(
             msg=target_alert["msg"],
             alerts=alerts,
             states=states,
-            severity="error",
-        )
-        prometheus.check_alert_list(
-            label=target_alert["label"],
-            msg=target_alert["msg"],
-            alerts=alerts,
-            states=states,
-            severity="warning",
+            severity=target_alert["severity"],
         )
         api.check_alert_cleared(
             label=target_alert["label"],
