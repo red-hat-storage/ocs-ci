@@ -27,6 +27,7 @@ from ocs_ci.utility.utils import (
     delete_file,
     download_file,
     exec_cmd,
+    get_infra_id_from_openshift_install_state,
 )
 
 
@@ -226,10 +227,13 @@ class IBMCloudIPI(CloudDeploymentBase):
         )
         exec_cmd(cmd)
 
+        # get infraID
+        infra_id = get_infra_id_from_openshift_install_state(self.cluster_path)
+
         logger.info("Creating service ID")
         cmd = (
             f"ccoctl ibmcloud create-service-id --credentials-requests-dir {self.credentials_requests_dir} "
-            f"--name {self.cluster_name} --output-dir {self.cluster_path}"
+            f"--name {infra_id} --output-dir {self.cluster_path}"
         )
         exec_cmd(cmd)
 

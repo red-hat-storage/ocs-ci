@@ -5,17 +5,17 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'ibm_cloud'
   deployment_type: 'ipi'
-  region: 'us-south'
+  region: 'us-east'
   base_domain: 'ibmcloud2.qe.rh-ocs.com'
   worker_instance_type: 'bx2-16x64'
   worker_availability_zones:
-    - 'us-south-1'
-    - 'us-south-2'
-    - 'us-south-3'
+    - 'us-east-1'
+    - 'us-east-2'
+    - 'us-east-3'
   master_availability_zones:
-    - 'us-south-1'
-    - 'us-south-2'
-    - 'us-south-3'
+    - 'us-east-1'
+    - 'us-east-2'
+    - 'us-east-3'
   worker_replicas: 3
   master_replicas: 3
 
