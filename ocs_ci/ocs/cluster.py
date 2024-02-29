@@ -1267,8 +1267,10 @@ def validate_pdb_creation():
             constants.MON_PDB,
             constants.OSD_PDB,
             constants.MGR_PDB,
-            constants.RGW_PDB,
         ]
+        if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
+            pdb_required.append(constants.RGW_PDB)
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
