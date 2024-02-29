@@ -42,15 +42,19 @@ class BackingStore:
 
     def __init__(
         self,
-        name,
-        method,
-        type,
+        name="",
+        method="oc",
+        type="cloud",
         uls_name=None,
         secret_name=None,
         mcg_obj=None,
         vol_num=None,
         vol_size=None,
     ):
+        if not name:
+            name = create_unique_resource_name(
+                resource_description="backingstore", resource_type=type
+            )
         self.name = name
         self.method = method
         self.type = type
@@ -297,101 +301,65 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             list: A list of backingstore names.
 
         """
-        current_call_created_backingstores = []
+        # Validate arguments
         if method.lower() not in cmdMap:
             raise RuntimeError(
                 f"Invalid method type received: {method}. "
                 f'available types: {", ".join(cmdMap.keys())}'
             )
+        for cloud, _ in uls_dict.items():
+            if cloud.lower() not in cmdMap[method]:
+                raise RuntimeError(
+                    f"Invalid cloud type received: {cloud}. "
+                    f'available types: {", ".join(cmdMap[method].keys())}'
+                )
+        method = method.lower()
+        cloud = cloud.lower()
+
+        current_call_backingstore_count = sum(
+            1 if cloud == "pv" else len(uls_lst) for cloud, uls_lst in uls_dict.items()
+        )
+
         for cloud, uls_lst in uls_dict.items():
             for uls_tup in uls_lst:
-                # Todo: Replace multiple .append calls, create names in advance, according to amountoc
-                if cloud.lower() not in cmdMap[method.lower()]:
-                    raise RuntimeError(
-                        f"Invalid cloud type received: {cloud}. "
-                        f'available types: {", ".join(cmdMap[method.lower()].keys())}'
-                    )
                 if cloud == "pv":
-                    if len(uls_tup) == 3:
-                        vol_num, size, storagecluster = uls_tup
-                        req_cpu, req_mem, lim_cpu, lim_mem = (None, None, None, None)
-                    else:
-                        (
-                            vol_num,
-                            size,
-                            storagecluster,
-                            req_cpu,
-                            req_mem,
-                            lim_cpu,
-                            lim_mem,
-                        ) = uls_tup
-                    if (
-                        storagecluster == constants.DEFAULT_STORAGECLASS_RBD
-                        and storagecluster_independent_check()
-                    ):
-                        storagecluster = (
-                            constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
-                        )
-                    backingstore_name = create_unique_resource_name(
-                        resource_description="backingstore", resource_type=cloud.lower()
+                    backingstore_obj = _create_pv_backingstore(
+                        mcg_obj,
+                        created_backingstores,
+                        uls_tup,
+                        method,
                     )
-                    backingstore_obj = BackingStore(
-                        name=backingstore_name,
-                        method=method.lower(),
-                        type="pv",
-                        mcg_obj=mcg_obj,
-                        vol_num=vol_num,
-                        vol_size=size,
-                    )
-                    current_call_created_backingstores.append(backingstore_obj)
-                    created_backingstores.append(backingstore_obj)
-                    if method.lower() == "cli":
-                        cmdMap[method.lower()][cloud.lower()](
-                            mcg_obj,
-                            backingstore_name,
-                            vol_num,
-                            size,
-                            storagecluster,
-                            req_cpu=req_cpu,
-                            req_mem=req_mem,
-                            lim_cpu=lim_cpu,
-                            lim_mem=lim_mem,
-                        )
-                    else:
-                        cmdMap[method.lower()][cloud.lower()](
-                            backingstore_name, vol_num, size, storagecluster
-                        )
                 else:
                     _, region = uls_tup
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
-                    for uls_name in uls_dict[cloud.lower()]:
-                        backingstore_name = create_unique_resource_name(
-                            resource_description="backingstore",
-                            resource_type=cloud.lower(),
-                        )
+                    for uls_name in uls_dict[cloud]:
                         backingstore_obj = BackingStore(
-                            name=backingstore_name,
-                            method=method.lower(),
-                            type="cloud",
+                            method=method,
+                            type=cloud,
                             uls_name=uls_name,
                             mcg_obj=mcg_obj,
                         )
-                        current_call_created_backingstores.append(backingstore_obj)
                         created_backingstores.append(backingstore_obj)
-                        if method.lower() == "cli":
-                            cmdMap[method.lower()][cloud.lower()](
+                        backingstore_name = backingstore_obj.name
+
+                        if method == "cli":
+                            cmdMap[method][cloud](
                                 mcg_obj, cld_mgr, backingstore_name, uls_name, region
                             )
-                        elif method.lower() == "oc":
-                            cmdMap[method.lower()][cloud.lower()](
+                        elif method == "oc":
+                            cmdMap[method][cloud](
                                 cld_mgr, backingstore_name, uls_name, region
                             )
                         mcg_obj.check_backingstore_state(
                             backingstore_name, constants.BS_OPTIMAL
                         )
-                        # TODO: Verify OC\CLI BS health by using the appropriate methods
 
-        return current_call_created_backingstores
+        current_call_backingstores = []
+        if current_call_backingstore_count > 0:
+            current_call_backingstores = current_call_backingstores[
+                current_call_backingstore_count:
+            ]
+        return current_call_backingstores
 
     def backingstore_cleanup():
         for backingstore in created_backingstores:
@@ -409,3 +377,57 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     request.addfinalizer(backingstore_cleanup)
 
     return _create_backingstore
+
+
+def _create_pv_backingstore(mcg_obj, created_backingstores, uls_tup, method):
+    """
+    Create a PV Backing Store
+
+    Args:
+        mcg_obj (MCG): MCG object containing data and utils
+            related to MCG
+        created_backingstores (list): List of backing stores created in the current scope
+        uls_tup (tuple): Tuple containing the amount of volumes, size in GB and storagecluster
+        method (str): Method of creation (CLI/OC)
+
+    """
+    cmdMap = {
+        "oc": oc_create_pv_backingstore,
+        "cli": cli_create_pv_backingstore,
+    }
+
+    # Unpack optional specs to the resource_specs list
+    vol_num, size, storagecluster, *resource_specs = uls_tup
+    # Ensure resource_specs has 4 elements, padding with None if necessary
+    resource_specs = (resource_specs + [None] * 4)[:4]
+    req_cpu, req_mem, lim_cpu, lim_mem = resource_specs
+
+    if (
+        storagecluster == constants.DEFAULT_STORAGECLASS_RBD
+        and storagecluster_independent_check()
+    ):
+        storagecluster = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+
+    backingstore_obj = BackingStore(
+        method=method,
+        type="pv",
+        mcg_obj=mcg_obj,
+        vol_num=vol_num,
+        vol_size=size,
+    )
+    created_backingstores.append(backingstore_obj)
+    backingstore_name = backingstore_obj.name
+    if method == "cli":
+        cmdMap[method](
+            mcg_obj,
+            backingstore_name,
+            vol_num,
+            size,
+            storagecluster,
+            req_cpu=req_cpu,
+            req_mem=req_mem,
+            lim_cpu=lim_cpu,
+            lim_mem=lim_mem,
+        )
+    else:
+        cmdMap[method](backingstore_name, vol_num, size, storagecluster)

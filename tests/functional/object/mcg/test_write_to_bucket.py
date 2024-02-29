@@ -149,6 +149,16 @@ class TestBucketIO(MCGTest):
                 ],
                 marks=[tier1, on_prem_platform_required],
             ),
+            pytest.param(
+                *[
+                    "OC",
+                    {
+                        "interface": "CLI",
+                        "backingstore_dict": {"rgw": [(1, "secure-endpoint")]},
+                    },
+                ],
+                marks=[tier1, on_prem_platform_required],
+            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
@@ -159,6 +169,7 @@ class TestBucketIO(MCGTest):
             "IBMCOS-CLI-1",
             "RGW-OC-1",
             "RGW-CLI-1",
+            "RGW-SECURE-OC-1",
         ],
     )
     @flaky
