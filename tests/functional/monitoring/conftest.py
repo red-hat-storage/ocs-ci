@@ -1177,7 +1177,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         nonlocal client
         nonlocal original_cluster
         # run_time of operation
-        run_time = 60 * 3
+        run_time = 60 * 7
         client.stop_heartbeat()
         client.set_ocs_version("4.13.0")
         logger.info(f"Waiting for {run_time} seconds")
