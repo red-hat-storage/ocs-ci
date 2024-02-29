@@ -1,13 +1,14 @@
 import base64
 import json
 import logging
-from abc import ABC, abstractmethod
 import tempfile
+from abc import ABC, abstractmethod
 
 import boto3
 import botocore
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import get_current_test_marks
 from ocs_ci.helpers.helpers import (
     create_resource,
     create_unique_resource_name,
@@ -225,7 +226,11 @@ class ObjectBucket(ABC):
             logger.warning(f"{self.name} deletion timed out. Verifying deletion.")
             verify = True
         if verify:
-            self.verify_deletion()
+            # Increae the timeout to 15 minutes if the test is tier4
+            timeout = 60
+            if any("tier4" in mark for mark in get_current_test_marks()):
+                timeout *= 15
+            self.verify_deletion(timeout)
         if original_context:
             config.switch_ctx(original_context)
 
@@ -247,6 +252,7 @@ class ObjectBucket(ABC):
 
         """
         logger.info(f"Verifying deletion of {self.name}")
+
         try:
             for del_check in TimeoutSampler(
                 timeout, interval, self.internal_verify_deletion
