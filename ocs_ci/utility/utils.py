@@ -2998,6 +2998,23 @@ def get_infra_id(cluster_path):
     return metadata["infraID"]
 
 
+def get_infra_id_from_openshift_install_state(cluster_path):
+    """
+    Get infraID from openshift_install_state.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: cluster infraID
+
+    """
+    metadata_file = os.path.join(cluster_path, ".openshift_install_state.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["*installconfig.ClusterID"]["InfraID"]
+
+
 def get_cluster_name(cluster_path):
     """
     Get clusterName from metadata.json in given cluster_path
