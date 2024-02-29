@@ -1321,7 +1321,8 @@ MGR_PDB = "rook-ceph-mgr-pdb"
 RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
 PDB_COUNT = 3
 PDB_COUNT_2_MGR = 4
-PDB_COUNT_ARBITER = 5
+PDB_COUNT_ARBITER = 4
+PDB_COUNT_ARBITER_VSPHERE = 5
 
 # MGR COUNT
 MGR_COUNT = 1
