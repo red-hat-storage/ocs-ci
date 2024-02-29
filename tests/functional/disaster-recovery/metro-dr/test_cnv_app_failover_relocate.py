@@ -86,7 +86,7 @@ class TestCnvApplicationMDR:
         """
         # Create CNV applications(appset+sub)
         md5sum_original = []
-        filename = "dd_file.txt"
+        filepath = "dd_file.txt"
 
         cnv_workloads = cnv_dr_workload(num_of_vm_subscription=1, num_of_vm_appset=1)
         self.wl_namespace = cnv_workloads[0].workload_namespace
@@ -105,7 +105,7 @@ class TestCnvApplicationMDR:
             md5sum_original.append(
                 run_dd_io(
                     cnv_wl.vm_obj,
-                    file_name=filename,
+                    file_path=filepath,
                     username=cnv_wl.vm_username,
                     verify=True,
                 )
@@ -154,10 +154,10 @@ class TestCnvApplicationMDR:
         # Validating data integrity after failing-over VMs to secondary managed cluster
         for count, cnv_wl in enumerate(cnv_workloads):
             md5sum_fail_out = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_name=filename, username=cnv_wl.vm_username
+                cnv_wl.vm_obj, file_path=filepath, username=cnv_wl.vm_username
             )
             logger.info(
-                f"Validating MD5sum of file {filename} on VM: {cnv_wl.workload_name}"
+                f"Validating MD5sum of file {filepath} on VM: {cnv_wl.workload_name}"
             )
             assert (
                 md5sum_original[count] == md5sum_fail_out
@@ -233,10 +233,10 @@ class TestCnvApplicationMDR:
         # Validating data integrity after relocating VMs back to primary managed cluster
         for count, cnv_wl in enumerate(cnv_workloads):
             md5sum_reloc = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_name=filename, username=cnv_wl.vm_username
+                cnv_wl.vm_obj, file_path=filepath, username=cnv_wl.vm_username
             )
             logger.info(
-                f"Validating MD5sum of file {filename} on VM: {cnv_wl.workload_name}"
+                f"Validating MD5sum of file {filepath} on VM: {cnv_wl.workload_name}"
             )
             assert (
                 md5sum_original[count] == md5sum_reloc
