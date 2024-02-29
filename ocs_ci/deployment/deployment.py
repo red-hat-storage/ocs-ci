@@ -220,6 +220,52 @@ class Deployment(object):
             submariner = Submariner()
             submariner.deploy()
 
+    def deploy_gitops_operator(self, switch_ctx=None):
+        """
+        Deploy GitOps operator
+
+        Args:
+            switch_ctx (int): The cluster index by the cluster name
+
+        """
+        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+
+        logger.info("Creating GitOps Operator Subscription")
+        gitops_subscription_yaml_data = templating.load_yaml(
+            constants.GITOPS_SUBSCRIPTION_YAML
+        )
+        package_manifest = PackageManifest(
+            resource_name=constants.GITOPS_OPERATOR_NAME,
+        )
+        gitops_subscription_yaml_data["spec"][
+            "startingCSV"
+        ] = package_manifest.get_current_csv(
+            channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
+        )
+
+        gitops_subscription_manifest = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="gitops_subscription_manifest", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            gitops_subscription_yaml_data, gitops_subscription_manifest.name
+        )
+        run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
+
+        self.wait_for_subscription(
+            constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
+        )
+        logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
+        time.sleep(90)
+        subscriptions = ocp.OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            resource_name=constants.GITOPS_OPERATOR_NAME,
+            namespace=constants.OPENSHIFT_OPERATORS,
+        ).get()
+        gitops_csv_name = subscriptions["status"]["currentCSV"]
+        csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)
+        csv.wait_for_phase("Succeeded", timeout=720)
+        logger.info("GitOps Operator Deployment Succeeded")
+
     def do_gitops_deploy(self):
         """
         Deploy GitOps operator
@@ -233,43 +279,7 @@ class Deployment(object):
         # Multicluster operations
         if config.multicluster:
             config.switch_acm_ctx()
-            logger.info("Creating GitOps Operator Subscription")
-            gitops_subscription_yaml_data = templating.load_yaml(
-                constants.GITOPS_SUBSCRIPTION_YAML
-            )
-            package_manifest = PackageManifest(
-                resource_name=constants.GITOPS_OPERATOR_NAME,
-            )
-            gitops_subscription_yaml_data["spec"][
-                "startingCSV"
-            ] = package_manifest.get_current_csv(
-                channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
-            )
-
-            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="gitops_subscription_manifest", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                gitops_subscription_yaml_data, gitops_subscription_manifest.name
-            )
-            run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
-
-            self.wait_for_subscription(
-                constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
-            )
-            logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
-            time.sleep(90)
-            subscriptions = ocp.OCP(
-                kind=constants.SUBSCRIPTION_WITH_ACM,
-                resource_name=constants.GITOPS_OPERATOR_NAME,
-                namespace=constants.OPENSHIFT_OPERATORS,
-            ).get()
-            gitops_csv_name = subscriptions["status"]["currentCSV"]
-            csv = CSV(
-                resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE
-            )
-            csv.wait_for_phase("Succeeded", timeout=720)
-            logger.info("GitOps Operator Deployment Succeeded")
+            self.deploy_gitops_operator()
 
             logger.info("Creating GitOps CLuster Resource")
             run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")

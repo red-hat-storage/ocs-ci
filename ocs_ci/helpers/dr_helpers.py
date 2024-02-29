@@ -7,7 +7,7 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
@@ -17,8 +17,10 @@ from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
     get_primary_cluster_config,
+    get_passive_acm_index,
 )
 from ocs_ci.utility import version, templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
 
 logger = logging.getLogger(__name__)
@@ -131,6 +133,7 @@ def failover(
     namespace,
     workload_type=constants.SUBSCRIPTION,
     workload_placement_name=None,
+    switch_ctx=None,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -140,10 +143,11 @@ def failover(
         namespace (str): Namespace where workload is running
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
@@ -171,6 +175,7 @@ def relocate(
     namespace,
     workload_type=constants.SUBSCRIPTION,
     workload_placement_name=None,
+    switch_ctx=None,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -180,10 +185,11 @@ def relocate(
         namespace (str): Namespace where workload is running
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","preferredCluster":"{preferred_cluster}"}}}}'
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
@@ -835,13 +841,14 @@ def get_managed_cluster_node_ips():
     return cluster_data
 
 
-def enable_fence(drcluster_name):
+def enable_fence(drcluster_name, switch_ctx=None):
     """
     Once the managed cluster is fenced, all communication
     from applications to the ODF external storage cluster will fail
 
     Args:
         drcluster_name (str): Name of the DRcluster which needs to be fenced
+        switch_ctx (int): The cluster index by the cluster name
 
     """
 
@@ -849,7 +856,7 @@ def enable_fence(drcluster_name):
         f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
     )
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=fence_params, format_type="merge"):
@@ -888,13 +895,14 @@ def configure_drcluster_for_fencing():
     config.switch_ctx(old_ctx)
 
 
-def enable_unfence(drcluster_name):
+def enable_unfence(drcluster_name, switch_ctx=None):
     """
     The OpenShift cluster to be Unfenced is the one where applications
     are not currently running and the cluster that was Fenced earlier.
 
     Args:
         drcluster_name (str): Name of the DRcluster which needs to be fenced
+        switch_ctx (int): The cluster index by the cluster name
 
     """
 
@@ -902,7 +910,7 @@ def enable_unfence(drcluster_name):
         f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
     )
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     unfence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_UNFENCE}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=unfence_params, format_type="merge"):
@@ -911,13 +919,14 @@ def enable_unfence(drcluster_name):
     config.switch_ctx(restore_index)
 
 
-def fence_state(drcluster_name, fence_state):
+def fence_state(drcluster_name, fence_state, switch_ctx=None):
     """
     Sets the specified clusterFence state
 
     Args:
        drcluster_name (str): Name of the DRcluster which needs to be fenced
        fence_state (str): Specify the clusterfence state either constants.ACTION_UNFENCE and ACTION_FENCE
+       switch_ctx (int): The cluster index by the cluster name
 
     """
 
@@ -925,7 +934,7 @@ def fence_state(drcluster_name, fence_state):
         f"Edit the DRCluster {drcluster_name} cluster clusterfence state {fence_state}  "
     )
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     params = f'{{"spec":{{"clusterFence":"{fence_state}"}}}}'
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
     if not drcluster_obj.patch(params=params, format_type="merge"):
@@ -936,23 +945,49 @@ def fence_state(drcluster_name, fence_state):
     config.switch_ctx(restore_index)
 
 
-def get_fence_state(drcluster_name):
+def get_fence_state(drcluster_name, switch_ctx=None):
     """
     Returns the clusterfence state of given drcluster
 
     Args:
         drcluster_name (str): Name of the DRcluster
+        switch_ctx (int): The cluster index by the cluster name
 
     Returns:
         state (str): If drcluster are fenced: Fenced or Unfenced, else None if not defined
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
-    state = drcluster_obj.get().get("spec").get("clusterFence")
+    state = drcluster_obj.get().get("status").get("phase")
     config.switch_ctx(restore_index)
     return state
+
+
+@retry(UnexpectedBehaviour, tries=40, delay=5, backoff=5)
+def verify_fence_state(drcluster_name, state, switch_ctx=None):
+    """
+    Verify the specified drcluster is in expected state
+
+    Args:
+        drcluster_name (str): Name of the DRcluster
+        state (str): The fence state it is either constants.ACTION_FENCE or constants.ACTION_UNFENCE
+        switch_ctx (int): The cluster index by the cluster name
+
+    Raises:
+        Raises exception Unexpected-behaviour if the specified drcluster is not in the given state condition
+    """
+    sample = get_fence_state(drcluster_name=drcluster_name, switch_ctx=switch_ctx)
+    if sample == state:
+        logger.info(f"Primary managed cluster {drcluster_name} reached {state} state")
+    else:
+        logger.error(
+            f"Primary managed cluster {drcluster_name} not reached {state} state"
+        )
+        raise UnexpectedBehaviour(
+            f"Primary managed cluster {drcluster_name} not reached {state} state"
+        )
 
 
 def create_backup_schedule():
@@ -971,25 +1006,79 @@ def create_backup_schedule():
     config.switch_ctx(old_ctx)
 
 
-def gracefully_reboot_ocp_nodes(
-    namespace, drcluster_name, workload_type=constants.SUBSCRIPTION
-):
+def gracefully_reboot_ocp_nodes(drcluster_name):
     """
     Gracefully reboot OpenShift Container Platform
     nodes which was fenced before
 
     Args:
-        namespace (str): Name of the namespace
         drcluster_name (str): Name of the drcluster which needs to be rebooted
-        workload_type (str): Type of workload. ie Subscription(Default) or ApplicationSet
+
+    """
+    config.switch_to_cluster_by_name(drcluster_name)
+    gracefully_reboot_nodes()
+
+
+def restore_backup():
+    """
+    Restores the backup in new hub and make it as active
 
     """
 
-    primary_cluster_name = get_current_primary_cluster_name(
-        namespace=namespace, workload_type=workload_type
+    restore_index = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    backup_schedule = templating.load_yaml(constants.DR_RESTORE_YAML)
+    backup_schedule_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="restore", delete=False
     )
-    if primary_cluster_name == drcluster_name:
-        set_current_primary_cluster_context(namespace, workload_type)
+    templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
+    run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+    config.switch_ctx(restore_index)
+
+
+@retry(UnexpectedBehaviour, tries=40, delay=5, backoff=5)
+def verify_restore_is_completed():
+    """
+    Function to verify restore is completed or finished
+
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    restore_obj = ocp.OCP(
+        kind=constants.ACM_HUB_RESTORE, namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    cmd_output = restore_obj.exec_oc_cmd(command="get restore -oyaml")
+    status = cmd_output["items"][0]["status"]["phase"]
+    if status == "Finished":
+        logger.info("Restore completed successfully")
     else:
-        set_current_secondary_cluster_context(namespace, workload_type)
-    gracefully_reboot_nodes()
+        logger.error(f"Restore failed with some errors: {cmd_output}")
+        raise UnexpectedBehaviour("Restore failed with some errors")
+    config.switch_ctx(restore_index)
+
+
+@retry(UnexpectedBehaviour, tries=60, delay=5, backoff=2)
+def verify_drpolicy_cli(switch_ctx=None):
+    """
+    Function to verify DRPolicy status
+
+    Returns:
+        bool: True if the status is in succeed state, else raise exception
+        switch_ctx (int): The cluster index by the cluster name
+
+    """
+
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+    status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
+    if status.get("reason") == "Succeeded":
+        logger.info("DRPolicy validation succeeded")
+        config.switch_ctx(restore_index)
+        return True
+    else:
+        logger.warning(f"DRPolicy is not in succeeded or validated state: {status}")
+        config.switch_ctx(restore_index)
+        raise UnexpectedBehaviour(
+            f"DRPolicy is not in succeeded or validated state: {status}"
+        )
