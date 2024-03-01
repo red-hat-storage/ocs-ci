@@ -49,8 +49,8 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableResourceException,
     UnsupportedFeatureError,
-    UnexpectedDeploymentConfiguration,
     MDRDeploymentException,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -132,6 +132,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
     get_oadp_version,
+    get_az_count,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -139,7 +140,6 @@ from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
-from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
 
@@ -289,22 +289,10 @@ class Deployment(object):
 
             logger.info("Creating ManagedClusterSetBinding")
 
-            cluster_set = []
-            managed_clusters = (
-                ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
-            )
-            # ignore local-cluster here
-            for i in managed_clusters:
-                if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
-                    cluster_set.append(
-                        i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL]
-                    )
-            if all(x == cluster_set[0] for x in cluster_set):
-                logger.info(f"Found the uniq clusterset {cluster_set[0]}")
-            else:
-                raise UnexpectedDeploymentConfiguration(
-                    "There are more then one clusterset added to multiple managedcluters"
-                )
+            # Importing here to avoid circular import
+            from ocs_ci.utility.utils import get_clusterset_name
+
+            cluster_set = get_clusterset_name()
 
             managedclustersetbinding_obj = templating.load_yaml(
                 constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML

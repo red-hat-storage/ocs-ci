@@ -55,6 +55,7 @@ from ocs_ci.ocs.exceptions import (
     InteractivePromptException,
     NotFoundError,
     CephToolBoxNotFoundException,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -2072,6 +2073,32 @@ def get_running_acm_version():
     )
     json_out.stdout.close()
     return acm_version.communicate()[0].decode()
+
+
+def get_clusterset_name():
+    """
+    Function to fetch unique cluster set name used by managed clusters
+
+    Returns:
+        list: list of cluster set
+
+    """
+    cluster_set = []
+    # Importing here to avoid circular imports
+    from ocs_ci.ocs import ocp
+
+    managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    # ignore local-cluster here
+    for i in managed_clusters:
+        if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+            cluster_set.append(i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL])
+    if all(x == cluster_set[0] for x in cluster_set):
+        log.info(f"Found the uniq clusterset {cluster_set[0]}")
+    else:
+        raise UnexpectedDeploymentConfiguration(
+            "There are more then one clusterset added to multiple managedcluters"
+        )
+    return cluster_set
 
 
 def parse_pgsql_logs(data):

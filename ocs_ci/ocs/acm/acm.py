@@ -28,6 +28,7 @@ from ocs_ci.utility.utils import (
     get_running_acm_version,
     string_chunkify,
     run_cmd,
+    get_clusterset_name,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
@@ -322,6 +323,10 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
+
+        cluster_set = get_clusterset_name()
+        cluster_set_name = cluster_set[0]
+
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
