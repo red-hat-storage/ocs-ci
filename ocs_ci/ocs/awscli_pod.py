@@ -88,7 +88,7 @@ def awscli_pod_cleanup(namespace=None):
     try:
         ocp_sts.delete(resource_name=constants.S3CLI_STS_NAME)
     except CommandFailed as e:
-        if "NotFound" not in str(e):
+        if "NotFound" in str(e):
             log.info("The AWS CLI STS was not found, assuming it was already deleted")
     except TimeoutError:
         log.warning("Standard deletion of the AWS CLI STS timed-out, forcing deletion")
