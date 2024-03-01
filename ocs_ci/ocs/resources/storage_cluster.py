@@ -784,6 +784,8 @@ def mcg_only_install_verification(ocs_registry_image=None):
     log.info("Verifying MCG Only installation")
     basic_verification(ocs_registry_image)
     verify_storage_system()
+    verify_backing_store()
+    verify_mcg_only_pods()
 
 
 def basic_verification(ocs_registry_image=None):
@@ -1121,6 +1123,60 @@ def verify_max_openshift_version():
         f"olm.maxOpenShiftVersion is {max_openshift_version} but expected "
         f"version is {expected_max_openshift_sem_version}"
     )
+
+
+def verify_backing_store():
+    """
+    Verify backingstore
+    """
+    log.info("Verifying backingstore")
+    backingstore_obj = OCP(
+        kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    # backingstore creation will take time, so keeping timeout as 600
+    assert backingstore_obj.wait_for_resource(
+        condition=constants.STATUS_READY, column="PHASE", timeout=600
+    )
+
+
+def verify_mcg_only_pods():
+    """
+    Verify pods in MCG Only deployment
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
+    resources_dict = {
+        constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL: 1,
+        constants.NOOBAA_CORE_POD_LABEL: 1,
+        constants.NOOBAA_DB_LABEL_47_AND_ABOVE: 1,
+        constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
+        constants.NOOBAA_OPERATOR_POD_LABEL: 1,
+        constants.OCS_METRICS_EXPORTER: 1,
+        constants.OCS_OPERATOR_LABEL: 1,
+        constants.ODF_CONSOLE: 1,
+        constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
+        constants.OPERATOR_LABEL: 1,
+    }
+    if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+        resources_dict.update(
+            {
+                constants.NOOBAA_DEFAULT_BACKINGSTORE_LABEL: 1,
+            }
+        )
+    if ocs_version >= version.VERSION_4_15:
+        resources_dict.update(
+            {
+                constants.UX_BACKEND_APP_LABEL: 1,
+            }
+        )
+    for label, count in resources_dict.items():
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=label,
+            resource_count=count,
+            timeout=600,
+        )
 
 
 def osd_encryption_verification():
