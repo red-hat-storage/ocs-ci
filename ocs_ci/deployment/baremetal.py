@@ -48,6 +48,7 @@ class BAREMETALBASE(Deployment):
 
     def __init__(self):
         super().__init__()
+        self.cluster_name = config.ENV_DATA["cluster_name"]
 
 
 class BMBaseOCPDeployment(BaseOCPDeployment):
@@ -55,6 +56,8 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         super().__init__()
         self.bm_config = config.ENV_DATA["baremetal"]
         self.srv_details = config.ENV_DATA["baremetal"]["servers"]
+        self.aws = aws.AWS()
+        self.__helper_node_handler = None
 
     def deploy_prereq(self):
         """
@@ -77,21 +80,24 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
                 result == constants.BM_STATUS_RESPONSE_UPDATED
             ), "Failed to update request"
 
-        self.connect_to_helper_node()
-
     # the VM hosting the httpd, tftp and dhcp services might be just started and it might take some time to
     # propagate the DDNS name, if used, so re-trying this function for 20 minutes
+    @property
     @retry((TimeoutError, socket.gaierror), tries=10, delay=120, backoff=1)
-    def connect_to_helper_node(self):
+    def helper_node_handler(self):
         """
         Create connection to helper node hosting httpd, tftp and dhcp services for PXE boot
         """
-        self.host = self.bm_config["bm_httpd_server"]
-        self.user = self.bm_config["bm_httpd_server_user"]
-        self.private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
+        if not self.__helper_node_handler:
+            self.host = self.bm_config["bm_httpd_server"]
+            self.user = self.bm_config["bm_httpd_server_user"]
+            self.private_key = os.path.expanduser(config.DEPLOYMENT["ssh_key_private"])
 
-        # wait till the server is up and running
-        self.helper_node_handler = Connection(self.host, self.user, self.private_key)
+            # wait till the server is up and running
+            self.__helper_node_handler = Connection(
+                self.host, self.user, self.private_key
+            )
+        return self.__helper_node_handler
 
     def check_bm_status_exist(self):
         """
@@ -301,7 +307,6 @@ class BAREMETALUPI(BAREMETALBASE):
     class OCPDeployment(BMBaseOCPDeployment):
         def __init__(self):
             super().__init__()
-            self.aws = aws.AWS()
 
         def deploy_prereq(self):
             """
