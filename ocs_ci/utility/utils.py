@@ -55,6 +55,7 @@ from ocs_ci.ocs.exceptions import (
     InteractivePromptException,
     NotFoundError,
     CephToolBoxNotFoundException,
+    NoRunningCephToolBoxException,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -2282,7 +2283,12 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
     if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
         delay = 60
     return retry(
-        (CephHealthException, CommandFailed, subprocess.TimeoutExpired),
+        (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ),
         tries=tries,
         delay=delay,
         backoff=1,
