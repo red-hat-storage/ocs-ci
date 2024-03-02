@@ -3,6 +3,7 @@ Pod related functionalities and context info
 
 Each pod in the openshift cluster will have a corresponding pod object
 """
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import logging
 import os
@@ -3201,6 +3202,53 @@ def wait_for_pods_to_be_in_statuses(
         exclude_pod_name_prefixes=exclude_pod_name_prefixes,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def wait_for_pods_to_be_in_statuses_concurrently(
+    app_selectors_to_resource_count_list,
+    namespace,
+    timeout=1200,
+    status=constants.STATUS_RUNNING,
+):
+    """
+    Verify pods are running in the namespace using app selectors. This method is using concurrent futures to
+    speed up execution and will be blocking until all pods are running or timeout is reached
+
+    :param app_selectors_to_resource_count_list:
+    # Example: app_selectors_to_resource_count_list = [
+    #             {"app=capi-provider-controller-manager": 2},
+    #             {"app=catalog-operator": 3},
+    #             {"app=certified-operators-catalog": 1},
+    #         ]
+    :param namespace: namespace of the pods expected to run
+    :param timeout: time to wait for the pods to be running in seconds
+    :param status: status of the pods to wait for
+    :return: bool True if all pods are running, False otherwise
+    """
+    pod = OCP(kind=constants.POD, namespace=namespace)
+    results = dict()
+
+    def check_pod_status(app_selector, resource_count):
+        results[app_selector] = pod.wait_for_resource(
+            condition=status,
+            selector=app_selector,
+            resource_count=resource_count,
+            timeout=timeout,
+        )
+
+    with ThreadPoolExecutor(
+        max_workers=len(app_selectors_to_resource_count_list)
+    ) as executor:
+        futures = []
+        for item in app_selectors_to_resource_count_list:
+            for app_selector, resource_count in item.items():
+                futures.append(
+                    executor.submit(check_pod_status, app_selector, resource_count)
+                )
+
+        [future.result() for future in futures]
+
+    return all(value for value in results.values())
 
 
 def get_pod_ip(pod_obj):

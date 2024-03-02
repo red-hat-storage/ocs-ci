@@ -36,7 +36,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
 
         :returns:
             str: Name of the hosted cluster
-            bool: True if hosted cluster is verified, False otherwise
+            bool: True if hosted cluster passed validation, False otherwise
         """
         if (
             not config.default_cluster_ctx.ENV_DATA["platform"].lower()
@@ -70,7 +70,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         Deploy multiple hosted OCP clusters on provisioned Provider platform
         """
         # we need to ensure that all dependencies are installed so for the first cluster we will install all operators
-        # and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP.
+        # and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP with hcp.
 
         number_of_clusters_to_deploy = int(
             config.default_cluster_ctx.ENV_DATA["number_of_clusters_to_deploy"]
@@ -82,9 +82,10 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         if number_of_clusters_to_deploy == 0:
             return
 
+        futures = []
         with ThreadPoolExecutor() as executor:
             for _ in range(number_of_clusters_to_deploy):
-                deployment_states.append(
+                futures.append(
                     executor.submit(
                         self.deploy_ocp,
                         deploy_cnv=False,
@@ -94,4 +95,5 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
                     )
                 )
 
-        logger.info(f"All deployment jobs finished: {deployment_states}")
+        [deployment_states.append(future.result()) for future in futures]
+        logger.info(f"All deployment jobs have finished: {deployment_states}")

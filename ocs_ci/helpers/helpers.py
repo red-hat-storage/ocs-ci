@@ -4597,19 +4597,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     else:
         image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-
-    # create DATA_DIR if it doesn't exist
-    if not os.path.exists(constants.DATA_DIR):
-        create_directory_path(constants.DATA_DIR)
-
-    if not os.path.isfile(pull_secret_path):
-        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
-        exec_cmd(
-            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
-            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
-            shell=True,
-        )
+    pull_secret_path = download_pull_secret()
     exec_cmd(
         f"oc image extract --registry-config {pull_secret_path} "
         f"{image} --confirm "
@@ -4632,6 +4620,25 @@ def retrieve_cli_binary(cli_type="mcg"):
     assert os.access(
         local_cli_path, os.X_OK
     ), f"The {cli_type} CLI binary does not have execution permissions"
+
+
+def download_pull_secret():
+    """
+    Download the pull secret from the cluster and store it locally.
+    :return: pull secret path
+    """
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    # create DATA_DIR if it doesn't exist
+    if not os.path.exists(constants.DATA_DIR):
+        create_directory_path(constants.DATA_DIR)
+    if not os.path.isfile(pull_secret_path):
+        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
+        exec_cmd(
+            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+            shell=True,
+        )
+    return pull_secret_path
 
 
 def get_architecture_path(cli_type):
