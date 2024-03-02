@@ -2,15 +2,16 @@ import logging
 import os
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_file
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import download_pull_secret
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
@@ -117,6 +118,7 @@ class HyperShiftBase(Deployment):
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
         self.get_ICSP_list()
+        pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
         if not ocp_version:
@@ -141,19 +143,17 @@ class HyperShiftBase(Deployment):
             f"--memory {memory} "
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
-            f"--pull-secret {os.path.join(constants.DATA_DIR, 'pull-secret')} "
+            f"--pull-secret {pull_secret_path} "
             f"--image-content-sources {self.icsp_mirrors_path}"
         )
 
-        logger.info(
-            f"Creating HyperShift hosted cluster with command: {create_hcp_cluster_cmd}"
-        )
+        logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)
 
-        cluster_verified = self.verify_hosted_ocp_cluster_from_provider(name)
+        passed = self.verify_hosted_ocp_cluster_from_provider(name)
 
-        logger.info("HyperShift hosted cluster node-pool creation completed")
-        return name, cluster_verified
+        logger.info(f"HyperShift hosted cluster {name} passed validation: {passed}")
+        return name, passed
 
     def verify_hosted_ocp_cluster_from_provider(self, name):
         """
@@ -161,6 +161,11 @@ class HyperShiftBase(Deployment):
         :param name: hosted OCP cluster name
         :return: True if hosted OCP cluster is verified, False otherwise
         """
+
+        timeout_pods_wait_min = 20
+        timeout_hosted_cluster_completed_min = 30
+        timeout_worker_nodes_ready_min = 40
+
         namespace = f"clusters-{name}"
         logger.info(
             f"Waiting for HyperShift hosted cluster pods to be ready in the namespace: {namespace}"
@@ -175,15 +180,20 @@ class HyperShiftBase(Deployment):
         ]
 
         validation_passed = True
-        if not self.verify_pods_running(
-            app_selectors_to_resource_count_list, namespace
+
+        if not wait_for_pods_to_be_in_statuses_concurrently(
+            app_selectors_to_resource_count_list,
+            namespace,
+            timeout_pods_wait_min * 60,
         ):
             logger.error(f"HyperShift hosted cluster '{name}' pods are not running")
             validation_passed = False
         else:
             logger.info("HyperShift hosted cluster pods are running")
 
-        if not self.wait_hosted_cluster_completed(name):
+        if not self.wait_hosted_cluster_completed(
+            name, timeout=timeout_hosted_cluster_completed_min * 60
+        ):
             logger.error(
                 f"HyperShift hosted cluster '{name}' creation is not Completed"
             )
@@ -191,7 +201,9 @@ class HyperShiftBase(Deployment):
         else:
             logger.info("HyperShift hosted cluster create is OK")
 
-        if not self.wait_for_worker_nodes_to_be_ready(name):
+        if not self.wait_for_worker_nodes_to_be_ready(
+            name, timeout=timeout_worker_nodes_ready_min * 60
+        ):
             logger.error(
                 f"HyperShift hosted cluster '{name}' worker nodes are not ready"
             )
@@ -199,38 +211,6 @@ class HyperShiftBase(Deployment):
         else:
             logger.info("HyperShift hosted cluster worker nodes are ready")
         return validation_passed
-
-    def verify_pods_running(self, app_selectors_to_resource_count_list, namespace):
-        """
-        Verify pods are running in the namespace using app selectors. THis method is using concurrent futures to
-        speed up execution
-        :param app_selectors_to_resource_count_list:
-        :param namespace: namespace of the pods expected to run
-        :return: bool True if all pods are running, False otherwise
-        """
-        pod = OCP(kind=constants.POD, namespace=namespace)
-
-        def check_pod_status(app_selector, resource_count, result, index):
-            result[index] = pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=app_selector,
-                resource_count=resource_count,
-                timeout=1200,
-            )
-
-        with ThreadPoolExecutor(
-            max_workers=len(app_selectors_to_resource_count_list)
-        ) as executor:
-            futures = []
-            for item in app_selectors_to_resource_count_list:
-                for app_selector, resource_count in item.items():
-                    future = executor.submit(
-                        check_pod_status, app_selector, resource_count
-                    )
-                    futures.append(future)
-
-            results = [future.result() for future in futures]
-        return all(results)
 
     def get_current_nodepool_size(self, name):
         """
@@ -267,15 +247,16 @@ class HyperShiftBase(Deployment):
             f"get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $3}}'"
         )
 
-    def wait_hosted_cluster_completed(self, name):
+    def wait_hosted_cluster_completed(self, name, timeout=3600):
         """
         Wait for HyperShift hosted cluster creation to complete
-        :param name:
+        :param name: name of the cluster
+        :param timeout: timeout in seconds
         :return: True if cluster creation completed, False otherwise
         """
         logger.info(f"Verifying HyperShift hosted cluster {name} creation is Completed")
         for sample in TimeoutSampler(
-            timeout=3600,
+            timeout=timeout,
             sleep=60,
             func=self.get_hosted_cluster_progress,
             name=name,
@@ -283,20 +264,20 @@ class HyperShiftBase(Deployment):
             if sample == "Completed":
                 return True
 
-    def wait_for_worker_nodes_to_be_ready(self, name):
+    def wait_for_worker_nodes_to_be_ready(self, name, timeout=2400):
         """
         Wait for worker nodes to be ready for HyperShift hosted cluster
         :param name: name of the cluster
+        :param timeout: timeout in seconds
         :return: True if worker nodes are ready, False otherwise
         """
 
-        wait_timeout_min = 40
         logger.info(
             f"Verifying worker nodes to be ready for HyperShift hosted cluster {name}. "
-            f"Max wait time: {wait_timeout_min} min "
+            f"Max wait time: {timeout} sec "
         )
         for sample in TimeoutSampler(
-            timeout=wait_timeout_min * 60,
+            timeout=timeout,
             sleep=60,
             func=self.worker_nodes_deployed,
             name=name,
