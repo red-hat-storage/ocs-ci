@@ -109,7 +109,7 @@ def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
         f"oc image mirror --filter-by-os='.*' -f {mapping_file} "
         f"--insecure --registry-config={pull_secret_path} "
         "--max-per-registry=2 --continue-on-error=true --skip-missing=true",
-        timeout=3600,
+        timeout=18000,
         ignore_error=True,
     )
 
