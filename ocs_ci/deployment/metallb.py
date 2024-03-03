@@ -176,7 +176,7 @@ class MetalLBInstaller:
         :return: bool True if subscription already exists, False otherwise
         """
         return OCP(
-            kind=constants.SUBSCRIPTION,
+            kind=constants.SUBSCRIPTION_COREOS,
             namespace=self.namespace_lb,
             resource_name=self.subscription_name,
         ).check_resource_existence(
