@@ -4580,6 +4580,8 @@ def download_pull_secret():
             f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
             shell=True,
         )
+    else:
+        logger.info(f"Pull secret already exists at {pull_secret_path}")
     return pull_secret_path
 
 

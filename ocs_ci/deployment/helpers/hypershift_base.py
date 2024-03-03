@@ -220,9 +220,10 @@ class HyperShiftBase(Deployment):
         """
 
         logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
-        return self.ocp.exec_oc_cmd(
-            f"get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $4}}'"
+        cmd = (
+            f"oc get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $4}}'"
         )
+        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
     def worker_nodes_deployed(self, name):
         """
@@ -243,9 +244,10 @@ class HyperShiftBase(Deployment):
         """
 
         logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
-        return self.ocp.exec_oc_cmd(
-            f"get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $3}}'"
+        cmd = (
+            f"oc get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $3}}'"
         )
+        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
     def wait_hosted_cluster_completed(self, name, timeout=3600):
         """
@@ -292,9 +294,8 @@ class HyperShiftBase(Deployment):
         :return: hosted cluster kubeconfig name
         """
         logger.info(f"Getting kubeconfig for HyperShift hosted cluster {name}")
-        return self.ocp.exec_oc_cmd(
-            f"get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
-        )
+        cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
+        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
     def download_hosted_cluster_kubeconfig(self, name, kubeconfig_path):
         """
@@ -318,9 +319,8 @@ class HyperShiftBase(Deployment):
         :param name: name of the cluster
         :return: progress status; 'Completed' is expected in most cases
         """
-        return self.ocp.exec_oc_cmd(
-            f"get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
-        )
+        cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
+        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
     def get_ICSP_list(self):
         """
