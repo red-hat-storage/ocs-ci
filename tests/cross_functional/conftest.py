@@ -1070,7 +1070,13 @@ def validate_mcg_bg_features(
     """
 
     def factory(
-        feature_setup_map, run_in_bg=False, skip_any_features=None, object_amount=5
+        feature_setup_map,
+        run_in_bg=False,
+        skip_any_features=None,
+        object_amount=5,
+        run_current=True,
+        retry=1,
+        delay=10,
     ):
         """
         factory functon implementing the fixture
@@ -1083,6 +1089,8 @@ def validate_mcg_bg_features(
                 to be validated
             object_amount (int): Number of objects that you wanna use while doing
                 the validation
+            run_current (bool): True if you want to run the current instance of validation
+                False otherwise.
 
         Returns:
             Event(): this is a threading.Event() object used to send signals to the
@@ -1109,67 +1117,70 @@ def validate_mcg_bg_features(
         )
         skip_any_features = list() if skip_any_features is None else skip_any_features
 
-        if "replication" not in skip_any_features:
-            validate_replication = executor.submit(
-                validate_mcg_bucket_replicaton,
-                awscli_pod_session,
-                mcg_obj_session,
-                feature_setup_map["replication"],
-                uploaded_objects_dir,
-                downloaded_obejcts_dir,
-                event,
-                run_in_bg=run_in_bg,
-                object_amount=object_amount,
-            )
-            futures_obj.append(validate_replication)
+        if run_current:
+            if "replication" not in skip_any_features:
+                validate_replication = executor.submit(
+                    validate_mcg_bucket_replicaton,
+                    awscli_pod_session,
+                    mcg_obj_session,
+                    feature_setup_map["replication"],
+                    uploaded_objects_dir,
+                    downloaded_obejcts_dir,
+                    event,
+                    run_in_bg=run_in_bg,
+                    object_amount=object_amount,
+                    tries=retry,
+                    delay=delay,
+                )
+                futures_obj.append(validate_replication)
 
-        if "caching" not in skip_any_features:
-            validate_caching = executor.submit(
-                validate_mcg_caching,
-                awscli_pod_session,
-                mcg_obj_session,
-                cld_mgr,
-                feature_setup_map["caching"],
-                uploaded_objects_dir,
-                downloaded_obejcts_dir,
-                event,
-                run_in_bg=run_in_bg,
-            )
-            futures_obj.append(validate_caching)
+            if "caching" not in skip_any_features:
+                validate_caching = executor.submit(
+                    validate_mcg_caching,
+                    awscli_pod_session,
+                    mcg_obj_session,
+                    cld_mgr,
+                    feature_setup_map["caching"],
+                    uploaded_objects_dir,
+                    downloaded_obejcts_dir,
+                    event,
+                    run_in_bg=run_in_bg,
+                )
+                futures_obj.append(validate_caching)
 
-        if "expiration" not in skip_any_features:
-            validate_expiration = executor.submit(
-                validate_mcg_object_expiration,
-                mcg_obj_session,
-                feature_setup_map["expiration"],
-                event,
-                run_in_bg=run_in_bg,
-                object_amount=object_amount,
-                prefix="",
-            )
-            futures_obj.append(validate_expiration)
+            if "expiration" not in skip_any_features:
+                validate_expiration = executor.submit(
+                    validate_mcg_object_expiration,
+                    mcg_obj_session,
+                    feature_setup_map["expiration"],
+                    event,
+                    run_in_bg=run_in_bg,
+                    object_amount=object_amount,
+                    prefix="",
+                )
+                futures_obj.append(validate_expiration)
 
-        if "rgw kafka" not in skip_any_features:
-            validate_rgw_kafka = executor.submit(
-                validate_rgw_kafka_notification,
-                feature_setup_map["rgw kafka"],
-                event,
-                run_in_bg=run_in_bg,
-            )
-            futures_obj.append(validate_rgw_kafka)
+            if "rgw kafka" not in skip_any_features:
+                validate_rgw_kafka = executor.submit(
+                    validate_rgw_kafka_notification,
+                    feature_setup_map["rgw kafka"],
+                    event,
+                    run_in_bg=run_in_bg,
+                )
+                futures_obj.append(validate_rgw_kafka)
 
-        if "nsfs" not in skip_any_features:
-            validate_nsfs = executor.submit(
-                validate_mcg_nsfs_feature,
-            )
-            futures_obj.append(validate_nsfs)
+            if "nsfs" not in skip_any_features:
+                validate_nsfs = executor.submit(
+                    validate_mcg_nsfs_feature,
+                )
+                futures_obj.append(validate_nsfs)
 
-        # if not run in background we wait until the
-        # threads are finsihed executing, ie. single iteration
-        if not run_in_bg:
-            for t in futures_obj:
-                t.result()
-            event = None
+            # if not run in background we wait until the
+            # threads are finsihed executing, ie. single iteration
+            if not run_in_bg:
+                for t in futures_obj:
+                    t.result()
+                event = None
 
         return event, futures_obj
 
@@ -1207,6 +1218,8 @@ def setup_mcg_bg_features(
         skip_any_type=None,
         skip_any_provider=None,
         skip_any_features=None,
+        retry=1,
+        delay=10,
     ):
         """
         Args:
@@ -1343,6 +1356,8 @@ def setup_mcg_bg_features(
             run_in_bg=not is_disruptive,
             skip_any_features=skip_any_features,
             object_amount=object_amount,
+            retry=retry,
+            delay=delay,
         )
         feature_setup_map["executor"]["event"] = event
         feature_setup_map["executor"]["threads"] = threads

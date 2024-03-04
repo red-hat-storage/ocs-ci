@@ -19,6 +19,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.resources.pod import get_rgw_pods, get_pod_logs
 from ocs_ci.utility.utils import exec_cmd, run_cmd
+from ocs_ci.ocs.exceptions import CommandFailed
 
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,8 @@ def validate_mcg_bucket_replicaton(
     event,
     run_in_bg=False,
     object_amount=5,
+    tries=1,
+    delay=10,
 ):
     """
     Validate MCG bucket replication feature
@@ -135,7 +138,9 @@ def validate_mcg_bucket_replicaton(
     # Verify replication is working as expected by performing a two-way round-trip object verification
     while True:
         for first_bucket, second_bucket in source_target_map.items():
-            random_object_round_trip_verification(
+            retry(CommandFailed, tries=tries, delay=delay)(
+                random_object_round_trip_verification
+            )(
                 io_pod=awscli_pod_session,
                 bucket_name=first_bucket.name,
                 upload_dir=bidi_uploaded_objs_dir_1,
@@ -150,7 +155,9 @@ def validate_mcg_bucket_replicaton(
                 timeout=1200,
             )
 
-            random_object_round_trip_verification(
+            retry(CommandFailed, tries=tries, delay=delay)(
+                random_object_round_trip_verification
+            )(
                 io_pod=awscli_pod_session,
                 bucket_name=second_bucket.name,
                 upload_dir=bidi_uploaded_objs_dir_2,
