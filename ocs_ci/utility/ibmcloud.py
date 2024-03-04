@@ -646,8 +646,7 @@ class IBMCloudIPI(object):
         Restart nodes by stopping and starting VM in IBM Cloud
         Args:
             nodes (list): The OCS objects of the nodes
-            wait (bool): True in case wait for status is needed,
-                False otherwise
+            wait (bool): True in case wait for status is needed, False otherwise
             force (bool): True for force instance stop, False otherwise
             timeout (int): Timeout for the command, defaults to 300 seconds.
         """
@@ -733,8 +732,7 @@ class IBMCloudIPI(object):
         Terminate the Node in IBMCloud
         Args:
             nodes (list): The OCS objects of the nodes
-            wait (bool): True in case wait for status is needed,
-                False otherwise
+            wait (bool): True in case wait for status is needed, False otherwise
         """
         for node in nodes:
             cmd = f"ibmcloud is instance-delete {node.name} -f"
@@ -830,8 +828,7 @@ class IBMCloudIPI(object):
         Args:
             volume (str): The volume to wait for to be attached
         Returns:
-            bool: True if the volume has been attached to the
-                instance, False otherwise
+            bool: True if the volume has been attached to the instance, False otherwise
         """
         try:
             for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
