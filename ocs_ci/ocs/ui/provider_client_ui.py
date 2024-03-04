@@ -28,8 +28,8 @@ class StorageClientUI(PageNavigator):
         """
         self.navigate_client_page()
         logger.info("Click on 'Generate client onboarding token'")
-        self.do_click(self.client_loc["generate_token"])
-        token = self.get_element_text(self.client_loc["token"])
+        self.do_click(self.validation["generate_token"])
+        token = self.get_element_text(self.validation["token"])
         return token
 
     def verify_client_data_in_ui(
@@ -47,13 +47,13 @@ class StorageClientUI(PageNavigator):
         """
         self.navigate_client_page()
         logger.info(f"Search for {client_name} client")
-        self.do_send_keys(self.client_loc["search_client"], text=client_name)
+        self.do_send_keys(self.validation["search_client"], text=client_name)
         time.sleep(2)
-        client_name_ui = self.get_element_text(self.client_loc["client_name"])
+        client_name_ui = self.get_element_text(self.validation["client_name"])
         assert (
             client_name_ui == client_name
         ), f"Client name in the UI is {client_name_ui}. It should be {client_name}"
-        ocp_version_ui = self.get_element_text(self.client_loc["ocp_version"])
+        ocp_version_ui = self.get_element_text(self.validation["client_ocp_version"])
         assert (
             ocp_version_ui == ocp_version
         ), f"OCP version in the UI is {ocp_version_ui}. It should be {ocp_version}"
@@ -69,7 +69,7 @@ class StorageClientUI(PageNavigator):
         """
         self.nav_object_storage()
         clients_info = self.get_element_text(
-            self.client_loc["clients_number_on_dashboad"]
+            self.validation["clients_number_on_dashboad"]
         )
         connected_clients = clients_info.split(" ")[0]
         total_clients = clients_info.split(" ")[2]

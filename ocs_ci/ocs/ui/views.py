@@ -1556,6 +1556,19 @@ validation_4_14 = {
         "//button[@data-test='horizontal-link-Overview']",
         By.XPATH,
     ),
+    "generate_token": ("//button[text()='Generate client onboarding token']", By.XPATH),
+    "copy_to_clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
+    "token": ("//div[@class='odf-onboarding-modal__text-area']", By.XPATH),
+    "search_client": ("input[data-test='name-filter-input']", By.CSS_SELECTOR),
+    "clients_number_on_dashboad": (
+        "div[data-status-id='Storage Clients-secondary-status']",
+        By.CSS_SELECTOR,
+    ),
+    "client_name": ("name", By.ID),
+    "client_cluster_id": ("clusterID", By.ID),
+    "client_ocp_version": ("openshiftVersion", By.ID),
+    "client_odf_version": ("dataFoundationVersion", By.ID),
+    "client_heartbeat": ("lastHeartbeat", By.ID),
 }
 
 
