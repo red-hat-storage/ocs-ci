@@ -2,6 +2,7 @@ import logging
 import pytest
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import purple_squad
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class TestMetalLB(object):
 
         request.addfinalizer(teardown)
 
+    @purple_squad
     def test_install_metallb(self):
         """
         Test MetalLB installation

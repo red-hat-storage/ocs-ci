@@ -1,12 +1,17 @@
 import logging
 
 from ocs_ci.deployment.hosted_cluster import HypershiftHostedOCP
-from ocs_ci.framework.pytest_customization.marks import hci_provider_required, libtest
+from ocs_ci.framework.pytest_customization.marks import (
+    hci_provider_required,
+    libtest,
+    purple_squad,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @libtest
+@purple_squad
 class TestProviderHosted(object):
     """
     Test provider hosted
