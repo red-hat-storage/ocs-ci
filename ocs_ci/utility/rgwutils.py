@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ def get_rgw_count(ocs_version, is_upgrade, version_before_upgrade):
     RGW Count is 2 if:
        OCS 4.5 unless upgraded from a prior version
        OCS 4.6
+       arbiter deployment
 
     Otherwise, RGW Count is 1
 
@@ -24,6 +26,10 @@ def get_rgw_count(ocs_version, is_upgrade, version_before_upgrade):
         int: RGW Count
 
     """
+    if config.DEPLOYMENT.get("arbiter_deployment"):
+        log.debug("RGW Count: 2")
+        return 2
+
     semantic_ocs_version = version.get_semantic_version(
         ocs_version, only_major_minor=True
     )
