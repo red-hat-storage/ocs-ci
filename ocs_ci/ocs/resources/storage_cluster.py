@@ -293,6 +293,14 @@ def ocs_install_verification(
             }
         )
 
+    if config.DEPLOYMENT.get("arbiter_deployment") is True:
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 5,
+                constants.MGR_APP_LABEL: 2,
+            }
+        )
+
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
             if (
