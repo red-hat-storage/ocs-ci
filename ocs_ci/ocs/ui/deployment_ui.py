@@ -464,9 +464,6 @@ class DeploymentUI(PageNavigator):
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
 
-    def add_disk_for_bm_platform(self):
-        pass
-
     def install_ocs_ui(self):
         """
         Install OCS/ODF via UI.
@@ -474,9 +471,7 @@ class DeploymentUI(PageNavigator):
         """
         if config.DEPLOYMENT.get("local_storage"):
             create_optional_operators_catalogsource_non_ga()
-            if config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM:
-                self.add_disk_for_bm_platform()
-            elif config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
+            if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
                 add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()
