@@ -96,3 +96,15 @@ class StorageClientUI(PageNavigator):
             f"Number of connected clients on the dashboard: {connected_clients}",
             f"Number of clients with recent heartbeat: {clients_with_heartbeat}",
         )
+
+    def get_token_description(self):
+        """
+        Verify that token window has description how to use it
+        """
+        self.navigate_client_page()
+        logger.info("Click on 'Generate client onboarding token'")
+        self.do_click(self.validation["generate_token"])
+        token_explanation = self.get_element_text(
+            self.validation["token_explanation_part_1"]
+        )
+        return token_explanation

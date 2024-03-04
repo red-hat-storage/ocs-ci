@@ -1605,6 +1605,10 @@ validation_4_14 = {
     "generate_token": ("//button[text()='Generate client onboarding token']", By.XPATH),
     "copy_to_clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
     "token": ("//div[@class='odf-onboarding-modal__text-area']", By.XPATH),
+    "token_explanation_part_1": (
+        "p[data-ouia-component-type='PF4/Text']",
+        By.CSS_SELECTOR,
+    ),
     "search_client": ("input[data-test='name-filter-input']", By.CSS_SELECTOR),
     "clients_number_on_dashboad": (
         "div[data-status-id='Storage Clients-secondary-status']",
