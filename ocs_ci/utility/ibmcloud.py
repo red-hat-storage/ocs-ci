@@ -620,8 +620,7 @@ class IBMCloudIPI(object):
         Stop the nodes on IBM Cloud
         Args:
             nodes (list): The OCS objects of the nodes
-            force (bool): True for VM ungraceful power off, False for
-                graceful VM shutdown
+            force (bool): True for VM ungraceful power off, False for graceful VM shutdown
             wait (bool): Wait for the VMs to stop
         """
         for node in nodes:
