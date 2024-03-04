@@ -7352,6 +7352,7 @@ def scale_noobaa_resources():
     log.info("Scaled noobaa pod resources")
     time.sleep(60)
 
+
 @pytest.fixture(scope="function")
 def create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(request):
     """

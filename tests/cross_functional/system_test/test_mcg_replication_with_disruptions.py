@@ -19,6 +19,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     magenta_squad,
     mcg,
+    bugzilla,
+    polarion_id,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
@@ -245,6 +247,8 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 @magenta_squad
 @skipif_vsphere_ipi
 class TestLogBasedReplicationWithDisruptions:
+    @polarion_id("OCS-5457")
+    @bugzilla("2266805")
     def test_log_based_replication_with_disruptions(
         self,
         mcg_obj_session,
