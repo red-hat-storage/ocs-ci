@@ -7258,14 +7258,6 @@ def setup_logwriter_rbd_workload_factory(
     return logwriter_sts
 
 
-@pytest.fixture(scope="session")
-def scale_noobaa_pods_resources_session(request):
-    """
-    Session scoped fixture to scale the noobaa resources
-    """
-    return scale_noobaa_pods_resources()
-
-
 @pytest.fixture()
 def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
     """
@@ -7469,26 +7461,34 @@ def scale_noobaa_resources(request):
 
     """
 
-    storagecluster_obj = OCP(
-        kind=constants.STORAGECLUSTER,
-        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
+    def factory(min_ep_count=3, max_ep_count=3, cpu=6, memory="10Gi"):
+        storagecluster_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
 
-    scale_endpoint_pods_param = (
-        '{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 3,"maxCount": 10}}}}'
-    )
-    scale_noobaa_resources_param = (
-        '{"spec": {"resources": {"noobaa-core": {"limits": {"cpu": "3","memory": "4Gi"},'
-        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-db": {"limits": {"cpu": "3","memory": "4Gi"},'
-        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-endpoint": {"limits": {"cpu": "3","memory": "4Gi"},'
-        '"requests": {"cpu": "3","memory": "4Gi"}}}}}'
-    )
-    storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
-    log.info("Scaled noobaa endpoint counts")
-    storagecluster_obj.patch(params=scale_noobaa_resources_param, format_type="merge")
-    log.info("Scaled noobaa pod resources")
-    time.sleep(60)
+        scale_endpoint_pods_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"endpoints": {{"minCount": {min_ep_count},"maxCount": {max_ep_count}}}}}}}}}'
+        )
+        scale_noobaa_resources_param = (
+            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
+            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
+            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
+            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
+            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}}}}}}}}}}}'
+        )
+        storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
+        log.info("Scaled noobaa endpoint counts")
+        storagecluster_obj.patch(
+            params=scale_noobaa_resources_param, format_type="merge"
+        )
+        log.info("Scaled noobaa pod resources")
+        time.sleep(60)
+
+    return factory
 
 
 @pytest.fixture(scope="function")

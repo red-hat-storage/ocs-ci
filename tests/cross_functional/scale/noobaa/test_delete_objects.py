@@ -1,12 +1,16 @@
 import logging
 import pytest
+import time
 
+from threading import Event
+from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     s3_delete_objects,
     list_objects_in_batches,
     s3_delete_object,
+    random_object_round_trip_verification,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
@@ -15,6 +19,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     orange_squad,
 )
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +43,38 @@ def s3bench(request):
 @orange_squad
 @mcg
 class TestDeleteObjects:
+    def run_background_io(
+        self, io_pod, mcg_obj, bucket_name, upload_dir, download_dir, event
+    ):
+        """
+        Run background IO for the given bucket
+
+        Args:
+            io_pod (Pod): Pod object representing aws-cli pod
+            bucket_name (str): Name of the bucket
+            upload_dir (str): Pod directory from where the objects are uploaded
+            download_dir (str): Pod directory to where the objects are downloaded
+            event (threading.Event()): Event() object
+
+        """
+        while True:
+
+            retry(CommandFailed, tries=10, delay=5)(
+                random_object_round_trip_verification
+            )(
+                io_pod,
+                bucket_name,
+                upload_dir,
+                download_dir,
+                cleanup=True,
+                mcg_obj=mcg_obj,
+            )
+
+            if event.is_set():
+                break
+            time.sleep(60)
+        log.info(f"Successfully verified background io for the bucket {bucket_name}")
+
     @bugzilla("2181535")
     @polarion_id("OCS-4916")
     @pytest.mark.parametrize(
@@ -52,24 +90,52 @@ class TestDeleteObjects:
     )
     def test_delete_objects(
         self,
+        awscli_pod_session,
+        mcg_obj_session,
         scale_noobaa_db_pod_pv_size,
-        scale_noobaa_pods_resources_session,
+        scale_noobaa_resources_session,
         bucket_factory,
         s3bench,
         mcg_obj,
         delete_mode,
+        test_directory_setup,
     ):
         """
         Test deletion of objects, objectbucket and backingstore when there
         is huge number of objects (~2 million) stored
         """
-        scale_noobaa_db_pod_pv_size(pv_size="600")
-
         bucket_class_dict = {
             "interface": "OC",
             "backingstore_dict": {"aws": [(1, "eu-central-1")]},
             "timeout": 1800,
         }
+
+        # create a bucket where we run some io continuously in the background.
+        upload_dir = test_directory_setup.origin_dir
+        download_dir = test_directory_setup.result_dir
+
+        io_bucket = bucket_factory(bucketclass=bucket_class_dict, verify_health=False)[
+            0
+        ].name
+
+        event = Event()
+
+        executor = ThreadPoolExecutor(
+            max_workers=1,
+        )
+        io_thread = executor.submit(
+            self.run_background_io,
+            awscli_pod_session,
+            mcg_obj_session,
+            io_bucket,
+            upload_dir,
+            download_dir,
+            event,
+        )
+
+        # scale the noobaa db pv size
+        scale_noobaa_db_pod_pv_size(pv_size="600")
+
         # create an object bucket
         bucket = bucket_factory(bucketclass=bucket_class_dict, verify_health=False)[0]
         bucket.verify_health(timeout=600)
@@ -118,3 +184,7 @@ class TestDeleteObjects:
             # Delete the whole bucket directly
             bucket.delete()
             log.info(f"Deleted bucket {bucket.name} directly!")
+
+        # stop the io running in the background
+        event.set()
+        io_thread.result()
