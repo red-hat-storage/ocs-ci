@@ -42,3 +42,17 @@ class TestStorageClientUI(ManageTest):
         logger.info("Verifying values on Storage Clients page")
         storageclient_obj = StorageClientUI()
         storageclient_obj.verify_client_data_in_ui()
+
+    @hci_provider_required
+    def test_token_explanation(self, setup_ui_class):
+        """
+        Test the presense of token explanation
+        on the token generation modal
+        """
+        logger.info("Verifying presense  of token explanation")
+        storageclient_obj = StorageClientUI()
+        token_explanation = storageclient_obj.get_token_description()
+        assert (
+            "To onboard the client cluster, the provider cluster requires the onboarding token"
+            in token_explanation
+        ), f"{token_explanation} doesn't have expected text"
