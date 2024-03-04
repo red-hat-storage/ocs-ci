@@ -83,7 +83,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
             return
 
         futures = []
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             for _ in range(number_of_clusters_to_deploy):
                 futures.append(
                     executor.submit(

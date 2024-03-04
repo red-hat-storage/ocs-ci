@@ -127,7 +127,7 @@ class HyperShiftBase(Deployment):
             index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
         if not name:
-            name = "hcp-" + datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            name = "hcp-" + datetime.utcnow().strftime("%f")
 
         logger.info(
             f"Creating HyperShift hosted cluster with specs: name:{name}, "
