@@ -2712,4 +2712,3 @@ def list_objects_in_batches(
 
         marker = response.get("Contents", [])[-1]["Key"]
         del response
-
