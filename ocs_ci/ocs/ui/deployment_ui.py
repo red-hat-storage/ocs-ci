@@ -224,8 +224,14 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
             )
-        self.verify_disks_lso_attached()
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+        if config.ENV_DATA.get("platform") != constants.BAREMETAL_PLATFORM:
+            self.verify_disks_lso_attached()
+            timeout_next = 60
+        else:
+            timeout_next = 600
+        self.do_click(
+            self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
+        )
 
         logger.info("Confirm new storage class")
         self.do_click(self.dep_loc["yes"], enable_screenshot=True)
@@ -458,6 +464,9 @@ class DeploymentUI(PageNavigator):
                 self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
             )
 
+    def add_disk_for_bm_platform(self):
+        pass
+
     def install_ocs_ui(self):
         """
         Install OCS/ODF via UI.
@@ -465,7 +474,10 @@ class DeploymentUI(PageNavigator):
         """
         if config.DEPLOYMENT.get("local_storage"):
             create_optional_operators_catalogsource_non_ga()
-            add_disk_for_vsphere_platform()
+            if config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM:
+                self.add_disk_for_bm_platform()
+            elif config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
+                add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()
         if not config.UPGRADE.get("ui_upgrade"):
