@@ -95,13 +95,13 @@ class HyperShiftBase(Deployment):
         self,
         name: str = None,
         nodepool_replicas: int = 2,
-        memory: str = "12Gi",
-        cpu_cores: int = 6,
+        memory: str = "8Gi",
+        cpu_cores: int = 4,
         root_volume_size: str = 40,
         ocp_version=None,
     ):
         """
-        Create HyperShift hosted cluster
+        Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
 
         Args:
             name (str): Name of the cluster
@@ -122,9 +122,9 @@ class HyperShiftBase(Deployment):
 
         # If ocp_version is not provided, get the version from Hosting Platform
         if not ocp_version:
-            index_image = f"{constants.REGISTRY_SVC}:{get_ocp_version()}"
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{get_ocp_version()}-x86_64"
         else:
-            index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
+            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
         if not name:
             name = "hcp-" + datetime.utcnow().strftime("%Y%m%d%H%M%S")
