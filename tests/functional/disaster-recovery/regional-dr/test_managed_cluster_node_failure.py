@@ -7,17 +7,19 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier4, tier4b
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import (
     Pod,
+    get_ceph_tools_pod,
     get_pod_node,
     get_pods_having_label,
     wait_for_pods_to_be_running,
     wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import archive_ceph_crashes, ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +54,24 @@ class TestManagedClusterNodeFailure:
         def finalizer():
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+                # Archive the ceph daemon crash warnings to silence them
+                crash_warning_found = run_cmd_verify_cli_output(
+                    cmd="ceph health detail",
+                    expected_output_lst={
+                        "HEALTH_WARN",
+                        "daemons have recently crashed",
+                    },
+                    cephtool_cmd=True,
+                )
+                if crash_warning_found:
+                    archive_ceph_crashes(get_ceph_tools_pod())
+
                 logger.info("Checking for Ceph Health OK")
                 ceph_health_check(tries=40, delay=60)
+
+                if crash_warning_found:
+                    pytest.fail("Test failed due to Ceph daemon crash warning")
 
         request.addfinalizer(finalizer)
 
