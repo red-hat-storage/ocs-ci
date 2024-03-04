@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @tier3
 class TestCSISubvolumeGroup(ManageTest):
-    def test_network_fence_not_editable(self):
+    def test_subvolume_group_pinning(self):
         """
         Test that verifies that the pinning value of CephFilesystemSubVolumeGroup is 1
         """
@@ -31,4 +31,4 @@ class TestCSISubvolumeGroup(ManageTest):
             logger.error(err_msg)
             raise Exception(err_msg)
 
-        logger.info("Pinning value found and it is 1, ax expected")
+        logger.info("Pinning value found and it is 1, as expected")
