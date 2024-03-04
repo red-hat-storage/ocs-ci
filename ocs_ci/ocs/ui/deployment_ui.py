@@ -466,7 +466,7 @@ class DeploymentUI(PageNavigator):
 
     def install_ocs_ui(self):
         """
-        Install OCS/ODF via UI.
+        Install OCS/ODF via UI
 
         """
         if config.DEPLOYMENT.get("local_storage"):
