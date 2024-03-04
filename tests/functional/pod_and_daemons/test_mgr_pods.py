@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import purple_squad, brown_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class TestMgrPods(BaseTest):
     4. Check Active MGR pod reboot
     """
 
-    @purple_squad
+    @green_squad
     @polarion_id("OCS-5437")
     def test_two_mgr_pods_and_metadata(self):
         """
@@ -79,7 +79,7 @@ class TestMgrPods(BaseTest):
         )
         log.info(f"Name entries in mgr metadata: {mgr_metadata_names}")
 
-    @brown_squad
+    @green_squad
     @polarion_id("OCS-5438")
     def test_two_mgr_daemons_and_failure(self):
         """
@@ -137,7 +137,7 @@ class TestMgrPods(BaseTest):
         )
 
     @polarion_id("OCS-5439")
-    @brown_squad
+    @green_squad
     def test_mgr_pod_reboot(self):
         """
         - Deoloy OCP and ODF
