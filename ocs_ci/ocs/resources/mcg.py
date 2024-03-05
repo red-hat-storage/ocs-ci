@@ -2,9 +2,8 @@ import base64
 import json
 import logging
 import os
-import platform
 import re
-import stat
+
 import tempfile
 from time import sleep
 
@@ -31,12 +30,11 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
-    create_directory_path,
     get_attr_chain,
-    get_ocs_build_number,
     exec_cmd,
     TimeoutSampler,
 )
+from ocs_ci.helpers.helpers import retrieve_cli_binary
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
@@ -94,7 +92,7 @@ class MCG:
                 "The expected MCG CLI binary could not be found,"
                 " downloading the expected version"
             )
-            self.retrieve_noobaa_cli_binary()
+            retrieve_cli_binary(cli_type="mcg")
 
         """
         The certificate will be copied on each mcg_obj instantiation since
@@ -128,23 +126,7 @@ class MCG:
         ) + "/rpc"
         self.region = config.ENV_DATA["region"]
 
-        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
-        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
-        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
-        self.noobaa_user = admin_credentials["email"]
-        self.noobaa_password = admin_credentials["password"]
-
-        self.noobaa_token = self.retrieve_nb_token()
-
-        self.s3_resource = boto3.resource(
-            "s3",
-            verify=retrieve_verification_mode(),
-            endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key,
-        )
-
-        self.s3_client = self.s3_resource.meta.client
+        self.update_s3_creds()
 
         if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
             "create_aws_creds"
@@ -885,90 +867,12 @@ class MCG:
         result.stderr = result.stderr.decode()
         return result
 
-    def get_architecture_path(self):
-        """
-        Return path of MCG CLI Binary in the image.
-        """
-        system = platform.system()
-        machine = platform.machine()
-        noobaa = "noobaa"
-        path = "/usr/share/mcg/"
-        if system == "Linux":
-            path = os.path.join(path, "linux")
-            if machine == "x86_64":
-                path = os.path.join(path, f"{noobaa}-amd64")
-            elif machine == "ppc64le":
-                path = os.path.join(path, f"{noobaa}-ppc64le")
-            elif machine == "s390x":
-                path = os.path.join(path, f"{noobaa}-s390x")
-        elif system == "Darwin":  # Mac
-            path = os.path.join(path, "macosx", noobaa)
-        return path
-
     @retry(
         (CommandFailed, subprocess.TimeoutExpired),
         tries=5,
         delay=15,
         backoff=1,
     )
-    def retrieve_noobaa_cli_binary(self):
-        """
-        Download the MCG-CLI binary and store it locally.
-
-        Raises:
-            AssertionError: In the case the CLI binary is not executable.
-
-        """
-        semantic_version = version.get_semantic_ocs_version_from_config()
-        remote_path = self.get_architecture_path()
-        remote_mcg_cli_basename = os.path.basename(remote_path)
-        local_mcg_cli_dir = os.path.dirname(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-        if (
-            config.DEPLOYMENT["live_deployment"]
-            and semantic_version >= version.VERSION_4_13
-        ):
-            image = f"{constants.MCG_CLI_IMAGE}:v{semantic_version}"
-        else:
-            image = f"{constants.MCG_CLI_IMAGE_PRE_4_13}:{get_ocs_build_number()}"
-
-        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-
-        # create DATA_DIR if it doesn't exist
-        if not os.path.exists(constants.DATA_DIR):
-            create_directory_path(constants.DATA_DIR)
-
-        if not os.path.isfile(pull_secret_path):
-            logger.info(
-                f"Extracting pull-secret and placing it under {pull_secret_path}"
-            )
-            exec_cmd(
-                f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
-                f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
-                shell=True,
-            )
-        exec_cmd(
-            f"oc image extract --registry-config {pull_secret_path} "
-            f"{image} --confirm "
-            f"--path {self.get_architecture_path()}:{local_mcg_cli_dir}"
-        )
-        os.rename(
-            os.path.join(local_mcg_cli_dir, remote_mcg_cli_basename),
-            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-        )
-        # Add an executable bit in order to allow usage of the binary
-        current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-        os.chmod(
-            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
-            current_file_permissions.st_mode | stat.S_IEXEC,
-        )
-        # Make sure the binary was copied properly and has the correct permissions
-        assert os.path.isfile(
-            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-        ), f"MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-        assert os.access(
-            constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK
-        ), "The MCG CLI binary does not have execution permissions"
-
     @property
     @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
     def status(self):
@@ -1030,8 +934,12 @@ class MCG:
         Delete the noobaa-core pod and wait for it to come up again
 
         """
+        from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
 
         self.core_pod.delete(wait=True)
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_CORE_POD_LABEL, exptected_count=1
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
@@ -1084,6 +992,30 @@ class MCG:
 
         return credentials_dict
 
+    def update_s3_creds(self):
+        """
+        Set the S3 credentials of the NooBaa admin user from the
+        noobaa-admin secret, and update the S3 resource and client
+
+        """
+        admin_credentials = self.get_noobaa_admin_credentials_from_secret()
+        self.access_key_id = admin_credentials["AWS_ACCESS_KEY_ID"]
+        self.access_key = admin_credentials["AWS_SECRET_ACCESS_KEY"]
+        self.noobaa_user = admin_credentials["email"]
+        self.noobaa_password = admin_credentials["password"]
+
+        self.noobaa_token = self.retrieve_nb_token()
+
+        self.s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key,
+        )
+
+        self.s3_client = self.s3_resource.meta.client
+
     def reset_admin_pw(self, new_password):
         """
         Reset the NooBaa admin password
@@ -1108,3 +1040,42 @@ class MCG:
 
         logger.info("Waiting a bit for the change to propogate through the system...")
         sleep(15)
+
+    def get_admin_default_resource_name(self):
+        """
+        Get the default resource name of the admin account
+
+        Returns:
+            str: The default resource name
+
+        """
+
+        read_account_output = self.send_rpc_query(
+            "account_api",
+            "read_account",
+            params={
+                "email": self.noobaa_user,
+            },
+        )
+        return read_account_output.json()["reply"]["default_resource"]
+
+    def get_default_bc_backingstore_name(self):
+        """
+        Get the default backingstore name of the default bucketclass
+
+        Returns:
+            str: The default backingstore name
+
+        """
+        bucketclass_ocp_obj = OCP(
+            kind=constants.BUCKETCLASS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
+        )
+        return (
+            bucketclass_ocp_obj.get()
+            .get("spec")
+            .get("placementPolicy")
+            .get("tiers")[0]
+            .get("backingStores")[0]
+        )

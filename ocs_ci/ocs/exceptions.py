@@ -140,6 +140,10 @@ class NotSupportedFunctionError(Exception):
     pass
 
 
+class NotSupportedException(Exception):
+    pass
+
+
 class NonUpgradedImagesFoundError(Exception):
     pass
 
@@ -635,7 +639,7 @@ class ArchitectureNotSupported(Exception):
     pass
 
 
-class MissingSquadDecoratorError(Exception):
+class MissingDecoratorError(Exception):
     pass
 
 
@@ -677,4 +681,12 @@ class HostValidationFailed(Exception):
 
 
 class SameNameClusterAlreadyExistsException(Exception):
+    pass
+
+
+class NoRunningCephToolBoxException(Exception):
+    pass
+
+
+class UsernameNotFoundException(Exception):
     pass

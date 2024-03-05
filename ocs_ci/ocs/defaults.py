@@ -73,6 +73,7 @@ MAX_BYTES_IN_POOL_AFTER_DATA_DELETE = 250000
 # Elastic search parameters
 ELASTICSEARCH_DEV_IP = "10.0.144.103"
 ELASTICSEARCE_PORT = 9200
+ELASTICSEARCE_SCHEME = "http"
 
 # Local storage namespace
 LOCAL_STORAGE_NAMESPACE = "openshift-local-storage"

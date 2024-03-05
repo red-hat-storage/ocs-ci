@@ -1,0 +1,4 @@
+# This configuration file is used for changing performance profile during deployment.
+---
+ENV_DATA:
+  performance_profile: balanced

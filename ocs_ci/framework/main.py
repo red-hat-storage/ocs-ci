@@ -113,6 +113,7 @@ def process_ocsci_conf(arguments):
             "4.13",
             "4.14",
             "4.15",
+            "4.16",
         ],
     )
     parser.add_argument("--ocs-registry-image")
@@ -200,7 +201,7 @@ def init_multicluster_ocsci_conf(args, nclusters):
     # options so that separation of per cluster conf will be easier
     for i in range(nclusters):
         parser.add_argument(
-            f"--cluster{i+1}",
+            f"--cluster{i + 1}",
             required=True,
             action="store_true",
             help=(
@@ -227,7 +228,7 @@ def init_multicluster_ocsci_conf(args, nclusters):
             if multicluster_conf[index][arg + 1].startswith("--"):
                 multicluster_conf[index][
                     arg + 1
-                ] = f"{multicluster_conf[index][arg+1]}{index + 1}"
+                ] = f"{multicluster_conf[index][arg + 1]}{index + 1}"
         framework.config.multicluster_args.append(multicluster_conf[index][1:])
         check_config_requirements()
     framework.config.multicluster_common_args.append(common_argv)

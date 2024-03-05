@@ -11,9 +11,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     skipif_ocs_version,
     green_squad,
+    cloud_platform_required,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
@@ -26,9 +29,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-4919")
 @green_squad
-@pytest.mark.skip(
-    reason="Skipping due to the issue https://github.com/red-hat-storage/ocs-ci/issues/8464"
-)
+@cloud_platform_required
 class TestMonFailuresWithIntransitEncryption:
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):
@@ -61,7 +62,7 @@ class TestMonFailuresWithIntransitEncryption:
             8. Verify the in-transit encryption configuration after
             scaling up mons and restarting mgr pod.
         """
-
+        self.mons = []
         if not get_in_transit_encryption_config_state():
             if config.ENV_DATA.get("in_transit_encryption"):
                 pytest.fail(
@@ -88,9 +89,17 @@ class TestMonFailuresWithIntransitEncryption:
         # Sleeping for 10 seconds to emulate a condition where the 2 mons is inaccessibe  for 10 seconds.
         time.sleep(10)
 
+        def restart_mgr_pod():
+            ceph_obj.scan_cluster()
+            mgr_pod = ceph_obj.mgrs[0]
+            mgr_pod.delete(wait=True)
+
         # Restart Mgr pod
-        mgr_pod = ceph_obj.mgrs[0]
-        mgr_pod.delete(wait=True)
+        retry(
+            (CommandFailed),
+            tries=5,
+            delay=10,
+        )(restart_mgr_pod)()
 
         # Sleeping for 5 seconds to rejoin the manager's pod.
         time.sleep(5)
@@ -101,7 +110,6 @@ class TestMonFailuresWithIntransitEncryption:
 
         log.info("Waiting for mgr pod move to Running state")
         ceph_obj.scan_cluster()
-        mgr_pod = ceph_obj.mgrs[0]
 
         assert ceph_obj.POD.wait_for_resource(
             condition=constants.STATUS_RUNNING,

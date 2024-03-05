@@ -27,6 +27,7 @@ from ocs_ci.utility.utils import (
     delete_file,
     download_file,
     exec_cmd,
+    get_infra_id_from_openshift_install_state,
 )
 
 
@@ -196,6 +197,8 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.warning(
                 "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
             )
+        # Make sure ccoctl is downloaded before using it in destroy job.
+        self.configure_cloud_credential_operator()
         self.delete_service_id()
         if resource_group:
             resource_group = self.get_resource_group()
@@ -224,10 +227,13 @@ class IBMCloudIPI(CloudDeploymentBase):
         )
         exec_cmd(cmd)
 
+        # get infraID
+        infra_id = get_infra_id_from_openshift_install_state(self.cluster_path)
+
         logger.info("Creating service ID")
         cmd = (
             f"ccoctl ibmcloud create-service-id --credentials-requests-dir {self.credentials_requests_dir} "
-            f"--name {self.cluster_name} --output-dir {self.cluster_path}"
+            f"--name {infra_id} --output-dir {self.cluster_path}"
         )
         exec_cmd(cmd)
 
@@ -472,17 +478,20 @@ class IBMCloudIPI(CloudDeploymentBase):
         the cluster while in manual mode.
 
         """
-        # retrieve ccoctl binary from https://mirror.openshift.com
-        version = config.DEPLOYMENT.get("ccoctl_version")
-        source = f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/ccoctl-linux.tar.gz"
         bin_dir = config.RUN["bin_dir"]
-        tarball = os.path.join(bin_dir, "ccoctl-linux.tar.gz")
-        logger.info("Downloading ccoctl tarball from %s", source)
-        download_file(source, tarball)
-        cmd = f"tar -xzC {bin_dir} -f {tarball} ccoctl"
-        logger.info("Extracting ccoctl binary from %s", tarball)
-        exec_cmd(cmd)
-        delete_file(tarball)
+        ccoctl_path = os.path.join(bin_dir, "ccoctl")
+        if not os.path.isfile(ccoctl_path):
+            # retrieve ccoctl binary from https://mirror.openshift.com
+            version = config.DEPLOYMENT.get("ccoctl_version")
+            source = f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/ccoctl-linux.tar.gz"
+            bin_dir = config.RUN["bin_dir"]
+            tarball = os.path.join(bin_dir, "ccoctl-linux.tar.gz")
+            logger.info("Downloading ccoctl tarball from %s", source)
+            download_file(source, tarball)
+            cmd = f"tar -xzC {bin_dir} -f {tarball} ccoctl"
+            logger.info("Extracting ccoctl binary from %s", tarball)
+            exec_cmd(cmd)
+            delete_file(tarball)
 
     @staticmethod
     def export_api_key():

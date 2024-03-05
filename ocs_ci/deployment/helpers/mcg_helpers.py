@@ -44,3 +44,41 @@ def mcg_only_post_deployment_checks():
 
     # Enable console plugin
     enable_console_plugin()
+
+
+def check_if_mcg_root_secret_public():
+    """
+    Verify if MCG root secret is public
+
+    Returns:
+        False if the secrets are not public and True otherwise
+
+    """
+
+    noobaa_endpoint_dep = ocp.OCP(
+        kind="Deployment",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+    ).get()
+
+    noobaa_core_sts = ocp.OCP(
+        kind="Statefulset",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_CORE_STATEFULSET,
+    ).get()
+
+    nb_endpoint_env = noobaa_endpoint_dep["spec"]["template"]["spec"]["containers"]
+    nb_core_env = noobaa_core_sts["spec"]["template"]["spec"]["containers"]
+
+    def _check_env_vars(env_vars):
+        """
+        Method verifies the environment variable lists
+        if the root secret is public
+
+        """
+        for env in env_vars:
+            if env["name"] == "NOOBAA_ROOT_SECRET" and "value" in env.keys():
+                return True
+        return False
+
+    return _check_env_vars(nb_core_env) or _check_env_vars(nb_endpoint_env)

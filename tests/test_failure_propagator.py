@@ -108,6 +108,7 @@ class TestFailurePropagator:
                     message = (
                         message + " Couldn't identify the test case that caused this"
                     )
+                config.RUN["display_skipped_msg_in_email"] = message
                 pytest.fail(message)
 
     @pytest.mark.last

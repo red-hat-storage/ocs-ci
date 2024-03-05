@@ -224,6 +224,8 @@ class CreateResourceForm(PageNavigator):
             )
             self._remove_text_from_input()
             self.do_send_keys(self.name_input_loc, text_input)
+            logger.info("sleep 1s to get management-console apply input rules")
+            time.sleep(1)
         # reload popup to process all input, but not a part
         self.do_click(self.validation_loc["input_value_validator_icon"])
         self.do_click(self.validation_loc["input_value_validator_icon"])
@@ -539,10 +541,12 @@ class DataFoundationTabBar(PageNavigator):
         Navigate to Overview tab. Accessible from any Data Foundation tabs
         """
         logger.info("Navigate to Data Foundation - Overview")
-        # pay attention Overview loc will show twice if Home Page nav extended
-        self.do_click(
-            locator=self.validation_loc["odf-overview"], enable_screenshot=True
-        )
+
+        # check if 'Overview' element is present and active, if not click on 'Overview' tab
+        if not self.get_elements(self.validation_loc["odf-overview-tab-active"]):
+            self.do_click(
+                locator=self.validation_loc["odf-overview"], enable_screenshot=True
+            )
 
         from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 

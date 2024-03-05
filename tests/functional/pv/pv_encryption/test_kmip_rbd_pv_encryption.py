@@ -18,6 +18,7 @@ from ocs_ci.helpers.helpers import (
     create_pods,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
 
 log = logging.getLogger(__name__)
@@ -105,12 +106,10 @@ class TestKmipRbdPvEncryptionKMIP(ManageTest):
 
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
-            if pod_obj.exec_sh_cmd_on_pod(
-                command=f"lsblk | grep {vol_handle} | grep crypt"
-            ):
-                log.info(f"Encrypted device found in {pod_obj.name}")
-            else:
-                log.error(f"Encrypted device not found in {pod_obj.name}")
+            node = pod_obj.get_node()
+            assert verify_crypt_device_present_onnode(
+                node, vol_handle
+            ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
             pod_obj.run_io(
                 storage_type="block",

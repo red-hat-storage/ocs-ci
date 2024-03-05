@@ -178,7 +178,7 @@ def get_clusters(
                     logger.info(
                         f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
                         f"(id: {instance.id}) running time is {running_time} hours while the allowed"
-                        f" running time for it is {allowed_running_time/3600} hours"
+                        f" running time for it is {allowed_running_time / 3600} hours"
                     )
                     if running_time.total_seconds() > allowed_running_time:
                         return True
@@ -312,6 +312,22 @@ def cluster_cleanup():
         p.join()
 
 
+def delete_buckets(bucket_prefix, days):
+    """
+    Delete the S3 buckets with given prefix
+
+    Args:
+        bucket_prefix (str): Bucket prefix to delete.
+        days (int): Days older than this will be considered to delete
+
+    """
+    aws = AWS()
+    buckets_to_delete = aws.get_buckets_with_prefix_(bucket_prefix, days)
+    logger.info(f"buckets to delete: {buckets_to_delete}")
+    for bucket in buckets_to_delete:
+        aws.delete_bucket(bucket)
+
+
 def aws_cleanup():
     parser = argparse.ArgumentParser(
         description="AWS overall resources cleanup according to running time",
@@ -365,8 +381,35 @@ def aws_cleanup():
         required=False,
         help="The name of the cluster to delete from AWS",
     )
+    bucket_group = parser.add_argument_group("S3 Bucket Sweeping Options")
+    bucket_group.add_argument(
+        "--sweep-buckets", action="store_true", help="Deleting S3 buckets."
+    )
+    bucket_group.add_argument(
+        "--bucket-prefix",
+        help="Prefix for S3 buckets. Only buckets with this prefix will be considered to delete.",
+    )
+    bucket_group.add_argument(
+        "--days",
+        type=int,
+        default=5,
+        help="""
+                Maximum running time for the buckets in days.
+                Buckets older than to this will be deleted.
+                The minimum is 5 days
+                """,
+    )
 
     args = parser.parse_args()
+
+    if args.sweep_buckets:
+        if not args.bucket_prefix:
+            parser.error(
+                "--bucket-prefix is required when --sweep-buckets is specified."
+            )
+        delete_buckets(args.bucket_prefix, args.days)
+        return
+
     if not args.force:
         confirmation = input(
             "Careful! This action could be highly destructive. "
@@ -383,7 +426,7 @@ def aws_cleanup():
             logger.info(
                 "Adding special rule for prefix '%s' with hours %s", prefix, hours
             )
-            prefixes_hours_to_spare.update({prefix: hours})
+            prefixes_hours_to_spare = {**{prefix: hours}, **prefixes_hours_to_spare}
 
     time_to_delete = args.hours * 60 * 60 if args.hours else None
     region = defaults.AWS_REGION if not args.region else args.region

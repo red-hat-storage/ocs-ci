@@ -139,7 +139,9 @@ class Disruptions:
 
     def delete_resource(self, resource_id=0):
         pod_ocp = ocp.OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+            kind=constants.POD,
+            namespace=self.resource_obj[resource_id].namespace
+            or config.ENV_DATA["cluster_namespace"],
         )
         if self.cluster_kubeconfig:
             # Setting 'cluster_kubeconfig' attribute to use as the value of the

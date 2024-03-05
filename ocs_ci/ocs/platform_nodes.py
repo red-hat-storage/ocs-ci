@@ -60,7 +60,10 @@ from ocs_ci.utility.utils import (
     get_module_ip,
     get_terraform_ignition_provider,
 )
-from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes_in_statuses
+from ocs_ci.ocs.node import (
+    wait_for_nodes_status,
+    get_nodes_in_statuses,
+)
 from ocs_ci.utility.vsphere_nodes import VSPHERENode
 from paramiko.ssh_exception import NoValidConnectionsError, AuthenticationException
 from semantic_version import Version
@@ -92,6 +95,7 @@ class PlatformNodesFactory:
             "rosa": AWSNodes,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
+            "hci_baremetal": IBMCloudBMNodes,
         }
 
     def get_nodes_platform(self):
@@ -3070,3 +3074,127 @@ class GCPNodes(NodesBase):
         node_names = [n.name for n in not_ready_nodes]
         if node_names:
             self.gcp.start_instances(node_names)
+
+
+class IBMCloudBMNodes(NodesBase):
+    """
+    IBM Cloud for Bare metal machines class
+
+    """
+
+    def __init__(self):
+        super(IBMCloudBMNodes, self).__init__()
+        from ocs_ci.utility import ibmcloud_bm
+
+        self.ibmcloud_bm = ibmcloud_bm.IBMCloudBM()
+
+    def get_machines(self, nodes):
+        """
+        Get the machines associated with the given nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            list: List of dictionaries. List of the machines associated with the given nodes
+
+        """
+        node_names = [n.name for n in nodes]
+        return self.ibmcloud_bm.get_machines_by_names(node_names)
+
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be in a NotReady state. False, otherwise
+
+        """
+        machines = self.get_machines(nodes)
+        self.ibmcloud_bm.stop_machines(machines)
+        if wait:
+            node_names = [n.name for n in nodes]
+            wait_for_nodes_status(
+                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+            )
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise
+
+        """
+        machines = self.get_machines(nodes)
+        self.ibmcloud_bm.start_machines(machines)
+        if wait:
+            node_names = [n.name for n in nodes]
+            wait_for_nodes_status(
+                node_names, constants.NODE_READY, timeout=720, sleep=20
+            )
+
+    def restart_nodes(self, nodes, wait=True, force=False):
+        """
+        Restart nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise
+            force (bool): If True, it will force restarting the nodes. False, otherwise.
+                Default value is False.
+
+        """
+        machines = self.get_machines(nodes)
+        self.ibmcloud_bm.restart_machines(machines, force=force)
+        if wait:
+            node_names = [n.name for n in nodes]
+            logger.info(
+                f"Wait for the nodes {node_names} to reach the status {constants.NODE_NOT_READY}"
+            )
+            wait_for_nodes_status(
+                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+            )
+            logger.info(
+                f"Wait for the nodes {node_names} to be in a Ready status again"
+            )
+            wait_for_nodes_status(
+                node_names, constants.NODE_READY, timeout=720, sleep=20
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True):
+        """
+        Restart the nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise
+
+        """
+        self.stop_nodes(nodes, wait=True)
+        self.start_nodes(nodes, wait=wait)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Start the nodes in a NotReady state
+
+        """
+        nodes_not_ready = get_nodes_in_statuses([constants.NODE_NOT_READY])
+        machines = self.get_machines(nodes_not_ready)
+        self.ibmcloud_bm.start_machines(machines)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes
+
+        """
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate nodes
+
+        """
+        raise NotImplementedError("terminate nodes functionality is not implemented")

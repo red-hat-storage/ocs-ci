@@ -25,6 +25,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import kms
 from semantic_version import Version
+from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
 
 log = logging.getLogger(__name__)
@@ -164,14 +165,11 @@ class TestEncryptedRbdClone(ManageTest):
 
         log.info("Checking for encrypted device and running IO on all pods")
         for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
-            if pod_obj.exec_sh_cmd_on_pod(
-                command=f"lsblk | grep {vol_handle} | grep crypt"
-            ):
-                log.info(f"Encrypted device found in {pod_obj.name}")
-            else:
-                raise ResourceNotFoundError(
-                    f"Encrypted device not found in {pod_obj.name}"
-                )
+            node = pod_obj.get_node()
+            assert verify_crypt_device_present_onnode(
+                node, vol_handle
+            ), f"Crypt devicve {vol_handle} not found on node:{node}"
+
             log.info(f"File created during IO {pod_obj.name}")
             pod_obj.run_io(
                 storage_type="block",
@@ -246,14 +244,10 @@ class TestEncryptedRbdClone(ManageTest):
                     )
         # Verify encrypted device is present and md5sum on all pods
         for vol_handle, pod_obj in zip(cloned_vol_handles, cloned_pod_objs):
-            if pod_obj.exec_sh_cmd_on_pod(
-                command=f"lsblk | grep {vol_handle} | grep crypt"
-            ):
-                log.info(f"Encrypted device found in {pod_obj.name}")
-            else:
-                raise ResourceNotFoundError(
-                    f"Encrypted device not found in {pod_obj.name}"
-                )
+            node = pod_obj.get_node()
+            assert verify_crypt_device_present_onnode(
+                node, vol_handle
+            ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
             log.info(f"Verifying md5sum on pod {pod_obj.name}")
             pod.verify_data_integrity(

@@ -14,10 +14,13 @@ import tempfile
 import threading
 import time
 import inspect
+import stat
+import platform
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from subprocess import PIPE, run
 from uuid import uuid4
+
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
@@ -32,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnavailableBuildException,
     UnexpectedBehaviour,
+    NotSupportedException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
@@ -44,8 +48,12 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
+    create_directory_path,
+    exec_cmd,
+    get_ocs_build_number,
 )
 from ocs_ci.utility.utils import convert_device_size
+
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -708,6 +716,7 @@ def create_storage_class(
     fs_name=None,
     volume_binding_mode="Immediate",
     allow_volume_expansion=True,
+    kernelMountOptions=None,
 ):
     """
     Create a storage class
@@ -730,6 +739,7 @@ def create_storage_class(
         volume_binding_mode (str): Can be "Immediate" or "WaitForFirstConsumer" which the PVC will be in pending till
             pod attachment.
         allow_volume_expansion(bool): True to create sc with volume expansion
+        kernelMountOptions (str): Mount option for security context
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -771,6 +781,8 @@ def create_storage_class(
         if sc_name
         else create_unique_resource_name(f"test-{interface}", "storageclass")
     )
+    if kernelMountOptions:
+        sc_data["parameters"]["kernelMountOptions"] = kernelMountOptions
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
@@ -1360,7 +1372,7 @@ def create_build_from_docker_image(
     install_package,
     namespace,
     source_image="quay.io/ocsci/fedora",
-    source_image_label="latest",
+    source_image_label="fio",
 ):
     """
     Allows to create a build config using a Dockerfile specified as an
@@ -2813,7 +2825,9 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
-def modify_deployment_replica_count(deployment_name, replica_count):
+def modify_deployment_replica_count(
+    deployment_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Function to modify deployment replica count,
     i.e to scale up or down deployment
@@ -2821,16 +2835,35 @@ def modify_deployment_replica_count(deployment_name, replica_count):
     Args:
         deployment_name (str): Name of deployment
         replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deployment exists
 
     Returns:
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = ocp.OCP(
-        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=deployment_name, params=params)
+
+
+def modify_job_parallelism_count(
+    job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Function to modify Job instances count,
+
+    Args:
+        job_name (str): Name of job
+        count (int): instances count to be changed to
+        namespace (str): namespace where the job is running
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.JOB, namespace=namespace)
+    params = f'{{"spec": {{"parallelism": {count}}}}}'
+    return ocp_obj.patch(resource_name=job_name, params=params)
 
 
 def collect_performance_stats(dir_name):
@@ -3545,7 +3578,9 @@ def get_failure_domain():
     return storage_cluster_obj.data["items"][0]["status"]["failureDomain"]
 
 
-def modify_statefulset_replica_count(statefulset_name, replica_count):
+def modify_statefulset_replica_count(
+    statefulset_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Function to modify statefulset replica count,
     i.e to scale up or down statefulset
@@ -3558,9 +3593,7 @@ def modify_statefulset_replica_count(statefulset_name, replica_count):
         bool: True in case if changes are applied. False otherwise
 
     """
-    ocp_obj = OCP(
-        kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    ocp_obj = OCP(kind=constants.STATEFULSET, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=statefulset_name, params=params)
 
@@ -4069,11 +4102,10 @@ def get_cephfs_subvolumegroup():
         str: The name of cephfilesystemsubvolumegroup
 
     """
-    if config.ENV_DATA.get(
-        "platform", ""
-    ).lower() in constants.HCI_PC_OR_MS_PLATFORM and (
-        config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
-        or config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+    if (
+        config.ENV_DATA.get("platform", "").lower()
+        in constants.MANAGED_SERVICE_PLATFORMS
+        and config.ENV_DATA.get("cluster_type", "").lower() == "consumer"
     ):
         subvolume_group = ocp.OCP(
             kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
@@ -4081,6 +4113,17 @@ def get_cephfs_subvolumegroup():
         )
         subvolume_group_obj = subvolume_group.get().get("items")[0]
         subvolume_group_name = subvolume_group_obj.get("metadata").get("name")
+    elif config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+        configmap_obj = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-configs")
+        json_config = ceph_csi_configmap.get("data").get("config.json")
+        json_config_list = json.loads(json_config)
+        for dict_item in json_config_list:
+            if "cephFS" in dict_item.keys():
+                subvolume_group_name = dict_item["cephFS"].get("subvolumeGroup")
     else:
         subvolume_group_name = "csi"
 
@@ -4347,3 +4390,208 @@ def get_s3_credentials_from_secret(secret_name):
     secret_key = base64.b64decode(base64_secret_key).decode("utf-8")
 
     return access_key, secret_key
+
+
+def verify_pvc_size(pod_obj, expected_size):
+    """
+    Verify PVC size is as expected or not.
+
+    Args:
+        pod_obj : Pod Object
+        expected_size : Expected size of PVC
+    Returns:
+        bool: True if expected size is matched with the PVC attached to pod. else False
+
+    """
+    # Wait for 240 seconds to reflect the change on pod
+    logger.info(f"Checking pod {pod_obj.name} to verify the change.")
+
+    command = "df -kh"
+    for df_out in TimeoutSampler(240, 3, pod_obj.exec_cmd_on_pod, command=command):
+        if not df_out:
+            continue
+        df_out = df_out.split()
+
+        if not df_out:
+            logger.error(
+                f"Command {command} failed to return an output from pod {pod_obj.name}"
+            )
+            return False
+
+        new_size_mount = df_out[df_out.index(pod_obj.get_storage_path()) - 4]
+        if (
+            expected_size - 0.5 <= float(new_size_mount[:-1]) <= expected_size
+            and new_size_mount[-1] == "G"
+        ):
+            logger.info(
+                f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
+                f"is reflected on pod {pod_obj.name}"
+            )
+            return True
+
+        logger.info(
+            f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
+            f" on pod {pod_obj.name}. New size on mount is not "
+            f"{expected_size}G as expected, but {new_size_mount}. "
+            f"Checking again."
+        )
+    return False
+
+
+def check_selinux_relabeling(pod_obj):
+    """
+    Check SeLinux Relabeling is set to false.
+
+    Args:
+        pod_obj (Pod object): App pod
+
+    """
+    # Get the node on which pod is running
+    node_name = pod.get_pod_node(pod_obj=pod_obj).name
+
+    # Check SeLinux Relabeling is set to false
+    logger.info("checking for crictl logs")
+    oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    cmd1 = "crictl inspect $(crictl ps --name perf -q)"
+    output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
+    key = '"selinuxRelabel": false'
+    assert key in output, f"{key} is not present in inspect logs"
+    logger.info(f"{key} is present in inspect logs of application pod running node")
+
+
+def verify_log_exist_in_pods_logs(
+    pod_names,
+    expected_log,
+    container=None,
+    namespace=config.ENV_DATA["cluster_namespace"],
+    all_containers_flag=True,
+    since=None,
+):
+    """
+    Verify log exist in pods logs.
+
+    Args:
+        pod_names (list): Name of the pod
+        expected_log (str): the expected logs in "oc logs" command
+        container (str): Name of the container
+        namespace (str): Namespace of the pod
+        all_containers_flag (bool): fetch logs from all containers of the resource
+        since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
+
+    Returns:
+        bool: return True if log exist otherwise False
+
+    """
+    for pod_name in pod_names:
+        pod_logs = pod.get_pod_logs(
+            pod_name,
+            namespace=namespace,
+            container=container,
+            all_containers=all_containers_flag,
+            since=since,
+        )
+        logger.info(f"logs osd:{pod_logs}")
+        if expected_log in pod_logs:
+            return True
+    return False
+
+
+def retrieve_cli_binary(cli_type="mcg"):
+    """
+    Download the MCG-CLI/ODF-CLI binary and store it locally.
+
+    Args:
+        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+
+    Raises:
+        AssertionError: In the case the CLI binary is not executable.
+
+    """
+    semantic_version = version.get_semantic_ocs_version_from_config()
+    ocs_build = get_ocs_build_number()
+    if cli_type == "odf" and semantic_version < version.VERSION_4_15:
+        raise NotSupportedException(
+            f"odf cli tool not supported on ODF {semantic_version}"
+        )
+
+    remote_path = get_architecture_path(cli_type)
+    remote_cli_basename = os.path.basename(remote_path)
+    if cli_type == "mcg":
+        local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+    elif cli_type == "odf":
+        local_cli_path = constants.CLI_TOOL_LOCAL_PATH
+    local_cli_dir = os.path.dirname(local_cli_path)
+    live_deployment = config.DEPLOYMENT["live_deployment"]
+    if live_deployment and semantic_version >= version.VERSION_4_13:
+        if semantic_version >= version.VERSION_4_15:
+            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+        else:
+            image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+    else:
+        image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
+
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    # create DATA_DIR if it doesn't exist
+    if not os.path.exists(constants.DATA_DIR):
+        create_directory_path(constants.DATA_DIR)
+
+    if not os.path.isfile(pull_secret_path):
+        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
+        exec_cmd(
+            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+            shell=True,
+        )
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    )
+    os.rename(
+        os.path.join(local_cli_dir, remote_cli_basename),
+        local_cli_path,
+    )
+    # Add an executable bit in order to allow usage of the binary
+    current_file_permissions = os.stat(local_cli_path)
+    os.chmod(
+        local_cli_path,
+        current_file_permissions.st_mode | stat.S_IEXEC,
+    )
+    # Make sure the binary was copied properly and has the correct permissions
+    assert os.path.isfile(
+        local_cli_path
+    ), f"{cli_type} CLI file not found at {local_cli_path}"
+    assert os.access(
+        local_cli_path, os.X_OK
+    ), f"The {cli_type} CLI binary does not have execution permissions"
+
+
+def get_architecture_path(cli_type):
+    """
+    Get Architcture path
+
+    Args:
+        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+
+    Returns:
+        (str): path of MCG/ODF CLI Binary in the image.
+    """
+    system = platform.system()
+    machine = platform.machine()
+    path = f"/usr/share/{cli_type}/"
+    if cli_type == "mcg":
+        image_prefix = "noobaa"
+    elif cli_type == "odf":
+        image_prefix = "odf"
+    if system == "Linux":
+        path = os.path.join(path, "linux")
+        if machine == "x86_64":
+            path = os.path.join(path, f"{image_prefix}-amd64")
+        elif machine == "ppc64le":
+            path = os.path.join(path, f"{image_prefix}-ppc64le")
+        elif machine == "s390x":
+            path = os.path.join(path, f"{image_prefix}-s390x")
+    elif system == "Darwin":  # Mac
+        path = os.path.join(path, "macosx", image_prefix)
+    return path

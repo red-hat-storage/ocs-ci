@@ -113,7 +113,7 @@ DEPLOYMENT:
   api_ssl_ca_cert: "data/ca.crt"
   install_lvmo: False
   # Cloud Credential Operator Utility
-  ccoctl_version: "4.11.0"
+  ccoctl_version: "4.15.0"
   # AWS profile ( profile must exist in ~/.aws/credentials )
   aws_profile: "ocs_ci"
   aws_cred_path: "~/.aws/credentials"
@@ -239,6 +239,8 @@ ENV_DATA:
 
   # used in external mode deployment
   restricted-auth-permission: false
+  # k8s_cluster_name should be used with restricted-auth-permission
+  use_k8s_cluster_name: true
 
   # used in heterogeneous architecture
   num_workers_additional: 0
@@ -263,6 +265,11 @@ ENV_DATA:
   multus_cluster_net_range: "192.168.30.0/24"
   multus_cluster_net_type: "macvlan"
   multus_cluster_net_mode: "bridge"
+
+  #RDR Green field
+  rdr_osd_deployment_mode: "greenfield"
+
+  # Assisted Installer related settings
 
 # This section is related to upgrade
 UPGRADE:
@@ -307,16 +314,19 @@ PERF:
   # use in the tests this ES IP and Port - in case of deploy_internal_es: false
   internal_es_server: ""
   internal_es_port: 9200
+  internal_es_scheme: "http"
   # There is a Production ES for long term results saving
   production_es: true
   # The Production (long term results saving) ES information:  IP / Port
   production_es_server: "10.0.78.167"
   production_es_port: 9200
+  production_es_scheme: "http"
   # There is a Lab ES for development testing - combine with --dev-mode argument
   dev_lab_es: true
   # The Dev. Lab ES information:  IP / Port
   dev_es_server: "10.0.144.103"
   dev_es_port: 9200
+  dev_es_scheme: "http"
   dashboard_cred: "data/perfdash"
 
 # Specific component to be enabled/disabled
