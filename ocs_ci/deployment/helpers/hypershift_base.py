@@ -327,9 +327,9 @@ class HyperShiftBase(Deployment):
             )
             exec_cmd(f"rm -f {kubeadmin_path_abs}/kubeconfig")
 
-        time.sleep(0.5)
+        time.sleep(3)
         open(f"{kubeadmin_path_abs}/kubeconfig", "a").close()
-        time.sleep(0.5)
+        time.sleep(3)
 
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeadmin_path_abs}"
