@@ -20,6 +20,7 @@ class TestStorageClientUI(ManageTest):
 
     """
 
+    @polarion_id("OCS-5453")
     @hci_provider_and_client_required
     @runs_on_provider
     def test_clients_on_dashboard(self, setup_ui_class):
@@ -32,6 +33,7 @@ class TestStorageClientUI(ManageTest):
         storageclient_obj = StorageClientUI()
         storageclient_obj.verify_clients_on_dashboard()
 
+    @polarion_id("OCS-5452")
     @hci_provider_and_client_required
     def test_storage_clients_page(self, setup_ui_class):
         """
@@ -43,6 +45,7 @@ class TestStorageClientUI(ManageTest):
         storageclient_obj = StorageClientUI()
         storageclient_obj.verify_client_data_in_ui()
 
+    @polarion_id("OCS-5454")
     @hci_provider_and_client_required
     def test_token_explanation(self, setup_ui_class):
         """
