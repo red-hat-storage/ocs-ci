@@ -43,6 +43,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ClientDownloadError,
     CommandFailed,
+    ConfigurationError,
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
@@ -3427,6 +3428,15 @@ def mirror_image(image, cluster_config=None):
     """
     if not cluster_config:
         cluster_config = config
+    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry")
+    if not mirror_registry:
+        raise ConfigurationError(
+            'DEPLOYMENT["mirror_registry"] parameter not configured!\n'
+            "This might be caused by previous failure in OCP deployment or wrong configuration."
+        )
+    if image.startswith(mirror_registry):
+        log.debug(f"Skipping mirror of image {image}, it is already mirrored.")
+        return image
     with prepare_customized_pull_secret(image) as authfile_fo:
         # login to mirror registry
         login_to_mirror_registry(authfile_fo.name, cluster_config)

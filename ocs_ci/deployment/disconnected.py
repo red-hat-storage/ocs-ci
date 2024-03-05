@@ -109,7 +109,7 @@ def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
         f"oc image mirror --filter-by-os='.*' -f {mapping_file} "
         f"--insecure --registry-config={pull_secret_path} "
         "--max-per-registry=2 --continue-on-error=true --skip-missing=true",
-        timeout=3600,
+        timeout=18000,
         ignore_error=True,
     )
 
@@ -277,7 +277,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
     if icsp:
         cmd += " --continue-on-error --skip-missing"
     try:
-        exec_cmd(cmd, timeout=7200)
+        exec_cmd(cmd, timeout=18000)
     except CommandFailed:
         # if icsp is configured, the oc mirror command might fail (return non 0 rc),
         # even though we use --continue-on-error and --skip-missing arguments
