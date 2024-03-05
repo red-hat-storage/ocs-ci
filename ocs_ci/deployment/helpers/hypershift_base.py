@@ -316,13 +316,21 @@ class HyperShiftBase(Deployment):
         :return: True if kubeconfig downloaded successfully, False otherwise
         """
         if not kubeconfig_path:
-            kubeconfig_path = f"~/clusters/{name}/openshift-cluster-dir/auth/kubeconfig"
+            kubeconfig_path = f"~/clusters/{name}/openshift-cluster-dir/auth"
+
+        os.makedirs(os.path.dirname(kubeconfig_path), exist_ok=True)
+
+        if os.path.isfile(f"{kubeconfig_path}/kubeconfig"):
+            logger.info(
+                f"Kubeconfig for HyperShift hosted cluster {name} already exists at {kubeconfig_path}, removing it"
+            )
+            exec_cmd(f"rm -f {kubeconfig_path}/kubeconfig")
 
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
         )
         exec_cmd(
-            f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}"
+            f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}/kubeconfig"
         )
         if os.path.isfile(kubeconfig_path) and os.stat(kubeconfig_path).st_size > 0:
             return True

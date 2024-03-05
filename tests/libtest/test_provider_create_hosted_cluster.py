@@ -64,6 +64,6 @@ class TestProviderHosted(object):
         hps_base = HyperShiftBase()
         hosted_cluster_names = hps_base.get_hosted_cluster_names()
         for hosted_cluster_name in hosted_cluster_names:
-            hps_base.download_hosted_cluster_kubeconfig(
+            assert hps_base.download_hosted_cluster_kubeconfig(
                 hosted_cluster_name,
-            )
+            ), "Failed to download kubeconfig for hosted cluster"
