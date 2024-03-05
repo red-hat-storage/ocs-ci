@@ -318,19 +318,20 @@ class HyperShiftBase(Deployment):
         if not kubeconfig_path:
             kubeconfig_path = f"~/clusters/{name}/openshift-cluster-dir/auth"
 
-        os.makedirs(os.path.dirname(kubeconfig_path), exist_ok=True)
+        kubeadmin_path_abs = os.path.expanduser(kubeconfig_path)
+        os.makedirs(os.path.dirname(kubeadmin_path_abs), exist_ok=True)
 
-        if os.path.isfile(f"{kubeconfig_path}/kubeconfig"):
+        if os.path.isfile(f"{kubeadmin_path_abs}/kubeconfig"):
             logger.info(
-                f"Kubeconfig for HyperShift hosted cluster {name} already exists at {kubeconfig_path}, removing it"
+                f"Kubeconfig for HyperShift hosted cluster {name} already exists at {kubeadmin_path_abs}, removing it"
             )
-            exec_cmd(f"rm -f {kubeconfig_path}/kubeconfig")
+            exec_cmd(f"rm -f {kubeadmin_path_abs}/kubeconfig")
 
         logger.info(
-            f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
+            f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeadmin_path_abs}"
         )
         resp = exec_cmd(
-            f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}/kubeconfig",
+            f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeadmin_path_abs}/kubeconfig",
             shell=True,
         )
         if resp.returncode != 0:
@@ -338,7 +339,10 @@ class HyperShiftBase(Deployment):
                 f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{resp.stderr.decode('utf-8')}"
             )
             return False
-        if os.path.isfile(kubeconfig_path) and os.stat(kubeconfig_path).st_size > 0:
+        if (
+            os.path.isfile(f"{kubeadmin_path_abs}/kubeconfig")
+            and os.stat(f"{kubeadmin_path_abs}/kubeconfig").st_size > 0
+        ):
             return True
 
     def get_hosted_cluster_progress(self, name):
