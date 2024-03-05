@@ -1462,7 +1462,7 @@ def reboot_node(ceph_node, timeout=300):
         raise
 
 
-def enable_console_plugin():
+def enable_console_plugin(value="[odf-console]"):
     """
     Enables console plugin for ODF
     """
@@ -1472,13 +1472,20 @@ def enable_console_plugin():
         and ocsci_config.ENV_DATA["enable_console_plugin"]
     ):
         log.info("Enabling console plugin")
-        ocp_obj = OCP()
-        patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
-        patch_cmd = (
-            f"patch console.operator cluster -n {ocsci_config.ENV_DATA['cluster_namespace']}"
-            f" --type json -p {patch}"
+        # ocp_obj = OCP()
+        # patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
+        # patch_cmd = (
+        #     f"patch console.operator cluster -n {ocsci_config.ENV_DATA['cluster_namespace']}"
+        #     f" --type json -p {patch}"
+        # )
+        # ocp_obj.exec_oc_cmd(command=patch_cmd)
+        path = "/spec/plugins"
+        # value = "[odf-console]"
+        params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
+        ocp_obj = OCP(kind=constants.CONSOLE_CONFIG)
+        ocp_obj.patch(params=params, format_type="json"), (
+            "Failed to run patch command to update odf-console"
         )
-        ocp_obj.exec_oc_cmd(command=patch_cmd)
 
 
 def get_non_acm_cluster_config():

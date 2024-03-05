@@ -1251,7 +1251,7 @@ class BAREMETALAI(BAREMETALBASE):
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk(worker):
+def clean_disk(worker, namespace=constants.BM_DEBUG_NODE_NS):
     """
     Perform disk cleanup
 
@@ -1262,7 +1262,7 @@ def clean_disk(worker):
     ocp_obj = ocp.OCP()
     cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
     out = ocp_obj.exec_oc_debug_cmd(
-        node=worker.name, cmd_list=[cmd], namespace=constants.BM_DEBUG_NODE_NS
+        node=worker.name, cmd_list=[cmd], namespace=namespace
     )
     disk_to_ignore_cleanup_raw = json.loads(str(out))
     disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
@@ -1277,7 +1277,7 @@ def clean_disk(worker):
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
         cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
-        namespace=constants.BM_DEBUG_NODE_NS,
+        namespace=namespace,
     )
     lsblk_output = json.loads(str(out))
     lsblk_devices = lsblk_output["blockdevices"]
@@ -1290,13 +1290,13 @@ def clean_disk(worker):
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
-                namespace=constants.BM_DEBUG_NODE_NS,
+                namespace=namespace,
             )
             logger.info(out)
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
-                namespace=constants.BM_DEBUG_NODE_NS,
+                namespace=namespace,
             )
             logger.info(out)
 
