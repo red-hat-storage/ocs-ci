@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HypershiftHostedOCP
 from ocs_ci.framework.pytest_customization.marks import (
     hci_provider_required,
@@ -53,3 +54,16 @@ class TestProviderHosted(object):
         """
         logger.info("Test deploy hosted OCP on provider platform multiple times")
         HypershiftHostedOCP().deploy_multiple_ocp_clusters()
+
+    @hci_provider_required
+    def test_create_kubeconfig_for_hosted_clusters(self):
+        """
+        Test create kubeconfig for hosted cluster
+        """
+        logger.info("Test create kubeconfig for hosted clusters")
+        hps_base = HyperShiftBase()
+        hosted_cluster_names = hps_base.get_hosted_cluster_names()
+        for hosted_cluster_name in hosted_cluster_names:
+            hps_base.download_hosted_cluster_kubeconfig(
+                hosted_cluster_name,
+            )
