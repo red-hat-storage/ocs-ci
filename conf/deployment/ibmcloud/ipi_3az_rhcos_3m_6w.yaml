@@ -2,6 +2,17 @@
 DEPLOYMENT:
   openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
+  local_storage: true
+  local_storage_storagedeviceset_count: 3
+  type: 'VMDK'
+  provision_type: 'thick'
+  ocs_operator_nodes_to_label: 6
+  arbiter_deployment: true
+  arbiter_zone: 'arbiter'
+  arbiter_autodetect: false
+  dummy_zone_node_labels: true
+  network_split_setup: true
+  network_zone_latency: 5
 ENV_DATA:
   platform: 'ibm_cloud'
   deployment_type: 'ipi'
