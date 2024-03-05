@@ -2360,7 +2360,11 @@ def run_ceph_health_cmd(namespace):
 
     try:
         ct_pod = get_ceph_tools_pod(namespace=namespace)
-    except (AssertionError, CephToolBoxNotFoundException) as ex:
+    except (
+        AssertionError,
+        CephToolBoxNotFoundException,
+        NoRunningCephToolBoxException,
+    ) as ex:
         raise CommandFailed(ex)
 
     return ct_pod.exec_ceph_cmd(
