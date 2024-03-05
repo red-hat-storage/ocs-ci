@@ -289,7 +289,7 @@ class HyperShiftBase(Deployment):
 
     def get_hosted_cluster_kubeconfig_name(self, name):
         """
-        Get HyperShift hosted cluster kubeconfig
+        Get HyperShift hosted cluster kubeconfig, for example 'hcp414-bm2-a-admin-kubeconfig'
         :param name: name of the cluster
         :return: hosted cluster kubeconfig name
         """
@@ -297,13 +297,27 @@ class HyperShiftBase(Deployment):
         cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
-    def download_hosted_cluster_kubeconfig(self, name, kubeconfig_path):
+    def get_hosted_cluster_names(self):
+        """
+        Get HyperShift hosted cluster names
+        :return: list of hosted cluster names
+        """
+        logger.info("Getting HyperShift hosted cluster names")
+        cmd = "oc get --namespace clusters hostedclusters -o custom-columns=NAME:.metadata.name --no-headers"
+        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip().split()
+
+    def download_hosted_cluster_kubeconfig(
+        self, name: str, kubeconfig_path: str = None
+    ):
         """
         Download HyperShift hosted cluster kubeconfig
         :param name: name of the cluster
         :param kubeconfig_path: path to download kubeconfig
         :return: True if kubeconfig downloaded successfully, False otherwise
         """
+        if not kubeconfig_path:
+            kubeconfig_path = f"~/clusters/{name}/openshift-cluster-dir/auth/kubeconfig"
+
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
         )
