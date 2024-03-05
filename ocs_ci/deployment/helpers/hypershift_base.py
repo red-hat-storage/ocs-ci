@@ -319,7 +319,7 @@ class HyperShiftBase(Deployment):
             kubeconfig_path = f"~/clusters/{name}/openshift-cluster-dir/auth"
 
         kubeadmin_path_abs = os.path.expanduser(kubeconfig_path)
-        os.makedirs(os.path.dirname(kubeadmin_path_abs), exist_ok=True)
+        os.makedirs(kubeadmin_path_abs, exist_ok=True)
 
         if os.path.isfile(f"{kubeadmin_path_abs}/kubeconfig"):
             logger.info(
@@ -327,9 +327,8 @@ class HyperShiftBase(Deployment):
             )
             exec_cmd(f"rm -f {kubeadmin_path_abs}/kubeconfig")
 
-        time.sleep(3)
+        time.sleep(0.5)
         open(f"{kubeadmin_path_abs}/kubeconfig", "a").close()
-        time.sleep(3)
 
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeadmin_path_abs}"
