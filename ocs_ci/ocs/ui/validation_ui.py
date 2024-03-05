@@ -184,7 +184,7 @@ class ValidationUI(PageNavigator):
         refresh_web_console_popup = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["warning-alert"],
             expected_text="Refresh web console",
-            timeout=120,
+            timeout=180,
         )
         if refresh_web_console_popup:
             logger.info(
@@ -652,6 +652,7 @@ class ValidationUI(PageNavigator):
         onboarding_token(str): client onboarding token
 
         """
+        self.refresh_web_console()
         self.navigate_to_storageclients_page()
         self.do_click(
             self.validation_loc["generate_client_onboarding_token_button"],

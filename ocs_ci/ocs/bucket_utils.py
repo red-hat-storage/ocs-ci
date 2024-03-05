@@ -1021,6 +1021,39 @@ def check_pv_backingstore_status(
     return True if res in desired_status else False
 
 
+def check_pv_backingstore_type(
+    backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    check if existing pv backing store is in READY state
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        backingstore_type: type of the backing store
+
+    """
+    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath=`{.status.phase}`"
+    )
+    phase = run_cmd(cmd=cmd)
+    assert phase == constants.STATUS_READY
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath=`{.spec.type}`"
+    )
+    backingstore_type = run_cmd(cmd=cmd)
+    return backingstore_type
+
+
 def create_multipart_upload(s3_obj, bucketname, object_key):
     """
     Initiates Multipart Upload
