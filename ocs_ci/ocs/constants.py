@@ -831,6 +831,9 @@ NETWORK_POLICY_YAML = os.path.join(
 STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_client.yaml"
 )
+OCS_CATALOGSOURCE_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "ocs-catalogsource.yaml"
+)
 
 
 # Openshift-logging clusterlogging operator deployment yamls
@@ -1086,6 +1089,7 @@ OPERATOR_CS_QUAY_API_QUERY = (
 )
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
+OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
