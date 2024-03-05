@@ -4,7 +4,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     ui,
     runs_on_provider,
-    hci_provider_required,
+    hci_provider_and_client_required,
 )
 from ocs_ci.framework.pytest_customization.marks import black_squad
 from ocs_ci.ocs.ui.provider_client_ui import StorageClientUI
@@ -20,7 +20,7 @@ class TestStorageClientUI(ManageTest):
 
     """
 
-    @hci_provider_required
+    @hci_provider_and_client_required
     @runs_on_provider
     def test_clients_on_dashboard(self, setup_ui_class):
         """
@@ -32,7 +32,7 @@ class TestStorageClientUI(ManageTest):
         storageclient_obj = StorageClientUI()
         storageclient_obj.verify_clients_on_dashboard()
 
-    @hci_provider_required
+    @hci_provider_and_client_required
     def test_storage_clients_page(self, setup_ui_class):
         """
         Test the values of Storage Clients page:
@@ -43,7 +43,7 @@ class TestStorageClientUI(ManageTest):
         storageclient_obj = StorageClientUI()
         storageclient_obj.verify_client_data_in_ui()
 
-    @hci_provider_required
+    @hci_provider_and_client_required
     def test_token_explanation(self, setup_ui_class):
         """
         Test the presense of token explanation
