@@ -2797,6 +2797,10 @@ def censor_values(data_to_censor):
             for pattern in constants.config_keys_patterns_to_censor:
                 if pattern in key.lower():
                     data_to_censor[key] = "*" * 5
+            for expression in constants.config_keys_expressions_to_censor:
+                if key == expression:
+                    data_to_censor[key] = "*" * 5
+
     return data_to_censor
 
 

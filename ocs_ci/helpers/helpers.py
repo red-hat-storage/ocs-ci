@@ -1,6 +1,7 @@
 """
 Helper functions file for OCS QE
 """
+
 import base64
 import random
 import datetime
@@ -786,9 +787,9 @@ def create_storage_class(
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
-        sc_data["parameters"][
-            f"csi.storage.k8s.io/{key}-secret-namespace"
-        ] = config.ENV_DATA["cluster_namespace"]
+        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-namespace"] = (
+            config.ENV_DATA["cluster_namespace"]
+        )
 
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -2923,12 +2924,12 @@ def collect_performance_stats(dir_name):
 
     performance_stats["master_node_utilization"] = master_node_utilization_from_adm_top
     performance_stats["worker_node_utilization"] = worker_node_utilization_from_adm_top
-    performance_stats[
-        "master_node_utilization_from_oc_describe"
-    ] = master_node_utilization_from_oc_describe
-    performance_stats[
-        "worker_node_utilization_from_oc_describe"
-    ] = worker_node_utilization_from_oc_describe
+    performance_stats["master_node_utilization_from_oc_describe"] = (
+        master_node_utilization_from_oc_describe
+    )
+    performance_stats["worker_node_utilization_from_oc_describe"] = (
+        worker_node_utilization_from_oc_describe
+    )
 
     file_name = os.path.join(log_dir_path, "performance")
     with open(file_name, "w") as outfile:
@@ -3120,17 +3121,25 @@ def default_volumesnapshotclass(interface_type):
         resource_name = (
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
             if external
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
-            if (config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM)
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            else (
+                constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
+                if (
+                    config.ENV_DATA["platform"].lower()
+                    in constants.HCI_PC_OR_MS_PLATFORM
+                )
+                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            )
         )
     elif interface_type == constants.CEPHFILESYSTEM:
         resource_name = (
             constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
             if external
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
-            if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            else (
+                constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
+                if config.ENV_DATA["platform"].lower()
+                in constants.HCI_PC_OR_MS_PLATFORM
+                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            )
         )
     base_snapshot_class = OCP(
         kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
@@ -4645,3 +4654,29 @@ def get_ceph_log_level(service, subsystem):
 
     memory_value, log_value = ceph_log_level.split("/")
     return int(log_value)
+
+
+def flatten_multilevel_dict(d):
+    """
+    Recursively extracts the leaves of a multi-level dictionary and returns them as a list.
+
+    Args:
+        d (dict): The multi-level dictionary.
+
+    Returns:
+        list: A list containing the leaves of the dictionary.
+
+    """
+    leaves_list = []
+    for value in d.values():
+        if isinstance(value, dict):
+            leaves_list.extend(flatten_multilevel_dict(value))
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, (dict, list)):
+                    leaves_list.extend(flatten_multilevel_dict({"": item}))
+                else:
+                    leaves_list.append(item)
+        else:
+            leaves_list.append(value)
+    return leaves_list
