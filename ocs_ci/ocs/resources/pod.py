@@ -2258,7 +2258,9 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
         logger.warning("None of the new osd pods reached the desired status")
 
 
-def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_pod_restarts_count(
+    list_of_pods=[], namespace=config.ENV_DATA["cluster_namespace"]
+):
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2266,7 +2268,8 @@ def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
         dict: dictionary of pod name and its corresponding restart count
 
     """
-    list_of_pods = get_all_pods(namespace)
+    if not list_of_pods:
+        list_of_pods = get_all_pods(namespace)
     restart_dict = {}
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
