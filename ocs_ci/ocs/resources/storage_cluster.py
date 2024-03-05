@@ -275,6 +275,13 @@ def ocs_install_verification(
             }
         )
 
+    if config.DEPLOYMENT.get("arbiter_deployment"):
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 5,
+            }
+        )
+
     if fusion_aas_consumer or client_cluster:
         del resources_dict[constants.OCS_OPERATOR_LABEL]
         del resources_dict[constants.OPERATOR_LABEL]
