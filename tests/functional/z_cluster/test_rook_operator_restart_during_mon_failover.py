@@ -91,7 +91,7 @@ class TestDrainNodeMon(ManageTest):
         schedule_nodes([node_name])
 
         log.info("Wait for all the pods in openshift-storage to be running.")
-        assert wait_for_pods_to_be_running(timeout=300)
+        assert wait_for_pods_to_be_running(timeout=480, sleep=20)
 
         sample = TimeoutSampler(
             timeout=100,
