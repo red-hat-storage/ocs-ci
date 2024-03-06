@@ -86,7 +86,7 @@ class TestCnvApplicationMDR:
         """
         # Create CNV applications(appset+sub)
         md5sum_original = []
-        filepath = "dd_file.txt"
+        vm_filepath = "/dd_file.txt"
 
         cnv_workloads = cnv_dr_workload(num_of_vm_subscription=1, num_of_vm_appset=1)
         self.wl_namespace = cnv_workloads[0].workload_namespace
@@ -104,8 +104,8 @@ class TestCnvApplicationMDR:
         for cnv_wl in cnv_workloads:
             md5sum_original.append(
                 run_dd_io(
-                    cnv_wl.vm_obj,
-                    file_path=filepath,
+                    vm_obj=cnv_wl.vm_obj,
+                    file_path=vm_filepath,
                     username=cnv_wl.vm_username,
                     verify=True,
                 )
@@ -154,14 +154,14 @@ class TestCnvApplicationMDR:
         # Validating data integrity after failing-over VMs to secondary managed cluster
         for count, cnv_wl in enumerate(cnv_workloads):
             md5sum_fail_out = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_path=filepath, username=cnv_wl.vm_username
+                cnv_wl.vm_obj, file_path=vm_filepath, username=cnv_wl.vm_username
             )
             logger.info(
-                f"Validating MD5sum of file {filepath} on VM: {cnv_wl.workload_name}"
+                f"Validating MD5sum of file {vm_filepath} on VM: {cnv_wl.workload_name} after FailOver"
             )
             assert (
                 md5sum_original[count] == md5sum_fail_out
-            ), "Failed: MD5 comparison after Failover"
+            ), "Failed: MD5 comparison after FailOver"
 
         # Start nodes if cluster is down
         wait_time = 120
@@ -233,10 +233,10 @@ class TestCnvApplicationMDR:
         # Validating data integrity after relocating VMs back to primary managed cluster
         for count, cnv_wl in enumerate(cnv_workloads):
             md5sum_reloc = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_path=filepath, username=cnv_wl.vm_username
+                cnv_wl.vm_obj, file_path=vm_filepath, username=cnv_wl.vm_username
             )
             logger.info(
-                f"Validating MD5sum of file {filepath} on VM: {cnv_wl.workload_name}"
+                f"Validating MD5sum of file {vm_filepath} on VM: {cnv_wl.workload_name} after Relocate"
             )
             assert (
                 md5sum_original[count] == md5sum_reloc

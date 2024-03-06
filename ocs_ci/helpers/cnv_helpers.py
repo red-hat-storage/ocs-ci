@@ -7,6 +7,7 @@ import logging
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 from ocs_ci.helpers.helpers import (
@@ -14,6 +15,7 @@ from ocs_ci.helpers.helpers import (
     create_ocs_object_from_kind_and_name,
 )
 from ocs_ci.framework import config
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +357,7 @@ def cal_md5sum_vm(vm_obj, file_path, username=None):
     return md5sum_out.split()[0]
 
 
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
 def run_dd_io(vm_obj, file_path, size="102400", username=None, verify=False):
     """
     Perform input/output (I/O) operation using dd command via SSH on a virtual machine.
@@ -378,7 +381,8 @@ def run_dd_io(vm_obj, file_path, size="102400", username=None, verify=False):
         username=username,
     )
     if verify:
-        return vm_obj.cal_md5sum_vm(
+        return cal_md5sum_vm(
+            vm_obj=vm_obj,
             file_path=file_path,
             username=username,
         )

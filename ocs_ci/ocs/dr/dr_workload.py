@@ -523,7 +523,7 @@ class CnvWorkload(DRWorkload):
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
         self.vm_secret_name = kwargs.get("vm_secret")
-        self.vm_secret_obj = None
+        self.vm_secret_obj = []
         self.vm_obj = None
         self.vm_username = kwargs.get("vm_username")
         self.workload_type = kwargs.get("workload_type")
@@ -560,6 +560,7 @@ class CnvWorkload(DRWorkload):
             vm_name=self.vm_name, namespace=self.workload_namespace
         )
 
+        # Creating secrets to access the VMs via SSH
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             try:
@@ -568,8 +569,10 @@ class CnvWorkload(DRWorkload):
                 if str(ex).find("(AlreadyExists)"):
                     log.warning("The namespace already exists !")
 
-            self.vm_secret_obj = create_vm_secret(
-                secret_name=self.vm_secret_name, namespace=self.workload_namespace
+            self.vm_secret_obj.append(
+                create_vm_secret(
+                    secret_name=self.vm_secret_name, namespace=self.workload_namespace
+                )
             )
 
         # Load DRPC
@@ -721,10 +724,11 @@ class CnvWorkload(DRWorkload):
             config.switch_acm_ctx()
             run_cmd(cmd=f"oc delete -f {self.cnv_workload_yaml_file}", timeout=900)
 
-            for cluster in get_non_acm_cluster_config():
+            for cluster, secret_obj in zip(
+                get_non_acm_cluster_config(), self.vm_secret_obj
+            ):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                if self.vm_secret_obj:
-                    self.vm_secret_obj.delete()
+                secret_obj.delete()
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
                     check_replication_resources_state=False,
