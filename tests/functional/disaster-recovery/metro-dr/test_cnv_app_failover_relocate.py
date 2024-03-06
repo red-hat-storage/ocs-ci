@@ -193,7 +193,8 @@ class TestCnvApplicationMDR:
 
         # Reboot the nodes after unfenced
         gracefully_reboot_ocp_nodes(
-            self.wl_namespace, self.primary_cluster_name, cnv_workloads[0].workload_type
+            namespace=self.wl_namespace,
+            drcluster_name=self.primary_cluster_name,
         )
 
         secondary_cluster_name = get_current_secondary_cluster_name(
