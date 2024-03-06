@@ -2,7 +2,7 @@ import logging
 import pytest
 import time
 
-
+from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework.pytest_customization.marks import tier2
 from ocs_ci.framework import config
 from ocs_ci.helpers.cnv_helpers import run_dd_io, cal_md5sum_vm
@@ -84,10 +84,13 @@ class TestCnvApplicationMDR:
         fail-over/relocate between managed clusters.
 
         """
-        # Create CNV applications(appset+sub)
         md5sum_original = []
         vm_filepath = "/dd_file.txt"
 
+        # Download and extract the virtctl binary to bin_dir. Skips if already present.
+        CNVInstaller().download_and_extract_virtctl_binary()
+
+        # Create CNV applications(appset+sub)
         cnv_workloads = cnv_dr_workload(num_of_vm_subscription=1, num_of_vm_appset=1)
         self.wl_namespace = cnv_workloads[0].workload_namespace
 
