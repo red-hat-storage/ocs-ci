@@ -52,7 +52,8 @@ class TestCnvApplicationMDR:
             ):
                 enable_unfence(self.primary_cluster_name)
                 gracefully_reboot_ocp_nodes(
-                    self.wl_namespace, self.primary_cluster_name
+                    namespace=self.wl_namespace,
+                    drcluster_name=self.primary_cluster_name,
                 )
 
         request.addfinalizer(finalizer)
