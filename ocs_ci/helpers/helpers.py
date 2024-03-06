@@ -4086,6 +4086,38 @@ def create_reclaim_space_cronjob(
     return ocs_obj
 
 
+def create_csi_addons_global_timeout_configmap():
+    """
+    Create Global timeout config for reclaimspace job
+
+    Returns:
+        bool: Returns True if the operation was successful, False otherwise.
+    """
+    logging.info("Creating config map")
+    global_timeout_configmap = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_CONFIGMAP_YAML)
+    #timeout in str format
+    timeout = global_timeout_configmap["data"]["reclaim-space-timeout"]
+    if run_cmd(f"oc create -f {global_timeout_configmap}", timeout=60):
+        return timeout
+    else:
+        return False
+
+
+def high_priority_class():
+    """
+    Function to create high priority class on the cluster
+
+    Returns:
+        bool: Returns True if the operation was successful, False otherwise.
+    """
+    priority_class_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_JOB_YAML)
+    priority_class_data["value"] = 1000
+    ocs_obj = create_resource(**priority_class_data)
+    return ocs_obj
+
+
+
+
 def get_cephfs_subvolumegroup():
     """
     Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.

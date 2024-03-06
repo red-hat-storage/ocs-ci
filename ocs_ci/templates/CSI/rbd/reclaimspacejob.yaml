@@ -13,6 +13,7 @@ spec:
     persistentVolumeClaim: pvc-1
   # backOfflimit specifies the number of retries before marking reclaim space operation as failed.
   # If not specified, defaults to 6. Maximum allowed value is 60 and minimum allowed value is 0.
+  timeout: 360
   backOffLimit: 10
   # retryDeadlineSeconds specifies the duration in seconds relative to the start time that the operation may be retried;
   # value must be positive integer. If not specified, defaults to 600 seconds. Maximum allowed value is 1800.
