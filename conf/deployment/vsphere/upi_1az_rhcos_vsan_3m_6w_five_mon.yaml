@@ -16,6 +16,10 @@ ENV_DATA:
     - 'data-4'
     - 'data-5'
     - 'data-6'
+  master_availability_zones:
+    - 'data-1'
+    - 'data-2'
+    - 'data-3'
   worker_num_cpus: '16'
   master_num_cpus: '4'
   master_memory: '16384'
