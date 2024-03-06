@@ -337,6 +337,7 @@ def get_ssh_private_key_path():
     return private_key_path
 
 
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
 def cal_md5sum_vm(vm_obj, file_path, username=None):
     """
     Calculate the MD5 checksum of a file via SSH on a virtual machine.
