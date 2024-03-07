@@ -7349,3 +7349,93 @@ def scale_noobaa_resources():
     storagecluster_obj.patch(params=scale_noobaa_resources_param, format_type="merge")
     log.info("Scaled noobaa pod resources")
     time.sleep(60)
+
+
+@pytest.fixture(scope="function")
+def create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(request):
+    """
+    Create scale pods and PVCs using a kube job on HCI clients fixture. This fixture makes use of the
+    FioPodScale class to create the expected number of PODs+PVCs.
+    This fixture is for HCI Bare Metal when using HCI clients.
+
+    """
+    orig_index = None
+    client_index_per_fio_scale_dict = {}
+
+    def factory(
+        scale_count=None,
+        pvc_per_pod_count=5,
+        start_io=True,
+        io_runtime=None,
+        pvc_size=None,
+        max_pvc_size=30,
+        client_indexes=None,
+    ):
+        """
+        Create a factory for creating scale pods and PVCs using k8s on HCI clients fixture.
+
+        Args:
+            scale_count (int): No of PVCs to be Scaled. Should be one of the values in the dict
+                "constants.SCALE_PVC_ROUND_UP_VALUE".
+            pvc_per_pod_count (int): Number of PVCs to be attached to single POD
+            Example, If 20 then 20 PVCs will be attached to single POD
+            start_io (bool): Binary value to start IO default it's True
+            io_runtime (seconds): Runtime in Seconds to continue IO
+            pvc_size (int): Size of PVC to be created
+            max_pvc_size (int): The max size of the pvc
+            client_indexes (list): The list of the client indexes to create scale pods and PVCs.
+                If not specified, it creates scale pods and PVCs on all the clients.
+
+        Returns:
+            dict: Dictionary of the client index per fio_scale object associated with the client.
+
+        """
+        nonlocal orig_index
+        orig_index = ocsci_config.cur_index
+
+        scale_count = scale_count or min(constants.SCALE_PVC_ROUND_UP_VALUE)
+        client_indexes = client_indexes or ocsci_config.get_consumer_indexes_list()
+        for client_i in client_indexes:
+            ocsci_config.switch_ctx(client_i)
+
+            fio_scale = FioPodScale(
+                kind=constants.DEPLOYMENTCONFIG,
+                node_selector=constants.SCALE_NODE_SELECTOR,
+            )
+            # Save the client index and fio_scale object in a dictionary to clean the
+            # fio_scale pods and PVCs in the teardown
+            client_index_per_fio_scale_dict[client_i] = fio_scale
+
+            log.info("Start creating scale pods and PVCs using the 'fio_scale' object")
+            kube_pod_obj_list, kube_pvc_obj_list = fio_scale.create_scale_pods(
+                scale_count=scale_count,
+                pvc_per_pod_count=pvc_per_pod_count,
+                start_io=start_io,
+                io_runtime=io_runtime,
+                pvc_size=pvc_size,
+                max_pvc_size=max_pvc_size,
+                obj_name_prefix=f"obj_c{client_i}_",
+            )
+            kube_pod_obj_list_names = [p.name for p in kube_pod_obj_list]
+            kube_pvc_obj_list_names = [p.name for p in kube_pvc_obj_list]
+
+            log.info(
+                f"kube pod list = {kube_pod_obj_list_names}, kube pvc list ="
+                f" {kube_pvc_obj_list_names}"
+            )
+
+            client_index_per_fio_scale_dict[client_i] = fio_scale
+
+        ocsci_config.switch_ctx(orig_index)
+        return client_index_per_fio_scale_dict
+
+    @switch_to_default_cluster_index_at_last
+    def finalizer():
+        log.info("Cleaning the fio_scale instances")
+        for client_i, fio_scale in client_index_per_fio_scale_dict.items():
+            ocsci_config.switch_ctx(client_i)
+            if not fio_scale.is_cleanup:
+                fio_scale.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
