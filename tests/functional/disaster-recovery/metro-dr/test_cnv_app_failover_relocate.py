@@ -52,7 +52,6 @@ class TestCnvApplicationMDR:
             ):
                 enable_unfence(self.primary_cluster_name)
                 gracefully_reboot_ocp_nodes(
-                    namespace=self.wl_namespace,
                     drcluster_name=self.primary_cluster_name,
                 )
 
@@ -193,7 +192,6 @@ class TestCnvApplicationMDR:
 
         # Reboot the nodes after unfenced
         gracefully_reboot_ocp_nodes(
-            namespace=self.wl_namespace,
             drcluster_name=self.primary_cluster_name,
         )
 
