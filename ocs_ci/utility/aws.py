@@ -2022,9 +2022,12 @@ class AWS(object):
             description (str): Description of the role
             document (str): JSON string representing the role policy to assume
 
+        Returns:
+            dict: Created role data
+
         """
         logger.info("Creating IAM role: %s", role_name)
-        self.iam_client.create_role(
+        return self.iam_client.create_role(
             RoleName=role_name,
             Description=description,
             AssumeRolePolicyDocument=document,
@@ -2047,7 +2050,8 @@ class AWS(object):
         Get STS Caller Identity.
         """
         logger.info("Retrieving STS Caller Identity")
-        return self.sts_client.get_caller_identity()
+        resp = self.sts_client.get_caller_identity()
+        return resp["Account"]
 
 
 def get_instances_ids_and_names(instances):
@@ -2382,21 +2386,22 @@ def create_and_attach_volume_for_all_workers(
     )
 
 
-def create_sts_role(role_name):
+def create_and_attach_sts_role():
     """
     Create IAM role to support STS deployments.
 
-    Args:
-        role_name (str): Name to create the role with
+    Returns:
+        dict: Created role data
 
     """
+    logger.info("Creating STS role in AWS IAM")
     aws = AWS()
     namespace = config.ENV_DATA.get("cluster_namespace")
     service_account_name_1 = "noobaa"
     service_account_name_2 = "noobaa-endpoint"
     aws_account_id = aws.get_caller_identity()
-    auth_cluster = exec_cmd("oc get authentication cluster -ojson")
-    auth_cluster_dict = json.loads(auth_cluster)
+    resp = exec_cmd("oc get authentication cluster -ojson")
+    auth_cluster_dict = json.loads(resp.stdout)
     oidc_provider = auth_cluster_dict["spec"]["serviceAccountIssuer"].replace(
         "https://", ""
     )
@@ -2422,7 +2427,10 @@ def create_sts_role(role_name):
             }
         ],
     }
-
+    logger.info("Trust Data: \n%s", trust_data)
+    cluster_path = config.ENV_DATA["cluster_path"]
+    role_name = get_infra_id(cluster_path)
     description = f"Role created for {role_name} to support STS"
-    aws.create_iam_role(role_name, description, json.dumps(trust_data))
+    role_data = aws.create_iam_role(role_name, description, json.dumps(trust_data))
     aws.attach_role_policy(role_name, policy_arn)
+    return role_data
