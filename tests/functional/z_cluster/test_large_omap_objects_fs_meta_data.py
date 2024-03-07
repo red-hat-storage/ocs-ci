@@ -66,4 +66,4 @@ class TestLargeOmapObjectsFsMetaData(ManageTest):
             "mkdir -p /var/lib/www/html/dir3/.snap; for n in {1..100}; do touch /var/lib/www/html/dir3/file{0..11000}; "
             "mkdir -p /var/lib/www/html/dir3/.snap/snap_$n; rm -f /var/lib/www/html/dir3/file{0..11000}; done"
         )
-        self.pod_obj.exec_sh_cmd_on_pod(command=cmd, sh="bash", timeout=20000)
+        self.pod_obj.exec_sh_cmd_on_pod(command=cmd, sh="bash", timeout=2000)
