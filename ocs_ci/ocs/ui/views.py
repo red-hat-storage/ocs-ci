@@ -63,6 +63,7 @@ deployment = {
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
     "standard_csi_sc": ('a[id="standard-csi-link"]', By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
+    "ibmcloud_sc": ("//span[text()='(default) | vpc.block.csi.ibm.io']", By.XPATH),
     "osd_size_dropdown": ('button[data-test-id="dropdown-button"]', By.CSS_SELECTOR),
     "512": ('button[data-test-dropdown-menu="512Gi"]', By.CSS_SELECTOR),
     "2048": ('button[data-test-dropdown-menu="2Ti"]', By.CSS_SELECTOR),

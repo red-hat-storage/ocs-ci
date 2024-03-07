@@ -44,6 +44,7 @@ def ui_deployment_conditions():
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
         constants.GCP_PLATFORM,
+        constants.IBMCLOUD_PLATFORM,
     ):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
