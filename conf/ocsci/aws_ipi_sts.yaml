@@ -1,7 +1,9 @@
 ---
+DEPLOYMENT:
+  sts_enabled: true
+
 ENV_DATA:
   platform: 'aws'
   deployment_type: 'ipi'
   region: 'us-east-2'
   worker_instance_type: 'm4.xlarge'
-  sts_enabled: true

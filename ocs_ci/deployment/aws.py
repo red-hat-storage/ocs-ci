@@ -194,7 +194,7 @@ class AWSIPI(AWSBase):
     class OCPDeployment(IPIOCPDeployment):
         def deploy_prereq(self):
             super().deploy_prereq()
-            if config.ENV_DATA.get("sts_enabled"):
+            if config.DEPLOYMENT.get("sts_enabled"):
                 self.sts_setup()
 
         def sts_setup(self):
