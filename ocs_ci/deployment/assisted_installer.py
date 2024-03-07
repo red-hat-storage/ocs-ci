@@ -304,13 +304,16 @@ class AssistedInstallerCluster(object):
         """
         failed_validations = []
         for host in self.api.get_cluster_hosts(self.id):
-            vi = json.loads(host["validations_info"])
-            for section in vi:
-                for v in vi[section]:
-                    if v["status"] in ("failure", "pending"):
-                        failed_validations.append(
-                            f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
-                        )
+            try:
+                vi = json.loads(host["validations_info"])
+                for section in vi:
+                    for v in vi[section]:
+                        if v["status"] in ("failure", "pending"):
+                            failed_validations.append(
+                                f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
+                            )
+            except KeyError as err:
+                failed_validations.append(f"host {host['id']}: {err}")
         if failed_validations:
             msg = f"Failed hosts validations: \n{os.linesep.join(failed_validations)}"
             logger.debug(msg)
