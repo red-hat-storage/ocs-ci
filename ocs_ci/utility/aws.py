@@ -3,6 +3,7 @@ import logging
 import time
 import boto3
 import random
+import json
 import traceback
 import re
 
@@ -10,7 +11,7 @@ from datetime import datetime, timezone
 from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import get_infra_id
+from ocs_ci.utility.utils import exec_cmd, get_infra_id
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, exceptions
 from ocs_ci.ocs.parallel import parallel
@@ -43,6 +44,8 @@ class AWS(object):
     _s3_resource = None
     _route53_client = None
     _elb_client = None
+    _iam_client = None
+    _sts_client = None
 
     def __init__(self, region_name=None):
         """
@@ -144,6 +147,36 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._elb_client
+
+    @property
+    def iam_client(self):
+        """
+        Property for iam client
+
+        Returns:
+            boto3.client: instance of iam
+        """
+        if not self._iam_client:
+            self._iam_client = boto3.client(
+                "iam",
+                region_name=self._region_name,
+            )
+        return self._iam_client
+
+    @property
+    def sts_client(self):
+        """
+        Property for sts client
+
+        Returns:
+            boto3.client: instance of sts
+        """
+        if not self._sts_client:
+            self._sts_client = boto3.client(
+                "sts",
+                region_name=self._region_name,
+            )
+        return self._sts_client
 
     def get_ec2_instance(self, instance_id):
         """
@@ -1980,6 +2013,42 @@ class AWS(object):
         for each_bucket in buckets:
             self.delete_bucket(bucket=each_bucket)
 
+    def create_iam_role(self, role_name, description, document):
+        """
+        Create IAM role.
+
+        Args:
+            role_name (str): Name of the role
+            description (str): Description of the role
+            document (str): JSON string representing the role policy to assume
+
+        """
+        logger.info("Creating IAM role: %s", role_name)
+        self.iam_client.create_role(
+            RoleName=role_name,
+            Description=description,
+            AssumeRolePolicyDocument=document,
+        )
+
+    def attach_role_policy(self, role_name, policy_arn):
+        """
+        Attach role-policy.
+
+        Args:
+            role_name (str): Name of the role to attach the policy to
+            policy_arn (str): ARN of the policy to attach to the role
+
+        """
+        logger.info("Attaching role-policy %s to role %s", policy_arn, role_name)
+        self.iam_client.attach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+
+    def get_caller_identity(self):
+        """
+        Get STS Caller Identity.
+        """
+        logger.info("Retrieving STS Caller Identity")
+        return self.sts_client.get_caller_identity()
+
 
 def get_instances_ids_and_names(instances):
     """
@@ -2311,3 +2380,49 @@ def create_and_attach_volume_for_all_workers(
         count,
         device_names,
     )
+
+
+def create_sts_role(role_name):
+    """
+    Create IAM role to support STS deployments.
+
+    Args:
+        role_name (str): Name to create the role with
+
+    """
+    aws = AWS()
+    namespace = config.ENV_DATA.get("cluster_namespace")
+    service_account_name_1 = "noobaa"
+    service_account_name_2 = "noobaa-endpoint"
+    aws_account_id = aws.get_caller_identity()
+    auth_cluster = exec_cmd("oc get authentication cluster -ojson")
+    auth_cluster_dict = json.loads(auth_cluster)
+    oidc_provider = auth_cluster_dict["spec"]["serviceAccountIssuer"].replace(
+        "https://", ""
+    )
+    policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+
+    trust_data = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Federated": f"arn:aws:iam::{aws_account_id}:oidc-provider/{oidc_provider}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                    "StringEquals": {
+                        f"{oidc_provider}:sub": [
+                            f"system:serviceaccount:{namespace}:{service_account_name_1}",
+                            f"system:serviceaccount:{namespace}:{service_account_name_2}",
+                        ]
+                    }
+                },
+            }
+        ],
+    }
+
+    description = f"Role created for {role_name} to support STS"
+    aws.create_iam_role(role_name, description, json.dumps(trust_data))
+    aws.attach_role_policy(role_name, policy_arn)
