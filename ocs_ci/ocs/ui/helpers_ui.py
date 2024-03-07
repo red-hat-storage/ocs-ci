@@ -118,6 +118,7 @@ def ui_add_capacity_conditions():
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
         constants.GCP_PLATFORM,
+        constants.IBMCLOUD_PLATFORM,
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
