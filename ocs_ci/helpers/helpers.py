@@ -18,8 +18,7 @@ import stat
 import platform
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
-from subprocess import PIPE, run, TimeoutExpired
-from pathlib import Path
+from subprocess import PIPE, run
 from uuid import uuid4
 
 
