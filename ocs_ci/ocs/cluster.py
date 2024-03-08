@@ -278,6 +278,12 @@ class CephCluster(object):
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
 
+        #If the monCount is updated to five, then change expected_mon_count value to five
+        cephcluster_data = self.CEPHCLUSTER.get()
+        monCount_val = cephcluster_data["items"][0]["spec"]["mon"]["count"]
+        if(monCount_val == 5):
+            expected_mon_count = 5
+
         self.scan_cluster()
 
         if config.ENV_DATA[
@@ -381,6 +387,24 @@ class CephCluster(object):
         """
         self.cluster.reload()
         self.cluster.data["spec"]["mon"]["count"] = new_count
+        logger.info(self.cluster.data)
+        self.cluster.apply(**self.cluster.data)
+        self.mon_count = new_count
+        self.cluster_health_check()
+        logger.info(f"Mon count changed to {new_count}")
+        self.cluster.reload()
+
+    def update_mon_count_to_five(self):
+        """
+        Change mon count  to five in the cluster
+
+        """
+        new_count = 5
+        self.cluster.reload()
+        logger.info(self.cluster.data)
+        self.cluster.data["spec"]["managedResources"]["cephFileSystem"][
+            "monCount"
+        ] = new_count
         logger.info(self.cluster.data)
         self.cluster.apply(**self.cluster.data)
         self.mon_count = new_count
