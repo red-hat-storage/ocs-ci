@@ -3,10 +3,13 @@ import pytest
 import time
 
 from ocs_ci.ocs import ocp, constants
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    skipif_less_than_five_workers,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
-    ignore_leftovers,
+    skipif_ocs_version,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
@@ -34,7 +37,6 @@ def verify_mon_pod_running(pods):
     return ret
 
 
-@ignore_leftovers
 @brown_squad
 @skipif_less_than_five_workers
 @skipif_ocs_version("<4.15")
@@ -44,7 +46,8 @@ class TestFiveMonInCluster(ManageTest):
 
         A Testcase to add five mon pods to the cluster when the failure domain value is greater than five
 
-        This test looks if failure domain is greater than five, if yes it will update the monCount to five and will wait for the CephMonLowNumber alert to get cleared
+        This test looks if failure domain is greater than five, if yes it will update the monCount to five
+        and will wait for the CephMonLowNumber alert to get cleared
 
         """
         target_msg = "The current number of Ceph monitors can be increased in order to improve cluster resilience."
@@ -62,14 +65,6 @@ class TestFiveMonInCluster(ManageTest):
             kind=constants.STORAGECLUSTER,
         )
 
-
-        #ceph_cluster.cluster_health_check(timeout=60)
-        #log.info("helloooo")
-        #assert len(list_mons) != 5, pytest.skip(
-        #    "INVALID: Mon count is already set to five."
-        #)
-        # worker_nodes = node.get_worker_nodes()
-        # node.label_nodes(worker_nodes)
         list_mons = ceph_cluster.get_mons_from_cluster()
         assert len(list_mons) < 5, pytest.skip(
             "INVALID: Mon count is already above three."
@@ -82,7 +77,7 @@ class TestFiveMonInCluster(ManageTest):
             log.error(f"got bad response from Prometheus: {alerts_response.text}")
         prometheus_alerts = alerts_response.json()["data"]["alerts"]
 
-        log.info('verifying that alert is generated to update monCount to five')
+        log.info("verifying that alert is generated to update monCount to five")
         try:
             prometheus.check_alert_list(
                 label=target_label,
@@ -95,7 +90,7 @@ class TestFiveMonInCluster(ManageTest):
             test_pass = True
         except AssertionError:
             pytest.fail(
-                f"Failed to get CephMonLowCount warning when failure domain is updated to five"
+                "Failed to get CephMonLowCount warning when failure domain is updated to five"
             )
 
         if test_pass:
@@ -105,7 +100,7 @@ class TestFiveMonInCluster(ManageTest):
                 format_type="merge",
             )
 
-            log.info('Verifying that all five mon pods are in running state')
+            log.info("Verifying that all five mon pods are in running state")
             assert verify_mon_pod_running(
                 pods
             ), "All five mon pods are not up and running state"
@@ -120,10 +115,12 @@ class TestFiveMonInCluster(ManageTest):
         else:
             # if test got to this point, the alert was found, test PASS
             pytest.fail(
-                f"Failed to get CephMonLowCount warning when mon count is updated to five"
+                "Failed to get CephMonLowCount warning when mon count is updated to five"
             )
 
-        log.info("Verify that CephMonLowNumber alert got cleared post updating monCount to 5")
+        log.info(
+            "Verify that CephMonLowNumber alert got cleared post updating monCount to 5"
+        )
         api.check_alert_cleared(
             label=target_label, measure_end_time=measure_end_time, time_min=300
         )
