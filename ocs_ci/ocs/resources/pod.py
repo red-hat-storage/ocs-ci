@@ -3215,11 +3215,6 @@ def wait_for_pods_to_be_in_statuses_concurrently(
     speed up execution and will be blocking until all pods are running or timeout is reached
 
     :param app_selectors_to_resource_count_list:
-    # Example: app_selectors_to_resource_count_list = [
-    #             {"app=capi-provider-controller-manager": 2},
-    #             {"app=catalog-operator": 3},
-    #             {"app=certified-operators-catalog": 1},
-    #         ]
     :param namespace: namespace of the pods expected to run
     :param timeout: time to wait for the pods to be running in seconds
     :param status: status of the pods to wait for
