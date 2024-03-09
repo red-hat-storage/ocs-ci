@@ -197,7 +197,7 @@ class HostedODF:
 
     def apply_network_policy(self):
         """
-        Apply network policy to the client namespace
+        Apply network policy to the client namespace. Network policy is created always on Provider side.
 
         Returns:
             bool: True if network policy is created, False otherwise
