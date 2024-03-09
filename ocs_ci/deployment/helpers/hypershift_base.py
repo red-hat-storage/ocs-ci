@@ -14,7 +14,6 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
-from ocs_ci.utility import templating
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 """
@@ -436,31 +435,3 @@ class HyperShiftBase(Deployment):
         ):
             if sample == "":
                 return True
-
-    def apply_network_policy(self, namespace):
-        """
-        Apply network policy to the namespace. Should be done before every hosted cluster creation
-        :param namespace: namespace to apply network policy
-        :return:
-        """
-
-        logger.info(f"Applying network policy to namespace {namespace}")
-
-        network_policy_data = templating.load_yaml(
-            constants.NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE
-        )
-        network_policy_data["metadata"]["namespace"] = namespace
-        network_policy_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="network_policy_provider_mode", delete=False
-        )
-        templating.dump_data_to_temp_yaml(network_policy_data, network_policy_file.name)
-        exec_cmd(f"oc create -f {network_policy_file.name}")
-
-        ocp = OCP(kind=constants.NETWORK_POLICY, namespace=namespace)
-        network_policy_created = ocp.check_resource_existence(
-            resource_name=f"network-policy-{namespace}", should_exist=True, timeout=60
-        )
-        logger.info(
-            f"Network policy in namespace {namespace} created: {network_policy_created}"
-        )
-        return network_policy_created
