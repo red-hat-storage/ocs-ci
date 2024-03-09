@@ -202,6 +202,12 @@ class HostedODF:
 
         self.exec_oc_cmd(f"create namespace {self.namespace_client}")
 
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name=self.namespace_client,
+            should_exist=True,
+        )
+
     def apply_network_policy(self):
         """
         Apply network policy to the client namespace. Network policy is created always on Provider side.

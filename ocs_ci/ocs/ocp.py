@@ -172,16 +172,6 @@ class OCP(object):
             self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
         )
 
-        log.info(">>>>>>> 2")
-        local_vars = {k: v for k, v in locals().items() if k != "self"}
-        log.info(f"locals = {local_vars}")
-        log.info(f"self = {vars(self)}")
-        log.info("<<<<<<< 2")
-
-        log.info(">>>>>>> 3")
-        log.info(f"config = {vars(cluster_config)}")
-        log.info("<<<<<<< 3")
-
         if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
             cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
                 cluster_config.ENV_DATA["cluster_path"],
@@ -312,11 +302,6 @@ class OCP(object):
         retry += 1
         while retry:
             try:
-                log.info(">>>>>>> 1")
-                local_vars = {k: v for k, v in locals().items() if k != "self"}
-                log.info(f"locals = {local_vars}")
-                log.info(f"self = {vars(self)}")
-                log.info("<<<<<<< 1")
                 return self.exec_oc_cmd(
                     command,
                     silent=silent,
