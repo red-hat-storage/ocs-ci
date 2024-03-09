@@ -1,11 +1,3 @@
-class DeployHostedOCP:
-    def __init__(
-        self,
-        cluster_name: str,
-    ):
-        self.cluster_name = cluster_name
-
-
 class DeployHostedOCS:
     def __init__(
         self,

@@ -1,7 +1,10 @@
 import logging
 
-from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import HypershiftHostedOCP
+from ocs_ci.deployment.helpers.hypershift_base import (
+    HyperShiftBase,
+    get_hosted_cluster_names,
+)
+from ocs_ci.deployment.hosted_cluster import HypershiftHostedOCP, HostedODF
 from ocs_ci.framework.pytest_customization.marks import (
     hci_provider_required,
     libtest,
@@ -62,8 +65,23 @@ class TestProviderHosted(object):
         """
         logger.info("Test create kubeconfig for hosted clusters")
         hps_base = HyperShiftBase()
-        hosted_cluster_names = hps_base.get_hosted_cluster_names()
+        hosted_cluster_names = get_hosted_cluster_names()
         for hosted_cluster_name in hosted_cluster_names:
             assert hps_base.download_hosted_cluster_kubeconfig(
                 hosted_cluster_name,
             ), "Failed to download kubeconfig for hosted cluster"
+
+    @hci_provider_required
+    def test_install_odf_on_hosted_cluster(self):
+        """
+        Test install ODF on hosted cluster
+        """
+        logger.info("Test install ODF on hosted cluster")
+
+        HyperShiftBase().download_hosted_cluster_kubeconfig_multiple()
+
+        hosted_cluster_names = get_hosted_cluster_names()
+        cluster_name = hosted_cluster_names[0]
+
+        hosted_odf = HostedODF(cluster_name)
+        hosted_odf.do_deploy()
