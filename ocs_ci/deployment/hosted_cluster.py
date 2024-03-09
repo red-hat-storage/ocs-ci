@@ -1,4 +1,5 @@
 import logging
+import os
 import tempfile
 
 from ocs_ci.deployment.cnv import CNVInstaller
@@ -160,7 +161,7 @@ class HostedODF:
         self.namespace_client = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
         self.timeout_check_resources_existence = 6
         self.name = name
-        self.cluster_kubeconfig = (
+        self.cluster_kubeconfig = os.path.expanduser(
             f"{constants.auth_path_pattern.format(name)}/kubeconfig"
         )
 
