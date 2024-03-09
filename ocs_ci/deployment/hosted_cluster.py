@@ -241,5 +241,4 @@ class HostedODF:
             resource_name="openshift-storage-egress",
             should_exist=True,
         ):
-            logger.info(f"Namespace {self.namespace_client} already exists")
             return
