@@ -178,6 +178,10 @@ class OCP(object):
         log.info(f"self = {vars(self)}")
         log.info("<<<<<<< 2")
 
+        log.info(">>>>>>> 3")
+        log.info(f"config = {vars(cluster_config)}")
+        log.info("<<<<<<< 3")
+
         if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
             cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
                 cluster_config.ENV_DATA["cluster_path"],
