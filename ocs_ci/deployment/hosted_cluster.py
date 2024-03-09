@@ -178,17 +178,23 @@ class HostedODF:
 
         """
         cmd = "oc --kubeconfig {} {}".format(self.cluster_kubeconfig, cmd)
-        return helpers.exec_cmd(cmd, timeout, ignore_error, **kwargs)
+        return helpers.exec_cmd(
+            cmd=cmd, timeout=timeout, ignore_error=ignore_error, **kwargs
+        )
 
     def create_ns(self):
         logger.info(f"Creating namespace {self.namespace_client} for storage client")
 
-        ocp = OCP(kind="namespace", resource_name=self.namespace_client)
+        ocp = OCP(
+            kind="namespace",
+            resource_name=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+
         if ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
             resource_name=self.namespace_client,
             should_exist=True,
-            cluster_config=self.cluster_kubeconfig,
         ):
             logger.info(f"Namespace {self.namespace_client} already exists")
             return

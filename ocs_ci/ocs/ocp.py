@@ -1056,14 +1056,13 @@ class OCP(object):
                 f"Resource: {self.resource_name} is not in expected phase: " f"{phase}"
             )
 
-    def is_exist(self, resource_name="", selector=None, **kwargs):
+    def is_exist(self, resource_name="", selector=None):
         """
         Check if at least one of the resource exists.
 
         Args:
             resource_name (str): Name of the resource.
             selector (str): Selector of the resource.
-            kwargs: Additional arguments to pass to the get method.
 
         Raises:
             ResourceNameNotSpecifiedException: In case the name is not
@@ -1078,7 +1077,7 @@ class OCP(object):
         log.info(f"Check if resource: {resource_name} exists.")
         self.check_name_is_specified(resource_name)
         try:
-            self.get(resource_name, selector=selector, **kwargs)
+            self.get(resource_name, selector=selector)
             log.info(f"Resource: {resource_name}, selector: {selector} found.")
             return True
         except CommandFailed:
@@ -1146,8 +1145,8 @@ class OCP(object):
             bool: True if the resource was found, False otherwise
         """
 
-        def _check_existence(ocp_obj, should_exist, resource_name, selector, **kwargs):
-            return ocp_obj.is_exist(resource_name, selector, **kwargs) == should_exist
+        def _check_existence(ocp_obj, should_exist, resource_name, selector):
+            return ocp_obj.is_exist(resource_name, selector) == should_exist
 
         try:
             for expected_state in TimeoutSampler(
@@ -1158,7 +1157,6 @@ class OCP(object):
                 should_exist,
                 resource_name,
                 selector,
-                **kwargs,
             ):
                 if expected_state:
                     return True
