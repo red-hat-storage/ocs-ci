@@ -333,21 +333,20 @@ class HyperShiftBase(Deployment):
         for name in names:
             self.download_hosted_cluster_kubeconfig(name)
 
-    def download_hosted_cluster_kubeconfig(
-        self, name: str, kubeconfig_path: str = None
-    ):
+    def download_hosted_cluster_kubeconfig(self, name: str, auth_path: str = None):
         """
         Download HyperShift hosted cluster kubeconfig
         :param name: name of the cluster
-        :param kubeconfig_path: path to download kubeconfig
+        :param auth_path: path to download kubeconfig
         :return: True if kubeconfig downloaded successfully, False otherwise
         """
-        if not kubeconfig_path:
-            kubeconfig_path = f"{constants.auth_path_pattern.format(name)}/kubeconfig"
+        if not auth_path:
+            auth_path = constants.auth_path_pattern.format(name)
 
-        kubeconfig_path_abs = os.path.expanduser(kubeconfig_path)
-        os.makedirs(kubeconfig_path_abs, exist_ok=True)
+        auth_path_abs = os.path.expanduser(auth_path)
+        os.makedirs(auth_path_abs, exist_ok=True)
 
+        kubeconfig_path_abs = f"{auth_path_abs}/kubeconfig"
         if os.path.isfile(kubeconfig_path_abs):
             logger.info(
                 f"Kubeconfig for HyperShift hosted cluster {name} already exists at {kubeconfig_path_abs}, removing it"
