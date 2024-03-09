@@ -81,7 +81,7 @@ class TestProviderHosted(object):
         HyperShiftBase().download_hosted_cluster_kubeconfig_multiple()
 
         hosted_cluster_names = get_hosted_cluster_names()
-        cluster_name = hosted_cluster_names[0]
+        cluster_name = hosted_cluster_names[-1]
 
         hosted_odf = HostedODF(cluster_name)
         hosted_odf.do_deploy()
