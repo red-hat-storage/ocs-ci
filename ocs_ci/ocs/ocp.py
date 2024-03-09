@@ -172,6 +172,12 @@ class OCP(object):
             self.cluster_kubeconfig if os.path.exists(self.cluster_kubeconfig) else None
         )
 
+        log.info(">>>>>>> 2")
+        local_vars = {k: v for k, v in locals().items() if k != "self"}
+        log.info(f"locals = {local_vars}")
+        log.info(f"self = {vars(self)}")
+        log.info("<<<<<<< 2")
+
         if kubeconfig_path or not env_kubeconfig or not os.path.exists(env_kubeconfig):
             cluster_dir_kubeconfig = kubeconfig_path or os.path.join(
                 cluster_config.ENV_DATA["cluster_path"],
@@ -302,6 +308,11 @@ class OCP(object):
         retry += 1
         while retry:
             try:
+                log.info(">>>>>>> 1")
+                local_vars = {k: v for k, v in locals().items() if k != "self"}
+                log.info(f"locals = {local_vars}")
+                log.info(f"self = {vars(self)}")
+                log.info("<<<<<<< 1")
                 return self.exec_oc_cmd(
                     command,
                     silent=silent,
@@ -1129,7 +1140,7 @@ class OCP(object):
         return output
 
     def check_resource_existence(
-        self, should_exist, timeout=60, resource_name="", selector=None, **kwargs
+        self, should_exist, timeout=60, resource_name="", selector=None
     ):
         """
         Checks whether an OCP() resource exists
@@ -1139,7 +1150,6 @@ class OCP(object):
             timeout (int): How long should the check run before moving on
             resource_name (str): Name of the resource.
             selector (str): Selector of the resource.
-            kwargs: Additional arguments to pass to the get method.
 
         Returns:
             bool: True if the resource was found, False otherwise
