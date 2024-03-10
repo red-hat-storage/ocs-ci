@@ -4595,3 +4595,53 @@ def get_architecture_path(cli_type):
     elif system == "Darwin":  # Mac
         path = os.path.join(path, "macosx", image_prefix)
     return path
+
+
+def odf_cli_set_log_level(service, log_level, subsystem):
+    """
+    Set the log level for a Ceph service.
+    Args:
+        service (str): The Ceph service name.
+        log_level (str): The log level to set.
+        subsystem (str): The subsystem for which to set the log level.
+    Returns:
+        str: The output of the command execution.
+    """
+    from pathlib import Path
+
+    if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+        retrieve_cli_binary(cli_type="odf")
+
+    logger.info(
+        f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
+    )
+    cmd = (
+        f"{constants.CLI_TOOL_LOCAL_PATH} --kubeconfig {os.getenv('KUBECONFIG')} "
+        f" set ceph log-level {service} {subsystem} {log_level}"
+    )
+
+    logger.info(cmd)
+    return exec_cmd(cmd, use_shell=True)
+
+
+def get_ceph_log_level(service, subsystem):
+    """
+    Return CEPH log level value.
+
+    Args:
+        service (_type_): _description_
+        subsystem (_type_): _description_
+    """
+
+    logger.info(
+        f"Fetching ceph log level for {service} on {subsystem} Using odf-cli tool."
+    )
+    toolbox = pod.get_ceph_tools_pod()
+    ceph_cmd = f"ceph config get {service}"
+
+    ceph_output = toolbox.exec_ceph_cmd(ceph_cmd)
+
+    ceph_log_level = ceph_output.get(f"debug_{subsystem}", {}).get("value", None)
+
+    memory_value, log_value = ceph_log_level.split("/")
+    return int(log_value)
