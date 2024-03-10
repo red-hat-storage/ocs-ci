@@ -5,7 +5,11 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
     get_hosted_cluster_names,
 )
-from ocs_ci.deployment.hosted_cluster import HypershiftHostedOCP, HostedODF
+from ocs_ci.deployment.hosted_cluster import (
+    HypershiftHostedOCP,
+    HostedODF,
+    DeployClients,
+)
 from ocs_ci.framework.pytest_customization.marks import (
     hci_provider_required,
     libtest,
@@ -58,7 +62,7 @@ class TestProviderHosted(object):
         Test deploy hosted OCP on provider platform multiple times
         """
         logger.info("Test deploy hosted OCP on provider platform multiple times")
-        HypershiftHostedOCP().deploy_multiple_ocp_clusters()
+        HypershiftHostedOCP().deploy_hosted_ocp_clusters()
 
     @hci_provider_required
     def test_create_kubeconfig_for_hosted_clusters(self):
@@ -81,10 +85,19 @@ class TestProviderHosted(object):
         """
         logger.info("Test install ODF on hosted cluster")
 
-        HyperShiftBase().download_hosted_cluster_kubeconfig_multiple()
+        HyperShiftBase().download_hosted_clusters_kubeconfig_files()
 
         hosted_cluster_names = get_hosted_cluster_names()
         cluster_name = random.choice(hosted_cluster_names)
 
         hosted_odf = HostedODF(cluster_name)
         hosted_odf.do_deploy()
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_OCP_and_setup_ODF_client_on_hosted_clusters(self, setup_ui_class):
+        """
+        Test install ODF on hosted cluster
+        """
+        logger.info("Deploy hosted OCP on provider platform multiple times")
+        DeployClients().do_deploy()
