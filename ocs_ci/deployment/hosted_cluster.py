@@ -20,7 +20,6 @@ from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
 )
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
-from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
@@ -364,10 +363,9 @@ class HostedODF:
         """
         from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
-        login_ui()
         storage_clients = PageNavigator().nav_to_storageclients_page()
         onboarding_key = storage_clients.generate_client_onboarding_ticket()
-        close_browser()
+
         return onboarding_key
 
     def operator_group_exists(self):
@@ -512,7 +510,7 @@ class HostedODF:
         """
         Get the provider address
         """
-        ocp = OCP(namespace=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE)
+        ocp = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         storage_provider_endpoint = ocp.exec_oc_cmd(
             (
                 "get storageclusters.ocs.openshift.io -o jsonpath={'.items[*].status.storageProviderEndpoint'}"
