@@ -692,9 +692,7 @@ def create_oc_resource(
 
 
 def get_pod_name_by_pattern(
-    pattern="client",
-    namespace=None,
-    filter=None,
+    pattern="client", namespace=None, filter=None, cluster_kubeconfig=None
 ):
     """
     In a given namespace find names of the pods that match
@@ -704,13 +702,16 @@ def get_pod_name_by_pattern(
         pattern (str): name of the pod with given pattern
         namespace (str): Namespace value
         filter (str): pod name to filter from the list
+        cluster_kubeconfig (str): Path to kubeconfig file
 
     Returns:
         pod_list (list): List of pod names matching the pattern
 
     """
     namespace = namespace if namespace else ocsci_config.ENV_DATA["cluster_namespace"]
-    ocp_obj = OCP(kind="pod", namespace=namespace)
+    ocp_obj = OCP(
+        kind="pod", namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
+    )
     pod_names = ocp_obj.exec_oc_cmd("get pods -o name", out_yaml_format=False)
     pod_names = pod_names.split("\n")
     pod_list = []

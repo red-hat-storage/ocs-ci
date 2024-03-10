@@ -291,17 +291,20 @@ class HostedODF:
             sleep=15,
             func=check_all_csvs_are_succeeded,
             namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
         )
         sample.wait_for_func_value(value=True)
 
         client_pods = get_pod_name_by_pattern(
             pattern=constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
             namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
         )
         client_pods.extend(
             get_pod_name_by_pattern(
                 pattern=constants.OCS_CLIENT_OPERATOR_CONSOLE,
                 namespace=self.namespace_client,
+                cluster_kubeconfig=self.cluster_kubeconfig,
             )
         )
 
