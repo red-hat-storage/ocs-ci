@@ -296,9 +296,12 @@ class HostedODF:
 
         client_pods = [
             get_pod_name_by_pattern(
-                constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX
+                constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
+                namespace=self.namespace_client,
             ),
-            get_pod_name_by_pattern(constants.OCS_CLIENT_OPERATOR_CONSOLE),
+            get_pod_name_by_pattern(
+                constants.OCS_CLIENT_OPERATOR_CONSOLE, namespace=self.namespace_client
+            ),
         ]
 
         return wait_for_pods_to_be_running(
