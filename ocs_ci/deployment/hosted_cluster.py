@@ -34,15 +34,51 @@ class DeployClients:
 
     def do_deploy(self):
         hypershiftHostedOCP = HypershiftHostedOCP()
-        hypershiftHostedOCP.deploy_multiple_ocp_clusters()
+        cluster_names = hypershiftHostedOCP.deploy_hosted_ocp_clusters()
 
         logger.info(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
-        hypershiftHostedOCP.verify_multiple_hosted_ocp_cluster_from_provider()
+        verification_passed = (
+            hypershiftHostedOCP.verify_hosted_ocp_clusters_from_provider()
+        )
+        if not verification_passed:
+            logger.error("\nSome of the clusters are not ready\n")
 
         logger.info("Download kubeconfig for all clusters")
-        hypershiftHostedOCP.download_hosted_cluster_kubeconfig_multiple()
+        kubeconfig_paths = (
+            hypershiftHostedOCP.download_hosted_clusters_kubeconfig_files()
+        )
+
+        logger.info("Deploy ODF client on newly created hosted OCP clusters")
+        for cluster_name in cluster_names:
+            logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
+            hosted_odf = HostedODF(cluster_name)
+            hosted_odf.do_deploy()
+            logger.info(f"ODF client deployed on hosted OCP cluster '{cluster_name}'")
+
+        logger.info("kubeconfig files for all hosted OCP clusters:\n")
+
+        for kubeconfig_path in kubeconfig_paths:
+            logger.info(f"kubeconfig path: {kubeconfig_path}\n")
+
+    def deploy_multiple_odf_clients(self):
+        """
+        Deploy multiple ODF clients on hosted OCP clusters. Method tries to deploy ODF client on all hosted OCP clusters
+        If ODF was already deployed on some of the clusters, it will be skipped for those clusters.
+
+        :returns: list of kubeconfig paths for all hosted OCP clusters
+        """
+        kubeconfig_paths = HyperShiftBase().download_hosted_clusters_kubeconfig_files()
+
+        hosted_cluster_names = get_hosted_cluster_names()
+
+        for cluster_name in hosted_cluster_names:
+            logger.info(f"Deploying ODF client on hosted OCP cluster '{cluster_name}'")
+            hosted_odf = HostedODF(cluster_name)
+            hosted_odf.do_deploy()
+
+        return kubeconfig_paths
 
 
 class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
@@ -130,7 +166,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         )
         return self.create_kubevirt_OCP_cluster()
 
-    def deploy_multiple_ocp_clusters(
+    def deploy_hosted_ocp_clusters(
         self,
     ):
         """
@@ -149,10 +185,10 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
 
         logger.info(f"Deploying {number_of_clusters_to_deploy} clusters")
 
-        deployment_states = []
+        cluster_names = []
         for _ in range(number_of_clusters_to_deploy):
 
-            deployment_states.append(
+            cluster_names.append(
                 self.deploy_ocp(
                     deploy_cnv=False,
                     deploy_acm_hub=False,
@@ -161,7 +197,8 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
                 )
             )
 
-        logger.info(f"All deployment jobs have finished: {deployment_states}")
+        logger.info(f"All deployment jobs have finished: {cluster_names}")
+        return cluster_names
 
 
 class HostedODF:
@@ -192,7 +229,6 @@ class HostedODF:
         )
 
     def create_ns(self):
-        logger.info(f"Creating namespace {self.namespace_client} for storage client")
 
         ocp = OCP(
             kind="namespace",
@@ -224,7 +260,6 @@ class HostedODF:
             bool: True if network policy is created, False otherwise
         """
         namespace = f"clusters-{self.name}"
-        logger.info(f"Applying network policy to the namespace {namespace}")
 
         network_policy_data = templating.load_yaml(
             constants.NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE
@@ -247,6 +282,8 @@ class HostedODF:
     def do_deploy(self):
 
         logger.info(f"Deploying ODF client on hosted OCP cluster '{self.name}'")
+
+        logger.info("Applying network policy")
         self.apply_network_policy()
 
         logger.info("Creating ODF client namespace")

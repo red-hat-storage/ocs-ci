@@ -161,7 +161,7 @@ class HyperShiftBase(Deployment):
 
         return name
 
-    def verify_multiple_hosted_ocp_cluster_from_provider(self):
+    def verify_hosted_ocp_clusters_from_provider(self):
         """
         Verify multiple HyperShift hosted clusters from provider
         :return:
@@ -322,22 +322,25 @@ class HyperShiftBase(Deployment):
         cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
-    def download_hosted_cluster_kubeconfig_multiple(self):
+    def download_hosted_clusters_kubeconfig_files(self):
         """
         Get HyperShift hosted cluster kubeconfig for multiple clusters
         :return: list of hosted cluster kubeconfig paths
         """
         names = get_hosted_cluster_names()
 
+        kubeconfig_paths = []
         for name in names:
-            self.download_hosted_cluster_kubeconfig(name)
+            kubeconfig_paths.append(self.download_hosted_cluster_kubeconfig(name))
+
+        return kubeconfig_paths
 
     def download_hosted_cluster_kubeconfig(self, name: str, auth_path: str = None):
         """
         Download HyperShift hosted cluster kubeconfig
         :param name: name of the cluster
         :param auth_path: path to download kubeconfig
-        :return: True if kubeconfig downloaded successfully, False otherwise
+        :return: path to the downloaded kubeconfig, None if failed
         """
         if not auth_path:
             auth_path = constants.AUTH_PATH_PATTERN.format(name)
@@ -366,12 +369,12 @@ class HyperShiftBase(Deployment):
             logger.error(
                 f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{resp.stderr.decode('utf-8')}"
             )
-            return False
+            return
         if (
             os.path.isfile(kubeconfig_path_abs)
             and os.stat(kubeconfig_path_abs).st_size > 0
         ):
-            return True
+            return kubeconfig_path_abs
 
     def get_hosted_cluster_progress(self, name):
         """
