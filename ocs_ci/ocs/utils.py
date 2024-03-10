@@ -709,6 +709,12 @@ def get_pod_name_by_pattern(
 
     """
     namespace = namespace if namespace else ocsci_config.ENV_DATA["cluster_namespace"]
+
+    # exec_oc_cmd has robust logic around cluster_config, so we add a check here to
+    # avoid cluster_kubeconfig==None
+    if cluster_kubeconfig is None:
+        cluster_kubeconfig = ""
+
     ocp_obj = OCP(
         kind="pod", namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
     )
