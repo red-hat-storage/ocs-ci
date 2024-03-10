@@ -18,7 +18,6 @@ from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
@@ -353,6 +352,8 @@ class HostedODF:
         Get onboarding key from UI
         :return: str Onboarding key from Provider UI
         """
+        from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+
         login_ui()
         storage_clients = PageNavigator().nav_to_storageclients_page()
         onboarding_key = storage_clients.generate_client_onboarding_ticket()
