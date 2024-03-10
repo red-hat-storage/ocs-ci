@@ -294,15 +294,16 @@ class HostedODF:
         )
         sample.wait_for_func_value(value=True)
 
-        client_pods = [
+        client_pods = get_pod_name_by_pattern(
+            pattern=constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
+            namespace=self.namespace_client,
+        )
+        client_pods.extend(
             get_pod_name_by_pattern(
-                constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
+                pattern=constants.OCS_CLIENT_OPERATOR_CONSOLE,
                 namespace=self.namespace_client,
-            ),
-            get_pod_name_by_pattern(
-                constants.OCS_CLIENT_OPERATOR_CONSOLE, namespace=self.namespace_client
-            ),
-        ]
+            )
+        )
 
         return wait_for_pods_to_be_running(
             namespace=self.namespace_client, pod_names=client_pods, timeout=600
