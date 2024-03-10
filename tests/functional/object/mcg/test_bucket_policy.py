@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 import botocore.exceptions as boto3exception
@@ -270,6 +271,12 @@ class TestS3BucketPolicy(MCGTest):
         )
         put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
         logger.info(f"Put bucket policy response from Admin: {put_policy}")
+
+        # Hardcoded sleep is needed because we lack a confirmation mechanism
+        # we could wait for - even the get-policy result has been observed to be
+        # unreliable in confirming whether they policy is actually taking effect
+        logger.info("Waiting for 60 seconds for the policy to take effect")
+        time.sleep(60)
 
         # Get Policy
         logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
