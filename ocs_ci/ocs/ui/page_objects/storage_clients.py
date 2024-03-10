@@ -1,13 +1,11 @@
 import logging
 
-from ocs_ci.ocs.ui.base_ui import take_screenshot, copy_dom
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-
+from ocs_ci.ocs.ui.base_ui import take_screenshot, copy_dom, BaseUI
 
 logger = logging.getLogger(__name__)
 
 
-class StorageClients(PageNavigator):
+class StorageClients(BaseUI):
     """
     Storage Client page object under PageNavigator / Storage (version 4.14 and above)
     """
