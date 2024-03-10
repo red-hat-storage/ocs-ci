@@ -5,7 +5,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.base_ui import BaseUI, logger
-from ocs_ci.ocs.ui.page_objects.storage_clients import StorageClients
 from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
 from ocs_ci.utility import version
 
@@ -438,6 +437,8 @@ class PageNavigator(BaseUI):
         Navigate to Storage Clients Page
 
         """
+        from ocs_ci.ocs.ui.page_objects.storage_clients import StorageClients
+
         logger.info("Navigate to Storage Client Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.page_has_loaded(retries=120, sleep_time=10)
