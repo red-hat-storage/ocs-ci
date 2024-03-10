@@ -1,4 +1,5 @@
 import logging
+import random
 
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
@@ -81,7 +82,7 @@ class TestProviderHosted(object):
         HyperShiftBase().download_hosted_cluster_kubeconfig_multiple()
 
         hosted_cluster_names = get_hosted_cluster_names()
-        cluster_name = hosted_cluster_names[-1]
+        cluster_name = random.choice(hosted_cluster_names)
 
         hosted_odf = HostedODF(cluster_name)
         hosted_odf.do_deploy()

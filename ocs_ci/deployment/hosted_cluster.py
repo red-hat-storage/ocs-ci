@@ -14,8 +14,15 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 from ocs_ci.ocs.exceptions import ProviderModeNotFoundException
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +169,7 @@ class HostedODF:
         self.timeout_check_resources_existence = 6
         self.name = name
         self.cluster_kubeconfig = os.path.expanduser(
-            f"{constants.auth_path_pattern.format(name)}/kubeconfig"
+            f"{constants.AUTH_PATH_PATTERN.format(name)}/kubeconfig"
         )
 
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
@@ -241,7 +248,200 @@ class HostedODF:
         logger.info(f"Deploying ODF client on hosted OCP cluster '{self.name}'")
         self.apply_network_policy()
 
+        logger.info("Creating ODF client namespace")
         self.create_ns()
+
+        logger.info("Creating ODF client operator group")
+        self.create_operator_group()
+
+        logger.info("Creating ODF client catalog source")
+        self.create_catalog_source()
+
+        logger.info("Creating ODF client subscription")
+        self.create_subscription()
+
+        logger.info("Waiting for ODF client to be installed")
+        self.odf_client_installed()
+
+        logger.info("Creating storage client")
+        self.create_storage_client()
+
+        logger.info("Creating storage class claim cephfs")
+        self.create_storage_class_claim_cephfs()
+
+        logger.info("Creating storage class claim rbd")
+        self.create_storage_class_claim_rbd()
+
+        logger.info("Verify Storage Class cephfs exists")
+        self.storage_class_exists(constants.CEPHFILESYSTEM_SC)
+
+        logger.info("Verify Storage Class rbd exists")
+        self.storage_class_exists(constants.CEPHBLOCKPOOL_SC)
+
+    def odf_client_installed(self):
+        """
+        Check if ODF client is installed
+
+        :returns: True if ODF client is installed, False otherwise
+        """
+        sample = TimeoutSampler(
+            timeout=1200,
+            sleep=15,
+            func=check_all_csvs_are_succeeded,
+            namespace=self.namespace_client,
+        )
+        sample.wait_for_func_value(value=True)
+
+        client_pods = [
+            get_pod_name_by_pattern(
+                constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX
+            ),
+            get_pod_name_by_pattern(constants.OCS_CLIENT_OPERATOR_CONSOLE),
+        ]
+
+        return wait_for_pods_to_be_running(
+            namespace=self.namespace_client, pod_names=client_pods, timeout=600
+        )
+
+    def storage_client_exists(self):
+        """
+        Check if the storage client exists
+        :return:
+        """
+        ocp = OCP(
+            kind=constants.STORAGECLIENT,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name="openshift-storage-client",
+            should_exist=True,
+        )
+
+    def create_storage_client(self):
+        """
+        Create storage client
+        """
+
+        if self.storage_client_exists():
+            logger.info("Storage client already exists")
+            return
+
+        storage_client_data = templating.load_yaml(
+            constants.PROVIDER_MODE_STORAGE_CLIENT
+        )
+        storage_client_data["spec"][
+            "storageProviderEndpoint"
+        ] = self.get_provider_address()
+
+        onboarding_key = self.get_onboarding_key_ui()
+
+        storage_client_data["spec"]["onboardingKey"] = onboarding_key
+
+        storage_client_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="storage_client", delete=False
+        )
+        templating.dump_data_to_temp_yaml(storage_client_data, storage_client_file.name)
+
+        self.exec_oc_cmd(f"apply -f {storage_client_file.name}", timeout=120)
+
+        return self.storage_client_exists()
+
+    def get_onboarding_key_ui(self):
+        """
+        Get onboarding key from UI
+        :return: str Onboarding key from Provider UI
+        """
+        login_ui()
+        storage_clients = PageNavigator().nav_to_storageclients_page()
+        onboarding_key = storage_clients.generate_client_onboarding_ticket()
+        close_browser()
+        return onboarding_key
+
+    def operator_group_exists(self):
+        """
+        Check if the operator group exists
+        :return:
+        """
+        ocp = OCP(
+            kind=constants.OPERATOR_GROUP,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name="openshift-storage-client-operator-group",
+            should_exist=True,
+        )
+
+    def create_operator_group(self):
+        """
+        Create operator group for ODF
+        """
+        if self.operator_group_exists():
+            logger.info("OperatorGroup already exists")
+            return
+
+        operator_group_data = templating.load_yaml(
+            constants.PROVIDER_MODE_OPERATORGROUP
+        )
+
+        operator_group_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="operator_group", delete=False
+        )
+        templating.dump_data_to_temp_yaml(operator_group_data, operator_group_file.name)
+
+        self.exec_oc_cmd(f"apply -f {operator_group_file.name}", timeout=120)
+
+        return self.operator_group_exists()
+
+    def catalog_source_exists(self):
+        """
+        Check if the catalog source exists
+        :return:
+        """
+        ocp = OCP(
+            kind=constants.CATSRC,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name="redhat-operators",
+            should_exist=True,
+        )
+
+    def create_catalog_source(self):
+        """
+        Create catalog source for ODF
+        """
+        if self.catalog_source_exists():
+            logger.info("CatalogSource already exists")
+            return
+
+        catalog_source_data = templating.load_yaml(
+            constants.PROVIDER_MODE_CATALOGSOURCE
+        )
+        image_placeholder = catalog_source_data["spec"]["image"]
+        provider_odf_version = str(get_semantic_ocs_version_from_config())
+
+        logger.info(
+            f"ODF version: {provider_odf_version} will be installed on client. Setting up CatalogSource"
+        )
+
+        catalog_source_data["spec"]["image"] = image_placeholder.format(
+            provider_odf_version
+        )
+
+        catalog_source_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="catalog_source", delete=False
+        )
+        templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_file.name)
+
+        self.exec_oc_cmd(f"apply -f {catalog_source_file.name}", timeout=120)
+
+        return self.catalog_source_exists()
 
     def network_policy_created(self, namespace):
         """
@@ -249,9 +449,158 @@ class HostedODF:
         :return:
         """
         ocp = OCP(kind=constants.NETWORK_POLICY, namespace=namespace)
-        if ocp.check_resource_existence(
+        return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
             resource_name="openshift-storage-egress",
             should_exist=True,
-        ):
+        )
+
+    def subscription_exists(self):
+        """
+        Check if the subscription exists
+        :return:
+        """
+        ocp = OCP(
+            kind=constants.SUBSCRIPTION_COREOS,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name="ocs-subscription",
+            should_exist=True,
+        )
+
+    def create_subscription(self):
+        """
+        Create subscription for ODF
+        """
+        if self.subscription_exists():
+            logger.info("Subscription already exists")
             return
+
+        subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
+
+        default_channel = PackageManifest().get_default_channel()
+
+        subscription_data["spec"]["channel"] = default_channel
+
+        subscription_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="subscription", delete=False
+        )
+        templating.dump_data_to_temp_yaml(subscription_data, subscription_file.name)
+
+        self.exec_oc_cmd(f"apply -f {subscription_file.name}", timeout=120)
+
+        return self.subscription_exists()
+
+    def get_provider_address(self):
+        """
+        Get the provider address
+        """
+        ocp = OCP(namespace=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE)
+        storage_provider_endpoint = ocp.exec_oc_cmd(
+            (
+                "get storageclusters.ocs.openshift.io -o jsonpath={'.items[*].status.storageProviderEndpoint'}"
+            ),
+            out_yaml_format=False,
+        )
+        logger.info(f"Provider address: {storage_provider_endpoint}")
+        return storage_provider_endpoint
+
+    def storage_class_claim_exists_cephfs(self):
+        """
+        Check if storage class claim for CephFS exists
+        :return: True if storage class claim for CephFS exists, False otherwise
+        """
+        ocp = OCP(
+            kind=constants.STORAGECLASSCLAIM,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name="ocs-storagecluster-cephfs",
+            should_exist=True,
+        )
+
+    def create_storage_class_claim_cephfs(self):
+        """
+        Create storage class claim for CephFS
+        """
+
+        if self.storage_class_claim_exists_cephfs():
+            logger.info("Storage class claim for CephFS already exists")
+            return
+
+        storage_class_claim_data = templating.load_yaml(
+            constants.PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS
+        )
+
+        storage_class_claim_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="storage_class_claim_cephfs", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            storage_class_claim_data, storage_class_claim_file.name
+        )
+
+        self.exec_oc_cmd(f"apply -f {storage_class_claim_file.name}", timeout=120)
+
+        return self.storage_class_claim_exists_cephfs()
+
+    def storage_class_claim_exists_rbd(self):
+        """
+        Check if storage class claim for RBD exists
+        :return: True if storage class claim for RBD exists, False otherwise
+        """
+        ocp = OCP(
+            kind=constants.STORAGECLASSCLAIM,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name="ocs-storagecluster-ceph-rbd",
+            should_exist=True,
+        )
+
+    def create_storage_class_claim_rbd(self):
+        """
+        Create storage class claim for RBD
+        """
+
+        if self.storage_class_claim_exists_rbd():
+            logger.info("Storage class claim for RBD already exists")
+            return
+
+        storage_class_claim_data = templating.load_yaml(
+            constants.PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD
+        )
+
+        storage_class_claim_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="storage_class_claim_rbd", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            storage_class_claim_data, storage_class_claim_file.name
+        )
+
+        self.exec_oc_cmd(f"apply -f {storage_class_claim_file.name}", timeout=120)
+
+        return self.storage_class_claim_exists_rbd()
+
+    def storage_class_exists(self, sc_name):
+        """
+        Check if storage class is ready
+        :param sc_name: Name of the storage class
+        :return: True if storage class is ready, False otherwise
+        """
+        ocp = OCP(
+            kind=constants.STORAGECLASS,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            resource_name=sc_name,
+            should_exist=True,
+        )

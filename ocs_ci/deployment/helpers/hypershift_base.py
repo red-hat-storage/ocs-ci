@@ -340,7 +340,7 @@ class HyperShiftBase(Deployment):
         :return: True if kubeconfig downloaded successfully, False otherwise
         """
         if not auth_path:
-            auth_path = constants.auth_path_pattern.format(name)
+            auth_path = constants.AUTH_PATH_PATTERN.format(name)
 
         auth_path_abs = os.path.expanduser(auth_path)
         os.makedirs(auth_path_abs, exist_ok=True)
