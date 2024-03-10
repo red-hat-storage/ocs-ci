@@ -15,7 +15,10 @@ from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 from ocs_ci.ocs.exceptions import ProviderModeNotFoundException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.packagemanifest import (
+    PackageManifest,
+    get_selector_for_ocs_operator,
+)
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -482,7 +485,10 @@ class HostedODF:
 
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
 
-        default_channel = PackageManifest().get_default_channel()
+        default_channel = PackageManifest(
+            resource_name=constants.OCS_CLIENT_OPERATOR,
+            selector=get_selector_for_ocs_operator(),
+        ).get_default_channel()
 
         subscription_data["spec"]["channel"] = default_channel
 
