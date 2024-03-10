@@ -621,6 +621,17 @@ pvc_4_14 = {
     ),
 }
 
+storage_clients = {
+    "generate_client_onboarding_ticket": (
+        "//button[normalize-space()='Generate client onboarding token']",
+        By.XPATH,
+    ),
+    "client_onboarding_token": (
+        "//div[@class='odf-onboarding-modal__text-area']",
+        By.XPATH,
+    ),
+    "close_token_modal": ("//button[@aria-label='Close']", By.XPATH),
+}
 
 page_nav = {
     "page_navigator_sidebar": ("page-sidebar", By.ID),
@@ -679,6 +690,7 @@ page_nav_4_10 = {
 
 page_nav_4_14 = {
     "object_storage_page": ("Object Storage", By.LINK_TEXT),
+    "storageclients_page": ("Storage Clients", By.LINK_TEXT),
 }
 
 acm_page_nav = {
@@ -1877,6 +1889,7 @@ locators = {
         "bucketclass": bucketclass,
         "topology": topology,
         "mcg_stores": mcg_stores,
+        "storage_clients": storage_clients,
         "alerting": alerting,
     },
     "4.14": {
@@ -1917,6 +1930,7 @@ locators = {
         "bucketclass": bucketclass,
         "topology": topology,
         "mcg_stores": mcg_stores,
+        "storage_clients": storage_clients,
     },
     "4.13": {
         "login": {**login, **login_4_11},

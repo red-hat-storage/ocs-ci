@@ -5,6 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.base_ui import BaseUI, logger
+from ocs_ci.ocs.ui.page_objects.storage_clients import StorageClients
 from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
 from ocs_ci.utility import version
 
@@ -431,3 +432,16 @@ class PageNavigator(BaseUI):
             logger.info("Administrator user was already selected")
         else:
             logger.error("Unknown user role selected by default")
+
+    def nav_to_storageclients_page(self):
+        """
+        Navigate to Storage Clients Page
+
+        """
+        logger.info("Navigate to Storage Client Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=120, sleep_time=10)
+        self.do_click(
+            locator=self.page_nav["storageclients_page"], enable_screenshot=False
+        )
+        return StorageClients()

@@ -272,7 +272,30 @@ HCI_CLIENT = "hci_client"
 HCI_PROVIDER = "provider"
 
 # provider mode constants
-auth_path_pattern = "~/clusters/{}/openshift-cluster-dir/auth"
+AUTH_PATH_PATTERN = "~/clusters/{}/openshift-cluster-dir/auth"
+PROVIDER_MODE_OCS_DEPLOYMENT_PATH = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "provider-mode"
+)
+PROVIDER_MODE_CATALOGSOURCE = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs-catalogsource.yaml"
+)
+PROVIDER_MODE_OPERATORGROUP = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "operator_group.yaml"
+)
+PROVIDER_MODE_SUBSCRIPTION = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_client_operator_subscription.yaml"
+)
+PROVIDER_MODE_STORAGE_CLIENT = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_client.yaml"
+)
+PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_cephfs.yaml"
+)
+PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
+)
+OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
+OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]

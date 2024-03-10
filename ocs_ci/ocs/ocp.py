@@ -1078,10 +1078,12 @@ class OCP(object):
         self.check_name_is_specified(resource_name)
         try:
             self.get(resource_name, selector=selector)
-            log.info(f"Resource: {resource_name}, selector: {selector} found.")
+            log.info(f"Resource: '{resource_name}', selector: '{selector}' was found.")
             return True
         except CommandFailed:
-            log.info(f"Resource: {resource_name}, selector: {selector} not found.")
+            log.info(
+                f"Resource: '{resource_name}', selector: '{selector}' was not found."
+            )
             return False
 
     def get_logs(
