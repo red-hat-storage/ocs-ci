@@ -1,0 +1,13 @@
+interface={{ interface }}
+no-resolv
+log-queries
+log-dhcp
+dhcp-range={{ dhcp_range }}
+#dhcp-authoritative
+
+{% if dhcp_options is defined %}
+{% for item in dhcp_options %}
+dhcp-option={{ item }}
+
+{% endfor %}
+{% endif %}
