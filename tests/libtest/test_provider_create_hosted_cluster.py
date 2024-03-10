@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     hci_provider_required,
     libtest,
     purple_squad,
+    runs_on_provider,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ class TestProviderHosted(object):
                 hosted_cluster_name,
             ), "Failed to download kubeconfig for hosted cluster"
 
+    @runs_on_provider
     @hci_provider_required
     def test_install_odf_on_hosted_cluster(self):
         """
