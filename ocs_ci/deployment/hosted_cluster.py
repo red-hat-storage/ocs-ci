@@ -34,6 +34,7 @@ class DeployClients:
 
     def do_deploy(self):
         hypershiftHostedOCP = HypershiftHostedOCP()
+
         cluster_names = hypershiftHostedOCP.deploy_hosted_ocp_clusters()
 
         logger.info(
@@ -110,24 +111,6 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         ):
             raise ProviderModeNotFoundException()
 
-        initial_default_sc = helpers.get_default_storage_class()
-        logger.info(f"Initial default StorageClass: {initial_default_sc}")
-
-        if not initial_default_sc == constants.CEPHBLOCKPOOL_SC:
-            logger.info(
-                f"Changing the default StorageClass to {constants.CEPHBLOCKPOOL_SC}"
-            )
-            helpers.change_default_storageclass(scname=constants.CEPHBLOCKPOOL_SC)
-
-        if deploy_cnv:
-            self.deploy_cnv(check_cnv_ready=True)
-        if deploy_acm_hub:
-            self.deploy_acm_hub()
-        if deploy_metallb:
-            self.deploy_lb()
-        if download_hcp_binary:
-            self.download_hcp_binary()
-
         cluster_names_desired = []
         if "cluster_paths" in config.default_cluster_ctx.ENV_DATA:
             cluster_paths = config.default_cluster_ctx.ENV_DATA["cluster_paths"]
@@ -144,6 +127,10 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
                 cluster_name = path[start_index:end_index]
                 cluster_names_desired.append(cluster_name)
 
+        if "cluster_names" in config.default_cluster_ctx.ENV_DATA:
+            cluster_names_desired = config.default_cluster_ctx.ENV_DATA["cluster_names"]
+
+        if cluster_names_desired:
             cluster_names_existing = get_hosted_cluster_names()
             cluster_names_desired_left = [
                 cluster_name
@@ -154,23 +141,58 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
                 logger.info(
                     f"Creating hosted OCP cluster: {cluster_names_desired_left[-1]}"
                 )
+                self.deploy_dependencies(
+                    deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
+                )
+
                 return self.create_kubevirt_OCP_cluster(
                     name=cluster_names_desired_left[-1]
                 )
             else:
                 logger.info("All desired hosted OCP clusters already exist")
                 return None
+        else:
+            logger.info(
+                "\n--- No cluster_paths or cluster_names set to ENV_DATA. "
+                "Creating hosted OCP cluster with random name ---\n"
+            )
+            self.deploy_dependencies(
+                deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
+            )
+            return self.create_kubevirt_OCP_cluster()
 
-        logger.info(
-            "\n--- No cluster_paths set to ENV_DATA. Creating hosted OCP cluster with random name ---\n"
-        )
-        return self.create_kubevirt_OCP_cluster()
+    def deploy_dependencies(
+        self, deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
+    ):
+        """
+        Deploy dependencies for hosted OCP cluster
+        :param deploy_acm_hub: bool Deploy ACM Hub
+        :param deploy_cnv: bool Deploy CNV
+        :param deploy_metallb: bool Deploy MetalLB
+        :param download_hcp_binary: bool Download HCP binary
+
+        """
+        initial_default_sc = helpers.get_default_storage_class()
+        logger.info(f"Initial default StorageClass: {initial_default_sc}")
+        if not initial_default_sc == constants.CEPHBLOCKPOOL_SC:
+            logger.info(
+                f"Changing the default StorageClass to {constants.CEPHBLOCKPOOL_SC}"
+            )
+            helpers.change_default_storageclass(scname=constants.CEPHBLOCKPOOL_SC)
+        if deploy_cnv:
+            self.deploy_cnv(check_cnv_ready=True)
+        if deploy_acm_hub:
+            self.deploy_acm_hub()
+        if deploy_metallb:
+            self.deploy_lb()
+        if download_hcp_binary:
+            self.download_hcp_binary()
 
     def deploy_hosted_ocp_clusters(
         self,
     ):
         """
-        Deploy multiple hosted OCP clusters on provisioned Provider platform
+        Deploy multiple hosted OCP clusters on Provider platform
         """
         # we need to ensure that all dependencies are installed so for the first cluster we will install all operators
         # and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP with hcp.
@@ -186,16 +208,26 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         logger.info(f"Deploying {number_of_clusters_to_deploy} clusters")
 
         cluster_names = []
-        for _ in range(number_of_clusters_to_deploy):
+        for i in range(number_of_clusters_to_deploy):
 
-            cluster_names.append(
-                self.deploy_ocp(
-                    deploy_cnv=False,
-                    deploy_acm_hub=False,
-                    deploy_metallb=False,
-                    download_hcp_binary=False,
+            if i == 0:
+                cluster_names.append(
+                    self.deploy_ocp(
+                        deploy_cnv=True,
+                        deploy_acm_hub=True,
+                        deploy_metallb=True,
+                        download_hcp_binary=True,
+                    )
                 )
-            )
+            else:
+                cluster_names.append(
+                    self.deploy_ocp(
+                        deploy_cnv=False,
+                        deploy_acm_hub=False,
+                        deploy_metallb=False,
+                        download_hcp_binary=False,
+                    )
+                )
 
         logger.info(f"All deployment jobs have finished: {cluster_names}")
         return cluster_names
