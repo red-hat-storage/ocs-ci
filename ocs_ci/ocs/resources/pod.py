@@ -2296,6 +2296,7 @@ def check_pods_in_running_state(
     pod_names=None,
     raise_pod_not_found_error=False,
     skip_for_status=None,
+    cluster_kubeconfig=None,
 ):
     """
     Checks whether the pods in a given namespace are in Running state or not.
@@ -2312,6 +2313,7 @@ def check_pods_in_running_state(
         skip_for_status(list): List of pod status that should be skipped. If the status of a pod is in the given list,
             the check for 'Running' status of that particular pod will be skipped.
             eg: ["Pending", "Completed"]
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
@@ -2323,7 +2325,12 @@ def check_pods_in_running_state(
     else:
         list_of_pods = get_all_pods(namespace)
 
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    if cluster_kubeconfig is None:
+        cluster_kubeconfig = ""
+
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
+    )
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
         if (
@@ -2412,6 +2419,7 @@ def wait_for_pods_to_be_running(
     raise_pod_not_found_error=False,
     timeout=200,
     sleep=10,
+    cluster_kubeconfig=None,
 ):
     """
     Wait for all the pods in a specific namespace to be running.
@@ -2426,6 +2434,7 @@ def wait_for_pods_to_be_running(
             the rest of the pod names. The default value is False
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
 
     Returns:
          bool: True, if all pods in Running state. False, otherwise
@@ -2439,6 +2448,7 @@ def wait_for_pods_to_be_running(
             namespace=namespace,
             pod_names=pod_names,
             raise_pod_not_found_error=raise_pod_not_found_error,
+            cluster_kubeconfig=cluster_kubeconfig,
         ):
             # Check if all the pods in running state
             if pods_running:

@@ -377,7 +377,10 @@ class HostedODF:
         )
 
         return wait_for_pods_to_be_running(
-            namespace=self.namespace_client, pod_names=client_pods, timeout=600
+            namespace=self.namespace_client,
+            pod_names=client_pods,
+            timeout=600,
+            cluster_kubeconfig=self.cluster_kubeconfig,
         )
 
     def storage_client_exists(self):
@@ -486,7 +489,7 @@ class HostedODF:
         )
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
-            resource_name="redhat-operators",
+            resource_name="ocs-catalogsource",
             should_exist=True,
         )
 
@@ -545,7 +548,7 @@ class HostedODF:
         )
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
-            resource_name="ocs-subscription",
+            resource_name="odf-operator",
             should_exist=True,
         )
 
