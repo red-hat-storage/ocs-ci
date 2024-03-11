@@ -5705,16 +5705,8 @@ def nsfs_bucket_factory_fixture(
             exptected_count=original_endpoint_pods_count,
         )
 
-        # Get one of the endpoint pods for filesystem access in this fixture
-        endpoint_pod = Pod(
-            **get_pods_having_label(
-                constants.NOOBAA_ENDPOINT_POD_LABEL,
-                ocsci_config.ENV_DATA["cluster_namespace"],
-            )[0]
-        )
-
         # Apply the necessary permissions on the filesystem
-        endpoint_pod.exec_cmd_on_pod("chmod -R 777 /nsfs")
+        nsfs_obj.interface_pod.exec_cmd_on_pod("chmod -R 777 /nsfs")
 
         # Create a new MCG account and get its credentials
         nsfs_obj.s3_creds = mcg_account_factory(
@@ -5742,9 +5734,8 @@ def nsfs_bucket_factory_fixture(
             new_dir_name = helpers.create_unique_resource_name(
                 resource_description="nsfs-bucket", resource_type="dir"
             )
-            endpoint_pod.exec_cmd_on_pod(
-                "mkdir -m"
-                f" {nsfs_obj.existing_dir_mode} /nsfs/{nsfs_obj.nss.name}/{new_dir_name}"
+            nsfs_obj.interface_pod.exec_cmd_on_pod(
+                "mkdir -m" f" {nsfs_obj.existing_dir_mode} /nsfs/{new_dir_name}"
             )
             new_dir_path = f"/{new_dir_name}"
 
