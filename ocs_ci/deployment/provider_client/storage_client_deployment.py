@@ -136,8 +136,6 @@ class TestStorageClientDeployment(object):
         ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         # Create ODF subscription for provider
-        # disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
-        # create_catalog_source("quay.io/rhceph-dev/ocs-registry:4.14.5-8")
         self.ocp_obj.exec_oc_cmd(f"apply -f {constants.PROVIDER_SUBSCRIPTION_YAML}")
 
         # Wait until odf is installed
@@ -239,11 +237,16 @@ class TestStorageClientDeployment(object):
         list_of_rgw_pods = pod.get_rgw_pods(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
+        rgw_pod_obj = list_of_rgw_pods[0]
         restart_count_for_rgw_pod = pod.get_pod_restarts_count(
             list_of_pods=list_of_rgw_pods,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
-        log.info(f"restart count for rgw pod is: {restart_count_for_rgw_pod}")
+        rgw_pod_restart_count = restart_count_for_rgw_pod[rgw_pod_obj.name]
+        log.info(f"restart count for rgw pod is: {rgw_pod_restart_count}")
+        assert (
+            restart_count_for_rgw_pod[rgw_pod_obj.name] == 0
+        ), f"Error rgw pod has restarted {rgw_pod_restart_count} times"
 
         # Check ocs-storagecluster is in 'Ready' status
         log.info("Verify storagecluster on Ready state")
@@ -286,7 +289,7 @@ class TestStorageClientDeployment(object):
         # Create ODF subscription for storage-client
         self.ocp_obj.exec_oc_cmd(f"apply -f {subscription_yaml}")
         ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
-        self.wait_for_subscription(
+        Deployment().wait_for_subscription(
             ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
         )
         self.wait_for_csv(
@@ -359,7 +362,9 @@ class TestStorageClientDeployment(object):
             ), f"{secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
 
         # verify storage-client page is available
-        onboarding_token = self.validation_ui_obj.verify_storage_clients_page()
+        onboarding_token = (
+            self.validation_ui_obj.verify_onboarding_token_generation_from_ui()
+        )
         return onboarding_token
 
     def create_client(
