@@ -1321,6 +1321,12 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"]["kms"] = {
                     "enable": True,
                 }
+            if config.DEPLOYMENT.get("sc_encryption"):
+                if not config.DEPLOYMENT.get("kms_deployment"):
+                    raise UnsupportedFeatureError(
+                        "StorageClass encryption can be enabled only when KMS is enabled!"
+                    )
+                cluster_data["spec"]["encryption"]["storageClass"] = True
 
         if config.DEPLOYMENT.get("ceph_debug"):
             setup_ceph_debug()
