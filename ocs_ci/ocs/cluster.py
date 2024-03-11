@@ -29,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     LvDataPercentSizeWrong,
     ThinPoolUtilityWrong,
     TimeoutExpiredError,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -44,18 +45,19 @@ from ocs_ci.utility.utils import (
     get_trim_mean,
     ceph_health_check,
 )
-from ocs_ci.ocs.node import get_node_ip_addresses
+from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
-from ocs_ci.ocs.resources.pod import get_mds_pods
+from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_pods_to_be_running
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
 
@@ -3188,3 +3190,81 @@ def get_mon_quorum_ranks():
     for rank in list(out["quorum"]):
         mon_quorum_ranks[list(out["quorum_names"])[rank]] = rank
     return mon_quorum_ranks
+
+
+def client_cluster_health_check():
+    """
+    Check the client cluster health.
+
+    The function will check the following:
+    1. Wait for the cluster connectivity
+    2. Wait for the nodes to be in a Ready state
+    3. Checking that there are no extra Ceph pods on the cluster
+    4. Wait for the pods to be running in the cluster namespace
+    5. Checking that the storageclient is connected
+
+    Raises:
+        ResourceWrongStatusException: In case not all the nodes are ready, not all the pods are running, or
+            the storageclient is not connected
+        CephHealthException: In case there are extra Ceph pods on the cluster
+
+    """
+    wait_for_cluster_connectivity(tries=120, delay=5)
+    logger.info("Checking the cluster health")
+    wait_for_nodes_status(timeout=300, sleep=10)
+
+    logger.info("Checking that there are no extra Ceph pods on the cluster")
+    mon_pods = pod.get_mon_pods()
+    if mon_pods:
+        raise exceptions.CephHealthException(
+            "The client Cluster shouldn't have any mon pods!"
+        )
+    osd_pods = pod.get_osd_pods()
+    if osd_pods:
+        raise exceptions.CephHealthException(
+            "The client Cluster shouldn't have any osd pods!"
+        )
+    mds_pods = pod.get_mds_pods()
+    if mds_pods:
+        raise exceptions.CephHealthException(
+            "The client Cluster shouldn't have any mds pods!"
+        )
+
+    logger.info("Wait for the pods to be running")
+    res = wait_for_pods_to_be_running(timeout=300, sleep=20)
+    if not res:
+        raise ResourceWrongStatusException("Not all the pods in running state")
+
+    logger.info("Checking that the storageclient is connected")
+    sc_obj = OCP(
+        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    sc_obj.wait_for_resource(
+        resource_name=constants.DEFAULT_STORAGE_CLIENT,
+        column="PHASE",
+        condition="Connected",
+        timeout=180,
+        sleep=10,
+    )
+
+    logger.info("The client cluster health check passed successfully")
+
+
+@switch_to_orig_index_at_last
+def client_clusters_health_check():
+    """
+    Check the client clusters health using the function 'client_cluster_health_check'.
+    This function will be used when running a multi-cluster job, and we want to verify
+    that all the client clusters are in a good health.
+
+    Raises:
+        ResourceWrongStatusException: In case not all the nodes are ready or not all the pods are running
+        CephHealthException: In case there are extra Ceph pods on the cluster
+
+    """
+    client_indices = config.get_consumer_indexes_list()
+    for client_i in client_indices:
+        config.switch_ctx(client_i)
+        client_cluster_health_check()
+
+    logger.info("The client clusters health check passed successfully")
