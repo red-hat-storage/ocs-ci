@@ -59,7 +59,7 @@ class DeployClients:
 
         # if all desired clusters were already deployed and step 1 returns None instead of the list,
         # we proceed to ODF installation and storage client setup
-        if cluster_names is None:
+        if not cluster_names:
             cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
 
         # stage 4 deploy ODF on all hosted clusters if not already deployed
@@ -257,23 +257,23 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         for i in range(number_of_clusters_to_deploy):
 
             if i == 0:
-                cluster_names.append(
-                    self.deploy_ocp(
-                        deploy_cnv=True,
-                        deploy_acm_hub=True,
-                        deploy_metallb=True,
-                        download_hcp_binary=True,
-                    )
+                cluster_deployed = self.deploy_ocp(
+                    deploy_cnv=True,
+                    deploy_acm_hub=True,
+                    deploy_metallb=True,
+                    download_hcp_binary=True,
                 )
+                if cluster_deployed is not None:
+                    cluster_names.append(cluster_deployed)
             else:
-                cluster_names.append(
-                    self.deploy_ocp(
-                        deploy_cnv=False,
-                        deploy_acm_hub=False,
-                        deploy_metallb=False,
-                        download_hcp_binary=False,
-                    )
+                cluster_deployed = self.deploy_ocp(
+                    deploy_cnv=False,
+                    deploy_acm_hub=False,
+                    deploy_metallb=False,
+                    download_hcp_binary=False,
                 )
+                if cluster_deployed is not None:
+                    cluster_names.append(cluster_deployed)
 
         logger.info(f"All deployment jobs have finished: {cluster_names}")
         return cluster_names
