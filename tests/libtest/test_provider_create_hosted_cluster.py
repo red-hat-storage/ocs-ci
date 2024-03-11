@@ -79,7 +79,7 @@ class TestProviderHosted(object):
 
     @runs_on_provider
     @hci_provider_required
-    def test_install_odf_on_hosted_cluster(self, setup_ui_class):
+    def test_install_odf_on_hosted_cluster(self):
         """
         Test install ODF on hosted cluster
         """
