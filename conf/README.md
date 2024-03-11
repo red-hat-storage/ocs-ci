@@ -265,6 +265,43 @@ higher priority).
 * `performance_profile` - performance profile to be used (balanced, lean, performance).
 * `noobaa_external_pgsql` - Set to True if external PgSQL server for noobaa should be used.
   See AUTH and pgsql section there for additional data you need to provide via config.
+* `baremetal` - section related to Bare Metal platform, see the section below
+
+##### baremetal
+
+Bare Metal related section under `ENV_DATA` config.
+
+* `env_name` - name of the Bare Metal environment (used mainly for identification of configuration specific for the particular environment, e.g. _dnsmasq_ or _iPXE_ configuration)
+* `bm_httpd_server` - hostname or IP of helper/provisioning node (publicly accessible)
+* `bm_path_to_upload` - used by UPI deployment - place where to upload files accessible via http
+* `bm_httpd_document_root` - Apache document root, where to place files accessible via http (usually `/var/www/html/`)
+* `bm_install_files` - used by UPI deployment - base link to the files accessible via http
+* `bm_httpd_server_user` - user name used to ssh to the helper node
+* `bm_tftp_base_dir` - TFTP root dir where are placed files for PXE boot (usually `/tftpboot/`)
+* `bm_dnsmasq_dir` - _dnsmasq_ configuration files place
+* `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
+* `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
+* `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
+* `servers` - definition of the servers in the BM environment (map where key is the name of the server)
+
+###### server definition
+* `mgmt_provider` - defines how the server should be managed (`ipmitool` or `ibmcloud`)
+* `mgmt_console` - IP or link of management console of the BM server (required for `mgmt_provider == ipmitool`)
+* `mgmt_username` - login for the mgmt console (required for `mgmt_provider == ipmitool`)
+* `mgmt_password` - password for the mgmt console (required for `mgmt_provider == ipmitool`)
+* `role` - role of the server (`master`, `worker`, `bootstrap`)
+* `public_mac` - MAC address of public interface
+* `private_mac` - MAC address of private interface
+* `ip` - (deprecated in favor of `public_ip`/`private_ip`)
+* `gw` - (deprecated in favor of `public_gw`/`private_gw`)
+* `public_ip` - IP address of the public interface
+* `public_prefix_length` - Subnet prefix length for the public network
+* `public_gw` - GW for the public interface
+* `private_ip` - IP address of the private interface
+* `private_prefix_length` - Subnet prefix length for the private network
+* `private_gw` - GW for the private interface
+* `root_disk_id` - ID of the root disk
+* `root_disk_sn` - Serial number of the root disk
 
 #### UPGRADE
 
