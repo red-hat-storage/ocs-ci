@@ -163,18 +163,28 @@ class HyperShiftBase(Deployment):
 
     def verify_hosted_ocp_clusters_from_provider(self):
         """
-        Verify multiple HyperShift hosted clusters from provider
+        Verify multiple HyperShift hosted clusters from provider. If cluster_names is not provided at ENV_DATA,
+        it will get the list of hosted clusters from the provider to verify them all
         :return:
         """
-        names = get_hosted_cluster_names()
+        cluster_names = config.default_cluster_ctx.ENV_DATA.get("cluster_names")
+        if not cluster_names:
+            cluster_names = get_hosted_cluster_names()
         futures = []
-        with ThreadPoolExecutor(len(names)) as executor:
-            for name in names:
-                futures.append(
-                    executor.submit(self.verify_hosted_ocp_cluster_from_provider, name)
-                )
-
-        return all(future.result() for future in futures)
+        try:
+            with ThreadPoolExecutor(len(cluster_names)) as executor:
+                for name in cluster_names:
+                    futures.append(
+                        executor.submit(
+                            self.verify_hosted_ocp_cluster_from_provider, name
+                        )
+                    )
+            return all(future.result() for future in futures)
+        except Exception as e:
+            logger.error(
+                f"Failed to verify HyperShift hosted clusters from provider: {e}"
+            )
+            return False
 
     def verify_hosted_ocp_cluster_from_provider(self, name):
         """
@@ -183,9 +193,9 @@ class HyperShiftBase(Deployment):
         :return: True if hosted OCP cluster is verified, False otherwise
         """
 
-        timeout_pods_wait_min = 20
-        timeout_hosted_cluster_completed_min = 30
-        timeout_worker_nodes_ready_min = 40
+        timeout_pods_wait_min = 10
+        timeout_hosted_cluster_completed_min = 20
+        timeout_worker_nodes_ready_min = 20
 
         namespace = f"clusters-{name}"
         logger.info(

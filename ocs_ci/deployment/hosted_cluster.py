@@ -57,6 +57,11 @@ class DeployClients:
             hypershiftHostedOCP.download_hosted_clusters_kubeconfig_files()
         )
 
+        # if all desired clusters were already deployed and step 1 returns None instead of the list,
+        # we proceed to ODF installation and storage client setup
+        if cluster_names is None:
+            cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
+
         # stage 4 deploy ODF on all hosted clusters if not already deployed
         for cluster_name in cluster_names:
             logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
