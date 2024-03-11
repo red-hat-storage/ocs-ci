@@ -1042,13 +1042,13 @@ def check_pv_backingstore_type(
 
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
-        "-o=jsonpath=`{.status.phase}`"
+        "-o=jsonpath='{.status.phase}'"
     )
     phase = run_cmd(cmd=cmd)
     assert phase == constants.STATUS_READY
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
-        "-o=jsonpath=`{.spec.type}`"
+        "-o=jsonpath='{.spec.type}'"
     )
     backingstore_type = run_cmd(cmd=cmd)
     return backingstore_type

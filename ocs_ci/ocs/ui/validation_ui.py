@@ -646,10 +646,6 @@ class ValidationUI(PageNavigator):
     def verify_storage_clients_page(self):
         """
         Verify storage clients page in UI
-        and generate client onboarding token from Storage Clients page
-
-        Returns:
-        onboarding_token(str): client onboarding token
 
         """
         self.refresh_web_console()
@@ -666,6 +662,16 @@ class ValidationUI(PageNavigator):
             strings_on_page=strings_object_service_tab,
             page_name="client_onboarding_token_page",
         )
+
+    def verify_onboarding_token_generation_from_ui(self):
+        """
+        Verify onboarding token generation for client onboarding from Storage Clients page
+
+        Returns:
+        onboarding_token(str): client onboarding token
+
+        """
+        self.verify_storage_clients_page()
         # onboarding_token = self.do_click(self.validation_loc["copy to clipboard"],enable_screenshot=True).text
         onboarding_token = self.find_an_element_by_xpath(
             "//*[@class='odf-onboarding-modal__text-area']"
