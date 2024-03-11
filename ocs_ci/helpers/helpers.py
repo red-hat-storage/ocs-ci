@@ -787,9 +787,9 @@ def create_storage_class(
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
-        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-namespace"] = (
-            config.ENV_DATA["cluster_namespace"]
-        )
+        sc_data["parameters"][
+            f"csi.storage.k8s.io/{key}-secret-namespace"
+        ] = config.ENV_DATA["cluster_namespace"]
 
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -2924,12 +2924,12 @@ def collect_performance_stats(dir_name):
 
     performance_stats["master_node_utilization"] = master_node_utilization_from_adm_top
     performance_stats["worker_node_utilization"] = worker_node_utilization_from_adm_top
-    performance_stats["master_node_utilization_from_oc_describe"] = (
-        master_node_utilization_from_oc_describe
-    )
-    performance_stats["worker_node_utilization_from_oc_describe"] = (
-        worker_node_utilization_from_oc_describe
-    )
+    performance_stats[
+        "master_node_utilization_from_oc_describe"
+    ] = master_node_utilization_from_oc_describe
+    performance_stats[
+        "worker_node_utilization_from_oc_describe"
+    ] = worker_node_utilization_from_oc_describe
 
     file_name = os.path.join(log_dir_path, "performance")
     with open(file_name, "w") as outfile:
