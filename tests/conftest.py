@@ -5408,19 +5408,19 @@ def vault_tenant_sa_setup_factory(request):
             ] = f"https://{vault.vault_server}:{vault.port}"
             vdict[vault.kmsid]["vaultBackendPath"] = vault_resource_name
             if not ocsci_config.ENV_DATA.get("VAULT_CA_ONLY", None):
-                vdict[vault.kmsid]["vaultClientCertFromSecret"] = (
-                    get_default_if_keyval_empty(
-                        ocsci_config.ENV_DATA,
-                        "VAULT_CLIENT_CERT",
-                        defaults.VAULT_DEFAULT_CLIENT_CERT,
-                    )
+                vdict[vault.kmsid][
+                    "vaultClientCertFromSecret"
+                ] = get_default_if_keyval_empty(
+                    ocsci_config.ENV_DATA,
+                    "VAULT_CLIENT_CERT",
+                    defaults.VAULT_DEFAULT_CLIENT_CERT,
                 )
-                vdict[vault.kmsid]["vaultClientCertKeyFromSecret"] = (
-                    get_default_if_keyval_empty(
-                        ocsci_config.ENV_DATA,
-                        "VAULT_CLIENT_KEY",
-                        defaults.VAULT_DEFAULT_CLIENT_KEY,
-                    )
+                vdict[vault.kmsid][
+                    "vaultClientCertKeyFromSecret"
+                ] = get_default_if_keyval_empty(
+                    ocsci_config.ENV_DATA,
+                    "VAULT_CLIENT_KEY",
+                    defaults.VAULT_DEFAULT_CLIENT_KEY,
                 )
             else:
                 vdict[vault.kmsid].pop("vaultClientCertFromSecret")
@@ -6254,12 +6254,12 @@ def set_live_must_gather_images(pytestconfig):
         and not live_deployment
         and (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_13)
     ):
-        ocsci_config.REPORTING["default_ocs_must_gather_image"] = (
-            defaults.MUST_GATHER_UPSTREAM_IMAGE
-        )
-        ocsci_config.REPORTING["default_ocs_must_gather_latest_tag"] = (
-            defaults.MUST_GATHER_UPSTREAM_TAG
-        )
+        ocsci_config.REPORTING[
+            "default_ocs_must_gather_image"
+        ] = defaults.MUST_GATHER_UPSTREAM_IMAGE
+        ocsci_config.REPORTING[
+            "default_ocs_must_gather_latest_tag"
+        ] = defaults.MUST_GATHER_UPSTREAM_TAG
 
 
 @pytest.fixture(scope="function")
