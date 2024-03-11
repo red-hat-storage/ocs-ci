@@ -507,7 +507,8 @@ class HostedODF:
         secret_ocp_obj.get(
             resource_name=constants.ONBOARDING_PRIVATE_KEY, out_yaml_format=False
         )
-        key = secret_ocp_obj.get("data").get("key")
+
+        key = secret_ocp_obj.get("items")[0].get("data").get("key")
 
         config.AUTH.setdefault("managed_service", {}).setdefault("private_key", key)
         """
