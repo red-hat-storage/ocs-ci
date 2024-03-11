@@ -2423,7 +2423,7 @@ def wait_for_pods_to_be_running(
     raise_pod_not_found_error=False,
     timeout=200,
     sleep=10,
-    cluster_kubeconfig=None,
+    cluster_kubeconfig="",
 ):
     """
     Wait for all the pods in a specific namespace to be running.
