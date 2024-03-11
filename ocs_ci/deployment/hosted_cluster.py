@@ -1,7 +1,6 @@
 import logging
 import os
 import tempfile
-import time
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.helpers.hypershift_base import (
@@ -20,8 +19,9 @@ from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
 )
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
-from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_in_statuses_concurrently,
+)
 from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
@@ -36,8 +36,10 @@ class DeployClients:
     def do_deploy(self):
         hypershiftHostedOCP = HypershiftHostedOCP()
 
+        # stage 1 deploy multiple hosted OCP clusters
         cluster_names = hypershiftHostedOCP.deploy_hosted_ocp_clusters()
 
+        # stage 2 verify OCP clusters are ready
         logger.info(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
@@ -47,30 +49,35 @@ class DeployClients:
         if not verification_passed:
             logger.error("\nSome of the clusters are not ready\n")
 
+        # stage 3 download all available kubeconfig files
         logger.info("Download kubeconfig for all clusters")
         kubeconfig_paths = (
             hypershiftHostedOCP.download_hosted_clusters_kubeconfig_files()
         )
 
-        logger.info("Deploy ODF client on newly created hosted OCP clusters")
-
+        # stage 4 deploy ODF on all hosted clusters if not already deployed
         for cluster_name in cluster_names:
             logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
             hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
 
+        # stage 5 verify ODF client is installed on all hosted clusters
         odf_installed = []
         for cluster_name in cluster_names:
+            logger.info(f"Deploying ODF client on hosted OCP cluster '{cluster_name}'")
             hosted_odf = HostedODF(cluster_name)
             odf_installed.append(hosted_odf.verify_odf_installed())
-            logger.info(f"ODF client deployed on hosted OCP cluster '{cluster_name}'")
 
+        # stage 6 setup storage client on all hosted clusters
         client_setup = []
         for cluster_name in cluster_names:
+            logger.info(
+                f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
+            )
             hosted_odf = HostedODF(cluster_name)
             client_setup.append(hosted_odf.setup_storage_client())
-            logger.info(f"Storage client setup on hosted OCP cluster '{cluster_name}'")
 
+        # stage 7 verify all hosted clusters are ready and print kubeconfig paths
         logger.info("kubeconfig files for all hosted OCP clusters:\n")
         for kubeconfig_path in kubeconfig_paths:
             logger.info(f"kubeconfig path: {kubeconfig_path}\n")
@@ -394,8 +401,11 @@ class HostedODF:
         :returns: True if ODF client is installed, False otherwise
         """
         logger.info("Waiting for ODF client CSV's to be installed")
+        timeout_wait_csvs = 10
+        timeout_wait_pod = 5
+
         sample = TimeoutSampler(
-            timeout=1200,
+            timeout=timeout_wait_csvs * 60,
             sleep=15,
             func=check_all_csvs_are_succeeded,
             namespace=self.namespace_client,
@@ -403,33 +413,23 @@ class HostedODF:
         )
         sample.wait_for_func_value(value=True)
 
-        logger.info("wait 30 sec for pods starting to create")
-        time.sleep(30)
-        client_pods = get_pod_name_by_pattern(
-            pattern=constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
-            namespace=self.namespace_client,
-            cluster_kubeconfig=self.cluster_kubeconfig,
-        )
-        client_pods.extend(
-            get_pod_name_by_pattern(
-                pattern=constants.OCS_CLIENT_OPERATOR_CONSOLE,
-                namespace=self.namespace_client,
-                cluster_kubeconfig=self.cluster_kubeconfig,
+        app_selectors_to_resource_count_list = [
+            {"app.kubernetes.io/name=ocs-client-operator-console": 1},
+            {"control-plane=controller-manager": 1},
+        ]
+
+        if not wait_for_pods_to_be_in_statuses_concurrently(
+            app_selectors_to_resource_count_list,
+            self.namespace_client,
+            timeout_wait_pod * 60,
+        ):
+            logger.error(
+                f"ODF client pods with labels {app_selectors_to_resource_count_list} are not running"
             )
-        )
-
-        # wait_for_pods_to_be_running will check all client pods on openshift-storage-client namespace
-        # if no pods found by get_pod_name_by_pattern
-        if not client_pods:
             return False
-
-        logger.info(f"Waiting for ODF client pods to be running: {client_pods}")
-        return wait_for_pods_to_be_running(
-            namespace=self.namespace_client,
-            pod_names=client_pods,
-            timeout=600,
-            cluster_kubeconfig=self.cluster_kubeconfig,
-        )
+        else:
+            logger.info("ODF client pods are running")
+            return True
 
     def storage_client_exists(self):
         """
@@ -437,7 +437,7 @@ class HostedODF:
         :return:
         """
         ocp = OCP(
-            kind=constants.STORAGECLIENT,
+            kind=constants.STORAGECLIENTS,
             namespace=self.namespace_client,
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
@@ -629,7 +629,7 @@ class HostedODF:
         )
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
-            resource_name="odf-operator",
+            resource_name="ocs-client-operator",
             should_exist=True,
         )
 
