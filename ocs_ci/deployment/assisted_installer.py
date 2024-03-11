@@ -449,7 +449,7 @@ class AssistedInstallerCluster(object):
         """
         self.api.delete_cluster(self.id)
         logger.info(
-            "Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
+            f"Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
         )
 
     def delete_infrastructure_environment(self):
