@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+import time
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.helpers.hypershift_base import (
@@ -14,6 +15,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 from ocs_ci.ocs.exceptions import ProviderModeNotFoundException
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
@@ -60,6 +62,18 @@ class DeployClients:
             logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
             hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
+
+        # this step is needed to get ocs-client-operator to be installed
+        time.sleep(120)
+        logger.info("wait 120 sec for ocs-client-operator to be installed")
+        for cluster_name in cluster_names:
+            logger.info(
+                f"Verify ODF client is installed on hosted OCP cluster '{cluster_name}'"
+            )
+            hosted_odf = HostedODF(cluster_name)
+            hosted_odf.exec_oc_cmd(
+                "delete catalogsource --all -n openshift-marketplace"
+            )
 
         # stage 5 verify ODF client is installed on all hosted clusters
         odf_installed = []
@@ -488,7 +502,7 @@ class HostedODF:
         secret_ocp_obj.get(
             resource_name=constants.ONBOARDING_PRIVATE_KEY, out_yaml_format=False
         )
-        key = secret_ocp_obj.get().get("data").get("key")
+        key = secret_ocp_obj.get("data").get("key")
 
         config.AUTH.setdefault("managed_service", {}).setdefault("private_key", key)
         """
@@ -596,12 +610,21 @@ class HostedODF:
             provider_odf_version
         )
 
+        catalog_source_name = catalog_source_data["metadata"]["name"]
+
         catalog_source_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="catalog_source", delete=False
         )
         templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_file.name)
 
         self.exec_oc_cmd(f"apply -f {catalog_source_file.name}", timeout=120)
+
+        ocs_client_catsrc = CatalogSource(
+            resource_name=catalog_source_name,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        ocs_client_catsrc.wait_for_state("READY")
 
         return self.catalog_source_exists()
 
