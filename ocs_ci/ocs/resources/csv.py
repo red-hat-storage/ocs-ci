@@ -47,7 +47,7 @@ def get_csvs_start_with_prefix(csv_prefix, namespace):
     return [csv for csv in csv_list if csv_prefix in csv["metadata"]["name"]]
 
 
-def check_all_csvs_are_succeeded(namespace, timeout=600, cluster_kubeconfig=None):
+def check_all_csvs_are_succeeded(namespace, timeout=600, cluster_kubeconfig=""):
     """
     Check if all CSVs in namespace are in succeeded phase
 

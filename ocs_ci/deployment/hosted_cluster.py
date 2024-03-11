@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+import time
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.helpers.hypershift_base import (
@@ -53,16 +54,35 @@ class DeployClients:
         )
 
         logger.info("Deploy ODF client on newly created hosted OCP clusters")
+
         for cluster_name in cluster_names:
             logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
             hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
+
+        odf_installed = []
+        for cluster_name in cluster_names:
+            hosted_odf = HostedODF(cluster_name)
+            odf_installed.append(hosted_odf.verify_odf_installed())
             logger.info(f"ODF client deployed on hosted OCP cluster '{cluster_name}'")
 
-        logger.info("kubeconfig files for all hosted OCP clusters:\n")
+        client_setup = []
+        for cluster_name in cluster_names:
+            hosted_odf = HostedODF(cluster_name)
+            client_setup.append(hosted_odf.setup_storage_client())
+            logger.info(f"Storage client setup on hosted OCP cluster '{cluster_name}'")
 
+        logger.info("kubeconfig files for all hosted OCP clusters:\n")
         for kubeconfig_path in kubeconfig_paths:
             logger.info(f"kubeconfig path: {kubeconfig_path}\n")
+
+        assert verification_passed, "Some of the hosted OCP clusters are not ready"
+        assert all(
+            odf_installed
+        ), "ODF client was not deployed on all hosted OCP clusters"
+        assert all(
+            client_setup
+        ), "Storage client was not setup on all hosted ODF clusters"
 
     def deploy_multiple_odf_clients(self):
         """
@@ -313,7 +333,9 @@ class HostedODF:
         return self.network_policy_created(namespace=namespace)
 
     def do_deploy(self):
-
+        """
+        Deploy ODF client on hosted OCP cluster
+        """
         logger.info(f"Deploying ODF client on hosted OCP cluster '{self.name}'")
 
         logger.info("Applying network policy")
@@ -331,23 +353,40 @@ class HostedODF:
         logger.info("Creating ODF client subscription")
         self.create_subscription()
 
+    def verify_odf_installed(self):
+        """
+        Verify ODF client is installed
+        :return: bool True if ODF client is installed, False otherwise
+        """
         logger.info("Waiting for ODF client to be installed")
-        self.odf_client_installed()
+        odf_client_installed = self.odf_client_installed()
+        if not odf_client_installed:
+            logger.error("ODF client not installed or not all CSVs/Pods are ready")
+            return False
+        else:
+            logger.info("ODF client installed successfully")
+            return True
 
+    def setup_storage_client(self):
+        """
+        Setup storage client
+        :return: bool True if storage client is setup, False otherwise
+        """
         logger.info("Creating storage client")
         self.create_storage_client()
-
         logger.info("Creating storage class claim cephfs")
         self.create_storage_class_claim_cephfs()
-
         logger.info("Creating storage class claim rbd")
         self.create_storage_class_claim_rbd()
-
         logger.info("Verify Storage Class cephfs exists")
-        self.storage_class_exists(constants.CEPHFILESYSTEM_SC)
-
+        if not self.storage_class_exists(constants.CEPHFILESYSTEM_SC):
+            logger.error("Storage Class cephfs does not exist")
+            return False
         logger.info("Verify Storage Class rbd exists")
-        self.storage_class_exists(constants.CEPHBLOCKPOOL_SC)
+        if not self.storage_class_exists(constants.CEPHBLOCKPOOL_SC):
+            logger.error("Storage Class rbd does not exist")
+            return False
+        return True
 
     def odf_client_installed(self):
         """
@@ -355,6 +394,7 @@ class HostedODF:
 
         :returns: True if ODF client is installed, False otherwise
         """
+        logger.info("Waiting for ODF client CSV's to be installed")
         sample = TimeoutSampler(
             timeout=1200,
             sleep=15,
@@ -364,6 +404,8 @@ class HostedODF:
         )
         sample.wait_for_func_value(value=True)
 
+        logger.info("wait 30 sec for pods starting to create")
+        time.sleep(30)
         client_pods = get_pod_name_by_pattern(
             pattern=constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
             namespace=self.namespace_client,
@@ -377,6 +419,12 @@ class HostedODF:
             )
         )
 
+        # wait_for_pods_to_be_running will check all client pods on openshift-storage-client namespace
+        # if no pods found by get_pod_name_by_pattern
+        if not client_pods:
+            return False
+
+        logger.info(f"Waiting for ODF client pods to be running: {client_pods}")
         return wait_for_pods_to_be_running(
             namespace=self.namespace_client,
             pod_names=client_pods,
