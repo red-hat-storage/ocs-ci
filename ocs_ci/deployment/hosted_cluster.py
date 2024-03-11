@@ -10,7 +10,7 @@ from ocs_ci.deployment.helpers.hypershift_base import (
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 from ocs_ci.ocs.exceptions import ProviderModeNotFoundException
 from ocs_ci.ocs.ocp import OCP
@@ -22,6 +22,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
+from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config
 
@@ -415,7 +416,8 @@ class HostedODF:
             "storageProviderEndpoint"
         ] = self.get_provider_address()
 
-        onboarding_key = self.get_onboarding_key_ui()
+        # onboarding_key = self.get_onboarding_key_ui()
+        onboarding_key = self.get_onboarding_key()
 
         storage_client_data["spec"]["onboardingKey"] = onboarding_key
 
@@ -427,6 +429,30 @@ class HostedODF:
         self.exec_oc_cmd(f"apply -f {storage_client_file.name}", timeout=120)
 
         return self.storage_client_exists()
+
+    def get_onboarding_key(self):
+        """
+        Get onboarding key using the private key from the secret
+        :return: onboarding token key
+        """
+        secret_ocp_obj = ocp.OCP(
+            kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        secret_ocp_obj.get(
+            resource_name=constants.ONBOARDING_PRIVATE_KEY, out_yaml_format=False
+        )
+        key = secret_ocp_obj.get().get("data").get("key")
+
+        config.AUTH.setdefault("managed_service", {}).setdefault("private_key", key)
+        """
+        credentials_dict["AWS_ACCESS_KEY_ID"] = base64.b64decode(
+            creds_secret_obj.get("data").get("AWS_ACCESS_KEY_ID")
+        ).decode("utf-8")
+        """
+        token = generate_onboarding_token()
+        logger.info(f"Generated onboarding token: {token}")
+
+        return token
 
     def get_onboarding_key_ui(self):
         """

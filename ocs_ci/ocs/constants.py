@@ -1467,6 +1467,7 @@ MANAGED_ALERTMANAGER_SECRET = "alertmanager-managed-ocs-alertmanager-generated"
 MANAGED_ONBOARDING_SECRET = "onboarding-ticket-key"
 MANAGED_PROVIDER_SERVER_SECRET = "ocs-provider-server"
 MANAGED_MON_SECRET = "rook-ceph-mon"
+ONBOARDING_PRIVATE_KEY = "onboarding-private-key"
 
 # JSON Schema
 OSD_TREE_ROOT = {
