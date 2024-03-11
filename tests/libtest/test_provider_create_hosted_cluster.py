@@ -95,7 +95,7 @@ class TestProviderHosted(object):
 
     @runs_on_provider
     @hci_provider_required
-    def test_deploy_OCP_and_setup_ODF_client_on_hosted_clusters(self, setup_ui_class):
+    def test_deploy_OCP_and_setup_ODF_client_on_hosted_clusters(self):
         """
         Test install ODF on hosted cluster
         """
