@@ -119,62 +119,20 @@ class BAREMETALUPI(Deployment):
                     key_file=self.private_key,
                 )
 
+            self.configure_dnsmasq_on_helper_vm()
+
             # Perform Cleanup for stale entry's
-            cmd = f"rm -rf {self.bm_config['bm_tftp_base_dir']}"
+            cmd = f"rm -rf {self.bm_config['bm_tftp_base_dir']}/upi"
             assert self.helper_node_handler.exec_cmd(cmd=cmd), "Failed to Delete folder"
 
-            # Installing Required packages
-            cmd = "yum install dnsmasq -y"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to install required package"
-
-            # Enable dnsmasq service on boot
-            cmd = "systemctl enable dnsmasq"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to Enable dnsmasq service"
-
-            # Starting dnsmasq service
-            cmd = "systemctl start dnsmasq"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to Start dnsmasq service"
-
-            cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}"
+            # prepare pxe boot directory for UPI deployment
+            cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}/upi"
             assert self.helper_node_handler.exec_cmd(
                 cmd=cmd
             ), "Failed to create required folder"
 
-            cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}ocs4qe"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to create required folder"
+            self.restart_dnsmasq_service_on_helper_vm()
 
-            cmd = (
-                f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}ocs4qe/baremetal"
-            )
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to create required folder"
-
-            # Install syslinux
-            cmd = "yum install syslinux -y"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to install required package"
-
-            # Copy syslinux files to the tftp path
-            cmd = f"cp -ar /usr/share/syslinux/* {self.bm_config['bm_tftp_dir']}"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to Copy required files"
-
-            # Restarting dnsmasq service
-            cmd = "systemctl restart dnsmasq"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to restart dnsmasq service"
             with open(constants.RHCOS_IMAGES_FILE) as file_stream:
                 rhcos_images_file = yaml.safe_load(file_stream)
             ocp_version = get_ocp_version()
@@ -199,7 +157,7 @@ class BAREMETALUPI(Deployment):
             if check_for_rhcos_images(initramfs_image_path):
                 cmd = (
                     "wget -O "
-                    f"{self.bm_config['bm_tftp_dir']}"
+                    f"{self.bm_config['bm_tftp_base_dir']}/upi"
                     "/rhcos-installer-initramfs.x86_64.img "
                     f"{initramfs_image_path}"
                 )
@@ -220,7 +178,7 @@ class BAREMETALUPI(Deployment):
             if check_for_rhcos_images(kernel_image_path):
                 cmd = (
                     "wget -O "
-                    f"{self.bm_config['bm_tftp_dir']}"
+                    f"{self.bm_config['bm_tftp_base_dir']}/upi"
                     "/rhcos-installer-kernel-x86_64 "
                     f"{kernel_image_path}"
                 )
@@ -273,12 +231,6 @@ class BAREMETALUPI(Deployment):
                 else:
                     raise RhcosImageNotFound
 
-            # Create pxelinux.cfg directory
-            cmd = f"mkdir -m 755 {self.bm_config['bm_tftp_dir']}/pxelinux.cfg"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
-            ), "Failed to create required folder"
-
         def deploy(self, log_cli_level="DEBUG"):
             """
             Deploy
@@ -301,13 +253,13 @@ class BAREMETALUPI(Deployment):
                     upload_file(
                         server=self.host,
                         localpath=pxe_file_path,
-                        remotepath=f"{self.bm_config['bm_tftp_dir']}"
+                        remotepath=f"{self.bm_config['bm_tftp_base_dir']}"
                         f"/pxelinux.cfg/01-{self.srv_details[machine]['private_mac'].replace(':', '-')}",
                         user=self.user,
                         key_file=self.private_key,
                     )
             # Applying Permission
-            cmd = f"chmod 755 -R {self.bm_config['bm_tftp_dir']}"
+            cmd = f"chmod 755 -R {self.bm_config['bm_tftp_base_dir']}"
             self.helper_node_handler.exec_cmd(cmd=cmd)
 
             # Applying Permission
@@ -628,9 +580,9 @@ PROMPT 0
 LABEL pxeboot
     MENU LABEL PXE Boot
     MENU DEFAULT
-    KERNEL rhcos-installer-kernel-x86_64
-    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:dhcp rd.neednet=1 initrd=rhcos-installer-initramfs.x86_64.img console=ttyS0 \
-console=tty0 coreos.inst.install_dev=/dev/disk/by-id/{disk_path} {bm_metal_loc} \
+    KERNEL upi/rhcos-installer-kernel-x86_64
+    APPEND ip=enp1s0f0:dhcp ip=enp1s0f1:dhcp rd.neednet=1 initrd=upi/rhcos-installer-initramfs.x86_64.img \
+console=ttyS0 console=tty0 coreos.inst.install_dev=/dev/disk/by-id/{disk_path} {bm_metal_loc} \
 coreos.inst.ignition_url={bm_install_files_loc}{role}.ign \
 {extra_data}
 LABEL disk0
@@ -676,6 +628,138 @@ LABEL disk0
                 f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
             )
             run_cmd(cmd=cmd, secrets=secrets)
+
+        def configure_dnsmasq_on_helper_vm(self):
+            """
+            Install and configure dnsmasq and other required packages
+            for DHCP and PXE boot server on helper VM
+            """
+            # Install Required packages
+            cmd = "yum install dnsmasq syslinux-tftpboot -y"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to install required packages"
+
+            # Enable dnsmasq service on boot
+            cmd = "systemctl enable dnsmasq"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to Enable dnsmasq service"
+
+            # Create pxelinux.cfg directory
+            cmd = f"mkdir -m 755 {self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to create required folder"
+
+            if self.bm_config.get("bm_dnsmasq_common_config"):
+                self.configure_dnsmasq_common_config()
+
+            if self.bm_config.get("bm_dnsmasq_pxe_config"):
+                self.configure_dnsmasq_pxe_config()
+
+            if self.bm_config.get("bm_dnsmasq_hosts_config"):
+                self.configure_dnsmasq_hosts_config()
+
+            self.restart_dnsmasq_service_on_helper_vm()
+
+        def configure_dnsmasq_common_config(self):
+            """
+            Prepare common configuration for dnsmasq
+            """
+            # create dnsmasq common configuration
+            _templating = Templating()
+            template_data = {
+                "interface": self.bm_config["bm_dnsmasq_interface"],
+                "dhcp_range": self.bm_config["bm_dnsmasq_dhcp_range"],
+                "dhcp_options": self.bm_config["bm_dnsmasq_dhcp_options"],
+            }
+            common_config = _templating.render_template(
+                constants.DNSMASQ_COMMON_CONF_FILE_TEMPLATE,
+                template_data,
+            )
+            common_config_temp_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="dnsmasq.common", suffix=".conf", delete=False
+            )
+            with open(common_config_temp_file.name, "w") as t_file:
+                t_file.writelines(common_config)
+            self.helper_node_handler.upload_file(
+                common_config_temp_file.name,
+                "/etc/dnsmasq.d/dnsmasq.common.conf",
+            )
+
+        def configure_dnsmasq_pxe_config(self):
+            """
+            Prepare PXE configuration for dnsmasq
+            """
+            # create dnsmasq PXE configuration
+            _templating = Templating()
+            template_data = {"tftp_root": self.bm_config["bm_tftp_base_dir"]}
+            pxe_config = _templating.render_template(
+                constants.DNSMASQ_PXE_CONF_FILE_TEMPLATE,
+                template_data,
+            )
+            pxe_config_temp_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="dnsmasq.pxe", suffix=".conf", delete=False
+            )
+            with open(pxe_config_temp_file.name, "w") as t_file:
+                t_file.writelines(pxe_config)
+            self.helper_node_handler.upload_file(
+                pxe_config_temp_file.name,
+                "/etc/dnsmasq.d/dnsmasq.pxe.conf",
+            )
+
+        def configure_dnsmasq_hosts_config(self):
+            """
+            prepare hosts configuration for dnsmasq dhcp
+            """
+            hosts_config = ""
+            for machine in self.srv_details:
+                # which network is used for provisioning (public|private)
+                provisioning_network = self.bm_config["bm_provisioning_network"]
+                mac = self.srv_details[machine][f"{provisioning_network}_mac"]
+                ip = self.srv_details[machine][f"{provisioning_network}_ip"]
+                hostname = machine.split(".")[0]
+                hosts_config += f"dhcp-host={mac},{ip},{hostname},1h\n"
+            temp_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="dnsmasq.hosts", suffix=".conf", delete=False
+            )
+            with open(temp_file.name, "w") as t_file:
+                t_file.writelines(hosts_config)
+            self.helper_node_handler.upload_file(
+                temp_file.name,
+                f"/etc/dnsmasq.d/dnsmasq.hosts.{self.bm_config['env_name']}.conf",
+            )
+
+        def start_dnsmasq_service_on_helper_vm(self):
+            """
+            Start dnsmasq service providing DHCP and TFTP services for UPI deployment
+            """
+            # Starting dnsmasq service
+            cmd = "systemctl start dnsmasq"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to Start dnsmasq service"
+
+        def stop_dnsmasq_service_on_helper_vm(self):
+            """
+            Stop dnsmasq service providing DHCP and TFTP services for UPI deployment
+            """
+            # Stopping dnsmasq service
+            cmd = "systemctl stop dnsmasq"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to Stop dnsmasq service"
+
+        def restart_dnsmasq_service_on_helper_vm(self):
+            """
+            Restart dnsmasq service providing DHCP and TFTP services for UPI deployment
+            """
+            # Restarting dnsmasq service
+            cmd = "systemctl restart dnsmasq"
+            assert self.helper_node_handler.exec_cmd(
+                cmd=cmd
+            ), "Failed to restart dnsmasq service"
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
