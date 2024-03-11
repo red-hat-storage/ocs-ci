@@ -173,20 +173,20 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         # Install Required packages
         cmd = "yum install dnsmasq syslinux-tftpboot -y"
-        assert self.helper_node_handler.exec_cmd(
-            cmd=cmd
+        assert (
+            self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to install required packages"
 
         # Enable dnsmasq service on boot
         cmd = "systemctl enable dnsmasq"
-        assert self.helper_node_handler.exec_cmd(
-            cmd=cmd
+        assert (
+            self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to Enable dnsmasq service"
 
         # Create pxelinux.cfg directory
         cmd = f"mkdir -m 755 {self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg"
-        assert self.helper_node_handler.exec_cmd(
-            cmd=cmd
+        assert (
+            self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to create required folder"
 
         if self.bm_config.get("bm_dnsmasq_common_config"):
@@ -274,8 +274,8 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         # Starting dnsmasq service
         cmd = "systemctl start dnsmasq"
-        assert self.helper_node_handler.exec_cmd(
-            cmd=cmd
+        assert (
+            self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to Start dnsmasq service"
 
     def stop_dnsmasq_service_on_helper_vm(self):
@@ -284,8 +284,8 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         # Stopping dnsmasq service
         cmd = "systemctl stop dnsmasq"
-        assert self.helper_node_handler.exec_cmd(
-            cmd=cmd
+        assert (
+            self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to Stop dnsmasq service"
 
     def restart_dnsmasq_service_on_helper_vm(self):
@@ -294,8 +294,8 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         """
         # Restarting dnsmasq service
         cmd = "systemctl restart dnsmasq"
-        assert self.helper_node_handler.exec_cmd(
-            cmd=cmd
+        assert (
+            self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to restart dnsmasq service"
 
 
@@ -862,9 +862,8 @@ class BAREMETALAI(BAREMETALBASE):
             logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
             # create cluster/environment specific folder on httpd server
             cmd = f"mkdir -m 755 {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
-            # TODO this kind of assert doesn't work - it doesn't handle the not-zero error message!
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
             ), "Failed to create required folder"
 
             self.configure_ipxe_on_helper()
@@ -996,16 +995,16 @@ class BAREMETALAI(BAREMETALBASE):
             # download initrd, kernel and rootfs to httpd server
             dest_dir = f"{self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
             cmd = f"wget --no-verbose -O {dest_dir}/initrd '{initrd_url}'"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
             ), "Failed to download initrd"
             cmd = f"wget --no-verbose -O {dest_dir}/kernel '{kernel_url}'"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
             ), "Failed to download kernel"
             cmd = f"wget --no-verbose -O {dest_dir}/rootfs '{rootfs_url}'"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
             ), "Failed to download rootfs"
 
             # update ipxe_config_file to point initrd, kernel and rootfs to the downloaded files
@@ -1115,16 +1114,16 @@ class BAREMETALAI(BAREMETALBASE):
             Configure iPXE on helper node
             """
             cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}/ipxe"
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
             ), "Failed to create required folder"
 
             cmd = (
                 f"wget -O {self.bm_config['bm_tftp_base_dir']}/ipxe/ipxe.lkrn "
                 f"http://boot.ipxe.org/ipxe.lkrn"
             )
-            assert self.helper_node_handler.exec_cmd(
-                cmd=cmd
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
             ), "Failed to download ipxe.lkrn"
 
         def create_pxe_file(
