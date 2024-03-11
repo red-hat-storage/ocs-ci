@@ -25,7 +25,6 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
-from ocs_ci.utility.version import get_semantic_ocs_version_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -579,7 +578,15 @@ class HostedODF:
             constants.PROVIDER_MODE_CATALOGSOURCE
         )
         image_placeholder = catalog_source_data["spec"]["image"]
-        provider_odf_version = str(get_semantic_ocs_version_from_config())
+
+        if not config.ENV_DATA.get("hosted_odf_version"):
+            raise ValueError(
+                "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
+                "in the 'hosted_odf_version' key in the 'ENV_DATA' section of the config file. "
+                "image will be pulled from the 'quay.io/rhceph-dev/ocs-registry'"
+            )
+
+        provider_odf_version = config.ENV_DATA.get("hosted_odf_version")
 
         logger.info(
             f"ODF version: {provider_odf_version} will be installed on client. Setting up CatalogSource"
