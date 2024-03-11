@@ -163,7 +163,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             backoff=1,
             text_in_exception="ENOENT",
         )(get_mds_cache_memory_limit)()
-        expected_mds_value = 4294967296
+        expected_mds_value = 3221225472
         expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
         assert mds_cache_memory_limit == expected_mds_value, (
             f"mds_cache_memory_limit is not set with a value of {expected_mds_value_in_GB}GB. "
