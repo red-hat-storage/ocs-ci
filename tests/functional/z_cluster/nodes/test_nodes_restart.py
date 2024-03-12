@@ -83,13 +83,16 @@ class TestNodesRestart(ManageTest):
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
 
         """
+        timeout = 420
+        if storagecluster_independent_check():
+            timeout = 900
         ocp_nodes = get_node_objs()
         if is_vsphere_ipi_cluster():
             # When using vSphere IPI, we restart the nodes without stopping them.
             # See issue https://github.com/red-hat-storage/ocs-ci/issues/7760.
             nodes.restart_nodes(nodes=ocp_nodes, force=force, wait=False)
             node_names = [n.name for n in ocp_nodes]
-            wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=420)
+            wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=timeout)
         else:
             nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
 
