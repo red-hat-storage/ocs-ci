@@ -2,6 +2,7 @@ import base64
 import logging
 import os
 import tempfile
+import time
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.helpers.hypershift_base import (
@@ -81,6 +82,9 @@ class DeployClients:
                 hosted_odf.exec_oc_cmd(
                     "delete catalogsource --all -n openshift-marketplace"
                 )
+                logger.info("wait 30 sec and create catalogsource again")
+                time.sleep(30)
+                hosted_odf.create_catalog_source()
             odf_installed.append(hosted_odf.odf_client_installed())
 
         # stage 6 setup storage client on all hosted clusters
