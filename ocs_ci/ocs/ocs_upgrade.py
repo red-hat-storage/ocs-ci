@@ -366,9 +366,6 @@ class OCSUpgrade(object):
             str: OCS operator name, as displayed in CSV
 
         """
-        import ipdb
-
-        ipdb.set_trace()
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=resource_name,
