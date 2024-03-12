@@ -641,7 +641,7 @@ class ValidationUI(PageNavigator):
             timeout=1,
             expected_text="OpenShift Container Storage",
         )
-        return odf_operator_presence and not ocs_operator_presence
+        return odf_operator_presence, ocs_operator_presence
 
     def verify_storage_clients_page(self):
         """
