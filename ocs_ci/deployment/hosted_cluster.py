@@ -488,7 +488,7 @@ class HostedODF:
         if not len(onboarding_key):
             return
 
-        storage_client_data["spec"]["onboardingKey"] = onboarding_key
+        storage_client_data["spec"]["onboardingTicket"] = onboarding_key
 
         storage_client_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="storage_client", delete=False
