@@ -147,6 +147,9 @@ from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.deployment.provider_client.storage_client_deployment import (
+    TestStorageClientDeployment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +342,11 @@ class Deployment(object):
         Deploy OCS/ODF and run verification as well
 
         """
+        if config.ENV_DATA.get("odf_provider_mode_deployment", True):
+            logger.warning(
+                "Skipping normal ODF deployment because ODF deployment in Provider mode will be performed"
+            )
+            return
         if not config.ENV_DATA["skip_ocs_deployment"]:
             for i in range(config.nclusters):
                 if config.multicluster and (i in get_all_acm_indexes()):
@@ -505,6 +513,17 @@ class Deployment(object):
             )
             time.sleep(30)
 
+    def do_deploy_odf_provider_mode(self):
+        """
+        Deploy ODF in provider mode and setup native client
+        """
+        # Multicluster: Handle all ODF multicluster DR ops
+        if (
+            config.ENV_DATA.get("odf_provider_mode_deployment", True)
+            and not config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            TestStorageClientDeployment().provider_and_native_client_installation()
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -566,6 +585,7 @@ class Deployment(object):
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
+        self.do_deploy_odf_provider_mode()
         if config.DEPLOYMENT.get("cnv_deployment"):
             CNVInstaller().deploy_cnv()
 
