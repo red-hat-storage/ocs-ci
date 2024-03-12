@@ -176,7 +176,10 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
             # Deleting the Data pool
             log.info(f"Deleting the test storage pool : {self.sc_name}")
-            self.delete_ceph_pool(self.sc_name)
+            try:
+                self.delete_ceph_pool(self.sc_name)
+            except Exception:
+                pass
             # Verify deletion by checking the backend CEPH pools using the toolbox
             results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
             log.debug(f"Existing pools are : {results}")
