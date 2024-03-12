@@ -511,7 +511,7 @@ class HostedODF:
             sleep=15,
             func=self.get_storage_client_status,
         ):
-            if sample == "Connected":
+            if "Connected" in sample:
                 break
             logger.info(f"Storage client status: {sample}")
         else:

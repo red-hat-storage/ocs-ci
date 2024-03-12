@@ -70,7 +70,7 @@ def generate_onboarding_token():
             f"stderr: {ticketgen_result.stderr.decode()}\n"
             f"stdout: {ticketgen_output}"
         )
-    return ticketgen_output
+    return str(ticketgen_output).strip()
 
 
 def remove_header_footer_from_key(key):
