@@ -54,7 +54,7 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
 
     def stop_mgr():
         """
-        Downscale Ceph Manager deployment for 6 minutes. First 5 minutes
+        Downscale Ceph Manager deployment for 7 minutes. First 5 minutes
         the alert should be in 'Pending'.
         After 5 minutes it should be 'Firing'.
         This configuration of monitoring can be observed in ceph-mixins which
@@ -65,7 +65,7 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
             str: Name of downscaled deployment
         """
         # run_time of operation
-        run_time = 60 * 6
+        run_time = 60 * 7
         nonlocal oc
         nonlocal mgr
         logger.info(f"Downscaling deployment {mgr} to 0")
