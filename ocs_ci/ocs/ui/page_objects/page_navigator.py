@@ -431,7 +431,7 @@ class PageNavigator(BaseUI):
             logger.info("Administrator user was already selected")
         else:
             logger.error("Unknown user role selected by default")
-            
+
     def navigate_to_storageclients_page(self):
         """
         Navigate to Storage Clients Page
