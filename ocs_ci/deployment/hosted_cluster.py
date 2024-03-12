@@ -527,7 +527,7 @@ class HostedODF:
 
         return self.exec_oc_cmd(
             f"get storageclient -n {self.namespace_client} "
-            "-o=jsonpath=\"{range .items[*]}{.status.phase}{'\n'}{end}\""
+            "-o=jsonpath=\"{range .items[*]}{.status.phase}{'\\n'}{end}\""
         )
 
     def get_onboarding_key(self):
