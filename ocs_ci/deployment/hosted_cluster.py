@@ -829,13 +829,15 @@ class HostedODF:
         :param sc_name: Name of the storage class
         :return: True if storage class is ready, False otherwise
         """
+        timeout_min = 5
+
         ocp = OCP(
             kind=constants.STORAGECLASS,
             namespace=self.namespace_client,
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=timeout_min * 60,
             resource_name=sc_name,
             should_exist=True,
         )
