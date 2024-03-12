@@ -26,7 +26,10 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility import templating, version
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.baremetal import clean_disk
-from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+from ocs_ci.ocs.resources.storage_cluster import (
+    verify_storage_cluster,
+    check_storage_client_status,
+)
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
@@ -188,9 +191,7 @@ class TestStorageClientDeployment(object):
         )
 
         # Create ODF subscription for storage-client
-        self.odf_installation_on_client(
-            f"apply -f {constants.STORAGE_CLIENT_SUBSCRIPTION_YAML}"
-        )
+        self.odf_installation_on_client()
 
         # Fetch storage provider endpoint details
         storage_provider_endpoint = self.ocp_obj.exec_oc_cmd(
@@ -202,12 +203,17 @@ class TestStorageClientDeployment(object):
         )
         log.info(f"storage provider endpoint is: {storage_provider_endpoint}")
 
-        self.create_network_policy(constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE)
+        self.create_network_policy(
+            namespace_to_create_storage_client=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+        )
         onboarding_token = self.onboarding_token_generation_from_ui()
-        self.create_client(storage_provider_endpoint, onboarding_token)
+        self.create_storage_client(
+            storage_provider_endpoint=storage_provider_endpoint,
+            onboarding_token=onboarding_token,
+        )
 
-        # Create storage classclaim
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}")
+        # # Create storage classclaim
+        # self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}")
 
         # Check nooba db pod is up and running
         self.pod_obj.wait_for_resource(
@@ -304,7 +310,7 @@ class TestStorageClientDeployment(object):
 
     def create_network_policy(
         self,
-        namespace_to_create_storage_client,
+        namespace_to_create_storage_client=None,
     ):
         """
         This method creates network policy for the namespace where storage-client will be created
@@ -367,18 +373,19 @@ class TestStorageClientDeployment(object):
         )
         return onboarding_token
 
-    def create_client(
+    def create_storage_client(
         self,
-        storage_provider_endpoint,
-        onboarding_token,
+        storage_provider_endpoint=None,
+        onboarding_token=None,
+        expected_storageclient_status="Connected",
     ):
         """
         This method creates storage clients
 
         Inputs:
         storage_provider_endpoint (str): storage provider endpoint details.
-
         onboarding_token (str): onboarding token
+        expected_storageclient_status (str): expected storaeclient phase default value is 'Connected'
 
         """
         # Pull storage-client yaml data
@@ -402,8 +409,20 @@ class TestStorageClientDeployment(object):
         templating.dump_data_to_temp_yaml(
             storage_client_data, storage_client_data_yaml.name
         )
+
+        # Create storageclient CR
         log.info("Creating storageclient CR")
         self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
+
+        # Check storage client is in 'Connected' status
+        storage_client_status = check_storage_client_status()
+        assert (
+            storage_client_status == expected_storageclient_status
+        ), "storage client phase is not as expected"
+
+        # Create storage classclaim
+        if storage_client_status == "Connected":
+            self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}")
 
     def test_deployment(self):
         """
