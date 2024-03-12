@@ -467,7 +467,7 @@ def pytest_collection_modifyitems(session, config, items):
                 )
                 items.remove(item)
     # If multicluster upgrade scenario
-    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", True):
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
         for item in items:
             if (
                 list(
@@ -483,11 +483,11 @@ def pytest_collection_modifyitems(session, config, items):
                 else:
                     continue
                 markers_update = []
-                item_markers = copy(item.own_markers)
+                item_markers = copy.copy(item.own_markers)
                 if not item_markers:
                     # If testcase is in a class then own_markers will be empty
                     # hence we need to check item.instance.pytestmark
-                    item_markers = copy(item.instance.pytestmark)
+                    item_markers = copy.copy(item.instance.pytestmark)
                 for m in item_markers:
                     # fetch already marked 'order' value
                     if m.name == "order":
@@ -528,6 +528,19 @@ def pytest_collection_finish(session):
 
     """
     ocsci_config.RUN["number_of_tests"] = len(session.items)
+
+
+def pytest_runtest_setup(item):
+    """
+    Pytest hook where we want to switch context of the cluster
+    before any fixture runs
+
+    """
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        for mark in item.iter_markers():
+            if mark.name == "config_index":
+                log.info("Switching the test context to index: {mark.args[0]}")
+                ocsci_config.switch_ctx(mark.args[0])
 
 
 def pytest_fixture_setup(fixturedef, request):

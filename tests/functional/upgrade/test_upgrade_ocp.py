@@ -226,7 +226,7 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
-        if not config.ENV_DATA["mcg_only_deployment"]:
+        if not config.ENV_DATA["mcg_only_deployment"] and not config.multicluster:
             new_ceph_cluster = CephCluster()
             # Increased timeout because of this bug:
             # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
