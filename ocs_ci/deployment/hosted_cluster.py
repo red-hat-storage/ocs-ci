@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import tempfile
@@ -398,7 +399,11 @@ class HostedODF:
         :return: bool True if storage client is setup, False otherwise
         """
         logger.info("Creating storage client")
-        self.create_storage_client()
+        storage_client_created = self.create_storage_client()
+        if not storage_client_created:
+            logger.error("Storage client create failed")
+            return False
+
         logger.info("Creating storage class claim cephfs")
         self.create_storage_class_claim_cephfs()
         logger.info("Creating storage class claim rbd")
@@ -485,6 +490,9 @@ class HostedODF:
         # onboarding_key = self.get_onboarding_key_ui()
         onboarding_key = self.get_onboarding_key()
 
+        if not len(onboarding_key):
+            return
+
         storage_client_data["spec"]["onboardingKey"] = onboarding_key
 
         storage_client_file = tempfile.NamedTemporaryFile(
@@ -504,21 +512,32 @@ class HostedODF:
         secret_ocp_obj = ocp.OCP(
             kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        secret_ocp_obj.get(
-            resource_name=constants.ONBOARDING_PRIVATE_KEY, out_yaml_format=False
+
+        key = (
+            secret_ocp_obj.get(
+                resource_name=constants.ONBOARDING_PRIVATE_KEY, out_yaml_format=True
+            )
+            .get("data")
+            .get("key")
         )
+        decoded_key = base64.b64decode(key).decode("utf-8")
 
-        key = secret_ocp_obj.get("items")[0].get("data").get("key")
+        if not decoded_key or "BEGIN PRIVATE KEY" not in decoded_key:
+            logger.error(
+                "Onboarding token could not be generated, secret key is missing or invalid"
+            )
 
-        config.AUTH.setdefault("managed_service", {}).setdefault("private_key", key)
-        """
-        credentials_dict["AWS_ACCESS_KEY_ID"] = base64.b64decode(
-            creds_secret_obj.get("data").get("AWS_ACCESS_KEY_ID")
-        ).decode("utf-8")
-        """
-        token = generate_onboarding_token()
-        logger.info(f"Generated onboarding token: {token}")
+        config.AUTH.setdefault("managed_service", {}).setdefault(
+            "private_key", decoded_key
+        )
+        try:
+            token = generate_onboarding_token()
+        except Exception as e:
+            logger.error(f"Error during onboarding token generation: {e}")
+            token = ""
 
+        if len(token) == 0:
+            logger.error("ticketgen.sh failed to generate Onboarding token")
         return token
 
     def get_onboarding_key_ui(self):

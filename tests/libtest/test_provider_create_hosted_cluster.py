@@ -101,3 +101,13 @@ class TestProviderHosted(object):
         """
         logger.info("Deploy hosted OCP on provider platform multiple times")
         DeployClients().do_deploy()
+
+    @runs_on_provider
+    def test_create_onboarding_key(self):
+        """
+        Test create onboarding key
+        """
+        logger.info("Test create onboarding key")
+        assert len(
+            HostedODF("hcp414-bm2-v").get_onboarding_key()
+        ), "Failed to get onboarding key"
