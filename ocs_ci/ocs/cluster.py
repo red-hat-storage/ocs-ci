@@ -97,7 +97,7 @@ class CephCluster(object):
         namespace (str): openshift Namespace where this cluster lives
     """
 
-    def __init__(self, cluster_config):
+    def __init__(self, cluster_config=None):
         """
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
@@ -1062,7 +1062,7 @@ class MulticlusterCephHealthMonitor(object):
     def __enter__(self):
         pass
 
-    def __exit__(self):
+    def __exit__(self, exception_type, value, traceback):
         pass
 
 
