@@ -2,7 +2,6 @@ import base64
 import logging
 import os
 import tempfile
-import time
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.helpers.hypershift_base import (
@@ -69,24 +68,20 @@ class DeployClients:
             hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
 
-        # this step is needed to get ocs-client-operator to be installed
-        time.sleep(120)
-        logger.info("wait 120 sec for ocs-client-operator to be installed")
-        for cluster_name in cluster_names:
-            logger.info(
-                f"Verify ODF client is installed on hosted OCP cluster '{cluster_name}'"
-            )
-            hosted_odf = HostedODF(cluster_name)
-            hosted_odf.exec_oc_cmd(
-                "delete catalogsource --all -n openshift-marketplace"
-            )
-
         # stage 5 verify ODF client is installed on all hosted clusters
         odf_installed = []
         for cluster_name in cluster_names:
-            logger.info(f"Deploying ODF client on hosted OCP cluster '{cluster_name}'")
+            logger.info(f"Validate ODF client on hosted OCP cluster '{cluster_name}'")
             hosted_odf = HostedODF(cluster_name)
-            odf_installed.append(hosted_odf.verify_odf_installed())
+
+            if not hosted_odf.odf_client_installed():
+                # delete catalogsources help to finish install cluster if nodes have not enough mem
+                # see oc describe pod ocs-client-operator-controller-manager-<suffix> -n openshift-storage-client
+                # when the problem was hit
+                hosted_odf.exec_oc_cmd(
+                    "delete catalogsource --all -n openshift-marketplace"
+                )
+            odf_installed.append(hosted_odf.odf_client_installed())
 
         # stage 6 setup storage client on all hosted clusters
         client_setup = []
@@ -379,20 +374,6 @@ class HostedODF:
         logger.info("Creating ODF client subscription")
         self.create_subscription()
 
-    def verify_odf_installed(self):
-        """
-        Verify ODF client is installed
-        :return: bool True if ODF client is installed, False otherwise
-        """
-        logger.info("Waiting for ODF client to be installed")
-        odf_client_installed = self.odf_client_installed()
-        if not odf_client_installed:
-            logger.error("ODF client not installed or not all CSVs/Pods are ready")
-            return False
-        else:
-            logger.info("ODF client installed successfully")
-            return True
-
     def setup_storage_client(self):
         """
         Setup storage client
@@ -400,8 +381,10 @@ class HostedODF:
         """
         logger.info("Creating storage client")
         storage_client_created = self.create_storage_client()
+
+        # if storage client is not created, there is no point in continuing
         if not storage_client_created:
-            logger.error("Storage client create failed")
+            logger.error("storage client is not ready; abort further steps")
             return False
 
         logger.info("Creating storage class claim cephfs")
@@ -428,31 +411,41 @@ class HostedODF:
         timeout_wait_csvs = 10
         timeout_wait_pod = 5
 
-        sample = TimeoutSampler(
-            timeout=timeout_wait_csvs * 60,
-            sleep=15,
-            func=check_all_csvs_are_succeeded,
-            namespace=self.namespace_client,
-            cluster_kubeconfig=self.cluster_kubeconfig,
-        )
-        sample.wait_for_func_value(value=True)
+        try:
+            sample = TimeoutSampler(
+                timeout=timeout_wait_csvs * 60,
+                sleep=15,
+                func=check_all_csvs_are_succeeded,
+                namespace=self.namespace_client,
+                cluster_kubeconfig=self.cluster_kubeconfig,
+            )
+            sample.wait_for_func_value(value=True)
 
-        app_selectors_to_resource_count_list = [
-            {"app.kubernetes.io/name=ocs-client-operator-console": 1},
-            {"control-plane=controller-manager": 1},
-        ]
+            app_selectors_to_resource_count_list = [
+                {"app.kubernetes.io/name=ocs-client-operator-console": 1},
+                {"control-plane=controller-manager": 1},
+            ]
+        except Exception as e:
+            logger.error(f"Error during ODF client CSV's installation: {e}")
+            return False
 
-        if not wait_for_pods_to_be_in_statuses_concurrently(
-            app_selectors_to_resource_count_list,
-            self.namespace_client,
-            timeout_wait_pod * 60,
-        ):
+        try:
+            pods_are_running = wait_for_pods_to_be_in_statuses_concurrently(
+                app_selectors_to_resource_count_list,
+                self.namespace_client,
+                timeout_wait_pod * 60,
+            )
+        except Exception as e:
+            logger.error(f"Error during ODF client pods status check: {e}")
+            pods_are_running = False
+
+        if not pods_are_running:
             logger.error(
                 f"ODF client pods with labels {app_selectors_to_resource_count_list} are not running"
             )
             return False
         else:
-            logger.info("ODF client pods are running")
+            logger.info("ODF client pods are running, CSV's are installed")
             return True
 
     def storage_client_exists(self):
@@ -475,6 +468,8 @@ class HostedODF:
         """
         Create storage client
         """
+
+        storage_client_connected_timeout_min = 5
 
         if self.storage_client_exists():
             logger.info("Storage client already exists")
@@ -502,7 +497,34 @@ class HostedODF:
 
         self.exec_oc_cmd(f"apply -f {storage_client_file.name}", timeout=120)
 
-        return self.storage_client_exists()
+        if self.storage_client_exists():
+            logger.info("Storage client create Failed")
+            return False
+
+        # wait for storage client to Connected
+        for sample in TimeoutSampler(
+            timeout=storage_client_connected_timeout_min * 60,
+            sleep=15,
+            func=self.get_storage_client_status,
+        ):
+            if sample == "Connected":
+                break
+            logger.info(f"Storage client status: {sample}")
+        else:
+            logger.error("Storage client did not reach Connected status in given time")
+            return False
+
+        return True
+
+    def get_storage_client_status(self):
+        """
+        Check the status of the storage client
+        """
+
+        return self.exec_oc_cmd(
+            f"get storageclient -n {self.namespace_client} "
+            "-o=jsonpath=\"{range .items[*]}{.status.phase}{'\n'}{end}\""
+        )
 
     def get_onboarding_key(self):
         """
