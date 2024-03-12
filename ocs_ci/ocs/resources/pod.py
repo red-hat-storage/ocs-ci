@@ -2259,7 +2259,7 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
 
 
 def get_pod_restarts_count(
-    list_of_pods=[], namespace=config.ENV_DATA["cluster_namespace"]
+    namespace=config.ENV_DATA["cluster_namespace"], list_of_pods=None
 ):
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
