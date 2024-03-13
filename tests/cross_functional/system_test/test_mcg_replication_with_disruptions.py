@@ -247,6 +247,18 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 @magenta_squad
 @skipif_vsphere_ipi
 class TestLogBasedReplicationWithDisruptions:
+    @retry(Exception, tries=10, delay=5)
+    def delete_objs_in_batch(self, objs_to_delete, mockup_logger, source_bucket):
+        """
+        This function deletes objects in a batch
+        """
+        for obj in objs_to_delete:
+            mockup_logger.delete_objs_and_log(source_bucket.name, [obj])
+            # adding momentary sleep just to slowdown the deletion
+            # process
+            time.sleep(5)
+        logger.info(f"Successfully deleted these objects: {objs_to_delete}")
+
     @polarion_id("OCS-5457")
     @bugzilla("2266805")
     def test_log_based_replication_with_disruptions(
@@ -279,7 +291,6 @@ class TestLogBasedReplicationWithDisruptions:
            make sure no replication - no deletion sync works
 
         """
-
         # entry criteria setup
         feature_setup_map = setup_mcg_bg_features(
             num_of_buckets=5,
@@ -305,17 +316,10 @@ class TestLogBasedReplicationWithDisruptions:
         objs_in_bucket = mockup_logger.standard_test_obj_list
         objs_to_delete = random.sample(objs_in_bucket, 3)
 
-        from ocs_ci.utility.retry import retry
-
-        @retry(Exception, tries=10, delay=5)
-        def delete_objs_in_batch():
-            for obj in objs_to_delete:
-                mockup_logger.delete_objs_and_log(source_bucket.name, [obj])
-                time.sleep(5)
-            logger.info(f"Successfully deleted these objects: {objs_to_delete}")
-
         with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(delete_objs_in_batch)
+            future = executor.submit(
+                self.delete_objs_in_batch, objs_to_delete, mockup_logger, source_bucket
+            )
 
             # Restart noobaa pods
             nb_core_pod = get_noobaa_core_pod()

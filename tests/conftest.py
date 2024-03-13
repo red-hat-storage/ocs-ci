@@ -7480,6 +7480,7 @@ def aws_log_based_replication_setup(
         MockupBucketLogger: A MockupBucketLogger object
         Bucket: The source bucket
         Bucket: The target bucket
+
     """
 
     reduce_replication_delay_setup()
