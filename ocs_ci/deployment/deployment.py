@@ -2729,7 +2729,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Check backupstoragelocation resource in "Available" phase
         backupstorage = ocp.OCP(
             kind="BackupStorageLocation",
-            resource_name=constants.MDR_DPA,
+            resource_name="default",
             namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
         )
         resource = backupstorage.get()
