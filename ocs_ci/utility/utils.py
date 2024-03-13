@@ -4392,3 +4392,20 @@ def filter_out_emojis(plaintext):
     # Join the characters back together to form the filtered string
     filtered_string = "".join(filtered_chars)
     return filtered_string
+
+
+def get_oadp_version():
+    """
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "oadp-operator", namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    for csv in csv_list:
+        if "oadp-operator" in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
