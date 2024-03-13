@@ -6,10 +6,12 @@ Module for interactions with IBM Cloud Cluster.
 
 import json
 import logging
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.retry import retry
 
 
 logger = logging.getLogger(name=__file__)
@@ -42,6 +44,13 @@ class IBMCloudBM(object):
         run_cmd(login_cmd, secrets=[self.api_key])
         logger.info("Successfully logged in to IBM cloud")
 
+    @retry(
+        CommandFailed,
+        tries=3,
+        delay=20,
+        backoff=1,
+        text_in_exception="Remote management command has recently been issued for server",
+    )
     def run_ibmcloud_bm_cmd(
         self, cmd, secrets=None, timeout=600, ignore_error=False, **kwargs
     ):
@@ -73,7 +82,12 @@ class IBMCloudBM(object):
             # Check if we need to re-login to IBM Cloud account
             if any([error_msg in str(ex) for error_msg in login_error_messages]):
                 self.login()
+                wait_time_after_login = 10
+                logger.info(f"Wait {wait_time_after_login} seconds before proceeding")
+                time.sleep(wait_time_after_login)
                 return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+            else:
+                raise ex
 
     def get_all_machines(self):
         """
