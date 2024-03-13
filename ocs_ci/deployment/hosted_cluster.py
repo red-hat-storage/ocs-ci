@@ -291,15 +291,23 @@ class HostedODF:
 
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
         """
-        Execute command on the system
-        Args:
-            cmd (str): Command to execute
-            timeout (int): Timeout for the command
-            ignore_error (bool): True for ignoring error
-            **kwargs: Additional arguments for exec_cmd
+          Execute command on the system
+          Args:
+              cmd (str): Command to execute
+              timeout (int): Timeout for the command
+              ignore_error (bool): True for ignoring error
+              **kwargs: Additional arguments for exec_cmd
+
+        Raises:
+          CommandFailed: In case the command execution fails
 
         Returns:
-            tuple: (retcode, stdout, stderr)
+          (CompletedProcess) A CompletedProcess object of the command that was executed
+          CompletedProcess attributes:
+          args: The list or str args passed to run().
+          returncode (str): The exit code of the process, negative for signals.
+          stdout     (str): The standard output (None if not captured).
+          stderr     (str): The standard error (None if not captured).
 
         """
         cmd = "oc --kubeconfig {} {}".format(self.cluster_kubeconfig, cmd)
@@ -535,11 +543,11 @@ class HostedODF:
         """
         Check the status of the storage client
         """
-
-        return self.exec_oc_cmd(
-            f"get storageclient -n {self.namespace_client} "
-            "-o=jsonpath=\"{range .items[*]}{.status.phase}{'\\n'}{end}\""
+        cmd = (
+            f"get {constants.STORAGECLIENTS} storage-client -n {self.namespace_client} | "
+            "awk '/storage-client/{{print $2}}'"
         )
+        return self.exec_oc_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
     def get_onboarding_key(self):
         """
@@ -557,7 +565,7 @@ class HostedODF:
             .get("data")
             .get("key")
         )
-        decoded_key = base64.b64decode(key).decode("utf-8")
+        decoded_key = base64.b64decode(key).decode("utf-8").strip()
 
         if not decoded_key or "BEGIN PRIVATE KEY" not in decoded_key:
             logger.error(
@@ -567,11 +575,15 @@ class HostedODF:
         config.AUTH.setdefault("managed_service", {}).setdefault(
             "private_key", decoded_key
         )
+
+        logger.info(f">>>>>>decoded key>>>{decoded_key}<<<<<<<")
         try:
             token = generate_onboarding_token()
         except Exception as e:
             logger.error(f"Error during onboarding token generation: {e}")
             token = ""
+
+        logger.info(f">>>>>>token>>>{token}<<<<<<<")
 
         if len(token) == 0:
             logger.error("ticketgen.sh failed to generate Onboarding token")

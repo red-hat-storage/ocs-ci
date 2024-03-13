@@ -10,6 +10,7 @@ from ocs_ci.deployment.hosted_cluster import (
     HostedODF,
     DeployClients,
 )
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     hci_provider_required,
     libtest,
@@ -108,6 +109,17 @@ class TestProviderHosted(object):
         Test create onboarding key
         """
         logger.info("Test create onboarding key")
+
+        cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
         assert len(
-            HostedODF("hcp414-bm2-v").get_onboarding_key()
+            HostedODF(cluster_names[-1]).get_onboarding_key()
         ), "Failed to get onboarding key"
+
+    @hci_provider_required
+    def test_storage_client_connected(self):
+        """
+        Test storage client connected
+        """
+        logger.info("Test storage client connected")
+        cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
+        assert HostedODF(cluster_names[-1]).get_storage_client_status() == "Connected"
