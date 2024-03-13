@@ -2,6 +2,7 @@
 DEPLOYMENT:
   openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
+  ocs_operator_nodes_to_label: 6
 ENV_DATA:
   platform: 'ibm_cloud'
   deployment_type: 'ipi'

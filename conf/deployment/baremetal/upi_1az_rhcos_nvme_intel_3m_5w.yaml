@@ -2,6 +2,7 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
+  ocs_operator_nodes_to_label: 5
 ENV_DATA:
   platform: 'baremetal'
   deployment_type: 'upi'
