@@ -17,7 +17,7 @@ def generate_onboarding_token():
     Generate Onboarding token for consumer cluster via following steps:
 
     1. Download ticketgen.sh script from:
-        https://raw.githubusercontent.com/jarrpa/ocs-operator/ticketgen/hack/ticketgen/ticketgen.sh
+        https://raw.githubusercontent.com/red-hat-storage/ocs-operator/main/hack/ticketgen/ticketgen.sh
     2. Save private key from AUTH["managed_service"]["private_key"] to
         temporary file.
     3. Run ticketgen.sh script to generate Onboarding token.
@@ -35,7 +35,7 @@ def generate_onboarding_token():
     # download ticketgen.sh script
     logger.debug("Download and prepare ticketgen.sh script")
     download_file(
-        "https://raw.githubusercontent.com/jarrpa/ocs-operator/ticketgen/hack/ticketgen/ticketgen.sh",
+        "https://raw.githubusercontent.com/red-hat-storage/ocs-operator/main/hack/ticketgen/ticketgen.sh",
         ticketgen_script_path,
     )
     # add execute permission to the ticketgen.sh script
