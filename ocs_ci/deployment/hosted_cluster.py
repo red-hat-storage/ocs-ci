@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
-from ocs_ci.ocs.exceptions import ProviderModeNotFoundException
+from ocs_ci.ocs.exceptions import ProviderModeNotFoundException, CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
@@ -27,6 +27,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -479,27 +480,37 @@ class HostedODF:
             logger.info("Storage client already exists")
             return
 
-        storage_client_data = templating.load_yaml(
-            constants.PROVIDER_MODE_STORAGE_CLIENT
-        )
-        storage_client_data["spec"][
-            "storageProviderEndpoint"
-        ] = self.get_provider_address()
+        @retry((CommandFailed, TimeoutError), tries=3, delay=30, backoff=1)
+        def apply_storage_client_cr():
+            """
+            Internal function to apply storage client CR
+            :return:
+            """
+            storage_client_data = templating.load_yaml(
+                constants.PROVIDER_MODE_STORAGE_CLIENT
+            )
+            storage_client_data["spec"][
+                "storageProviderEndpoint"
+            ] = self.get_provider_address()
 
-        # onboarding_key = self.get_onboarding_key_ui()
-        onboarding_key = self.get_onboarding_key()
+            # onboarding_key = self.get_onboarding_key_ui()
+            onboarding_key = self.get_onboarding_key()
 
-        if not len(onboarding_key):
-            return
+            if not len(onboarding_key):
+                return
 
-        storage_client_data["spec"]["onboardingTicket"] = onboarding_key
+            storage_client_data["spec"]["onboardingTicket"] = onboarding_key
 
-        storage_client_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="storage_client", delete=False
-        )
-        templating.dump_data_to_temp_yaml(storage_client_data, storage_client_file.name)
+            storage_client_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="storage_client", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                storage_client_data, storage_client_file.name
+            )
 
-        self.exec_oc_cmd(f"apply -f {storage_client_file.name}", timeout=120)
+            self.exec_oc_cmd(f"apply -f {storage_client_file.name}", timeout=120)
+
+        apply_storage_client_cr()
 
         if self.storage_client_exists():
             logger.info("Storage client create Failed")
@@ -720,6 +731,7 @@ class HostedODF:
         default_channel = PackageManifest(
             resource_name=constants.OCS_CLIENT_OPERATOR,
             selector=get_selector_for_ocs_operator(),
+            cluster_kubeconfig=self.cluster_kubeconfig,
         ).get_default_channel()
 
         subscription_data["spec"]["channel"] = default_channel
