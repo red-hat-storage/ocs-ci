@@ -105,8 +105,8 @@ class HyperShiftBase(Deployment):
         self,
         name: str = None,
         nodepool_replicas: int = 2,
-        memory: str = "8Gi",
-        cpu_cores: int = 4,
+        memory: str = "12Gi",
+        cpu_cores: int = 6,
         root_volume_size: str = 40,
         ocp_version=None,
     ):
@@ -116,8 +116,10 @@ class HyperShiftBase(Deployment):
         Args:
             name (str): Name of the cluster
             nodepool_replicas (int): Number of nodes in the cluster
-            memory (str): Memory size of the cluster, minimum 12Gi
-            cpu_cores (str): CPU cores of the cluster, minimum 6
+            memory (str): Memory size of the cluster, minimum 12Gi; will use from ENV_DATA if
+            ENV_DATA['memory_per_hosted_cluster'] is set
+            cpu_cores (str): CPU cores of the cluster, minimum 6; will use from ENV_DATA if
+            ENV_DATA['cpu_cores_per_hosted_cluster'] is set
             ocp_version (str): OCP version of the cluster, if not specified, will use the version from Hosting Platform
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
 
@@ -125,6 +127,16 @@ class HyperShiftBase(Deployment):
             str: Name of the hosted cluster
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
+
+        if config.default_cluster_ctx.ENV_DATA.get("cpu_cores_per_hosted_cluster"):
+            cpu_cores = config.default_cluster_ctx.ENV_DATA.get(
+                "cpu_cores_per_hosted_cluster"
+            )
+
+        if config.default_cluster_ctx.ENV_DATA.get("memory_per_hosted_cluster"):
+            memory = config.default_cluster_ctx.ENV_DATA.get(
+                "memory_per_hosted_cluster"
+            )
 
         self.get_ICSP_list()
         pull_secret_path = download_pull_secret()
