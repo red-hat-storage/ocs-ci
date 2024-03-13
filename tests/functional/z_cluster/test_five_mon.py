@@ -5,6 +5,7 @@ import time
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
+    ignore_leftovers,
     skipif_less_than_five_workers,
 )
 from ocs_ci.framework.testlib import (
@@ -38,6 +39,7 @@ def verify_mon_pod_running(pods):
 
 
 @brown_squad
+@ignore_leftovers
 @skipif_less_than_five_workers
 @skipif_ocs_version("<4.15")
 class TestFiveMonInCluster(ManageTest):
