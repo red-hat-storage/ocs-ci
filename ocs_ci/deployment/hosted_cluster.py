@@ -14,7 +14,11 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
-from ocs_ci.ocs.exceptions import ProviderModeNotFoundException, CommandFailed
+from ocs_ci.ocs.exceptions import (
+    ProviderModeNotFoundException,
+    CommandFailed,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
@@ -393,7 +397,12 @@ class HostedODF:
         :return: bool True if storage client is setup, False otherwise
         """
         logger.info("Creating storage client")
-        storage_client_created = self.create_storage_client()
+
+        try:
+            storage_client_created = self.create_storage_client()
+        except TimeoutExpiredError as e:
+            logger.error(f"Error during storage client creation: {e}")
+            storage_client_created = False
 
         # if storage client is not created, there is no point in continuing
         if not storage_client_created:
