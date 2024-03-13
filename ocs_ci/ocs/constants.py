@@ -1205,6 +1205,14 @@ NUM_OF_VIPS = 2
 
 # Config related constants
 config_keys_patterns_to_censor = ["passw", "token", "secret", "key", "credential"]
+config_keys_expressions_to_censor = [
+    "AccountKey",
+    "AccountName",
+    "ApplicationID",
+    "ApplicationSecret",
+    "LogsAnalyticsWorkspaceID",
+    "TenantID",
+]
 
 # packages
 RHEL_POD_PACKAGES = [

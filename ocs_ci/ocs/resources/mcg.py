@@ -33,8 +33,9 @@ from ocs_ci.utility.utils import (
     get_attr_chain,
     exec_cmd,
     TimeoutSampler,
+    mask_secrets,
 )
-from ocs_ci.helpers.helpers import retrieve_cli_binary
+from ocs_ci.helpers.helpers import retrieve_cli_binary, flatten_multilevel_dict
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_resource,
@@ -64,7 +65,8 @@ class MCG:
         noobaa_user,
         noobaa_password,
         noobaa_token,
-    ) = (None,) * 12
+        data_to_mask,
+    ) = (None,) * 13
 
     def __init__(self, *args, **kwargs):
         """
@@ -125,6 +127,9 @@ class MCG:
             .get("externalDNS")[0]
         ) + "/rpc"
         self.region = config.ENV_DATA["region"]
+
+        noobaa_cr_services = get_noobaa.get("items")[0].get("status").get("services")
+        self.data_to_mask = flatten_multilevel_dict(noobaa_cr_services)
 
         self.update_s3_creds()
 
@@ -309,7 +314,10 @@ class MCG:
 
         """
 
-        logger.info(f"Sending MCG RPC query via mcg-cli:\n{api} {method} {params}")
+        masked_params = mask_secrets(str(params), self.data_to_mask)
+        logger.info(
+            f"Sending MCG RPC query via mcg-cli:\n{api} {method} {masked_params}"
+        )
 
         cli_output = self.exec_mcg_cmd(
             f"api {api} {method} '{json.dumps(params)}' -ojson"
@@ -654,9 +662,12 @@ class MCG:
         if replication_policy:
             bc_data["spec"].setdefault(
                 "replicationPolicy",
-                json.dumps(replication_policy)
-                if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12
-                else json.dumps({"rules": replication_policy}),
+                (
+                    json.dumps(replication_policy)
+                    if version.get_semantic_ocs_version_from_config()
+                    < version.VERSION_4_12
+                    else json.dumps({"rules": replication_policy})
+                ),
             )
 
         return create_resource(**bc_data)
@@ -852,6 +863,10 @@ class MCG:
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
 
+        # Mask sensitive data
+        if self.data_to_mask:
+            kwargs.setdefault("secrets", []).extend(self.data_to_mask)
+
         if use_yes:
             result = exec_cmd(
                 [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
@@ -1004,6 +1019,7 @@ class MCG:
         self.noobaa_user = admin_credentials["email"]
         self.noobaa_password = admin_credentials["password"]
 
+        self.data_to_mask.extend(flatten_multilevel_dict(admin_credentials))
         self.noobaa_token = self.retrieve_nb_token()
 
         self.s3_resource = boto3.resource(
