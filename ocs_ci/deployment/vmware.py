@@ -1554,6 +1554,13 @@ class VSPHEREIPI(VSPHEREBASE):
         installer = get_openshift_installer(
             config.DEPLOYMENT["installer_version"], force_download=force_download
         )
+        metadata_file = os.path.join(self.cluster_path, "metadata.json")
+        template_folder = None
+        if os.path.exists(metadata_file):
+            template_folder = get_infra_id(self.cluster_path)
+        else:
+            logger.warning("metadata.json file doesn't exist.")
+
         try:
             run_cmd(
                 f"{installer} destroy cluster "
@@ -1574,6 +1581,22 @@ class VSPHEREIPI(VSPHEREBASE):
             for i in range(constants.NUM_OF_VIPS)
         ]
         ipam.release_ips(hosts)
+
+        # post destroy checks
+        if template_folder:
+            self.post_destroy_checks(template_folder=template_folder)
+
+    def post_destroy_checks(self, template_folder):
+        """
+        Post destroy checks on vSphere IPI cluster
+
+        Args:
+            template_folder (str): template folder for the cluster
+
+        """
+        logger.debug("post destroy checks for vSphere IPI ")
+        # destroy the folder in templates
+        self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
 
 
 class VSPHEREAI(VSPHEREBASE):
