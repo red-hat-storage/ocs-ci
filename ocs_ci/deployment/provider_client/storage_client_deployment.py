@@ -298,7 +298,7 @@ class TestStorageClientDeployment(object):
         Deployment().wait_for_subscription(
             ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
         )
-        self.wait_for_csv(
+        Deployment().wait_for_csv(
             ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
         )
         log.info(f"Sleeping for 30 seconds after {ocs_client_operator} created")

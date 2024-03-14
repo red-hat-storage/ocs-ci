@@ -1266,14 +1266,24 @@ def clean_disk(worker, namespace=constants.BM_DEBUG_NODE_NS):
     )
     disk_to_ignore_cleanup_raw = json.loads(str(out))
     disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
+    selected_disks_to_ignore_cleanup = []
     for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
         if disk_to_ignore_cleanup["mountpoint"] == "/boot":
             logger.info(
                 f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
             )
-            selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
-            # Adding break when root disk is found
+            selected_disks_to_ignore_cleanup.append(
+                str(disk_to_ignore_cleanup["pkname"])
+            )
+        elif disk_to_ignore_cleanup["type"] == "rom":
+            logger.info(
+                f"Ignorning disk {disk_to_ignore_cleanup['kname']} for cleanup because it's a rom disk "
+            )
+            selected_disks_to_ignore_cleanup.append(
+                str(disk_to_ignore_cleanup["kname"])
+            )
             break
+
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
         cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
@@ -1283,7 +1293,8 @@ def clean_disk(worker, namespace=constants.BM_DEBUG_NODE_NS):
     lsblk_devices = lsblk_output["blockdevices"]
 
     for lsblk_device in lsblk_devices:
-        if lsblk_device["name"] == str(selected_disk_to_ignore_cleanup):
+        if lsblk_device["name"] in selected_disks_to_ignore_cleanup:
+            print(f'the disk cleanup ignored for, {lsblk_device["name"]}')
             pass
         else:
             logger.info(f"Cleaning up {lsblk_device['name']}")
