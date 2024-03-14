@@ -7,10 +7,10 @@ metadata:
 spec:
   containers:
    - name: web-server
-     image: quay.io/ocsci/nginx:fio
+     image: quay.io/ocsci/centos:fio
      volumeMounts:
        - name: mypvc
-         mountPath: /var/lib/www/html
+         mountPath: /mnt
   volumes:
    - name: mypvc
      persistentVolumeClaim:
