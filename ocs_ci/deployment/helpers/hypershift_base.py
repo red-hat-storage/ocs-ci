@@ -32,7 +32,8 @@ logger = logging.getLogger(__name__)
 def get_hosted_cluster_names():
     """
     Get HyperShift hosted cluster names
-    :return: list of hosted cluster names
+    Returns:
+        list: the list of hosted cluster names
     """
     logger.info("Getting HyperShift hosted cluster names")
     cmd = "oc get --namespace clusters hostedclusters -o custom-columns=NAME:.metadata.name --no-headers"
@@ -58,7 +59,6 @@ class HyperShiftBase(Deployment):
     def download_hcp_binary(self):
         """
         Download hcp binary to bin_dir
-
         """
         if os.path.isfile(self.hcp_binary_path):
             logger.info(
@@ -101,7 +101,7 @@ class HyperShiftBase(Deployment):
             exec_cmd(f"rm -f {self.hcp_binary_path}")
         self.download_hcp_binary()
 
-    def create_kubevirt_OCP_cluster(
+    def create_kubevirt_ocp_cluster(
         self,
         name: str = None,
         nodepool_replicas: int = 2,
@@ -138,7 +138,7 @@ class HyperShiftBase(Deployment):
                 "memory_per_hosted_cluster"
             )
 
-        self.get_ICSP_list()
+        self.save_mirrors_list_to_file()
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
@@ -177,7 +177,9 @@ class HyperShiftBase(Deployment):
         """
         Verify multiple HyperShift hosted clusters from provider. If cluster_names is not provided at ENV_DATA,
         it will get the list of hosted clusters from the provider to verify them all
-        :return:
+
+        Returns:
+            bool: True if all hosted clusters passed verification, False otherwise
         """
         cluster_names = config.default_cluster_ctx.ENV_DATA.get("cluster_names")
         if not cluster_names:
@@ -201,10 +203,11 @@ class HyperShiftBase(Deployment):
     def verify_hosted_ocp_cluster_from_provider(self, name):
         """
         Verify HyperShift hosted cluster from provider
-        :param name: hosted OCP cluster name
-        :return: True if hosted OCP cluster is verified, False otherwise
+        Args:
+            name (str): hosted OCP cluster name
+        Returns:
+            bool: True if hosted OCP cluster is verified, False otherwise
         """
-
         timeout_pods_wait_min = 10
         timeout_hosted_cluster_completed_min = 20
         timeout_worker_nodes_ready_min = 20
@@ -262,46 +265,52 @@ class HyperShiftBase(Deployment):
     def get_current_nodepool_size(self, name):
         """
         Get existing nodepool of HyperShift hosted cluster
-        :param name: name of the cluster
-        :return: int number of nodes in the nodepool
+        Args:
+            name (str): name of the cluster
+        Returns:
+             int: number of nodes in the nodepool
         """
-
         logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
         cmd = (
             f"oc get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $4}}'"
         )
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
-    def worker_nodes_deployed(self, name):
+    def worker_nodes_deployed(self, name: str):
         """
         Check if worker nodes are deployed for HyperShift hosted cluster
-        :param name: name of the cluster
-        :return: True if worker nodes are deployed, False otherwise
+        Args:
+            name (str): name of the cluster
+        Returns:
+             bool: True if worker nodes are deployed, False otherwise
         """
         logger.info(f"Checking if worker nodes are deployed for cluster {name}")
         return self.get_current_nodepool_size(name) == self.get_desired_nodepool_size(
             name
         )
 
-    def get_desired_nodepool_size(self, name):
+    def get_desired_nodepool_size(self, name: str):
         """
         Get desired nodepool of HyperShift hosted cluster
-        :param name: name of the cluster
-        :return: int number of nodes in the nodepool
+        Args:
+            name (str): of the cluster
+        Returns:
+            int: number of nodes in the nodepool
         """
-
         logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
         cmd = (
             f"oc get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $3}}'"
         )
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
-    def wait_hosted_cluster_completed(self, name, timeout=3600):
+    def wait_hosted_cluster_completed(self, name: str, timeout=3600):
         """
         Wait for HyperShift hosted cluster creation to complete
-        :param name: name of the cluster
-        :param timeout: timeout in seconds
-        :return: True if cluster creation completed, False otherwise
+        Args:
+            name: name of the cluster
+            timeout: timeout in seconds
+        Returns:
+             bool: True if cluster creation completed, False otherwise
         """
         logger.info(f"Verifying HyperShift hosted cluster {name} creation is Completed")
         for sample in TimeoutSampler(
@@ -313,14 +322,15 @@ class HyperShiftBase(Deployment):
             if sample == "Completed":
                 return True
 
-    def wait_for_worker_nodes_to_be_ready(self, name, timeout=2400):
+    def wait_for_worker_nodes_to_be_ready(self, name: str, timeout=2400):
         """
         Wait for worker nodes to be ready for HyperShift hosted cluster
-        :param name: name of the cluster
-        :param timeout: timeout in seconds
-        :return: True if worker nodes are ready, False otherwise
+        Args:
+            name (str): name of the cluster
+            timeout: timeout in seconds
+        Returns:
+            bool: True if worker nodes are ready, False otherwise
         """
-
         logger.info(
             f"Verifying worker nodes to be ready for HyperShift hosted cluster {name}. "
             f"Max wait time: {timeout} sec "
@@ -334,11 +344,13 @@ class HyperShiftBase(Deployment):
             if sample:
                 return True
 
-    def get_hosted_cluster_kubeconfig_name(self, name):
+    def get_hosted_cluster_kubeconfig_name(self, name: str):
         """
         Get HyperShift hosted cluster kubeconfig, for example 'hcp414-bm2-a-admin-kubeconfig'
-        :param name: name of the cluster
-        :return: hosted cluster kubeconfig name
+        Args:
+            name: name of the cluster
+        Returns:
+            str: hosted cluster kubeconfig name
         """
         logger.info(f"Getting kubeconfig for HyperShift hosted cluster {name}")
         cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
@@ -347,7 +359,8 @@ class HyperShiftBase(Deployment):
     def download_hosted_clusters_kubeconfig_files(self):
         """
         Get HyperShift hosted cluster kubeconfig for multiple clusters
-        :return: list of hosted cluster kubeconfig paths
+        Returns:
+            list: the list of hosted cluster kubeconfig paths
         """
         names = get_hosted_cluster_names()
 
@@ -360,9 +373,11 @@ class HyperShiftBase(Deployment):
     def download_hosted_cluster_kubeconfig(self, name: str, auth_path: str = None):
         """
         Download HyperShift hosted cluster kubeconfig
-        :param name: name of the cluster
-        :param auth_path: path to download kubeconfig
-        :return: path to the downloaded kubeconfig, None if failed
+        Args:
+            name (str): name of the cluster
+            auth_path (str): path to download kubeconfig
+        Returns:
+            str: path to the downloaded kubeconfig, None if failed
         """
         if not auth_path:
             auth_path = constants.AUTH_PATH_PATTERN.format(name)
@@ -398,18 +413,20 @@ class HyperShiftBase(Deployment):
         ):
             return kubeconfig_path_abs
 
-    def get_hosted_cluster_progress(self, name):
+    def get_hosted_cluster_progress(self, name: str):
         """
         Get HyperShift hosted cluster creation progress
-        :param name: name of the cluster
-        :return: progress status; 'Completed' is expected in most cases
+        Args:
+            name (str): name of the cluster
+        Returns:
+            str: progress status; 'Completed' is expected in most cases
         """
         cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
-    def get_ICSP_list(self):
+    def save_mirrors_list_to_file(self):
         """
-        Get list of ICSP clusters
+        Save ICSP mirrors list to a file
 
         """
         if (
@@ -425,9 +442,9 @@ class HyperShiftBase(Deployment):
         icsp_json = self.ocp.exec_oc_cmd("get imagecontentsourcepolicy -o json")
         parse_ICSP_json_to_mirrors_file(icsp_json, self.icsp_mirrors_path)
 
-    def update_ICSP_list(self):
+    def update_mirrors_list_to_file(self):
         """
-        Update ICSP list
+        Update ICSP list to a file
         """
         if os.path.isfile(self.icsp_mirrors_path):
             logger.info(f"Updating ICSP list from '{self.icsp_mirrors_path}'")
@@ -436,7 +453,7 @@ class HyperShiftBase(Deployment):
             self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="icsp_mirrors-", delete=False
             ).name
-        self.get_ICSP_list()
+        self.save_mirrors_list_to_file()
 
     def destroy_kubevirt_cluster(self, name):
         """

@@ -29,14 +29,9 @@ logger = logging.getLogger(__name__)
 class MetalLBInstaller:
     def __init__(
         self,
-        version: str = None,
         namespace: str = "metallb-system",
     ):
         self.addresses_reserved = None
-        if not version:
-            self.version_lb = get_ocp_version()
-        else:
-            self.version_lb = version
         self.namespace_lb = namespace
         self.l2Advertisement_name = None
         self.ip_address_pool_name = None
@@ -49,7 +44,8 @@ class MetalLBInstaller:
     def create_metallb_namespace(self):
         """
         Create MetalLB namespace
-        :return: True if namespace is created, False otherwise
+        Returns:
+            bool: True if namespace is created, False otherwise
         """
         logger.info(f"Creating namespace {self.namespace_lb} for MetalLB")
 
@@ -73,7 +69,9 @@ class MetalLBInstaller:
     def catalog_source_created(self):
         """
         Check if catalog source is created
-        :return: True if catalog source is created, False otherwise
+
+        Returns:
+            bool: True if catalog source is created, False otherwise
         """
         return CatalogSource(
             resource_name=self.catalog_source_name,
@@ -87,15 +85,21 @@ class MetalLBInstaller:
     def create_catalog_source(self):
         """
         Create catalog source for MetalLB
-        :return: True if catalog source is created, False otherwise, error if not get Ready state
+
+        Returns:
+            bool: True if catalog source is created, False otherwise, error if not get Ready state
         """
         logger.info("Creating catalog source for MetalLB")
         # replace latest version with specific version
         catalog_source_data = templating.load_yaml(METALLB_CATALOG_SOURCE_YAML)
 
+        metallb_version = config.default_cluster_ctx.ENV_DATA.get("metallb_version")
+        if not metallb_version:
+            metallb_version = get_ocp_version()
+
         image_placeholder = catalog_source_data.get("spec").get("image")
         catalog_source_data.get("spec").update(
-            {"image": image_placeholder.format("4.14")}
+            {"image": image_placeholder.format(metallb_version)}
         )
 
         self.catalog_source_name = catalog_source_data.get("metadata").get("name")
@@ -125,7 +129,9 @@ class MetalLBInstaller:
     def metallb_operator_group_created(self):
         """
         Check if MetalLB operator group is created
-        :return: True if operator group is created, False otherwise
+
+        Returns:
+            bool: True if operator group is created, False otherwise
         """
         if not self.operatorgroup_name:
             return False
@@ -143,7 +149,9 @@ class MetalLBInstaller:
     def create_metallb_operator_group(self):
         """
         Create MetalLB operator group
-        :return: True if operator group is created, False otherwise
+
+        Returns:
+            bool: True if operator group is created, False otherwise
         """
         logger.info("Creating MetalLB operator group")
         operator_group_data = templating.load_yaml(METALLB_OPERATOR_GROUP_YAML)
@@ -173,7 +181,8 @@ class MetalLBInstaller:
     def subscription_created(self):
         """
         Check if subscription already exists
-        :return: bool True if subscription already exists, False otherwise
+        Returns:
+            bool: True if subscription already exists, False otherwise
         """
         return OCP(
             kind=constants.SUBSCRIPTION_COREOS,
@@ -186,7 +195,9 @@ class MetalLBInstaller:
     def create_metallb_subscription(self):
         """
         Create MetalLB subscription
-        :return: True if subscription is created, and metallb pods are Ready, False otherwise
+
+        Returns:
+            bool: True if subscription is created, and metallb pods are Ready, False otherwise
         """
         logger.info("Creating MetalLB subscription")
         subscription_data = templating.load_yaml(METALLB_SUBSCRIPTION_YAML)
@@ -222,7 +233,9 @@ class MetalLBInstaller:
     def metallb_instance_created(self):
         """
         Check if MetalLB instance is created
-        :return: True if MetalLB instance is created, False otherwise
+
+        Returns:
+            bool: True if MetalLB instance is created, False otherwise
         """
         return OCP(
             kind=constants.METALLB_INSTANCE,
@@ -237,7 +250,8 @@ class MetalLBInstaller:
     def create_metallb_instance(self):
         """
         Create MetalLB instance
-        :return: True if MetalLB instance is created, False/None otherwise
+        Returns:
+            bool: True if MetalLB instance is created, False/None otherwise
         """
 
         if self.metallb_instance_created():
@@ -260,7 +274,13 @@ class MetalLBInstaller:
     def create_ip_address_pool(self):
         """
         Create IP address pool for MetalLB
-        :return: True if IP address pool is created, False if creation failed and None if IP address pool already exists
+
+        Returns:
+            bool: True if IP address pool is created, False if creation failed
+
+        Raises:
+            NotImplementedError: if platform is not supported
+            ValueError: if number of reserved IP addresses for MetalLB is not specified
         """
         reserved_ips_num = config.ENV_DATA.get("ips_to_reserve")
         if not reserved_ips_num:
@@ -284,7 +304,7 @@ class MetalLBInstaller:
             logger.info(
                 f"IPAddressPool {self.ip_address_pool_name} already exists in the namespace {self.namespace_lb}"
             )
-            return
+            return True
 
         if config.ENV_DATA["platform"] == constants.HCI_VSPHERE:
 
@@ -332,7 +352,9 @@ class MetalLBInstaller:
     def ip_address_pool_created(self):
         """
         Check if IP address pool is created
-        :return: True if IP address pool is created, False otherwise
+
+        Returns:
+            bool: True if IP address pool is created, False otherwise
         """
         return OCP(
             kind=constants.IP_ADDRESS_POOL,
@@ -347,7 +369,9 @@ class MetalLBInstaller:
     def update_ip_address_pool_cr(self, ipaddresspool_data):
         """
         Update IP address pool custom resource
-        :param ipaddresspool_data: IP address pool data. YAML accessible as dict
+
+        Args:
+            ipaddresspool_data (dict): IP address pool data. YAML accessible as dict
 
         """
         ocp = OCP(
@@ -370,7 +394,8 @@ class MetalLBInstaller:
     def l2advertisement_created(self):
         """
         Check if L2 advertisement is created
-        :return: True if L2 advertisement is created, False otherwise
+        Returns:
+            bool: True if L2 advertisement is created, False otherwise
         """
         return OCP(
             kind=constants.L2_ADVERTISEMENT,
@@ -385,7 +410,9 @@ class MetalLBInstaller:
     def create_l2advertisement(self):
         """
         Create L2 advertisement for IP address pool
-        :return: True if L2 advertisement is created, False if failed, None if L2 advertisement already exists
+
+        Returns:
+            bool: True if L2 advertisement is created, False if failed, None if L2 advertisement already exists
         """
 
         logger.info("Creating L2 advertisement for IP address pool")
@@ -421,11 +448,13 @@ class MetalLBInstaller:
         Deploy MetalLB
         If resources are already created, method will not create them again
 
+        Returns:
+            bool: True if MetalLB is deployed, False otherwise
         """
 
         if not config.DEPLOYMENT.get("metallb_operator"):
             logger.info("MetalLB operator deployment is not requested")
-            return
+            return True
 
         logger.info(
             f"Deploying MetalLB and dependant resources to namespace: '{self.namespace_lb}'"
@@ -470,7 +499,9 @@ class MetalLBInstaller:
     def delete_l2advertisement(self):
         """
         Delete l2advertisement
-        :return: True if l2advertisement is deleted, False otherwise
+
+        Returns:
+            bool: True if l2advertisement is deleted, False otherwise
         """
         ocp = OCP(
             kind=constants.L2_ADVERTISEMENT,
@@ -487,7 +518,9 @@ class MetalLBInstaller:
     def delete_operatorgroup(self):
         """
         Delete operator group
-        :returns True if operator group is deleted, False otherwise
+
+        Returns:
+            bool: True if operator group is deleted, False otherwise
         """
         ocp = OCP(
             kind=constants.OPERATOR_GROUP,
@@ -504,7 +537,9 @@ class MetalLBInstaller:
     def delete_subscription(self):
         """
         Delete subscription
-        :returns True if subscription is deleted, False otherwise
+
+        Returns:
+            bool: True if subscription is deleted, False otherwise
         """
         ocp = OCP(
             kind=constants.SUBSCRIPTION,
@@ -521,7 +556,9 @@ class MetalLBInstaller:
     def delete_ipaddresspool(self):
         """
         Delete ipaddresspool
-        :returns True if ipaddresspool is deleted, False otherwise
+
+        Returns:
+             bool: True if ipaddresspool is deleted, False otherwise
         """
         ocp = OCP(
             kind=constants.IP_ADDRESS_POOL,
@@ -538,7 +575,9 @@ class MetalLBInstaller:
     def delete_catalogsource(self):
         """
         Delete catalog source
-        :return: True if catalog source is deleted, False otherwise
+
+        Returns:
+             bool: True if catalog source is deleted, False otherwise
         """
         ocp = OCP(
             kind=constants.CATSRC,
@@ -555,7 +594,9 @@ class MetalLBInstaller:
     def delete_metallb_namespace(self):
         """
         Delete MetalLB namespace
-        :return: True if namespace is deleted, False otherwise
+
+        Returns:
+            True if namespace is deleted, False otherwise
         """
         ocp = OCP(kind="namespace", resource_name=self.namespace_lb)
         ocp.delete(resource_name=self.namespace_lb)

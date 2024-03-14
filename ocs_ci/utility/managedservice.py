@@ -12,7 +12,7 @@ from ocs_ci.utility.utils import download_file, exec_cmd
 logger = logging.getLogger(__name__)
 
 
-def generate_onboarding_token():
+def generate_onboarding_token(private_key: str = None):
     """
     Generate Onboarding token for consumer cluster via following steps:
 
@@ -21,6 +21,12 @@ def generate_onboarding_token():
     2. Save private key from AUTH["managed_service"]["private_key"] to
         temporary file.
     3. Run ticketgen.sh script to generate Onboarding token.
+
+    Important! The header and footer of the private key are rewritten to make the ticketgen.sh script work on older
+     openssl version OpenSSL 1.1.1k, which is the last version that was supported by CentOS 8 in the day of this comment
+
+    Args:
+        private_key (str): private key for Managed Service
 
     Raises:
         CommandFailed: In case the script ticketgen.sh fails.
@@ -46,7 +52,13 @@ def generate_onboarding_token():
     )
     # save private key to temp file
     logger.debug("Prepare temporary file with private key")
-    private_key = config.AUTH.get("managed_service", {}).get("private_key", "")
+    if not private_key:
+        private_key = config.AUTH.get("managed_service", {}).get("private_key", "")
+
+    # rewrite header and footer of private key to make it work on older openssl version
+    key_tmp = remove_header_footer_from_key(private_key)
+    private_key = add_header_footer_to_key(key_tmp)
+
     if not private_key:
         raise ConfigurationError(
             "Private key for Managed Service not defined.\n"
@@ -90,6 +102,23 @@ def remove_header_footer_from_key(key):
     if "-----END" in key_lines[-1]:
         key_lines = key_lines[:-1]
     return "".join(key_lines)
+
+
+def add_header_footer_to_key(key):
+    """
+    This function will add header and footer to key (like:
+    -----BEGIN RSA PRIVATE KEY-----
+    -----END RSA PRIVATE KEY-----
+    ) and return the key with header and footer.
+
+    Returns:
+        string: key string with header and footer
+
+    """
+
+    key = key.strip()
+    key = f"-----BEGIN RSA PRIVATE KEY-----\n{key}\n-----END RSA PRIVATE KEY-----"
+    return key
 
 
 def get_storage_provider_endpoint(cluster):

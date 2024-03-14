@@ -104,22 +104,25 @@ class TestProviderHosted(object):
         DeployClients().do_deploy()
 
     @runs_on_provider
+    @hci_provider_required
     def test_create_onboarding_key(self):
         """
         Test create onboarding key
         """
         logger.info("Test create onboarding key")
-
+        HyperShiftBase().download_hosted_clusters_kubeconfig_files()
         cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
         assert len(
             HostedODF(cluster_names[-1]).get_onboarding_key()
         ), "Failed to get onboarding key"
 
+    @runs_on_provider
     @hci_provider_required
     def test_storage_client_connected(self):
         """
         Test storage client connected
         """
         logger.info("Test storage client connected")
+        HyperShiftBase().download_hosted_clusters_kubeconfig_files()
         cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
         assert HostedODF(cluster_names[-1]).get_storage_client_status() == "Connected"

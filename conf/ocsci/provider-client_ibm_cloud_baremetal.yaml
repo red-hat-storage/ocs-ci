@@ -7,6 +7,10 @@ ENV_DATA:
   skip_ocs_deployment: true
   acm_version: "2.9"
   acm_hub_channel: release-2.9
-  # we have 2 vlan public subnets, so we can use any of them
-  public_subnet_id: 1
   hcp_version: "4.14"
+  hosted_odf_version: "latest-stable-4.14.5"
+  ips_to_reserve: 5
+  metallb_version: "latest"
+  cpu_cores_per_hosted_cluster: 6
+  memory_per_hosted_cluster: "12Gi"
+  cluster_names: [ "hcp414-bm2-l", "hcp414-bm2-n" ]
