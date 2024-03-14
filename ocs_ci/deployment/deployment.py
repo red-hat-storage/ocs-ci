@@ -2021,9 +2021,9 @@ class Deployment(object):
     def acm_operator_installed(self):
         """
         Check if ACM HUB is already installed
-        :return: bool True if ACM HUB is installed, False otherwise
+        Returns:
+             bool: True if ACM HUB operator is installed, False otherwise
         """
-
         ocp_obj = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
         return ocp_obj.check_resource_existence(
             timeout=6,
@@ -2180,8 +2180,9 @@ class Deployment(object):
 
     def deploy_multicluster_hub(self):
         """
-        Handle ACM HUB deployment
-        :return: bool True if ACM HUB is installed, False otherwise
+        Handle Multicluster HUB creation
+        Returns:
+            bool: True if ACM HUB is installed, False otherwise
         """
         logger.info("Creating MultiCluster Hub")
 
@@ -2194,12 +2195,16 @@ class Deployment(object):
             timeout=6,
         ):
             logger.info("MultiClusterHub already installed")
-            return
+            return True
 
-        run_cmd(
+        exec_cmd(
             f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
-        validate_acm_hub_install()
+        try:
+            validate_acm_hub_install()
+        except Exception as ex:
+            logger.error(f"Failed to install MultiClusterHub. Exception is: {ex}")
+            return False
 
 
 def create_external_pgsql_secret():

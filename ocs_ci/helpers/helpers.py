@@ -4625,7 +4625,9 @@ def retrieve_cli_binary(cli_type="mcg"):
 def download_pull_secret():
     """
     Download the pull secret from the cluster and store it locally.
-    :return: pull secret path
+
+    Returns:
+        str: pull secret path
     """
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     # create DATA_DIR if it doesn't exist

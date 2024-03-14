@@ -2460,6 +2460,8 @@ def assign_ips(num_of_vips=None, hosts=None):
         num_of_vips (int): Number of IPs to assign
         hosts (list): List of hosts to assign IPs
 
+    Raises:
+        ValueError: Either hosts or num_of_vips should be passed
     """
     ipam = IPAM(appiapp="address")
     subnet = config.ENV_DATA["machine_cidr"].split("/")[0]
@@ -2486,7 +2488,6 @@ def release_ips(hosts):
 
     Args:
         hosts (list): List of hosts to release IPs
-
     """
     if not hosts:
         logger.info("No hosts to release IPs")

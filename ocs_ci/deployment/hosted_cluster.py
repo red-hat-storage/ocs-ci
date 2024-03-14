@@ -18,6 +18,7 @@ from ocs_ci.ocs.exceptions import (
     ProviderModeNotFoundException,
     CommandFailed,
     TimeoutExpiredError,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -119,7 +120,8 @@ class DeployClients:
         Deploy multiple ODF clients on hosted OCP clusters. Method tries to deploy ODF client on all hosted OCP clusters
         If ODF was already deployed on some of the clusters, it will be skipped for those clusters.
 
-        :returns: list of kubeconfig paths for all hosted OCP clusters
+        Returns:
+            list: the list of kubeconfig paths for all hosted OCP clusters
         """
         kubeconfig_paths = HyperShiftBase().download_hosted_clusters_kubeconfig_files()
 
@@ -148,12 +150,14 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
     ):
         """
         Deploy hosted OCP cluster on provisioned Provider platform
-        :param deploy_cnv: (bool) Deploy CNV
-        :param deploy_acm_hub: (bool) Deploy ACM Hub
-        :param deploy_metallb: (bool) Deploy MetalLB
-        :param download_hcp_binary: (bool) Download HCP binary
 
-        :returns:
+        Args:
+            deploy_cnv: (bool) Deploy CNV
+            deploy_acm_hub: (bool) Deploy ACM Hub
+            deploy_metallb: (bool) Deploy MetalLB
+            download_hcp_binary: (bool) Download HCP binary
+
+        Returns:
             str: Name of the hosted cluster
         """
         if (
@@ -196,7 +200,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
                     deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
                 )
 
-                return self.create_kubevirt_OCP_cluster(
+                return self.create_kubevirt_ocp_cluster(
                     name=cluster_names_desired_left[-1]
                 )
             else:
@@ -210,17 +214,18 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
             self.deploy_dependencies(
                 deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
             )
-            return self.create_kubevirt_OCP_cluster()
+            return self.create_kubevirt_ocp_cluster()
 
     def deploy_dependencies(
         self, deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
     ):
         """
         Deploy dependencies for hosted OCP cluster
-        :param deploy_acm_hub: bool Deploy ACM Hub
-        :param deploy_cnv: bool Deploy CNV
-        :param deploy_metallb: bool Deploy MetalLB
-        :param download_hcp_binary: bool Download HCP binary
+        Args:
+            deploy_acm_hub: bool Deploy ACM Hub
+            deploy_cnv: bool Deploy CNV
+            deploy_metallb: bool Deploy MetalLB
+            download_hcp_binary: bool Download HCP binary
 
         """
         initial_default_sc = helpers.get_default_storage_class()
@@ -244,9 +249,10 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
     ):
         """
         Deploy multiple hosted OCP clusters on Provider platform
+
+        Returns:
+            list: the list of cluster names for all hosted OCP clusters deployed by the func successfully
         """
-        # we need to ensure that all dependencies are installed so for the first cluster we will install all operators
-        # and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP with hcp.
 
         if "cluster_names" in config.default_cluster_ctx.ENV_DATA:
             number_of_clusters_to_deploy = len(
@@ -260,7 +266,9 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
 
         cluster_names = []
         for i in range(number_of_clusters_to_deploy):
-
+            # we need to ensure that all dependencies are installed so for the first cluster we will install all
+            # operators and finish the rest preparation steps.
+            # For the rest of the clusters we will only deploy OCP with hcp command.
             if i == 0:
                 cluster_deployed = self.deploy_ocp(
                     deploy_cnv=True,
@@ -295,12 +303,12 @@ class HostedODF:
 
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
         """
-          Execute command on the system
-          Args:
-              cmd (str): Command to execute
-              timeout (int): Timeout for the command
-              ignore_error (bool): True for ignoring error
-              **kwargs: Additional arguments for exec_cmd
+        Execute command on the system
+        Args:
+          cmd (str): Command to execute
+          timeout (int): Timeout for the command
+          ignore_error (bool): True for ignoring error
+          **kwargs: Additional arguments for exec_cmd
 
         Raises:
           CommandFailed: In case the command execution fails
@@ -320,7 +328,12 @@ class HostedODF:
         )
 
     def create_ns(self):
+        """
+        Create namespace for ODF client
 
+        Returns:
+            bool: True if namespace is created, False if command execution fails
+        """
         ocp = OCP(
             kind="namespace",
             resource_name=self.namespace_client,
@@ -333,9 +346,13 @@ class HostedODF:
             should_exist=True,
         ):
             logger.info(f"Namespace {self.namespace_client} already exists")
-            return
+            return True
 
-        self.exec_oc_cmd(f"create namespace {self.namespace_client}")
+        try:
+            self.exec_oc_cmd(f"create namespace {self.namespace_client}")
+        except CommandFailed as e:
+            logger.error(f"Error during namespace creation: {e}")
+            return False
 
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
@@ -348,7 +365,7 @@ class HostedODF:
         Apply network policy to the client namespace. Network policy is created always on Provider side.
 
         Returns:
-            bool: True if network policy is created, False otherwise
+            bool: True if network policy is created or existed before, False otherwise
         """
         namespace = f"clusters-{self.name}"
 
@@ -357,18 +374,22 @@ class HostedODF:
         )
         network_policy_data["metadata"]["namespace"] = f"clusters-{self.name}"
 
-        if self.network_policy_created(namespace=namespace):
+        if self.network_policy_exists(namespace=namespace):
             logger.info(f"Network policy {namespace} already exists")
-            return
+            return True
 
         network_policy_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="network_policy", delete=False
         )
         templating.dump_data_to_temp_yaml(network_policy_data, network_policy_file.name)
 
-        exec_cmd(f"oc apply -f {network_policy_file.name}", timeout=120)
+        try:
+            exec_cmd(f"oc apply -f {network_policy_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during network policy creation: {e}")
+            return False
 
-        return self.network_policy_created(namespace=namespace)
+        return self.network_policy_exists(namespace=namespace)
 
     def do_deploy(self):
         """
@@ -394,7 +415,9 @@ class HostedODF:
     def setup_storage_client(self):
         """
         Setup storage client
-        :return: bool True if storage client is setup, False otherwise
+
+        Returns:
+            bool: True if storage client is setup, False otherwise
         """
         logger.info("Creating storage client")
 
@@ -427,7 +450,8 @@ class HostedODF:
         """
         Check if ODF client is installed
 
-        :returns: True if ODF client is installed, False otherwise
+        Returns:
+            bool: True if ODF client is installed, False otherwise
         """
         logger.info("Waiting for ODF client CSV's to be installed")
         timeout_wait_csvs = 10
@@ -473,7 +497,9 @@ class HostedODF:
     def storage_client_exists(self):
         """
         Check if the storage client exists
-        :return:
+
+        Returns:
+            bool: True if storage client exists, False otherwise
         """
         ocp = OCP(
             kind=constants.STORAGECLIENTS,
@@ -482,26 +508,30 @@ class HostedODF:
         )
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_existence,
-            resource_name="openshift-storage-client",
+            resource_name=constants.STORAGE_CLIENT_NAME,
             should_exist=True,
         )
 
     def create_storage_client(self):
         """
         Create storage client
+
+        Returns:
+            bool: True if storage client is created, False otherwise
         """
 
         storage_client_connected_timeout_min = 5
 
         if self.storage_client_exists():
             logger.info("Storage client already exists")
-            return
+            return True
 
         @retry((CommandFailed, TimeoutError), tries=3, delay=30, backoff=1)
         def apply_storage_client_cr():
             """
             Internal function to apply storage client CR
-            :return:
+            Returns:
+                bool: True if storage client is created, False otherwise
             """
             storage_client_data = templating.load_yaml(
                 constants.PROVIDER_MODE_STORAGE_CLIENT
@@ -510,11 +540,10 @@ class HostedODF:
                 "storageProviderEndpoint"
             ] = self.get_provider_address()
 
-            # onboarding_key = self.get_onboarding_key_ui()
             onboarding_key = self.get_onboarding_key()
 
             if not len(onboarding_key):
-                return
+                return False
 
             storage_client_data["spec"]["onboardingTicket"] = onboarding_key
 
@@ -551,6 +580,9 @@ class HostedODF:
     def get_storage_client_status(self):
         """
         Check the status of the storage client
+
+        Returns:
+            str: status of the storage client
         """
         cmd = (
             f"get {constants.STORAGECLIENTS} storage-client -n {self.namespace_client} | "
@@ -561,7 +593,9 @@ class HostedODF:
     def get_onboarding_key(self):
         """
         Get onboarding key using the private key from the secret
-        :return: onboarding token key
+
+        Returns:
+             str: onboarding token key
         """
         secret_ocp_obj = ocp.OCP(
             kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -585,14 +619,11 @@ class HostedODF:
             "private_key", decoded_key
         )
 
-        logger.info(f">>>>>>decoded key>>>{decoded_key}<<<<<<<")
         try:
-            token = generate_onboarding_token()
+            token = generate_onboarding_token(private_key=decoded_key)
         except Exception as e:
             logger.error(f"Error during onboarding token generation: {e}")
             token = ""
-
-        logger.info(f">>>>>>token>>>{token}<<<<<<<")
 
         if len(token) == 0:
             logger.error("ticketgen.sh failed to generate Onboarding token")
@@ -601,7 +632,9 @@ class HostedODF:
     def get_onboarding_key_ui(self):
         """
         Get onboarding key from UI
-        :return: str Onboarding key from Provider UI
+
+        Returns:
+            str: onboarding key from Provider UI
         """
         from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
@@ -613,7 +646,8 @@ class HostedODF:
     def operator_group_exists(self):
         """
         Check if the operator group exists
-        :return:
+        Returns:
+            bool: True if the operator group exists, False otherwise
         """
         ocp = OCP(
             kind=constants.OPERATOR_GROUP,
@@ -629,10 +663,13 @@ class HostedODF:
     def create_operator_group(self):
         """
         Create operator group for ODF
+
+        Returns:
+            bool: True if the operator group is created, False otherwise
         """
         if self.operator_group_exists():
             logger.info("OperatorGroup already exists")
-            return
+            return True
 
         operator_group_data = templating.load_yaml(
             constants.PROVIDER_MODE_OPERATORGROUP
@@ -643,14 +680,19 @@ class HostedODF:
         )
         templating.dump_data_to_temp_yaml(operator_group_data, operator_group_file.name)
 
-        self.exec_oc_cmd(f"apply -f {operator_group_file.name}", timeout=120)
-
+        try:
+            self.exec_oc_cmd(f"apply -f {operator_group_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during OperatorGroup creation: {e}")
+            return False
         return self.operator_group_exists()
 
     def catalog_source_exists(self):
         """
         Check if the catalog source exists
-        :return:
+
+        Returns:
+            bool: True if the catalog source exists, False otherwise
         """
         ocp = OCP(
             kind=constants.CATSRC,
@@ -666,10 +708,13 @@ class HostedODF:
     def create_catalog_source(self):
         """
         Create catalog source for ODF
+
+        Returns:
+            bool: True if the catalog source is created, False otherwise
         """
         if self.catalog_source_exists():
             logger.info("CatalogSource already exists")
-            return
+            return True
 
         catalog_source_data = templating.load_yaml(
             constants.PROVIDER_MODE_CATALOGSOURCE
@@ -700,21 +745,32 @@ class HostedODF:
         )
         templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_file.name)
 
-        self.exec_oc_cmd(f"apply -f {catalog_source_file.name}", timeout=120)
+        try:
+            self.exec_oc_cmd(f"apply -f {catalog_source_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during CatalogSource creation: {e}")
+            return False
 
         ocs_client_catsrc = CatalogSource(
             resource_name=catalog_source_name,
             namespace=constants.MARKETPLACE_NAMESPACE,
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
-        ocs_client_catsrc.wait_for_state("READY")
+
+        try:
+            ocs_client_catsrc.wait_for_state("READY")
+        except (TimeoutExpiredError, ResourceWrongStatusException) as e:
+            logger.error(f"Error during CatalogSource creation: {e}")
+            return False
 
         return self.catalog_source_exists()
 
-    def network_policy_created(self, namespace):
+    def network_policy_exists(self, namespace):
         """
         Check if the network policy is created
-        :return:
+
+        Returns:
+            bool: True if the network policy exists, False otherwise
         """
         ocp = OCP(kind=constants.NETWORK_POLICY, namespace=namespace)
         return ocp.check_resource_existence(
@@ -726,7 +782,9 @@ class HostedODF:
     def subscription_exists(self):
         """
         Check if the subscription exists
-        :return:
+
+        Returns:
+            bool: True if the subscription exists, False otherwise
         """
         ocp = OCP(
             kind=constants.SUBSCRIPTION_COREOS,
@@ -742,6 +800,9 @@ class HostedODF:
     def create_subscription(self):
         """
         Create subscription for ODF
+
+        Returns:
+            bool: True if the subscription is created, False otherwise
         """
         if self.subscription_exists():
             logger.info("Subscription already exists")
@@ -783,7 +844,9 @@ class HostedODF:
     def storage_class_claim_exists_cephfs(self):
         """
         Check if storage class claim for CephFS exists
-        :return: True if storage class claim for CephFS exists, False otherwise
+
+        Returns:
+            bool: True if storage class claim for CephFS exists, False otherwise
         """
         ocp = OCP(
             kind=constants.STORAGECLASSCLAIM,
@@ -799,11 +862,14 @@ class HostedODF:
     def create_storage_class_claim_cephfs(self):
         """
         Create storage class claim for CephFS
+
+        Returns:
+            bool: True if storage class claim for CephFS is created, False otherwise
         """
 
         if self.storage_class_claim_exists_cephfs():
             logger.info("Storage class claim for CephFS already exists")
-            return
+            return True
 
         storage_class_claim_data = templating.load_yaml(
             constants.PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS
@@ -816,14 +882,20 @@ class HostedODF:
             storage_class_claim_data, storage_class_claim_file.name
         )
 
-        self.exec_oc_cmd(f"apply -f {storage_class_claim_file.name}", timeout=120)
+        try:
+            self.exec_oc_cmd(f"apply -f {storage_class_claim_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during storage class claim creation: {e}")
+            return False
 
         return self.storage_class_claim_exists_cephfs()
 
     def storage_class_claim_exists_rbd(self):
         """
         Check if storage class claim for RBD exists
-        :return: True if storage class claim for RBD exists, False otherwise
+
+        Returns:
+             bool: True if storage class claim for RBD exists, False otherwise
         """
         ocp = OCP(
             kind=constants.STORAGECLASSCLAIM,
@@ -839,11 +911,14 @@ class HostedODF:
     def create_storage_class_claim_rbd(self):
         """
         Create storage class claim for RBD
+
+        Returns:
+            bool: True if storage class claim for RBD is created, False otherwise
         """
 
         if self.storage_class_claim_exists_rbd():
             logger.info("Storage class claim for RBD already exists")
-            return
+            return True
 
         storage_class_claim_data = templating.load_yaml(
             constants.PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD
@@ -856,15 +931,23 @@ class HostedODF:
             storage_class_claim_data, storage_class_claim_file.name
         )
 
-        self.exec_oc_cmd(f"apply -f {storage_class_claim_file.name}", timeout=120)
+        try:
+            self.exec_oc_cmd(f"apply -f {storage_class_claim_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during storage class claim creation: {e}")
+            return False
 
         return self.storage_class_claim_exists_rbd()
 
     def storage_class_exists(self, sc_name):
         """
         Check if storage class is ready
-        :param sc_name: Name of the storage class
-        :return: True if storage class is ready, False otherwise
+
+        Args:
+            sc_name: Name of the storage class
+
+        Returns:
+            bool: True if storage class is ready, False otherwise
         """
         timeout_min = 5
 

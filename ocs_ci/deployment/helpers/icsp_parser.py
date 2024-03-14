@@ -78,8 +78,10 @@ class RepositoryDigestMirror:
 def parse_image_content_source_policy(image_content_source_policy):
     """
     Parse the image content source policy
-    :param image_content_source_policy: image content source policy
-    :return: ImageContentSourcePolicy object
+    Args:
+        image_content_source_policy: image content source policy
+    Returns:
+         ImageContentSourcePolicy object
     """
     return ImageContentSourcePolicy(**image_content_source_policy)
 
@@ -87,8 +89,9 @@ def parse_image_content_source_policy(image_content_source_policy):
 def write_mirrors_to_file(file_path, mirrors_to_source_list):
     """
     Write the mirrors to a file
-    :param file_path: file path to write the mirrors to
-    :param mirrors_to_source_list: mirrors and their sources to write to the file, list of mirrors and their sources
+    Args:
+        file_path: file path to write the mirrors to
+        mirrors_to_source_list: mirrors and their sources to write to the file, list of mirrors and their sources
     """
     result = ""
     for mirrors_source in mirrors_to_source_list:
@@ -103,8 +106,9 @@ def write_mirrors_to_file(file_path, mirrors_to_source_list):
 def parse_ICSP_json_to_mirrors_file(icsp_json_dict, file_path):
     """
     Parse the ImageContentSourcePolicy object to a file
-    :param icsp_json_dict: ImageContentSourcePolicy CR in dict format
-    :param file_path: file path to write the mirrors to
+    Args:
+        icsp_json_dict: ImageContentSourcePolicy CR in dict format
+        file_path: file path to write the mirrors to
     """
     icsp_obj = parse_image_content_source_policy(icsp_json_dict)
     logger.info("ImageContentSourcePolicy object parsed")

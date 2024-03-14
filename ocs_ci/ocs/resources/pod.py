@@ -3231,13 +3231,15 @@ def wait_for_pods_to_be_in_statuses_concurrently(
     Verify pods are running in the namespace using app selectors. This method is using concurrent futures to
     speed up execution and will be blocking until all pods are running or timeout is reached
 
-    :param app_selectors_to_resource_count_list:
-    :param namespace: namespace of the pods expected to run
-    :param timeout: time to wait for the pods to be running in seconds
-    :param status: status of the pods to wait for
-    :param cluster_kubeconfig: The kubeconfig file to use for the oc command
+    Args:
+        app_selectors_to_resource_count_list:
+        namespace: namespace of the pods expected to run
+        timeout: time to wait for the pods to be running in seconds
+        status: status of the pods to wait for
+        cluster_kubeconfig: The kubeconfig file to use for the oc command
 
-    :return: bool True if all pods are running, False otherwise
+    Returns:
+        bool: True if all pods are running, False otherwise
     """
     pod = OCP(
         kind=constants.POD, namespace=namespace, cluster_kubeconfig=cluster_kubeconfig

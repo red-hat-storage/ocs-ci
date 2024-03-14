@@ -436,6 +436,8 @@ class PageNavigator(BaseUI):
         """
         Navigate to Storage Clients Page
 
+        Returns:
+            StorageClients: Storage Clients page object
         """
         from ocs_ci.ocs.ui.page_objects.storage_clients import StorageClients
 

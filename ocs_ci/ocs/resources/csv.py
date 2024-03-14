@@ -73,6 +73,9 @@ def check_all_csvs_are_succeeded(namespace, timeout=600, cluster_kubeconfig=""):
 
     Args:
         namespace (str): namespace of CSV
+        timeout (int): Timeout in seconds to wait for CSV to reach succeeded phase
+            ! currently not used !
+        cluster_kubeconfig (str): Kubeconfig of the cluster
 
     Returns:
         bool: True if all CSVs are in succeeded phase

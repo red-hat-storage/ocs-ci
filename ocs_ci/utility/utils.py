@@ -449,8 +449,6 @@ def mask_secrets(plaintext, secrets):
                 plaintext = [string.replace(secret, "*" * 5) for string in plaintext]
             else:
                 plaintext = plaintext.replace(secret, "*" * 5)
-    if secrets == ["*"]:
-        plaintext = "*" * 10
     return plaintext
 
 

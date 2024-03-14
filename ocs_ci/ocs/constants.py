@@ -297,6 +297,7 @@ PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
 )
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
+STORAGE_CLIENT_NAME = "storage-client"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
