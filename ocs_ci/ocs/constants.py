@@ -1948,15 +1948,6 @@ BACKINGSTORE_TYPE_GOOGLE = "google-cloud-storage"
 BACKINGSTORE_TYPE_PV_POOL = "pv-pool"
 BACKINGSTORE_TYPE_IBMCOS = "ibm-cos"
 
-BS_TYPE_TO_PLATFORM_NAME_MAPPING = {
-    BACKINGSTORE_TYPE_AWS: "aws",
-    BACKINGSTORE_TYPE_AZURE: "azure",
-    BACKINGSTORE_TYPE_GOOGLE: "gcp",
-    BACKINGSTORE_TYPE_PV_POOL: "pv",
-    BACKINGSTORE_TYPE_S3_COMP: "rgw",
-    BACKINGSTORE_TYPE_IBMCOS: "ibmcos",
-}
-
 
 # Squads assignment
 # Tests are assigned to Squads based on patterns matching test path.

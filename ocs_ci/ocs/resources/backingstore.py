@@ -20,6 +20,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     ObjectsStillBeingDeletedException,
     CommandFailed,
+    UnavailableResourceException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
@@ -409,3 +410,75 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     request.addfinalizer(backingstore_cleanup)
 
     return _create_backingstore
+
+
+def clone_backingstore(
+    protype_backingstore_name,
+    backingstore_factory,
+    method="oc",
+    namespace=None,
+):
+    """
+    Create a backingstore of the same kind and specs as an existing backingstore.
+
+    Args:
+        protype_backingstore_name (str): Name of the existing backingstore to clone
+        backingstore_factory (function): an backingstore factory instance
+        mcg_obj (MCG): MCG object containing data and utils related to MCG
+        method(str): Method to use for creating the backingstore (oc or cli)
+        namespace (str): Namespace of the backingstore to clone
+
+    Raises:
+        UnavailableResourceException: If the backingstore to clone does not exist
+
+    Returns:
+        str: Name of the new backingstore
+
+    """
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+    # Validate the prototype backingstore exists
+    protoype_backingstore = OCP(
+        kind="backingstore",
+        namespace=namespace,
+        resource_name=protype_backingstore_name,
+    )
+    if not protoype_backingstore.data:
+        raise UnavailableResourceException(
+            f"Backingstore {protype_backingstore_name} does not exist"
+        )
+
+    # Determine from the prototype the kind and specs of the new backingstore
+    prototype_bs_platform_name = protoype_backingstore.data["spec"]["type"]
+    if prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_AWS:
+        target_region = protoype_backingstore.data["spec"]["awsS3"]["region"]
+        clone_bs_dict = {"aws": [(1, target_region)]}
+
+    elif prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_AZURE:
+        clone_bs_dict = {"azure": [(1, None)]}
+
+    elif prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_GOOGLE:
+        clone_bs_dict = {"gcp": [(1, None)]}
+
+    elif prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_IBMCOS:
+        clone_bs_dict = {"ibmcos": [(1, None)]}
+
+    elif prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_S3_COMP:
+        clone_bs_dict = {"rgw": [(1, None)]}
+
+    if prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_PV_POOL:
+        pvpool_storageclass = (
+            constants.THIN_CSI_STORAGECLASS
+            if config.ENV_DATA["mcg_only_deployment"]
+            else constants.DEFAULT_STORAGECLASS_RBD
+        )
+        prototype_pvpool_data = protoype_backingstore.data["spec"]["pvPool"]
+        num_volumes = prototype_pvpool_data["numVolumes"]
+        size_str = prototype_pvpool_data["resources"]["requests"]["storage"]
+        prototype_pv_size = int(size_str[:-2])  # Remove the 'Gi' suffix
+        clone_pv_size = max(constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB, prototype_pv_size)
+        clone_bs_dict = {"pv": [(num_volumes, clone_pv_size, pvpool_storageclass)]}
+
+    clone_backingstore_name = backingstore_factory(method, clone_bs_dict)[0].name
+    return clone_backingstore_name
