@@ -522,16 +522,17 @@ class TestClone(ManageTest):
         teardown_factory(test_rox_pvc_clone_obj)
 
         # deleting the parent rox pvc
-        restore_snapshot_obj.delete(wait=False)
+        snapshot_restore_pod_obj.delete(wait=True)
+        restore_snapshot_obj.delete(wait=True)
         restore_snapshot_obj.ocp.wait_for_delete(
             resource_name=restore_snapshot_obj.name, timeout=900
         ), f"Snapshot {restore_snapshot_obj.name} is not deleted"
 
-        # # deleting parent rox pvc snapshot
-        # parent_pvc_snapshot_obj.delete()
-        # parent_pvc_snapshot_obj.ocp.wait_for_delete(
-        #     resource_name=parent_pvc_snapshot_obj.name, timeout=300
-        # ), f"PVC {parent_pvc_snapshot_obj.name} is not deleted"
+        # deleting parent rox pvc snapshot
+        parent_pvc_snapshot_obj.delete()
+        parent_pvc_snapshot_obj.ocp.wait_for_delete(
+            resource_name=parent_pvc_snapshot_obj.name, timeout=300
+        ), f"PVC {parent_pvc_snapshot_obj.name} is not deleted"
 
         # Verify file's presence on the new pod post deletion of parent pvc and snapshot
         logger.info(
