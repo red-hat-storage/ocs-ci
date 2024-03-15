@@ -2102,6 +2102,8 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
             constants.NOOBAA_OPERATOR_POD_LABEL,
             constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
         ]
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            nb_pod_labels.remove(constants.NOOBAA_DB_LABEL_47_AND_ABOVE)
         nb_pods_running = list()
         for pod_label in nb_pod_labels:
             pods = get_pods_having_label(pod_label, statuses=[constants.STATUS_RUNNING])
