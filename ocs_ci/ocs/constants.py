@@ -1056,6 +1056,99 @@ OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
 )
 
+# Performance profile related constants
+PERFORMANCE_PROFILE_LEAN = "lean"
+PERFORMANCE_PROFILE_BALANCED = "balanced"
+PERFORMANCE_PROFILE_PERFORMANCE = "performance"
+
+LEAN_PROFILE_REQUEST_CPU_VALUES = {
+    "mgr": 0.5,
+    "mon": 0.5,
+    "osd": 1.5,
+    "mds": 1,
+    "rgw": 1,
+}
+
+LEAN_PROFILE_REQUEST_MEMORY_VALUES = {
+    "mgr": "1Gi",
+    "mon": "1Gi",
+    "osd": "3Gi",
+    "mds": "2Gi",
+    "rgw": "1Gi",
+}
+
+BALANCED_PROFILE_REQUEST_CPU_VALUES = {
+    "mgr": "1",
+    "mon": "1",
+    "osd": "2",
+    "mds": "2",
+    "rgw": "2",
+}
+
+BALANCED_PROFILE_REQUEST_MEMORY_VALUES = {
+    "mgr": "1536Mi",
+    "mon": "2Gi",
+    "osd": "5Gi",
+    "mds": "6Gi",
+    "rgw": "2Gi",
+}
+
+PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
+    "mgr": 1,
+    "mon": 1.5,
+    "osd": 4,
+    "mds": 3,
+    "rgw": 2,
+}
+PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES = {
+    "mgr": "2Gi",
+    "mon": "2Gi",
+    "osd": "8Gi",
+    "mds": "8Gi",
+    "rgw": "4Gi",
+}
+
+LEAN_PROFILE_CPU_LIMIT_VALUES = {"mgr": 0.5, "mon": 0.5, "osd": 1.5, "mds": 1, "rgw": 1}
+
+LEAN_PROFILE_MEMORY_LIMIT_VALUES = {
+    "mgr": "1Gi",
+    "mon": "1Gi",
+    "osd": "3Gi",
+    "mds": "2Gi",
+    "rgw": "1Gi",
+}
+
+BALANCED_PROFILE_CPU_LIMIT_VALUES = {
+    "mgr": "2",
+    "mon": "1",
+    "osd": "2",
+    "mds": "2",
+    "rgw": "2",
+}
+
+BALANCED_PROFILE_MEMORY_LIMIT_VALUES = {
+    "mgr": "3Gi",
+    "mon": "2Gi",
+    "osd": "5Gi",
+    "mds": "6Gi",
+    "rgw": "2Gi",
+}
+
+PERFORMANCE_PROFILE_CPU_LIMIT_VALUES = {
+    "mgr": 1,
+    "mon": 1.5,
+    "osd": 4,
+    "mds": 3,
+    "rgw": 2,
+}
+PERFORMANCE_PROFILE_MEMORY_LIMIT_VALUES = {
+    "mgr": "2Gi",
+    "mon": "2Gi",
+    "osd": "8Gi",
+    "mds": "8Gi",
+    "rgw": "4Gi",
+}
+
 # Podsecurity admission policies
 PSA_PRIVILEGED = "privileged"
 PSA_BASELINE = "baseline"
