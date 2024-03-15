@@ -184,7 +184,7 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         ), "Failed to Enable dnsmasq service"
 
         # Create pxelinux.cfg directory
-        cmd = f"mkdir -m 755 {self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg"
+        cmd = f"mkdir -m 755 -p {self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg"
         assert (
             self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to create required folder"
@@ -854,7 +854,7 @@ class BAREMETALAI(BAREMETALBASE):
             self.configure_dnsmasq_on_helper_vm()
 
             # prepare ipxe directory in web document root
-            cmd = f"mkdir -m 755 {self.bm_config['bm_httpd_document_root']}/ipxe"
+            cmd = f"mkdir -m 755 -p {self.bm_config['bm_httpd_document_root']}/ipxe"
             logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
 
             # cleanup leftover files on httpd server from previous deployment
