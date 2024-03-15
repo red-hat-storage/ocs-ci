@@ -21,6 +21,7 @@ from ocs_ci.utility.aws import (
     create_and_attach_volume_for_all_workers,
     delete_cluster_buckets,
     destroy_volumes,
+    delete_sts_iam_roles,
     get_rhel_worker_instances,
     terminate_rhel_workers,
 )
@@ -269,6 +270,8 @@ class AWSIPI(AWSBase):
         """
         destroy_volumes(self.cluster_name)
         delete_cluster_buckets(self.cluster_name)
+        if config.DEPLOYMENT.get("sts_enabled"):
+            delete_sts_iam_roles()
         super(AWSIPI, self).destroy_cluster(log_level)
 
 

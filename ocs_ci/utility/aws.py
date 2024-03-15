@@ -2033,6 +2033,71 @@ class AWS(object):
             AssumeRolePolicyDocument=document,
         )
 
+    def get_iam_roles(self, base_name):
+        """
+        Retrieve a list of IAM roles that start with the base_name.
+
+        Args:
+            base_name (str): Base of the role name
+
+        Returns:
+            list: List of IAM roles that match the base_name
+
+        """
+        logger.info("Retrieving IAM roles that begin with %s", base_name)
+        iam_roles = []
+        paginator = self.iam_client.get_paginator("list_roles")
+        for resp in paginator.paginate():
+            role_names = [
+                role for role in resp["Roles"] if base_name in role.get("RoleName")
+            ]
+            iam_roles.extend(role_names)
+        logger.info(
+            "Found the following roles: %s",
+            [role.get("RoleName") for role in iam_roles],
+        )
+        return iam_roles
+
+    def delete_iam_role(self, role_name):
+        """
+        Delete the specified IAM role.
+
+        Args:
+            role_name (str): Name of the role to delete
+
+        """
+        logger.info("Deleting IAM role: %s", role_name)
+        self.iam_client.delete_role(RoleName=role_name)
+
+    def get_instance_profiles_for_role(self, role_name):
+        """
+        Get instance profiles for the specified role.
+
+        Args:
+            role_name (str): Name of the role to find instance profiles for
+
+        """
+        resp = self.iam_client.list_instance_profiles_for_role(RoleName=role_name)
+        return resp["InstanceProfiles"]
+
+    def remove_role_from_instance_profile(self, role_name, instance_profile_name):
+        """
+        Remove role from instance profile.
+
+        Args:
+            role_name (str): Name of the role to remove from the instance profile
+            instance_profile_name (str): Name of the instance profile to remove the role from
+
+        """
+        logger.info(
+            "Removing role %s from instance profile %s",
+            role_name,
+            instance_profile_name,
+        )
+        self.iam_client.remove_role_from_instance_profile(
+            InstanceProfileName=instance_profile_name, RoleName=role_name
+        )
+
     def attach_role_policy(self, role_name, policy_arn):
         """
         Attach role-policy.
@@ -2044,6 +2109,68 @@ class AWS(object):
         """
         logger.info("Attaching role-policy %s to role %s", policy_arn, role_name)
         self.iam_client.attach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+
+    def get_role_policies(self, role_name):
+        """
+        Get policies embedded in the role.
+
+        Args:
+            role_name (str): Name of the role
+
+        Return:
+            list: Role policies
+
+        """
+        logger.info("Getting policies for the role: %s", role_name)
+        paginator = self.iam_client.get_paginator("list_role_policies")
+        role_policies = []
+        for resp in paginator.paginate(RoleName=role_name):
+            logger.info("Found policies: %s", resp.get("PolicyNames"))
+            role_policies.extend(resp.get("PolicyNames"))
+        return role_policies
+
+    def get_attached_role_policies(self, role_name):
+        """
+        Get policies attached to a role.
+
+        Args:
+            role_name (str): Name of the role to fetch attached policies
+
+        Return:
+            list: Attached role policies
+
+        """
+        logger.info("Getting policies attached to role: %s", role_name)
+        paginator = self.iam_client.get_paginator("list_attached_role_policies")
+        role_policies = []
+        for resp in paginator.paginate(RoleName=role_name):
+            logger.info("Found attached policies: %s", resp.get("AttachedPolicies"))
+            role_policies.extend(resp.get("AttachedPolicies"))
+        return role_policies
+
+    def detach_role_policy(self, role_name, policy_arn):
+        """
+        Detach role policy from IAM role.
+
+        Args:
+            role_name (str): Name of the role to detach the policy from
+            policy_arn (str): ARN for the policy to detach from the role
+
+        """
+        logger.info("Detatching policy %s from role %s", policy_arn, role_name)
+        self.iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+
+    def delete_role_policy(self, role_name, policy_name):
+        """
+        Delete role policy.
+
+        Args:
+            role_name (str): Name of the role
+            policy_name (str): Name of the policy to delete
+
+        """
+        logger.info("Deleting role %s policy: %s", role_name, policy_name)
+        self.iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
 
     def get_caller_identity(self):
         """
@@ -2434,3 +2561,29 @@ def create_and_attach_sts_role():
     role_data = aws.create_iam_role(role_name, description, json.dumps(trust_data))
     aws.attach_role_policy(role_name, policy_arn)
     return role_data
+
+
+def delete_sts_iam_roles():
+    """
+    Delete IAM roles for the cluster.
+    """
+    logger.info("Deleting STS IAM Roles")
+    cluster_path = config.ENV_DATA["cluster_path"]
+    infra_id = get_infra_id(cluster_path)
+    aws = AWS()
+    roles = aws.get_iam_roles(infra_id)
+
+    for role in roles:
+        role_name = role["RoleName"]
+        attached_policies = aws.get_attached_role_policies(role_name)
+        for policy in attached_policies:
+            aws.detach_role_policy(role_name, policy["PolicyArn"])
+        policies = aws.get_role_policies(role_name)
+        for policy in policies:
+            aws.delete_role_policy(role_name, policy)
+        instance_profiles = aws.get_instance_profiles_for_role(role_name)
+        for instance_profile in instance_profiles:
+            aws.remove_role_from_instance_profile(
+                role_name, instance_profile["InstanceProfileName"]
+            )
+        aws.delete_iam_role(role_name)
