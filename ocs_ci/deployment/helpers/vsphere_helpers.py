@@ -45,6 +45,23 @@ class VSPHEREHELPERS(object):
         )
         self.folder_structure = config.ENV_DATA.get("folder_structure")
         self.ocp_version = get_ocp_version(seperator="_")
+        self.SCALEUP_VSPHERE_DIR = os.path.join(
+            constants.EXTERNAL_DIR,
+            f"v4-scaleup/ocp4-rhel-scaleup/aos-{self.ocp_version}/vsphere",
+        )
+        self.SCALEUP_VSPHERE_MAIN = os.path.join(self.SCALEUP_VSPHERE_DIR, "main.tf")
+        self.SCALEUP_VSPHERE_VARIABLES = os.path.join(
+            self.SCALEUP_VSPHERE_DIR, "variables.tf"
+        )
+        self.SCALEUP_VSPHERE_ROUTE53 = os.path.join(
+            self.SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf"
+        )
+        self.SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(
+            self.SCALEUP_VSPHERE_DIR, "route53/variables.tf"
+        )
+        self.SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
+            self.SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
+        )
         self._templating = Templating()
 
     def generate_terraform_vars_for_scaleup(self, rhcos_ips):
@@ -161,7 +178,7 @@ class VSPHEREHELPERS(object):
             cred_file_var_to_modify = "shared_credentials_file"
             target_cred_file_var = "shared_credentials_files"
             replace_content_in_file(
-                constants.SCALEUP_VSPHERE_ROUTE53,
+                self.SCALEUP_VSPHERE_ROUTE53,
                 cred_file_var_to_modify,
                 target_cred_file_var,
             )
@@ -172,62 +189,58 @@ class VSPHEREHELPERS(object):
             )
 
             replace_content_in_file(
-                constants.SCALEUP_VSPHERE_ROUTE53,
+                self.SCALEUP_VSPHERE_ROUTE53,
                 str_to_modify,
                 target_str,
             )
 
             replace_content_in_file(
-                constants.SCALEUP_VSPHERE_ROUTE53,
+                self.SCALEUP_VSPHERE_ROUTE53,
                 str_to_modify,
                 f'["{os.path.expanduser(config.DEPLOYMENT["aws_cred_path"])}"]',
             )
 
             replace_content_in_file(
-                constants.SCALEUP_VSPHERE_ROUTE53,
+                self.SCALEUP_VSPHERE_ROUTE53,
                 "us-east-1",
                 f"{config.ENV_DATA.get('region')}",
             )
 
         else:
-            # remove access and secret key from constants.SCALEUP_VSPHERE_MAIN
+            # remove access and secret key from SCALEUP_VSPHERE_MAIN
             access_key = 'access_key       = "${var.aws_access_key}"'
             secret_key = 'secret_key       = "${var.aws_secret_key}"'
-            replace_content_in_file(
-                constants.SCALEUP_VSPHERE_MAIN, f"{access_key}", " "
-            )
-            replace_content_in_file(
-                constants.SCALEUP_VSPHERE_MAIN, f"{secret_key}", " "
-            )
+            replace_content_in_file(self.SCALEUP_VSPHERE_MAIN, f"{access_key}", " ")
+            replace_content_in_file(self.SCALEUP_VSPHERE_MAIN, f"{secret_key}", " ")
 
-            # remove access and secret key from constants.SCALEUP_VSPHERE_ROUTE53
+            # remove access and secret key from SCALEUP_VSPHERE_ROUTE53
             route53_access_key = 'access_key = "${var.access_key}"'
             route53_secret_key = 'secret_key = "${var.secret_key}"'
             replace_content_in_file(
-                constants.SCALEUP_VSPHERE_ROUTE53, f"{route53_access_key}", " "
+                self.SCALEUP_VSPHERE_ROUTE53, f"{route53_access_key}", " "
             )
             replace_content_in_file(
-                constants.SCALEUP_VSPHERE_ROUTE53, f"{route53_secret_key}", " "
+                self.SCALEUP_VSPHERE_ROUTE53, f"{route53_secret_key}", " "
             )
 
             replace_content_in_file(
-                constants.SCALEUP_VSPHERE_ROUTE53,
+                self.SCALEUP_VSPHERE_ROUTE53,
                 "us-east-1",
                 f"{config.ENV_DATA.get('region')}",
             )
 
             # remove access and secret variables from scale-up repo
             remove_keys_from_tf_variable_file(
-                constants.SCALEUP_VSPHERE_VARIABLES,
+                self.SCALEUP_VSPHERE_VARIABLES,
                 ["aws_access_key", "aws_secret_key"],
             )
             remove_keys_from_tf_variable_file(
-                constants.SCALEUP_VSPHERE_ROUTE53_VARIABLES,
+                self.SCALEUP_VSPHERE_ROUTE53_VARIABLES,
                 ["access_key", "secret_key"],
             )
 
             # change root disk size
-            change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
+            change_vm_root_disk_size(self.SCALEUP_VSPHERE_MACHINE_CONF)
 
     def generate_cluster_info(self):
         """
@@ -336,3 +349,20 @@ class VSPHEREHELPERS(object):
             f.write(scale_up_config_str)
 
         logger.debug(f"scaleup config yaml file : {scale_config_var_yaml}")
+
+    def get_host_file_for_time_sync(self):
+        """
+        Fetches the host file for time sync
+
+        Returns:
+            str: host file
+
+        """
+        sync_time_with_host_file = self.SCALEUP_VSPHERE_MACHINE_CONF
+        if config.ENV_DATA["folder_structure"]:
+            sync_time_with_host_file = os.path.join(
+                constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
+                f"aos-{self.ocp_version}",
+                constants.CLUSTER_LAUNCHER_MACHINE_CONF,
+            )
+        return sync_time_with_host_file

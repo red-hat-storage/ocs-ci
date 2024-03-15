@@ -1137,8 +1137,6 @@ TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
-# importing here due to circular dependency
-from ocs_ci.utility.utils import get_ocp_version
 
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
@@ -1160,21 +1158,6 @@ VM_VAR = os.path.join(VSPHERE_DIR, "vm/variables.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
-SCALEUP_VSPHERE_DIR = os.path.join(
-    EXTERNAL_DIR,
-    f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
-)
-SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
-SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
-SCALEUP_VSPHERE_ROUTE53 = os.path.join(
-    SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf"
-)
-SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(
-    SCALEUP_VSPHERE_DIR, "route53/variables.tf"
-)
-SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
-    SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
-)
 RUST_URL = "https://sh.rustup.rs"
 COREOS_INSTALLER_REPO = "https://github.com/coreos/coreos-installer.git"
 
