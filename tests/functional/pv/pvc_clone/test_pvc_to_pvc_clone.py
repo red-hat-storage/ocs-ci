@@ -396,7 +396,9 @@ class TestClone(ManageTest):
 
         # Taking snapshot of pvc
         logger.info("Taking Snapshot of the PVC")
-        parent_pvc_snapshot_obj = snapshot_factory(self.pvc_obj, wait=True)
+        parent_pvc_snapshot_obj = snapshot_factory(
+            self.pvc_obj, wait=True, snapshot_name="snapshot-of-first-rwx-pvc-00"
+        )
         logger.info("Verified snapshots moved from false state to true state")
         teardown_factory(parent_pvc_snapshot_obj)
 
@@ -410,6 +412,7 @@ class TestClone(ManageTest):
             volume_mode=parent_pvc_snapshot_obj.parent_volume_mode,
             access_mode=constants.ACCESS_MODE_ROX,
             status=constants.STATUS_BOUND,
+            restore_pvc_name="first-rwx-snapshot-restore-to-rox-mode-00",
         )
         teardown_factory(restore_snapshot_obj)
 
@@ -431,6 +434,7 @@ class TestClone(ManageTest):
             namespace=restore_snapshot_obj.namespace,
             pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
             pvc_read_only_mode=True,
+            pod_name="rox-pvc-pod-00",
         )
         # Confirm that the pod is running
         helpers.wait_for_resource_state(
@@ -501,7 +505,9 @@ class TestClone(ManageTest):
         # Taking snapshot of rox pvc
         logger.info("Taking Snapshot of the cloned RWX PVC")
         # we shouldnt be able to create the snapshot
-        test_pvc_snapshot_obj = snapshot_factory(restore_snapshot_obj, wait=False)
+        test_pvc_snapshot_obj = snapshot_factory(
+            restore_snapshot_obj, wait=False, snapshot_name="snapshot-bound-to-fail-00"
+        )
         test_pvc_snapshot_obj_status = test_pvc_snapshot_obj.ocp.get_resource_status(
             test_pvc_snapshot_obj.name, "READYTOUSE"
         )
@@ -521,18 +527,31 @@ class TestClone(ManageTest):
         logger.info(f"{test_rox_pvc_clone_obj}")
         teardown_factory(test_rox_pvc_clone_obj)
 
-        # deleting the parent rox pvc
-        snapshot_restore_pod_obj.delete(wait=True)
-        restore_snapshot_obj.delete(wait=True)
-        restore_snapshot_obj.ocp.wait_for_delete(
-            resource_name=restore_snapshot_obj.name, timeout=900
-        ), f"Snapshot {restore_snapshot_obj.name} is not deleted"
-
-        # deleting parent rox pvc snapshot
+        # deleting parent rox pvc snapshot, failed snapshots and failed pvc
         parent_pvc_snapshot_obj.delete()
         parent_pvc_snapshot_obj.ocp.wait_for_delete(
             resource_name=parent_pvc_snapshot_obj.name, timeout=300
         ), f"PVC {parent_pvc_snapshot_obj.name} is not deleted"
+        test_pvc_snapshot_obj.delete()
+        test_pvc_snapshot_obj.ocp.wait_for_delete(
+            resource_name=test_pvc_snapshot_obj.name, timeout=300
+        ), f"PVC {test_pvc_snapshot_obj.name} is not deleted"
+        test_rox_pvc_clone_obj.delete()
+        test_rox_pvc_clone_obj.ocp.wait_for_delete(
+            resource_name=test_rox_pvc_clone_obj.name, timeout=300
+        ), f"PVC {test_rox_pvc_clone_obj.name} is not deleted"
+
+        # deleting the parent rox pvc pod
+        snapshot_restore_pod_obj.delete(wait=True)
+        snapshot_restore_pod_obj.ocp.wait_for_delete(
+            resource_name=snapshot_restore_pod_obj.name, timeout=900
+        ), f"Pod {snapshot_restore_pod_obj.name} is not deleted"
+
+        # deleting the parent rox pvc
+        restore_snapshot_obj.delete(wait=True)
+        restore_snapshot_obj.ocp.wait_for_delete(
+            resource_name=restore_snapshot_obj.name, timeout=900
+        ), f"Snapshot {restore_snapshot_obj.name} is not deleted"
 
         # Verify file's presence on the new pod post deletion of parent pvc and snapshot
         logger.info(
