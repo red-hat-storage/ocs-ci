@@ -527,7 +527,7 @@ class HostedODF:
             return True
 
         @retry((CommandFailed, TimeoutError), tries=3, delay=30, backoff=1)
-        def apply_storage_client_cr():
+        def _apply_storage_client_cr():
             """
             Internal function to apply storage client CR
             Returns:
@@ -556,9 +556,9 @@ class HostedODF:
 
             self.exec_oc_cmd(f"apply -f {storage_client_file.name}", timeout=120)
 
-        apply_storage_client_cr()
+        _apply_storage_client_cr()
 
-        if self.storage_client_exists():
+        if not self.storage_client_exists():
             logger.info("Storage client create Failed")
             return False
 
