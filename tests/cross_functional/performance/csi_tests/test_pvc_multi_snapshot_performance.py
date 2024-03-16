@@ -182,7 +182,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             except CommandFailed as cmdFailedEx:
                 log.info(f"Exception caught {cmdFailedEx}")
                 log.info("Continue to teardown ")
-                if '"pas-testing-rbd" not found' in cmdFailedEx:
+                if "pas-testing-rbd" in cmdFailedEx and "not found" in cmdFailedEx:
                     pass
             # Verify deletion by checking the backend CEPH pools using the toolbox
             results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
