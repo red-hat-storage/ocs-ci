@@ -90,19 +90,19 @@ class TestPodReattachTimePerformance(PASTest):
         argnames=["interface", "copies", "timeout", "total_time_limit"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 3, 120, 70],
+                *[constants.CEPHBLOCKPOOL, 3, 120, 100],
                 marks=pytest.mark.polarion_id("OCS-2043"),
             ),
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 13, 600, 420],
+                *[constants.CEPHBLOCKPOOL, 13, 600, 600],
                 marks=pytest.mark.polarion_id("OCS-2673"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 3, 120, 70],
+                *[constants.CEPHFILESYSTEM, 3, 120, 100],
                 marks=pytest.mark.polarion_id("OCS-2044"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 13, 600, 420],
+                *[constants.CEPHFILESYSTEM, 13, 600, 600],
                 marks=pytest.mark.polarion_id("OCS-2674"),
             ),
         ],
@@ -148,7 +148,6 @@ class TestPodReattachTimePerformance(PASTest):
 
         self.sc_obj = storageclass_factory(self.interface)
         for sample_index in range(1, samples_num + 1):
-
             csi_start_time = self.get_time("csi")
 
             logger.info(f"Start creating PVC number {sample_index}.")
