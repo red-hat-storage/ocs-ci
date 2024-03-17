@@ -2,37 +2,32 @@
 This module provides installation of ODF in provider mode and storage-client creation
 on the hosting cluster.
 """
-import pytest
 import logging
 import tempfile
 import time
 
+import pytest
 
+from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
-from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.utils import (
-    setup_ceph_toolbox,
-    enable_console_plugin,
-    run_cmd,
-)
-from ocs_ci.utility.utils import (
-    wait_for_machineconfigpool_status,
-    get_ocp_version,
-)
-from ocs_ci.utility import templating, version
-from ocs_ci.deployment.deployment import Deployment
-from ocs_ci.deployment.baremetal import clean_disk
+from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_cluster,
     check_storage_client_status,
 )
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
-from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.ocs.utils import (
+    setup_ceph_toolbox,
+    enable_console_plugin,
+)
+from ocs_ci.utility import templating, version
+from ocs_ci.utility.utils import (
+    get_ocp_version,
+)
 
 
 @pytest.fixture(scope="class")
@@ -94,48 +89,48 @@ class TestStorageClientDeployment(object):
         )
 
         # set control nodes as scheduleable
-        path = "/spec/mastersSchedulable"
-        params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+        # path = "/spec/mastersSchedulable"
+        # params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
         ocp_obj = ocp.OCP(
             kind=constants.SCHEDULERS_CONFIG,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
-        ocp_obj.patch(params=params, format_type="json"), (
-            "Failed to run patch command to update control nodes as scheduleable"
-        )
-
-        # Allow ODF to be deployed on all nodes
-        nodes = get_all_nodes()
-        node_objs = get_node_objs(nodes)
-
-        log.info("labeling storage nodes")
-        label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
-
-        # Allow hosting cluster domain to be usable by hosted clusters
-        path = "/spec/routeAdmission"
-        value = '{wildcardPolicy: "WildcardsAllowed"}'
-        params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
-        patch_cmd = (
-            f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
-            + f"default --type json -p '{params}'"
-        )
-        self.ocp_obj.exec_oc_cmd(command=patch_cmd)
-
-        # Enable nested virtualization on nodes
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.MACHINE_CONFIG_YAML}")
-        wait_for_machineconfigpool_status(node_type="all")
-        log.info("All the nodes are upgraded")
-
-        # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-        for node in nodes:
-            cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
-            out = run_cmd(cmd)
-            log.info(out)
-            log.info(f"Mount data cleared from node, {node}")
-        for node_obj in node_objs:
-            clean_disk(node_obj)
-        log.info("All nodes are wiped")
-        setup_local_storage(storageclass="localblock")
+        # ocp_obj.patch(params=params, format_type="json"), (
+        #     "Failed to run patch command to update control nodes as scheduleable"
+        # )
+        #
+        # # Allow ODF to be deployed on all nodes
+        # nodes = get_all_nodes()
+        # node_objs = get_node_objs(nodes)
+        #
+        # log.info("labeling storage nodes")
+        # label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+        #
+        # # Allow hosting cluster domain to be usable by hosted clusters
+        # path = "/spec/routeAdmission"
+        # value = '{wildcardPolicy: "WildcardsAllowed"}'
+        # params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
+        # patch_cmd = (
+        #     f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
+        #     + f"default --type json -p '{params}'"
+        # )
+        # self.ocp_obj.exec_oc_cmd(command=patch_cmd)
+        #
+        # # Enable nested virtualization on nodes
+        # self.ocp_obj.exec_oc_cmd(f"apply -f {constants.MACHINE_CONFIG_YAML}")
+        # wait_for_machineconfigpool_status(node_type="all")
+        # log.info("All the nodes are upgraded")
+        #
+        # # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
+        # for node in nodes:
+        #     cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
+        #     out = run_cmd(cmd)
+        #     log.info(out)
+        #     log.info(f"Mount data cleared from node, {node}")
+        # for node_obj in node_objs:
+        #     clean_disk(node_obj)
+        # log.info("All nodes are wiped")
+        # setup_local_storage(storageclass="localblock")
         ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         # Create ODF subscription for provider
