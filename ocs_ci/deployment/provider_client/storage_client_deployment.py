@@ -66,9 +66,9 @@ class TestStorageClientDeployment(object):
         self.validation_ui_obj = ValidationUI()
         self.ingress_operator_namespace = "openshift-ingress-operator"
         self.ocp_obj_ns = ocp.OCP(kind=constants.NAMESPACES)
-        self.ocp_obj_ns.new_project(
-            project_name=constants.BM_DEBUG_NODE_NS, policy=constants.PSA_PRIVILEGED
-        )
+        # self.ocp_obj_ns.new_project(
+        #     project_name=constants.BM_DEBUG_NODE_NS, policy=constants.PSA_PRIVILEGED
+        # )
         self.ocp_obj = ocp.OCP()
         self.storage_cluster_obj = ocp.OCP(
             kind="Storagecluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
