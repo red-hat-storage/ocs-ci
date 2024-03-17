@@ -13,7 +13,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
+# from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_cluster,
     check_storage_client_status,
@@ -277,23 +278,23 @@ class TestStorageClientDeployment(object):
         default value, constants.STORAGE_CLIENT_SUBSCRIPTION_YAML
 
         """
-        if catalog_yaml:
-            self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_CATALOGSOURCE_YAML}")
-
-            catalog_source = CatalogSource(
-                resource_name=constants.OCS_CATALOG_SOURCE_NAME,
-                namespace=constants.MARKETPLACE_NAMESPACE,
-            )
-            # Wait for catalog source is ready
-            catalog_source.wait_for_state("READY")
-
-        # Create ODF subscription for storage-client
-        self.ocp_obj.exec_oc_cmd(f"apply -f {subscription_yaml}")
+        # if catalog_yaml:
+        #     self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_CATALOGSOURCE_YAML}")
+        #
+        #     catalog_source = CatalogSource(
+        #         resource_name=constants.OCS_CATALOG_SOURCE_NAME,
+        #         namespace=constants.MARKETPLACE_NAMESPACE,
+        #     )
+        #     # Wait for catalog source is ready
+        #     catalog_source.wait_for_state("READY")
+        #
+        # # Create ODF subscription for storage-client
+        # self.ocp_obj.exec_oc_cmd(f"apply -f {subscription_yaml}")
         ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
-        Deployment().wait_for_subscription(
-            ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
-        )
-        self.wait_for_csv(
+        # Deployment().wait_for_subscription(
+        #     ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+        # )
+        Deployment().wait_for_csv(
             ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
         )
         log.info(f"Sleeping for 30 seconds after {ocs_client_operator} created")
