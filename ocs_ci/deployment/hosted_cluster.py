@@ -186,7 +186,14 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
             cluster_names_desired = config.default_cluster_ctx.ENV_DATA["cluster_names"]
 
         if cluster_names_desired:
-            cluster_names_existing = get_hosted_cluster_names()
+            try:
+                cluster_names_existing = get_hosted_cluster_names()
+            except CommandFailed as e:
+                logger.warning(
+                    f"Error during getting hosted cluster names: {e}, most likely CNV is not installed yet."
+                )
+                cluster_names_existing = []
+
             cluster_names_desired_left = [
                 cluster_name
                 for cluster_name in cluster_names_desired
