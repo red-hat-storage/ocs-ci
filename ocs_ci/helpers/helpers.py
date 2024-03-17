@@ -4669,8 +4669,9 @@ def is_rbd_default_storage_class(custom_sc=None):
     default_rbd_sc = (
         constants.DEFAULT_STORAGECLASS_RBD if custom_sc is None else custom_sc
     )
-    kubeconfig = os.getenv("KUBECONFIG")
-    cmd = f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' --kubeconfig {kubeconfig}"
+    cmd = (
+        f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
+    )
     try:
         check_annotations = json.loads(run_cmd(cmd))
     except json.decoder.JSONDecodeError:
