@@ -103,7 +103,7 @@ class DeploymentFactory(object):
             from .ocp import OCPDeployment
 
             # OCPDeployment is a temporary plugin, to stop OCS deployment fail
-            self.cls_map[f"{constants.HCI_BAREMETAL}-ai"] = OCPDeployment
+            self.cls_map[f"{constants.HCI_BAREMETAL}_ai"] = OCPDeployment
 
     def get_deployment(self):
         """
