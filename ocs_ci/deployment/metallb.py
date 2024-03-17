@@ -16,7 +16,9 @@ from ocs_ci.ocs.constants import (
     METALLB_IPADDRESSPOOL_PATH,
     METALLB_L2_ADVERTISEMENT_PATH,
 )
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -83,6 +85,7 @@ class MetalLBInstaller:
             resource_name=self.catalog_source_name,
         )
 
+    @retry(CommandFailed, tries=3, delay=15)
     def create_catalog_source(self):
         """
         Create catalog source for MetalLB
@@ -147,6 +150,7 @@ class MetalLBInstaller:
             resource_name=self.operatorgroup_name,
         )
 
+    @retry(CommandFailed, tries=3, delay=15)
     def create_metallb_operator_group(self):
         """
         Create MetalLB operator group
@@ -193,6 +197,7 @@ class MetalLBInstaller:
             should_exist=True, resource_name=self.subscription_name
         )
 
+    @retry(CommandFailed, tries=3, delay=15)
     def create_metallb_subscription(self):
         """
         Create MetalLB subscription
@@ -246,6 +251,7 @@ class MetalLBInstaller:
             namespace=self.namespace_lb, pod_names=metallb_pods, timeout=300
         )
 
+    @retry(CommandFailed, tries=8, delay=3)
     def metallb_instance_created(self):
         """
         Check if MetalLB instance is created
@@ -423,6 +429,7 @@ class MetalLBInstaller:
             resource_name=self.l2Advertisement_name,
         )
 
+    @retry(CommandFailed, tries=3, delay=15)
     def create_l2advertisement(self):
         """
         Create L2 advertisement for IP address pool
