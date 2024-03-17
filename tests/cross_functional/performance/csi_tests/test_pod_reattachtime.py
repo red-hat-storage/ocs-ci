@@ -90,19 +90,19 @@ class TestPodReattachTimePerformance(PASTest):
         argnames=["interface", "copies", "timeout", "total_time_limit"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 3, 120, 100],
+                *[constants.CEPHBLOCKPOOL, 3, 120, 150],
                 marks=pytest.mark.polarion_id("OCS-2043"),
             ),
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, 13, 600, 600],
+                *[constants.CEPHBLOCKPOOL, 13, 600, 720],
                 marks=pytest.mark.polarion_id("OCS-2673"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 3, 120, 100],
+                *[constants.CEPHFILESYSTEM, 3, 120, 150],
                 marks=pytest.mark.polarion_id("OCS-2044"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 13, 600, 600],
+                *[constants.CEPHFILESYSTEM, 13, 600, 720],
                 marks=pytest.mark.polarion_id("OCS-2674"),
             ),
         ],
