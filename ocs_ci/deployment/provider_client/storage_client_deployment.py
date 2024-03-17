@@ -92,15 +92,15 @@ class TestStorageClientDeployment(object):
         self.pvc_obj = ocp.OCP(
             kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
+        self.ns_obj = ocp.OCP(
+            kind=constants.SCHEDULERS_CONFIG,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
 
         # set control nodes as scheduleable
         path = "/spec/mastersSchedulable"
         params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-        ocp_obj = ocp.OCP(
-            kind=constants.SCHEDULERS_CONFIG,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        )
-        ocp_obj.patch(params=params, format_type="json"), (
+        self.ns_obj.patch(params=params, format_type="json"), (
             "Failed to run patch command to update control nodes as scheduleable"
         )
 
@@ -136,7 +136,6 @@ class TestStorageClientDeployment(object):
             clean_disk(node_obj)
         log.info("All nodes are wiped")
         setup_local_storage(storageclass="localblock")
-        ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         # Create ODF subscription for provider
         self.ocp_obj.exec_oc_cmd(f"apply -f {constants.PROVIDER_SUBSCRIPTION_YAML}")
@@ -211,9 +210,6 @@ class TestStorageClientDeployment(object):
             storage_provider_endpoint=storage_provider_endpoint,
             onboarding_token=onboarding_token,
         )
-
-        # # Create storage classclaim
-        # self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}")
 
         # Check nooba db pod is up and running
         self.pod_obj.wait_for_resource(
@@ -424,8 +420,14 @@ class TestStorageClientDeployment(object):
         if storage_client_status == "Connected":
             self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}")
 
-    def test_deployment(self):
+    def teardown(self):
         """
-        test deployment code
+        Remove debug namespace
         """
-        self.provider_and_native_client_installation()
+        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+
+    # def test_deployment(self):
+    #     """
+    #     test deployment code
+    #     """
+    #     self.provider_and_native_client_installation()
