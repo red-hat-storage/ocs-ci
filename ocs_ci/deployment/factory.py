@@ -100,10 +100,10 @@ class DeploymentFactory(object):
             self.cls_map["acm_ocp_deployment"] = OCPDeployWithACM
 
         elif self.deployment_platform == constants.HCI_BAREMETAL:
-            from .ocp import OCPDeployment
+            from .vmware import VSPHEREAI
 
             # OCPDeployment is a temporary plugin, to stop OCS deployment fail
-            self.cls_map[f"{constants.HCI_BAREMETAL}_ai"] = OCPDeployment
+            self.cls_map[f"{constants.HCI_BAREMETAL}_ai"] = VSPHEREAI
 
     def get_deployment(self):
         """
