@@ -99,6 +99,12 @@ class DeploymentFactory(object):
 
             self.cls_map["acm_ocp_deployment"] = OCPDeployWithACM
 
+        elif self.deployment_platform == constants.HCI_BAREMETAL:
+            from .ocp import OCPDeployment
+
+            # OCPDeployment is a temporary plugin, to stop OCS deployment fail
+            self.cls_map[f"{constants.HCI_BAREMETAL}-ai"] = OCPDeployment
+
     def get_deployment(self):
         """
         Get the exact deployment class based on ENV_DATA
