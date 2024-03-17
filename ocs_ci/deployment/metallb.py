@@ -18,10 +18,11 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import exec_cmd, get_ocp_version
+from ocs_ci.utility.utils import exec_cmd, get_ocp_version, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,8 @@ class MetalLBInstaller:
         Returns:
             bool: True if subscription is created, and metallb pods are Ready, False otherwise
         """
+        timeout_wait_csvs_min = 8
+
         logger.info("Creating MetalLB subscription")
         subscription_data = templating.load_yaml(METALLB_SUBSCRIPTION_YAML)
         if self.namespace_lb != METALLB_DEFAULT_NAMESPACE:
@@ -218,6 +221,19 @@ class MetalLBInstaller:
         )
 
         exec_cmd(f"oc apply -f {metallb_subscription_file.name}", timeout=2400)
+
+        try:
+            sample = TimeoutSampler(
+                timeout=timeout_wait_csvs_min * 60,
+                sleep=15,
+                func=check_all_csvs_are_succeeded,
+                namespace=self.namespace_lb,
+            )
+            sample.wait_for_func_value(value=True)
+
+        except Exception as e:
+            logger.error(f"Error during MetalLb installation: {e}")
+            return False
 
         metallb_pods = get_pod_name_by_pattern(
             METALLB_CONTROLLER_MANAGER_PREFIX, self.namespace_lb
