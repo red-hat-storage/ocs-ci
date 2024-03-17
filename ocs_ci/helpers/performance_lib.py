@@ -576,12 +576,12 @@ def measure_csi_snapshot_creation_time(interface, snapshot_id, start_time):
                 et = line.split(" ")[1]
                 et = datetime.strptime(et, time_format)
     if st is None:
-        logger.error(f"Cannot find start time of snapshot {snapshot_id}")
-        raise Exception(f"Cannot find start time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find csi start time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find csi start time of snapshot {snapshot_id}")
 
     if et is None:
-        logger.error(f"Cannot find end time of snapshot {snapshot_id}")
-        raise Exception(f"Cannot find end time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find csi end time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find csi end time of snapshot {snapshot_id}")
 
     total_time = (et - st).total_seconds()
     if total_time < 0:
