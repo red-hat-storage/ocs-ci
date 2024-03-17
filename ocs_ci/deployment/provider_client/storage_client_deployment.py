@@ -14,7 +14,6 @@ from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
 
-# from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_cluster,
     check_storage_client_status,
@@ -25,7 +24,7 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
 )
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     get_ocp_version,
 )
@@ -92,10 +91,10 @@ class TestStorageClientDeployment(object):
         # set control nodes as scheduleable
         # path = "/spec/mastersSchedulable"
         # params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-        ocp_obj = ocp.OCP(
-            kind=constants.SCHEDULERS_CONFIG,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        )
+        # ocp_obj = ocp.OCP(
+        #     kind=constants.SCHEDULERS_CONFIG,
+        #     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        # )
         # ocp_obj.patch(params=params, format_type="json"), (
         #     "Failed to run patch command to update control nodes as scheduleable"
         # )
@@ -132,48 +131,48 @@ class TestStorageClientDeployment(object):
         #     clean_disk(node_obj)
         # log.info("All nodes are wiped")
         # setup_local_storage(storageclass="localblock")
-        ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+        # ocp_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
         # Create ODF subscription for provider
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.PROVIDER_SUBSCRIPTION_YAML}")
-
-        # Wait until odf is installed
-        odf_operator = defaults.ODF_OPERATOR_NAME
-        Deployment().wait_for_subscription(
-            odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        Deployment().wait_for_csv(odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE)
-        log.info(f"Sleeping for 30 seconds after {odf_operator} created")
-        time.sleep(30)
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        log.info(f"Installed odf version: {ocs_version}")
-
-        # Check for rook ceph pods
-        assert self.pod_obj.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-operator",
-            resource_count=1,
-            timeout=600,
-        )
-
-        # Enable odf-console:
-        enable_console_plugin()
-        self.validation_ui_obj.refresh_web_console()
-
-        # Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
-        disable_CEPHFS_RBD_CSI = (
-            '{"data":{"ROOK_CSI_ENABLE_CEPHFS":"false", "ROOK_CSI_ENABLE_RBD":"false"}}'
-        )
-        assert self.config_map_obj.patch(
-            resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-            params=disable_CEPHFS_RBD_CSI,
-        ), "configmap/rook-ceph-operator-config not patched"
-
-        # Create storage profiles
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_PROFILE_YAML}")
-
-        # Create storage cluster
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_STORAGE_CLUSTER_YAML}")
+        # self.ocp_obj.exec_oc_cmd(f"apply -f {constants.PROVIDER_SUBSCRIPTION_YAML}")
+        #
+        # # Wait until odf is installed
+        # odf_operator = defaults.ODF_OPERATOR_NAME
+        # Deployment().wait_for_subscription(
+        #     odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+        # )
+        # Deployment().wait_for_csv(odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE)
+        # log.info(f"Sleeping for 30 seconds after {odf_operator} created")
+        # time.sleep(30)
+        # ocs_version = version.get_semantic_ocs_version_from_config()
+        # log.info(f"Installed odf version: {ocs_version}")
+        #
+        # # Check for rook ceph pods
+        # assert self.pod_obj.wait_for_resource(
+        #     condition="Running",
+        #     selector="app=rook-ceph-operator",
+        #     resource_count=1,
+        #     timeout=600,
+        # )
+        #
+        # # Enable odf-console:
+        # enable_console_plugin()
+        # self.validation_ui_obj.refresh_web_console()
+        #
+        # # Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
+        # disable_CEPHFS_RBD_CSI = (
+        #     '{"data":{"ROOK_CSI_ENABLE_CEPHFS":"false", "ROOK_CSI_ENABLE_RBD":"false"}}'
+        # )
+        # assert self.config_map_obj.patch(
+        #     resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+        #     params=disable_CEPHFS_RBD_CSI,
+        # ), "configmap/rook-ceph-operator-config not patched"
+        #
+        # # Create storage profiles
+        # self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_PROFILE_YAML}")
+        #
+        # # Create storage cluster
+        # self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_STORAGE_CLUSTER_YAML}")
 
         # Creating toolbox pod
         setup_ceph_toolbox()
