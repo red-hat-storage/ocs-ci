@@ -2076,6 +2076,9 @@ class AWS(object):
         Args:
             role_name (str): Name of the role to find instance profiles for
 
+        Returns:
+            list: Instance Profiles for the role
+
         """
         resp = self.iam_client.list_instance_profiles_for_role(RoleName=role_name)
         return resp["InstanceProfiles"]
@@ -2174,7 +2177,11 @@ class AWS(object):
 
     def get_caller_identity(self):
         """
-        Get STS Caller Identity.
+        Get STS Caller Identity Account ID
+
+        Returns:
+            str: Account ID
+
         """
         logger.info("Retrieving STS Caller Identity")
         resp = self.sts_client.get_caller_identity()
