@@ -1,7 +1,11 @@
 import logging
 
 import pytest
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     E2ETest,
     skipif_ocs_version,
@@ -15,19 +19,28 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     magenta_squad,
     mcg,
+    bugzilla,
+    polarion_id,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     patch_replication_policy_to_bucket,
     write_random_test_objects_to_bucket,
+    upload_test_objects_to_source_and_wait_for_replication,
+    update_replication_policy,
 )
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.resources.pod import (
     delete_pods,
     wait_for_pods_to_be_running,
     get_rgw_pods,
+    get_noobaa_db_pod,
+    get_noobaa_core_pod,
+    get_noobaa_pods,
+    wait_for_noobaa_pods_running,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -228,3 +241,154 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Objects sync works even when the cluster is rebooted")
+
+
+@system_test
+@magenta_squad
+@skipif_vsphere_ipi
+class TestLogBasedReplicationWithDisruptions:
+    @retry(Exception, tries=10, delay=5)
+    def delete_objs_in_batch(self, objs_to_delete, mockup_logger, source_bucket):
+        """
+        This function deletes objects in a batch
+        """
+        for obj in objs_to_delete:
+            mockup_logger.delete_objs_and_log(source_bucket.name, [obj])
+            # adding momentary sleep just to slowdown the deletion
+            # process
+            time.sleep(5)
+        logger.info(f"Successfully deleted these objects: {objs_to_delete}")
+
+    @polarion_id("OCS-5457")
+    @bugzilla("2266805")
+    def test_log_based_replication_with_disruptions(
+        self,
+        mcg_obj_session,
+        aws_log_based_replication_setup,
+        noobaa_db_backup,
+        noobaa_db_recovery_from_backup,
+        setup_mcg_bg_features,
+        validate_mcg_bg_features,
+    ):
+        """
+        This is a system test flow to test log based bucket replication
+        deletion sync is not impacted due to some noobaa specific disruptions
+        like noobaa pod restarts, noobaa db backup & recovery etc
+
+        1. Setup log based bucket replication between the buckets
+        2. Upload some objects and make sure replication works
+        3. Keep deleting some objects from the source bucket and make sure
+           deletion sync works as expected through out.
+        4. In another thread, restart the noobaa pods (db & core), make sure
+           deletion sync works for the step-3 deletion works as expected
+        5. Now take backup of Noobaa db using PV backup method
+        6. Remove the log based replication rules, perform some deletion in
+           source bucket. make sure deletion sync doesn't work
+        7. Recover noobaa db from the backup taken in step-5
+        8. Now check if deletion sync works by deleting some objects from
+           source bucket. Note: Expectation is still unclear
+        9. Now patch the bucket to remove complete replication policy and
+           make sure no replication - no deletion sync works
+
+        """
+        # entry criteria setup
+        feature_setup_map = setup_mcg_bg_features(
+            num_of_buckets=5,
+            object_amount=5,
+            is_disruptive=True,
+            skip_any_features=["nsfs", "rgw kafka", "caching", "replication"],
+        )
+
+        mockup_logger, source_bucket, target_bucket = aws_log_based_replication_setup()
+
+        # upload test objects to the bucket and verify replication
+        upload_test_objects_to_source_and_wait_for_replication(
+            mcg_obj_session,
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            600,
+        )
+
+        # Delete objects in the first set in a batch and perform noobaa pod
+        # restarts at the same time and make sure deletion sync works
+
+        objs_in_bucket = mockup_logger.standard_test_obj_list
+        objs_to_delete = random.sample(objs_in_bucket, 3)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                self.delete_objs_in_batch, objs_to_delete, mockup_logger, source_bucket
+            )
+
+            # Restart noobaa pods
+            nb_core_pod = get_noobaa_core_pod()
+            nb_db_pod = get_noobaa_db_pod()
+            nb_core_pod.delete()
+            nb_db_pod.delete()
+            wait_for_pods_to_be_running(pod_names=[nb_core_pod.name, nb_db_pod.name])
+
+            # Wait for the object deletion worker in the BG to completion
+            future.result()
+            assert compare_bucket_object_list(
+                mcg_obj_session,
+                source_bucket.name,
+                target_bucket.name,
+                timeout=600,
+            ), f"Deletion sync failed to complete for the objects {objs_to_delete} deleted in the first bucket set"
+
+        # Take noobaa db backup and remove deletion replication policy for the second bucket set
+        # Get noobaa pods before execution
+        noobaa_pods = get_noobaa_pods()
+
+        # Get noobaa PVC before execution
+        noobaa_pvc_obj = get_pvc_objs(pvc_names=[constants.NOOBAA_DB_PVC_NAME])
+
+        _, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
+
+        disable_deletion_sync = source_bucket.replication_policy
+        disable_deletion_sync["rules"][0]["sync_deletions"] = False
+        update_replication_policy(source_bucket.name, disable_deletion_sync)
+        logger.info("Deleting all the objects from the second bucket")
+        mockup_logger.delete_all_objects_and_log(source_bucket.name)
+        assert not compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=300,
+        ), "Deletion sync was done but not expected"
+
+        # Do noobaa db recovery and see if the deletion sync works now
+        noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
+        wait_for_noobaa_pods_running(timeout=420)
+
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=600,
+        ), "Deletion sync was not done but expected"
+
+        # Remove replication policy and upload some objects to the bucket
+        # make sure the replication itself doesn't take place
+        disable_replication = source_bucket.replication_policy
+        disable_replication["rules"] = []
+        update_replication_policy(source_bucket.name, dict())
+
+        logger.info("Uploading test objects and waiting for replication to complete")
+        mockup_logger.upload_test_objs_and_log(source_bucket.name)
+
+        assert not compare_bucket_object_list(
+            mcg_obj_session,
+            source_bucket.name,
+            target_bucket.name,
+            timeout=300,
+        ), "Standard replication completed even though replication policy is removed"
+
+        validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=False,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+            object_amount=5,
+        )
+        logger.info("No issues seen with the MCG bg feature validation")

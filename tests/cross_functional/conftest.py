@@ -319,31 +319,10 @@ def noobaa_db_backup_and_recovery_locally(
 
 
 @pytest.fixture()
-def noobaa_db_backup_and_recovery(request, snapshot_factory):
-    """
-    Verify noobaa backup and recovery
-
-    1. Take snapshot db-noobaa-db-0 PVC and retore it to PVC
-    2. Scale down the statefulset noobaa-db
-    3. Get the yaml of the current PVC, db-noobaa-db-0 and
-       change the parameter persistentVolumeReclaimPolicy to Retain for restored PVC
-    4. Delete both PVCs, the PV for the original claim db-noobaa-db-0 will be removed.
-       The PV for claim db-noobaa-db-0-snapshot-restore will move to ‘Released’
-    5. Edit again restore PV and remove the claimRef section.
-       The volume will transition to Available.
-    6. Edit the yaml db-noobaa-db-0.yaml and change the setting volumeName to restored PVC.
-    7. Scale up the stateful set again and the pod should be running
-
-    """
+def noobaa_db_backup(request, snapshot_factory):
     restore_pvc_objs = []
 
-    def factory(snapshot_factory=snapshot_factory):
-        # Get noobaa pods before execution
-        noobaa_pods = pod.get_noobaa_pods()
-
-        # Get noobaa PVC before execution
-        noobaa_pvc_obj = pvc.get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
-        noobaa_pv_name = noobaa_pvc_obj[0].get("spec").get("spec").get("volumeName")
+    def factory(noobaa_pvc_obj):
 
         # Take snapshot db-noobaa-db-0 PVC
         logger.info(f"Creating snapshot of the {noobaa_pvc_obj[0].name} PVC")
@@ -381,6 +360,15 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
             f"Succeesfuly created PVC {restore_pvc_obj.name} "
             f"from snapshot {snap_obj.name}"
         )
+        return restore_pvc_objs, snap_obj
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_recovery_from_backup(request):
+    def factory(snap_obj, noobaa_pvc_obj, noobaa_pods):
+        noobaa_pv_name = noobaa_pvc_obj[0].get("spec").get("spec").get("volumeName")
 
         # Scale down the statefulset noobaa-db
         modify_statefulset_replica_count(
@@ -473,6 +461,41 @@ def noobaa_db_backup_and_recovery(request, snapshot_factory):
         logger.info(
             "Changed the parameter persistentVolumeReclaimPolicy to Delete again"
         )
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_backup_and_recovery(
+    request, snapshot_factory, noobaa_db_backup, noobaa_db_recovery_from_backup
+):
+    """
+    Verify noobaa backup and recovery
+
+    1. Take snapshot db-noobaa-db-0 PVC and retore it to PVC
+    2. Scale down the statefulset noobaa-db
+    3. Get the yaml of the current PVC, db-noobaa-db-0 and
+       change the parameter persistentVolumeReclaimPolicy to Retain for restored PVC
+    4. Delete both PVCs, the PV for the original claim db-noobaa-db-0 will be removed.
+       The PV for claim db-noobaa-db-0-snapshot-restore will move to ‘Released’
+    5. Edit again restore PV and remove the claimRef section.
+       The volume will transition to Available.
+    6. Edit the yaml db-noobaa-db-0.yaml and change the setting volumeName to restored PVC.
+    7. Scale up the stateful set again and the pod should be running
+
+    """
+    restore_pvc_objs = []
+
+    def factory(snapshot_factory=snapshot_factory):
+        global restore_pvc_objs
+        # Get noobaa pods before execution
+        noobaa_pods = pod.get_noobaa_pods()
+
+        # Get noobaa PVC before execution
+        noobaa_pvc_obj = pvc.get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
+
+        restore_pvc_objs, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
+        noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
 
     def finalizer():
         # Get the statefulset replica count
