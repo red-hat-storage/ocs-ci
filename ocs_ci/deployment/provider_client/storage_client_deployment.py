@@ -12,7 +12,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
+
+# from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -68,6 +69,8 @@ class TestStorageClientDeployment(object):
 
 
         """
+        from ocs_ci.ocs.ui.validation_ui import ValidationUI
+
         self.validation_ui_obj = ValidationUI()
         self.ingress_operator_namespace = "openshift-ingress-operator"
         self.ocp_obj_ns = ocp.OCP(kind=constants.NAMESPACES)
