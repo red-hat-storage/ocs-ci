@@ -586,15 +586,17 @@ class Deployment(object):
         """
         # deploy provider-client deployment
         from ocs_ci.deployment.provider_client.storage_client_deployment import (
-            provider_client_deployment,
+            StorageClientDeployment,
         )
+
+        storage_client_deployment_obj = StorageClientDeployment()
 
         # Provider-client deployment if odf_provider_mode_deployment: True
         if (
             config.ENV_DATA.get("odf_provider_mode_deployment", True)
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
-            provider_client_deployment()
+            storage_client_deployment_obj.provider_and_native_client_installation()
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
