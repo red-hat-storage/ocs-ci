@@ -4017,6 +4017,7 @@ def create_reclaim_space_job(
     reclaim_space_job_name=None,
     backoff_limit=None,
     retry_deadline_seconds=None,
+    global_timeout=None,
 ):
     """
     Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
@@ -4037,6 +4038,8 @@ def create_reclaim_space_job(
     job_data = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_JOB_YAML)
     job_data["metadata"]["name"] = reclaim_space_job_name
     job_data["spec"]["target"]["persistentVolumeClaim"] = pvc_name
+    if global_timeout:
+        del job_data["spec"]["timeout"]
     if backoff_limit:
         job_data["spec"]["backOffLimit"] = backoff_limit
     if retry_deadline_seconds:
@@ -4091,14 +4094,20 @@ def create_csi_addons_global_timeout_configmap():
     Create Global timeout config for reclaimspace job
 
     Returns:
-        bool: Returns True if the operation was successful, False otherwise.
+        bool: Returns timeout value and cm object if the operation was successful, False otherwise.
     """
-    logging.info("Creating config map")
-    global_timeout_configmap = templating.load_yaml(constants.CSI_RBD_RECLAIM_SPACE_CONFIGMAP_YAML)
-    #timeout in str format
+    logging.info("Creating config map for reclaim space global timeout")
+    global_timeout_configmap = templating.load_yaml(
+        constants.CSI_RBD_RECLAIM_SPACE_CONFIGMAP_YAML
+    )
+
+    # timeout in str format
+    logging.info(f"global_timeout_configmap is {global_timeout_configmap}")
     timeout = global_timeout_configmap["data"]["reclaim-space-timeout"]
-    if run_cmd(f"oc create -f {global_timeout_configmap}", timeout=60):
-        return timeout
+    logging.info(f"timeout {timeout}")
+    cm_obj = create_resource(**global_timeout_configmap)
+    if cm_obj:
+        return timeout, cm_obj
     else:
         return False
 
@@ -4114,8 +4123,6 @@ def high_priority_class():
     priority_class_data["value"] = 1000
     ocs_obj = create_resource(**priority_class_data)
     return ocs_obj
-
-
 
 
 def get_cephfs_subvolumegroup():
