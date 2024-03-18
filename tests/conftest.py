@@ -8668,6 +8668,20 @@ def enable_rbd_metrics(request):
         "ceph config get mgr mgr/prometheus/rbd_stats_pools", out_yaml_format=False
     )
     pools_enabled = ",".join(pools_enabled)
+    exclude_perf_counters_enabled = ct_pod.exec_ceph_cmd(
+        "ceph config get mgr mgr/prometheus/exclude_perf_counters",
+        out_yaml_format=False,
+    )
+
+    def restore_exclude_perf_counters_enabled():
+        ct_pod.exec_ceph_cmd(
+            'ceph config set mgr mgr/prometheus/exclude_perf_counters ""',
+            out_yaml_format=False,
+        )
+        ct_pod.exec_ceph_cmd(
+            f'ceph config set mgr mgr/prometheus/exclude_perf_counters "{exclude_perf_counters_enabled}"',
+            out_yaml_format=False,
+        )
 
     def restore_ceph_rbd_metrics_settings():
         ct_pod.exec_ceph_cmd(
@@ -8691,4 +8705,9 @@ def enable_rbd_metrics(request):
             'ceph config set mgr mgr/prometheus/rbd_stats_pools "*"',
             out_yaml_format=False,
         )
+        ct_pod.exec_ceph_cmd(
+            'ceph config set mgr mgr/prometheus/exclude_perf_counters "false"',
+            out_yaml_format=False,
+        )
         request.addfinalizer(restore_ceph_rbd_metrics_settings)
+        request.addfinalizer(restore_exclude_perf_counters_enabled)
