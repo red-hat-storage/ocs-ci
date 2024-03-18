@@ -56,7 +56,7 @@ class DeployClients:
             hypershiftHostedOCP.verify_hosted_ocp_clusters_from_provider()
         )
         if not verification_passed:
-            logger.error("\nSome of the clusters are not ready\n")
+            logger.error("\n\n*** Some of the clusters are not ready ***\n")
 
         # stage 3 download all available kubeconfig files
         logger.info("Download kubeconfig for all clusters")
