@@ -256,7 +256,7 @@ class TestCnvApplicationMDR:
                 md5sum_original[count] == md5sum_org
             ), f"Failed: MD5 comparison of {vm_filepaths[0]} after relocation"
 
-        # Creating a file post relocate
+        # Creating a file(file3) post relocate
         for cnv_wl in cnv_workloads:
             run_dd_io(
                 vm_obj=cnv_wl.vm_obj,
