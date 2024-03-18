@@ -4550,6 +4550,23 @@ def archive_ceph_crashes(toolbox_pod):
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
 
 
+def ceph_crash_info_display(toolbox_pod):
+    """
+    Displays ceph crash information
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    """
+    ceph_crashes = get_ceph_crashes(toolbox_pod)
+    for each_crash in ceph_crashes:
+        log.error(f"ceph crash: {each_crash}")
+        crash_info = toolbox_pod.exec_ceph_cmd(
+            f"ceph crash info {each_crash}", out_yaml_format=False
+        )
+        log.error(crash_info)
+
+
 def add_time_report_to_email(session, soup):
     """
     Takes the time report dictionary and converts it into HTML table
