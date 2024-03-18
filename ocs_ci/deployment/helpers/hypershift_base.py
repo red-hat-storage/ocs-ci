@@ -398,15 +398,23 @@ class HyperShiftBase(Deployment):
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path_abs}"
         )
-        resp = exec_cmd(
-            f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path_abs}",
-            shell=True,
-        )
-        if resp.returncode != 0:
+
+        try:
+            resp = exec_cmd(
+                f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path_abs}",
+                shell=True,
+            )
+            if resp.returncode != 0:
+                logger.error(
+                    f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{resp.stderr.decode('utf-8')}"
+                )
+                return
+        except Exception as e:
             logger.error(
-                f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{resp.stderr.decode('utf-8')}"
+                f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}"
             )
             return
+
         if (
             os.path.isfile(kubeconfig_path_abs)
             and os.stat(kubeconfig_path_abs).st_size > 0
