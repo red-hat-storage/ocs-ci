@@ -869,8 +869,17 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
     else:
         running_ct_pods = _get_tools_pod_objs()
 
-    ceph_pod = Pod(**running_ct_pods[0])
-    ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
+    # pick rook-ceph-tool-external pod for external mode. External mode may have 2 toolboxes
+    ceph_pod = None
+    if config.DEPLOYMENT["external_mode"]:
+        for pod in running_ct_pods:
+            if pod.get("metadata").get("name").startswith("rook-ceph-tools-external"):
+                ceph_pod = Pod(**pod)
+                break
+    else:
+        ceph_pod = Pod(**running_ct_pods[0])
+    if not ceph_pod:
+        raise CephToolBoxNotFoundException
 
     if (
         config.ENV_DATA.get("platform", "").lower() == constants.ROSA_PLATFORM
