@@ -39,25 +39,6 @@ def configure_cloud_credential_operator():
         delete_file(tarball)
 
 
-def get_release_image(openshift_installer):
-    """
-    Retrieve release image using the openshift installer.
-
-    Args:
-        openshift_installer (str): Path to the openshift installer
-
-    Returns:
-        str: Release image from the openshift installer.
-
-    """
-    logger.info("Retrieving release image")
-    cmd = f"{openshift_installer} version"
-    proc = exec_cmd(cmd)
-    for line in proc.stdout.decode().split("\n"):
-        if "release image" in line:
-            return line.split(" ")[2].strip()
-
-
 def create_manifests(openshift_installer, output_dir):
     """
     Create manifests.

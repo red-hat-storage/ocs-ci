@@ -23,6 +23,7 @@ from ocs_ci.ocs.resources.pvc import (
 )
 from ocs_ci.utility import ibmcloud, version
 from ocs_ci.utility import cco
+from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -214,7 +215,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         Manually specify the IAM secrets for the cloud provider
         """
         cco.create_manifests(self.ocp_deployment.installer)
-        release_image = cco.get_release_image(self.ocp_deployment.installer)
+        release_image = get_ocp_release_image_from_installer()
         cco.extract_credentials_requests_ibmcloud(
             release_image, self.credentials_requests_dir, self.pull_secret_path
         )

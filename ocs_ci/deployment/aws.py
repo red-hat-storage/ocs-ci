@@ -26,6 +26,7 @@ from ocs_ci.utility.aws import (
     terminate_rhel_workers,
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.mirror_openshift import prepare_mirror_openshift_credential_files
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -208,7 +209,7 @@ class AWSIPI(AWSBase):
             credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
             install_config = os.path.join(cluster_path, "install-config.yaml")
 
-            release_image = cco.get_release_image(self.installer)
+            release_image = get_ocp_release_image_from_installer()
             cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
             cco.extract_ccoctl_binary(cco_image, pull_secret_path)
             cco.extract_credentials_requests_aws(
