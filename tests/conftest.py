@@ -7524,19 +7524,19 @@ def aws_log_based_replication_setup(
 
 
 @pytest.fixture(scope="session")
-def enable_rbd_metrics(self, request):
-    self.ct_pod = pod.get_ceph_tools_pod()
-    self.pools_enabled = self.ct_pod.exec_ceph_cmd(
+def enable_rbd_metrics(request):
+    ct_pod = pod.get_ceph_tools_pod()
+    pools_enabled = ct_pod.exec_ceph_cmd(
         "ceph config get mgr mgr/prometheus/rbd_stats_pools", out_yaml_format=False
     )
+    pools_enabled = ",".join(pools_enabled)
 
     def restore_ceph_rbd_metrics_settings():
-        self.ct_pod.exec_ceph_cmd(
+        ct_pod.exec_ceph_cmd(
             'ceph config set mgr mgr/prometheus/rbd_stats_pools ""',
             out_yaml_format=False,
         )
-        pools_enabled = ",".join(self.pools_enabled)
-        self.ct_pod.exec_ceph_cmd(
+        ct_pod.exec_ceph_cmd(
             f'ceph config set mgr mgr/prometheus/rbd_stats_pools "{pools_enabled}"',
             out_yaml_format=False,
         )
@@ -7548,8 +7548,8 @@ def enable_rbd_metrics(self, request):
     )
 
     # set all pools to be monitored by prometheus
-    if not (default_pool in self.pools_enabled or "*" in self.pools_enabled):
-        self.ct_pod.exec_ceph_cmd(
+    if not (default_pool in pools_enabled or "*" in pools_enabled):
+        ct_pod.exec_ceph_cmd(
             'ceph config set mgr mgr/prometheus/rbd_stats_pools "*"',
             out_yaml_format=False,
         )
