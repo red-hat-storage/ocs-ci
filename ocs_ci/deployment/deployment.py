@@ -149,9 +149,6 @@ from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
 
-# from ocs_ci.deployment.provider_client.storage_client_deployment import (
-#     TestStorageClientDeployment,
-# )
 
 logger = logging.getLogger(__name__)
 
@@ -589,17 +586,15 @@ class Deployment(object):
         """
         # deploy provider-client deployment
         from ocs_ci.deployment.provider_client.storage_client_deployment import (
-            TestStorageClientDeployment,
+            provider_client_deployment,
         )
-
-        self.storage_client_deployment_obj = TestStorageClientDeployment()
 
         # Provider-client deployment if odf_provider_mode_deployment: True
         if (
             config.ENV_DATA.get("odf_provider_mode_deployment", True)
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
-            self.storage_client_deployment_obj.provider_and_native_client_installation()
+            provider_client_deployment()
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
