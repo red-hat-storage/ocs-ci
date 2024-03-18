@@ -2,7 +2,7 @@
 This module provides installation of ODF in provider mode and storage-client creation
 on the hosting cluster.
 """
-import pytest
+import atexit
 import logging
 import tempfile
 import time
@@ -12,8 +12,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
-
-# from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -36,41 +36,18 @@ from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
 
 
-@pytest.fixture(scope="class")
-def setup_ui_class(request):
-    driver = login_ui()
-
-    def finalizer():
-        close_browser()
-
-    request.addfinalizer(finalizer)
-    return driver
-
-
 log = logging.getLogger(__name__)
 # Error message to look in a command output
 ERRMSG = "Error in command"
 
 
-@pytest.mark.usefixtures("setup_ui_class")
-class TestStorageClientDeployment(object):
-    def provider_and_native_client_installation(
-        self,
-    ):
-        """
-        1. set control nodes as scheduleable
-        2. allow ODF to be deployed on all nodes
-        3. allow hosting cluster domain to be usable by hosted clusters
-        4. Enable nested virtualization on vSphere nodes
-        5. Install ODF
-        6. Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-        7. Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
-        8. Create storage profile
+class StorageClientDeployment(object):
+    def __init__(self):
+        print("Initializing webdriver and logn to webconsole")
+        # Call a function during initialization
+        self.initial_function()
 
-
-        """
-        from ocs_ci.ocs.ui.validation_ui import ValidationUI
-
+        print("Intialization")
         self.validation_ui_obj = ValidationUI()
         self.ingress_operator_namespace = "openshift-ingress-operator"
         self.ocp_obj_ns = ocp.OCP(kind=constants.NAMESPACES)
@@ -90,8 +67,6 @@ class TestStorageClientDeployment(object):
         self.service_obj = ocp.OCP(
             kind="Service", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        ocp_version = get_ocp_version()
-        log.info(f"ocp version is: {ocp_version}")
         self.pvc_obj = ocp.OCP(
             kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
@@ -100,6 +75,36 @@ class TestStorageClientDeployment(object):
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
 
+        # Register a function to be called upon the destruction of the instance
+        atexit.register(self.cleanup_function)
+
+    def initial_function(self):
+        print("initial_function called during initialization.")
+        login_ui()
+
+    def cleanup_function(self):
+        print("cleanup_function called at exit.")
+        # Remove debug namespace
+        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+        # Close browser
+        close_browser()
+
+    def provider_and_native_client_installation(
+        self,
+    ):
+        """
+        1. set control nodes as scheduleable
+        2. allow ODF to be deployed on all nodes
+        3. allow hosting cluster domain to be usable by hosted clusters
+        4. Enable nested virtualization on vSphere nodes
+        5. Install ODF
+        6. Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
+        7. Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
+        8. Create storage profile
+        """
+
+        ocp_version = get_ocp_version()
+        log.info(f"ocp version is: {ocp_version}")
         # set control nodes as scheduleable
         path = "/spec/mastersSchedulable"
         params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
@@ -372,6 +377,7 @@ class TestStorageClientDeployment(object):
         )
         return onboarding_token
 
+    @retry(AssertionError, 12, 10, 1)
     def create_storage_client(
         self,
         storage_provider_endpoint=None,
@@ -422,17 +428,3 @@ class TestStorageClientDeployment(object):
         # Create storage classclaim
         if storage_client_status == "Connected":
             self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}")
-
-    def teardown(self):
-        """
-        Remove debug namespace
-        """
-        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
-
-
-def provider_client_deployment():
-    """
-    test deployment code
-    """
-    storage_client_deployment_obj = TestStorageClientDeployment()
-    storage_client_deployment_obj.provider_and_native_client_installation()
