@@ -119,7 +119,6 @@ class TestProfileDefaultValuesCheck(ManageTest):
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         self.perf_profile = perf_profile
-        log.info(type(self.perf_profile))
         log.info("Obtaining the performance profile values from the cluster")
         storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
         storage_cluster = StorageCluster(
@@ -136,7 +135,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 f"-n {namespace}  --type merge --patch '{ptch}'"
             )
             run_cmd(ptch_cmd)
-            log.info("Verify storagecluster on Ready state")
+            log.info("Verify storage cluster is on Ready state")
 
             verify_storage_cluster()
 
@@ -151,7 +150,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
             log.info("Reverting profile changes")
             ptch = f'{{"spec": {{"resourceProfile":"{exist_performance_profile}"}}}}'
 
-            #Reverting the performance profile back to the original
+            # Reverting the performance profile back to the original
             ptch_cmd = (
                 f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')}"
                 f" -n {namespace}  --type merge --patch '{ptch}'"
