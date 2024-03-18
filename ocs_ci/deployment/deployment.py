@@ -523,12 +523,14 @@ class Deployment(object):
             TestStorageClientDeployment,
         )
 
-        # Multicluster: Handle all ODF multicluster DR ops
+        self.storage_client_deployment_obj = TestStorageClientDeployment()
+
+        # Provider-client deployment if odf_provider_mode_deployment: True
         if (
             config.ENV_DATA.get("odf_provider_mode_deployment", True)
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
-            TestStorageClientDeployment().provider_and_native_client_installation()
+            self.storage_client_deployment_obj.provider_and_native_client_installation()
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
