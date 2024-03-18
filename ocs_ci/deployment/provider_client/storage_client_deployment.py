@@ -429,8 +429,10 @@ class TestStorageClientDeployment(object):
         """
         self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
 
-    # def test_deployment(self):
-    #     """
-    #     test deployment code
-    #     """
-    #     self.provider_and_native_client_installation()
+
+def provider_client_deployment():
+    """
+    test deployment code
+    """
+    storage_client_deployment_obj = TestStorageClientDeployment()
+    storage_client_deployment_obj.provider_and_native_client_installation()
