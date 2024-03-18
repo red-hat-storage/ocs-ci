@@ -1094,7 +1094,7 @@ BALANCED_PROFILE_REQUEST_MEMORY_VALUES = {
 }
 
 PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
-    "mgr": 1,
+    "mgr": 1.5,
     "mon": 1.5,
     "osd": 4,
     "mds": 3,
@@ -1108,10 +1108,10 @@ PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES = {
     "rgw": "4Gi",
 }
 
-LEAN_PROFILE_CPU_LIMIT_VALUES = {"mgr": 0.5, "mon": 0.5, "osd": 1.5, "mds": 1, "rgw": 1}
+LEAN_PROFILE_CPU_LIMIT_VALUES = {"mgr": 1, "mon": 0.5, "osd": 1.5, "mds": 1, "rgw": 1}
 
 LEAN_PROFILE_MEMORY_LIMIT_VALUES = {
-    "mgr": "1Gi",
+    "mgr": "2Gi",
     "mon": "1Gi",
     "osd": "3Gi",
     "mds": "2Gi",
@@ -1135,14 +1135,14 @@ BALANCED_PROFILE_MEMORY_LIMIT_VALUES = {
 }
 
 PERFORMANCE_PROFILE_CPU_LIMIT_VALUES = {
-    "mgr": 1,
+    "mgr": 3,
     "mon": 1.5,
     "osd": 4,
     "mds": 3,
     "rgw": 2,
 }
 PERFORMANCE_PROFILE_MEMORY_LIMIT_VALUES = {
-    "mgr": "2Gi",
+    "mgr": "4Gi",
     "mon": "2Gi",
     "osd": "8Gi",
     "mds": "8Gi",

@@ -131,28 +131,12 @@ class TestProfileDefaultValuesCheck(ManageTest):
             log.info("Performance profile is same as profile that is already present")
         else:
             ptch = f'{{"spec": {{"resourceProfile":"{self.perf_profile}"}}}}'
-            """
-            ptch_cmd = (
-                f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                f"-n openshift-storage  --type merge --patch {ptch}"
-            )
-            """
             ptch_cmd = (
                 f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')} "
                 f"-n {namespace}  --type merge --patch '{ptch}'"
             )
             run_cmd(ptch_cmd)
             log.info("Verify storagecluster on Ready state")
-            """
-            sample = TimeoutSampler(
-                timeout=2400,
-                sleep=40,
-                func=verify_storage_cluster,
-            )
-            if not sample.wait_for_func_status(result=True):
-                log.error("Storage Cluster did not reach Ready state after 2400s")
-                raise TimeoutExpiredError
-            """
 
             verify_storage_cluster()
 
@@ -166,6 +150,8 @@ class TestProfileDefaultValuesCheck(ManageTest):
             )
             log.info("Reverting profile changes")
             ptch = f'{{"spec": {{"resourceProfile":"{exist_performance_profile}"}}}}'
+
+            #Reverting the performance profile back to the original
             ptch_cmd = (
                 f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')}"
                 f" -n {namespace}  --type merge --patch '{ptch}'"
