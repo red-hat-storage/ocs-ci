@@ -359,14 +359,14 @@ def cal_md5sum_vm(vm_obj, file_path, username=None):
 
 
 @retry(CommandFailed, tries=10, delay=5, backoff=1)
-def run_dd_io(vm_obj, file_path, size="102400", username=None, verify=False):
+def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
     """
     Perform input/output (I/O) operation using dd command via SSH on a virtual machine.
 
     Args:
         vm_obj (obj): The virtual machine object.
         file_path (str): The full path of the file to write on
-        size (str, optional): Size in MB. Defaults to "102400" which is 100GB.
+        size (str, optional): Size in MB. Defaults to "102400" which is 10GB.
         username (str, optional): The username to use for SSH authentication. Defaults to None.
         verify (bool, optional): Whether to verify the I/O operation by calculating MD5 checksum.
             Defaults to False.
@@ -378,7 +378,7 @@ def run_dd_io(vm_obj, file_path, size="102400", username=None, verify=False):
     # Block size defaults to 1MB
     bs = 1024
     vm_obj.run_ssh_cmd(
-        command=f"dd if=/dev/zero of={file_path} bs={bs} count={size}",
+        command=f"dd if=/dev/urandom of={file_path} bs={bs} count={size}",
         username=username,
     )
     if verify:

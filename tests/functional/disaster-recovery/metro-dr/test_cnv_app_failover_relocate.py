@@ -85,7 +85,8 @@ class TestCnvApplicationMDR:
 
         """
         md5sum_original = []
-        vm_filepath = "/dd_file.txt"
+        md5sum_failover = []
+        vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
         # Download and extract the virtctl binary to bin_dir. Skips if already present.
         CNVInstaller().download_and_extract_virtctl_binary()
@@ -103,12 +104,12 @@ class TestCnvApplicationMDR:
             namespace=self.wl_namespace, workload_type=cnv_workloads[0].workload_type
         )
 
-        # Creating file on VMs and calculating its MD5sum
+        # Creating a file on VM and calculating its MD5sum
         for cnv_wl in cnv_workloads:
             md5sum_original.append(
                 run_dd_io(
                     vm_obj=cnv_wl.vm_obj,
-                    file_path=vm_filepath,
+                    file_path=vm_filepaths[0],
                     username=cnv_wl.vm_username,
                     verify=True,
                 )
@@ -154,13 +155,23 @@ class TestCnvApplicationMDR:
                 phase=constants.STATUS_RUNNING,
             )
 
+        for cnv_wl in cnv_workloads:
+            md5sum_failover.append(
+                run_dd_io(
+                    vm_obj=cnv_wl.vm_obj,
+                    file_path=vm_filepaths[1],
+                    username=cnv_wl.vm_username,
+                    verify=True,
+                )
+            )
+
         # Validating data integrity after failing-over VMs to secondary managed cluster
         for count, cnv_wl in enumerate(cnv_workloads):
             md5sum_fail_out = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_path=vm_filepath, username=cnv_wl.vm_username
+                cnv_wl.vm_obj, file_path=vm_filepaths[0], username=cnv_wl.vm_username
             )
             logger.info(
-                f"Validating MD5sum of file {vm_filepath} on VM: {cnv_wl.workload_name} after FailOver"
+                f"Validating MD5sum of file {vm_filepaths[0]} on VM: {cnv_wl.workload_name} after FailOver"
             )
             assert (
                 md5sum_original[count] == md5sum_fail_out
@@ -233,14 +244,35 @@ class TestCnvApplicationMDR:
                 phase=constants.STATUS_RUNNING,
             )
 
-        # Validating data integrity after relocating VMs back to primary managed cluster
+        # Validating data integrity(file1) after relocating VMs back to primary managed cluster
         for count, cnv_wl in enumerate(cnv_workloads):
-            md5sum_reloc = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_path=vm_filepath, username=cnv_wl.vm_username
+            md5sum_org = cal_md5sum_vm(
+                cnv_wl.vm_obj, file_path=vm_filepaths[0], username=cnv_wl.vm_username
             )
             logger.info(
-                f"Validating MD5sum of file {vm_filepath} on VM: {cnv_wl.workload_name} after Relocate"
+                f"Validating MD5sum of file {vm_filepaths[0]} on VM: {cnv_wl.workload_name} after Relocate"
             )
             assert (
-                md5sum_original[count] == md5sum_reloc
-            ), "Failed: MD5 comparison after relocation"
+                md5sum_original[count] == md5sum_org
+            ), f"Failed: MD5 comparison of {vm_filepaths[0]} after relocation"
+
+        # Creating a file post relocate
+        for cnv_wl in cnv_workloads:
+            run_dd_io(
+                vm_obj=cnv_wl.vm_obj,
+                file_path=vm_filepaths[2],
+                username=cnv_wl.vm_username,
+                verify=True,
+            )
+
+        # Validating data integrity(file2) after relocating VMs back to primary managed cluster
+        for count, cnv_wl in enumerate(cnv_workloads):
+            md5sum_fail = cal_md5sum_vm(
+                cnv_wl.vm_obj, file_path=vm_filepaths[1], username=cnv_wl.vm_username
+            )
+            logger.info(
+                f"Validating MD5sum of file {vm_filepaths[1]} on VM: {cnv_wl.workload_name} after Relocate"
+            )
+            assert (
+                md5sum_failover[count] == md5sum_fail
+            ), f"Failed: MD5 comparison of {vm_filepaths[1]}after relocation"
