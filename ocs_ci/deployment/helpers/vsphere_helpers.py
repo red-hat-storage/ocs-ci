@@ -158,6 +158,14 @@ class VSPHEREHELPERS(object):
 
             dump_data_to_temp_yaml(dict_data, default_map_path)
 
+            cred_file_var_to_modify = "shared_credentials_file"
+            target_cred_file_var = "shared_credentials_files"
+            replace_content_in_file(
+                constants.SCALEUP_VSPHERE_ROUTE53,
+                cred_file_var_to_modify,
+                target_cred_file_var,
+            )
+
             str_to_modify = "var.AWS_CREDS"
             target_str = (
                 f'{str_to_modify}\n  profile = "{config.DEPLOYMENT["aws_profile"]}"'
@@ -172,7 +180,7 @@ class VSPHEREHELPERS(object):
             replace_content_in_file(
                 constants.SCALEUP_VSPHERE_ROUTE53,
                 str_to_modify,
-                f'"{os.path.expanduser(config.DEPLOYMENT["aws_cred_path"])}"',
+                f'["{os.path.expanduser(config.DEPLOYMENT["aws_cred_path"])}"]',
             )
 
             replace_content_in_file(
