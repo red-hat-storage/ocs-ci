@@ -214,7 +214,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         """
         Manually specify the IAM secrets for the cloud provider
         """
-        cco.create_manifests(self.ocp_deployment.installer)
+        cco.create_manifests(self.ocp_deployment.installer, self.cluster_path)
         release_image = get_ocp_release_image_from_installer()
         cco.extract_credentials_requests_ibmcloud(
             release_image, self.credentials_requests_dir, self.pull_secret_path
