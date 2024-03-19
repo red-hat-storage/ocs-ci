@@ -23,12 +23,12 @@ def test_clone_backingstore(mcg_obj, backingstore_factory):
         prototype_bs_dict = clone_bs_dict_from_backingstore(prototype_backingstore)
         clone_bs_name = backingstore_factory("oc", prototype_bs_dict)[0].name
 
-        # Check if the clone type is the same as the prototype type
+        # Check the health of the clone
+        mcg_obj.check_backingstore_state(clone_bs_name, constants.BS_OPTIMAL)
+
+        # Check if type is the same as the prototype's
         clone_backingstore_data = OCP(
             kind="backingstore",
             resource_name=clone_bs_name,
         ).data
         assert clone_backingstore_data["spec"]["type"] == type
-
-        # Health check
-        mcg_obj.check_backingstore_state(clone_bs_name, constants.BS_OPTIMAL)
