@@ -2,10 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import (
-    tier2,
-    E2ETest,
-)
+from ocs_ci.framework.testlib import E2ETest, system_test
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.cluster import change_ceph_full_ratio, CephCluster
 from ocs_ci.helpers import helpers
@@ -19,7 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 logger = logging.getLogger(__name__)
 
 
-@tier2
+@system_test
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
@@ -113,7 +110,7 @@ class TestCloneDeletion(E2ETest):
         actual_alerts = list()
         for alert in alerts_response.json().get("data").get("alerts"):
             actual_alerts.append(alert.get("labels").get("alertname"))
-            print("Actual Alerts:", actual_alerts)
+            logger.info("Actual Alerts:", actual_alerts)
         for expected_alert in expected_alerts:
             if expected_alert not in actual_alerts:
                 logger.error(
@@ -143,18 +140,14 @@ class TestCloneDeletion(E2ETest):
             f"Start creating {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} GB."
         )
         clones_list = []
-        for i in range(self.num_of_clones):
-            index = i + 1
-            logger.info(f"Start creation of clone number {index}.")
+        for clone_num in range(self.num_of_clones):
+            logger.info(f"Start creation of clone number {clone_num+1}.")
 
             cloned_pvc_obj = pvc_clone_factory(
                 self.pvc_obj,
                 storageclass=self.pvc_obj.backed_sc,
             )
 
-            helpers.wait_for_resource_state(
-                cloned_pvc_obj, constants.STATUS_BOUND, timeout=1800
-            )
             cloned_pvc_obj.reload()
             clones_list.append(cloned_pvc_obj)
             logger.info(
@@ -185,13 +178,11 @@ class TestCloneDeletion(E2ETest):
             f"Start deleting {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} Gi."
         )
 
-        for i, clone in enumerate(clones_list):
-            i += 1
+        for index, clone in enumerate(clones_list):
+            index += 1
             pvc_reclaim_policy = clone.reclaim_policy
             clone.delete()
-            logger.info(
-                f"Deletion of clone number {i} , the clone name is {clone.name}."
-            )
+            logger.info(f"Deletion of the clone name is {clone.name}.")
             clone.ocp.wait_for_delete(clone.name, self.timeout)
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                 helpers.validate_pv_delete(clone.backed_pv)
