@@ -21,6 +21,7 @@ from ocs_ci.ocs.exceptions import (
     ObjectsStillBeingDeletedException,
     CommandFailed,
     UnavailableResourceException,
+    UnknownCloneTypeException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
@@ -412,10 +413,8 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     return _create_backingstore
 
 
-def clone_backingstore(
+def clone_bs_dict_from_backingstore(
     protype_backingstore_name,
-    backingstore_factory,
-    method="oc",
     namespace=None,
 ):
     """
@@ -430,9 +429,11 @@ def clone_backingstore(
 
     Raises:
         UnavailableResourceException: If the backingstore to clone does not exist
+        UnaknownCloneTypeException: If the prototype backingstore is of an unknown type
 
     Returns:
-        str: Name of the new backingstore
+        clone_bs_dict (dict): A dictionary containing the specs needed to create a copy of the
+        prototype backingstore
 
     """
     if not namespace:
@@ -451,6 +452,8 @@ def clone_backingstore(
 
     # Determine from the prototype the kind and specs of the new backingstore
     prototype_bs_platform_name = protoype_backingstore.data["spec"]["type"]
+    clone_bs_dict = {}
+
     if prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_AWS:
         target_region = protoype_backingstore.data["spec"]["awsS3"]["region"]
         clone_bs_dict = {"aws": [(1, target_region)]}
@@ -467,7 +470,7 @@ def clone_backingstore(
     elif prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_S3_COMP:
         clone_bs_dict = {"rgw": [(1, None)]}
 
-    if prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_PV_POOL:
+    elif prototype_bs_platform_name == constants.BACKINGSTORE_TYPE_PV_POOL:
         pvpool_storageclass = (
             constants.THIN_CSI_STORAGECLASS
             if config.ENV_DATA["mcg_only_deployment"]
@@ -480,5 +483,7 @@ def clone_backingstore(
         clone_pv_size = max(constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB, prototype_pv_size)
         clone_bs_dict = {"pv": [(num_volumes, clone_pv_size, pvpool_storageclass)]}
 
-    clone_backingstore_name = backingstore_factory(method, clone_bs_dict)[0].name
-    return clone_backingstore_name
+    else:
+        raise UnknownCloneTypeException(prototype_bs_platform_name)
+
+    return clone_bs_dict

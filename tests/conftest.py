@@ -66,7 +66,7 @@ from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
-    clone_backingstore,
+    clone_bs_dict_from_backingstore,
 )
 from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.namespacestore import (
@@ -7252,10 +7252,10 @@ def override_default_backingstore_fixture(
         # 1. if the name of an alternative backingstore is not provided,
         # Create a new backingstore of the same type as the current default
         if alt_bs_name is None:
-            alt_bs_name = clone_backingstore(
+            bs_dict = clone_bs_dict_from_backingstore(
                 protype_backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
-                backingstore_factory=backingstore_factory,
             )
+            alt_bs_name = backingstore_factory("oc", bs_dict)[0].name
 
         # 2. Update the new default resource of the admin account
         mcg_obj_session.exec_mcg_cmd(
