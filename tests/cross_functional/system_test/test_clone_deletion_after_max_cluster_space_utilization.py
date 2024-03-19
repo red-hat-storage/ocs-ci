@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, system_test
+from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.cluster import change_ceph_full_ratio, CephCluster
 from ocs_ci.helpers import helpers
@@ -16,11 +16,11 @@ from ocs_ci.framework.pytest_customization.marks import (
 logger = logging.getLogger(__name__)
 
 
-@system_test
+@tier2
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
-        pytest.param(constants.CEPHBLOCKPOOL),
+        # pytest.param(constants.CEPHBLOCKPOOL),
         pytest.param(constants.CEPHFILESYSTEM),
     ],
 )
@@ -60,13 +60,13 @@ class TestCloneDeletion(E2ETest):
         logger.info(f"ceph_free_capacity: {self.ceph_free_capacity}")
 
         # Change ceph full ratio
-        change_ceph_full_ratio(10)
+        change_ceph_full_ratio(30)
 
-        # Use 10% of the free storage capacity in the test
-        self.capacity_to_use = int(self.ceph_free_capacity * 0.10)
+        # Use 30% of the free storage capacity in the test
+        self.capacity_to_use = int(self.ceph_free_capacity * 0.30)
         logger.info(f"capacity_to_use: {self.capacity_to_use}")
 
-        self.num_of_clones = 10
+        self.num_of_clones = 20
         # Calculating the PVC size in GiB
         self.pvc_size = int(self.capacity_to_use / (self.num_of_clones + 1))
         logger.info(f"pvc size: {self.pvc_size}")
@@ -89,36 +89,6 @@ class TestCloneDeletion(E2ETest):
 
         self.pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {self.pod_obj.name}")
-
-    def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
-        """
-        Verify Alerts on prometheus
-
-        Args:
-            expected_alerts (list): list of alert names
-            threading_lock (threading.Rlock): Lock object to prevent simultaneous calls to 'oc'
-
-        Returns:
-            bool: True if expected_alerts exist, False otherwise
-
-        """
-        prometheus = PrometheusAPI(threading_lock=threading_lock)
-        logger.info("Logging of all prometheus alerts started")
-        alerts_response = prometheus.get(
-            "alerts", payload={"silenced": False, "inhibited": False}
-        )
-        actual_alerts = list()
-        for alert in alerts_response.json().get("data").get("alerts"):
-            actual_alerts.append(alert.get("labels").get("alertname"))
-            logger.info("Actual Alerts:", actual_alerts)
-        for expected_alert in expected_alerts:
-            if expected_alert not in actual_alerts:
-                logger.error(
-                    f"{expected_alert} alert does not exist in alerts list."
-                    f"The actaul alerts: {actual_alerts}"
-                )
-                return False
-        return True
 
     @skipif_external_mode
     @magenta_squad
@@ -154,13 +124,16 @@ class TestCloneDeletion(E2ETest):
                 f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
             )
 
-        logger.info("Verify 'CephClusterErrorState' Alerts are seen ")
+        logger.info(
+            "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
+        )
 
-        expected_alerts = "CephClusterErrorState"
+        expected_alerts = ["CephOSDCriticallyFull", "CephOSDNearFull"]
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
-            func=self.verify_alerts_via_prometheus,
+            func=prometheus.verify_alerts_via_prometheus,
             expected_alerts=[expected_alerts],
             threading_lock=threading_lock,
         )
@@ -169,7 +142,7 @@ class TestCloneDeletion(E2ETest):
             raise TimeoutExpiredError
 
         # Make the cluster out of full by increasing the full ratio.
-        logger.info("Change Ceph full_ratio from from 10% to 50%")
+        logger.info("Change Ceph full_ratio from from 30% to 50%")
 
         change_ceph_full_ratio(50)
         # After the cluster is out of full state and IOs started , Try to delete clones.

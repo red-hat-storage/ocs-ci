@@ -718,6 +718,35 @@ class PrometheusAPI(object):
             # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway on checking alert list
             logger.error(msg)
 
+    def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
+        """
+        Verify Alerts on prometheus
+
+        Args:
+            expected_alerts (list): list of alert names
+            threading_lock (threading.Rlock): Lock object to prevent simultaneous calls to 'oc'
+
+        Returns:
+            bool: True if expected_alerts exist, False otherwise
+
+        """
+        logger.info("Logging of all prometheus alerts started")
+        alerts_response = self.get(
+            "alerts", payload={"silenced": False, "inhibited": False}
+        )
+        actual_alerts = list()
+        for alert in alerts_response.json().get("data").get("alerts"):
+            actual_alerts.append(alert.get("labels").get("alertname"))
+            logger.info("Actual Alerts:", actual_alerts)
+        for expected_alert in expected_alerts:
+            if expected_alert not in actual_alerts:
+                logger.error(
+                    f"{expected_alert} alert does not exist in alerts list."
+                    f"The actaul alerts: {actual_alerts}"
+                )
+                return False
+        return True
+
 
 class PrometheusAlertSubscriber(Timer):
 
