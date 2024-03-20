@@ -1,7 +1,8 @@
+from ocs_ci.framework import config
+from ocs_ci.framework.testlib import libtest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.backingstore import clone_bs_dict_from_backingstore
-from ocs_ci.framework.testlib import libtest
 
 
 @libtest
@@ -30,5 +31,6 @@ def test_clone_backingstore(mcg_obj, backingstore_factory):
         clone_backingstore_data = OCP(
             kind="backingstore",
             resource_name=clone_bs_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
         ).data
         assert clone_backingstore_data["spec"]["type"] == type
