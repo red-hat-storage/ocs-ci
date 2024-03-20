@@ -2011,7 +2011,8 @@ def get_ksctl_cli(bin_dir=None):
 
 def get_kms_endpoint():
     """
-    Fetch VAULT_ADDR from ocs-kms-connection-details configmap
+    Fetch VAULT_ADDR or KMIP_ENDPOINT if kmip provider from
+    ocs-kms-connection-details configmap.
 
     Returns:
         str: KMS endpoint address
@@ -2022,12 +2023,16 @@ def get_kms_endpoint():
         resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
         namespace=config.ENV_DATA["cluster_namespace"],
     )
-    return ocs_kms_configmap.get().get("data")["VAULT_ADDR"]
+    if ocs_kms_configmap.get().get("data").get("KMS_PROVIDER") == "kmip":
+        return ocs_kms_configmap.get().get("data")["KMIP_ENDPOINT"]
+    else:
+        return ocs_kms_configmap.get().get("data")["VAULT_ADDR"]
 
 
 def set_kms_endpoint(address):
     """
-    Set VAULT_ADDR in ocs-kms-connection-details configmap to provided value
+    Set VAULT_ADDR or KMIP_ENDPOINT if kmip provider in
+    ocs-kms-connection-details configmap to provided value
 
     Args:
         address (str): Address to be set in KMS configuration
@@ -2038,6 +2043,10 @@ def set_kms_endpoint(address):
         resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
         namespace=config.ENV_DATA["cluster_namespace"],
     )
-    params = f'{{"data": {{"VAULT_ADDR": "{address}"}}}}'
+    if ocs_kms_configmap.get().get("data").get("KMS_PROVIDER") == "kmip":
+        addr_attribute = "KMIP_ENDPOINT"
+    else:
+        addr_attribute = "VAULT_ADDR"
+    params = f'{{"data": {{"{addr_attribute}": "{address}"}}}}'
     ocs_kms_configmap.patch(params=params, format_type="merge")
     return ocs_kms_configmap.get().get("data")["VAULT_ADDR"]
