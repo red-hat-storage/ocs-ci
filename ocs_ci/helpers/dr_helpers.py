@@ -1006,17 +1006,18 @@ def create_backup_schedule():
     config.switch_ctx(old_ctx)
 
 
-def gracefully_reboot_ocp_nodes(drcluster_name):
+def gracefully_reboot_ocp_nodes(drcluster_name, disable_eviction=False):
     """
     Gracefully reboot OpenShift Container Platform
     nodes which was fenced before
 
     Args:
         drcluster_name (str): Name of the drcluster which needs to be rebooted
+        disable_eviction (bool): On True will delete pod that is protected by PDB, False by default
 
     """
     config.switch_to_cluster_by_name(drcluster_name)
-    gracefully_reboot_nodes()
+    gracefully_reboot_nodes(disable_eviction=disable_eviction)
 
 
 def restore_backup():

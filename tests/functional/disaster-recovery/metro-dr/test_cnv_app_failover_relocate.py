@@ -52,7 +52,7 @@ class TestCnvApplicationMDR:
             ):
                 enable_unfence(self.primary_cluster_name)
                 gracefully_reboot_ocp_nodes(
-                    drcluster_name=self.primary_cluster_name,
+                    drcluster_name=self.primary_cluster_name, disable_eviction=True
                 )
 
         request.addfinalizer(finalizer)
@@ -203,7 +203,7 @@ class TestCnvApplicationMDR:
 
         # Reboot the nodes after unfenced
         gracefully_reboot_ocp_nodes(
-            drcluster_name=self.primary_cluster_name,
+            drcluster_name=self.primary_cluster_name, disable_eviction=True
         )
 
         secondary_cluster_name = get_current_secondary_cluster_name(
