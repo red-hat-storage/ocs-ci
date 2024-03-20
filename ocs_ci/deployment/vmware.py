@@ -191,13 +191,7 @@ class VSPHEREBASE(Deployment):
         config.ENV_DATA["vsphere_resource_pool"] = config.ENV_DATA.get("cluster_name")
 
         # sync guest time with host
-        sync_time_with_host_file = constants.SCALEUP_VSPHERE_MACHINE_CONF
-        if config.ENV_DATA["folder_structure"]:
-            sync_time_with_host_file = os.path.join(
-                constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
-                f"aos-{get_ocp_version(seperator='_')}",
-                constants.CLUSTER_LAUNCHER_MACHINE_CONF,
-            )
+        sync_time_with_host_file = helpers.get_host_file_for_time_sync()
         if config.ENV_DATA.get("sync_time_with_host"):
             sync_time_with_host(sync_time_with_host_file, True)
 
@@ -213,7 +207,10 @@ class VSPHEREBASE(Deployment):
         # choose the vsphere_dir based on OCP version
         # generate cluster_info and config yaml files
         # for OCP version greater than 4.4
-        vsphere_dir = constants.SCALEUP_VSPHERE_DIR
+        vsphere_dir = os.path.join(
+            constants.EXTERNAL_DIR,
+            f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
+        )
         rhel_module = "rhel-worker"
         if Version.coerce(self.ocp_version) >= Version.coerce("4.5"):
             vsphere_dir = os.path.join(
@@ -1424,7 +1421,10 @@ class VSPHEREUPI(VSPHEREBASE):
         helpers = VSPHEREHELPERS()
         helpers.modify_scaleup_repo()
 
-        vsphere_dir = constants.SCALEUP_VSPHERE_DIR
+        vsphere_dir = os.path.join(
+            constants.EXTERNAL_DIR,
+            f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
+        )
         if Version.coerce(self.ocp_version) >= Version.coerce("4.5"):
             vsphere_dir = os.path.join(
                 constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
