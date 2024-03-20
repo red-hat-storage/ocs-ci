@@ -6517,59 +6517,51 @@ def cnv_dr_workload(request):
     """
     instances = []
 
-    def factory(
-        num_of_vm_subscription=1,
-        num_of_vm_appset=0,
-    ):
+    def factory(num_of_vm_subscription=1, num_of_vm_appset=0):
         """
         Args:
             num_of_vm_subscription (int): Number of Subscription type workload to be created
-            num_of_vm_appset (int): Number of  ApplicationSet type workload to be created
+            num_of_vm_appset (int): Number of ApplicationSet type workload to be created
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
 
         Returns:
-            list: objects of workload class.
+            list: objects of workload class
 
         """
         total_pvc_count = 0
+        workload_types = [
+            (constants.SUBSCRIPTION, "dr_cnv_workload_sub"),
+            (constants.APPLICATION_SET, "dr_cnv_workload_appset"),
+        ]
 
-        for index in range(num_of_vm_subscription):
-            workload_details = ocsci_config.ENV_DATA["dr_cnv_workload_sub"][index]
-            workload = CnvWorkload(
-                workload_type=constants.SUBSCRIPTION,
-                workload_dir=workload_details["workload_dir"],
-                vm_name=workload_details["vm_name"],
-                workload_name=workload_details["name"],
-                workload_pod_count=workload_details["pod_count"],
-                workload_pvc_count=workload_details["pvc_count"],
-                workload_placement_name=workload_details[
-                    "dr_workload_app_placement_name"
-                ],
-                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
-            )
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
-
-        for index in range(num_of_vm_appset):
-            workload_details = ocsci_config.ENV_DATA["dr_cnv_workload_appset"][index]
-            workload = CnvWorkload(
-                workload_type=constants.APPLICATION_SET,
-                workload_dir=workload_details["workload_dir"],
-                vm_name=workload_details["vm_name"],
-                workload_name=workload_details["name"],
-                workload_pod_count=workload_details["pod_count"],
-                workload_pvc_count=workload_details["pvc_count"],
-                workload_placement_name=workload_details[
-                    "dr_workload_app_placement_name"
-                ],
-                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
-            )
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+        for workload_type, data_key in workload_types:
+            for index in range(
+                num_of_vm_subscription
+                if workload_type == constants.SUBSCRIPTION
+                else num_of_vm_appset
+            ):
+                workload_details = ocsci_config.ENV_DATA[data_key][index]
+                workload = CnvWorkload(
+                    workload_type=workload_type,
+                    workload_dir=workload_details["workload_dir"],
+                    vm_name=workload_details["vm_name"],
+                    vm_secret=workload_details["vm_secret"],
+                    vm_username=workload_details["vm_username"],
+                    workload_name=workload_details["name"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                    workload_placement_name=workload_details[
+                        "dr_workload_app_placement_name"
+                    ],
+                    workload_pvc_selector=workload_details[
+                        "dr_workload_app_pvc_selector"
+                    ],
+                )
+                instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload()
 
         return instances
 
