@@ -14,19 +14,26 @@ from ocs_ci.ocs.constants import (
     OSD_APP_LABEL,
     CEPHBLOCKPOOL,
     ACCESS_MODE_RWO,
+    STORAGECLASS,
 )
-from ocs_ci.helpers.helpers import delete_storageclasses, delete_cephblockpools
+from ocs_ci.helpers.helpers import create_pvc
+
 
 log = getLogger(__name__)
 
 REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
+config.ENV_DATA["worker_availability_zones"] = ["us-south-1", "us-south-2"]
 
 
 # WIP - move functions to right modoule #
-def get_failures_domain_name(cephblockpool: OCP) -> list[str]:
+def get_failures_domain_name(cpb_object: OCP) -> list[str]:
     failure_domains = list()
+    cephblockpools_names = list()
     prefix = DEFAULT_CEPHBLOCKPOOL
-    cephblockpools_names = cephblockpool["items"]["metadata"]["name"]
+    for i in range(0, len((cpb_object.data["items"]))):
+        cephblockpools_names.append(cpb_object.data["items"][i]["metadata"]["name"])
+
+    log.info(f"Cephblockpool names:{cephblockpools_names}")
 
     for name in cephblockpools_names:
         if name.startswith(prefix):
@@ -34,6 +41,8 @@ def get_failures_domain_name(cephblockpool: OCP) -> list[str]:
             log.info(corrected_name)
             if corrected_name:
                 failure_domains.append(corrected_name)
+
+    log.info(f"Failure domains:{failure_domains}")
 
     return failure_domains
 
@@ -54,30 +63,37 @@ def count_osd_pods() -> int:
 
 
 def delete_replica_1_sc() -> None:
-    delete_storageclasses([REPLICA1_STORAGECLASS])
+    sc_obj = OCP(kind=STORAGECLASS, resource_name=REPLICA1_STORAGECLASS)
+    sc_obj.delete(resource_name=REPLICA1_STORAGECLASS)
 
-    delete_cephblockpools
+
+def delete_replica1_cephblockpools(cpb_object: OCP):
+    for i in range(0, len((cpb_object.data["items"]))):
+        resourcename = cpb_object.data["items"][i]["metadata"]["name"]
+        if resourcename != DEFAULT_CEPHBLOCKPOOL:
+            cpb_object.delete(resource_name=resourcename)
+            log.info(f"deleting {resourcename}")
 
 
-def create_replica1_pvc(pvc_factory, project_factory):
+def create_replica1_pvc(project_factory):
     proj_obj = project_factory()
     proj = proj_obj.namespace
-    pvc_factory(
-        project=proj,
-        interface=None,
-        storageclass=REPLICA1_STORAGECLASS,
+    create_pvc(
+        namespace=proj,
+        sc_name=REPLICA1_STORAGECLASS,
         size="1G",
         access_mode=ACCESS_MODE_RWO,
     )
 
 
-def create_pod_on_failure_domain(pod_factory, failure_domain: str):
-    pvc = create_replica1_pvc()
-    pod_factory(pvc=pvc, nodeSelector="topology.kubernetes.io/zone: f{failure_domain}")
+def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: str):
+    pvc = create_replica1_pvc(project_factory)
+    pod_factory(pvc=pvc, node_selector={"topology.kubernetes.io/zone": failure_domain})
 
 
 @pytest.fixture(scope="function")
-def setup_rellica1(request, pod_factory):
+def setup_rellica1(request, pod_factory, project_factory):
+    log.info("setup fixture called")
     storage_cluster = StorageCluster(
         resource_name=config.ENV_DATA["storage_cluster_name"],
         namespace=config.ENV_DATA["cluster_namespace"],
@@ -85,27 +101,33 @@ def setup_rellica1(request, pod_factory):
 
     set_non_resilient_pool(storage_cluster)
     validate_non_resilient_pool(storage_cluster)
-    cephblockpools = OCP(kind=CEPHBLOCKPOOL)
-    testing_pod = pod_factory
+
+    failure_domains = config.ENV_DATA["worker_availability_zones"]
+    testing_pod = create_pod_on_failure_domain(
+        project_factory,
+        pod_factory,
+        failure_domain=failure_domains[1],
+    )
     log.info(testing_pod)
 
     def teardown() -> None:
-        # delete workload pod
-        # delete pvc
+        log.info("Teardown fixture called")
+        cephblockpools = OCP(kind=CEPHBLOCKPOOL)
         set_non_resilient_pool(storage_cluster, enable=False)
         delete_replica_1_sc()
-        delete_cephblockpools(cephblockpools)
+        delete_replica1_cephblockpools(cephblockpools)
         delete_pods(get_replica_1_osds())
 
-        request.addfinalizer(teardown)
+    request.addfinalizer(teardown)
 
 
 class TestReplicaOne:
-    def test_configure_replica1(self):
-        pass
-        # check ceph health
-        # list cephblock pools
-        # list new created osd
+    def test_configure_replica1(
+        self,
+    ):  # setup_rellica1):
+        log.info("Starting Tier1 replica one test")
+        cephblockpools = OCP(kind=CEPHBLOCKPOOL)
+        get_failures_domain_name(cephblockpools)
 
     def test_topology_validation(self):
         pass

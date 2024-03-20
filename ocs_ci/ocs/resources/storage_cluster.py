@@ -1,6 +1,7 @@
 """
 StorageCluster related functionalities
 """
+
 import copy
 import ipaddress
 import logging
@@ -2699,7 +2700,14 @@ def validate_non_resilient_pool(storage_cluster: StorageCluster) -> bool:
     storagecluster_yaml = storage_cluster.get(
         resource_name=constants.DEFAULT_CLUSTERNAME
     )
-    if str(storagecluster_yaml["spec"]["managedResources"][""]).lower() == "true":
+    if (
+        str(
+            storagecluster_yaml["spec"]["managedResources"]["cephNonResilientPools"][
+                "enable"
+            ]
+        ).lower()
+        == "true"
+    ):
         return True
 
     return False
