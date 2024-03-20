@@ -1119,7 +1119,7 @@ class TestNfsEnable(ManageTest):
 
         Steps:
         1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
-        2:- Create deployment config for app pod
+        2:- Create deployment for app pod
         3:- Run IO
         4:- Wait for IO completion
         5:- Verify presence of the file
@@ -1128,7 +1128,7 @@ class TestNfsEnable(ManageTest):
         8:- Able to read the /mnt/test file's content from inside the respined pod
         9:- Edit /mnt/test file
         10:- Able to read updated /mnt/test file
-        11:- Delete deployment config
+        11:- Delete deployment
         12:- Deletion of nfs PVC
 
         """
@@ -1144,10 +1144,10 @@ class TestNfsEnable(ManageTest):
                 volume_mode="Filesystem",
             )
 
-            # Create deployment config for app pod
-            log.info("----create deployment config----")
-            deployment_config_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
-            helpers.create_resource(**deployment_config_data)
+            # Create deployment for app pod
+            log.info("----creating deployment ---")
+            deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+            helpers.create_resource(**deployment_data)
             time.sleep(60)
 
             assert self.pod_obj.wait_for_resource(
@@ -1246,9 +1246,9 @@ class TestNfsEnable(ManageTest):
             assert result.rstrip() == "Before respin" + """\n""" + "After respin"
 
         finally:
-            # Delete deployment config
-            cmd_delete_deployment_config = "delete dc nfs-test-pod"
-            self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment_config)
+            # Delete deployment
+            cmd_delete_deployment = "delete dc nfs-test-pod"
+            self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment)
 
             pv_obj = nfs_pvc_obj.backed_pv_obj
             log.info(f"pv object-----{pv_obj}")
