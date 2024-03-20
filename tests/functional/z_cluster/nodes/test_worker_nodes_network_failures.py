@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_power,
     skipif_managed_service,
     skipif_hci_provider_and_client,
+    skipif_gcp_platform,
     bugzilla,
     brown_squad,
 )
@@ -18,6 +19,7 @@ from ocs_ci.ocs.bucket_utils import s3_put_object, s3_get_object
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,8 @@ class TestWorkerNodesFailure(ManageTest):
         argnames=["interface"],
         argvalues=[
             pytest.param(
-                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-1432")
+                constants.CEPHBLOCKPOOL,
+                marks=[pytest.mark.polarion_id("OCS-1432"), skipif_gcp_platform],
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-1433")
@@ -159,7 +162,11 @@ class TestWorkerNodesFailure(ManageTest):
 
         # Reboot the worker nodes
         logger.info(f"Stop and start the worker nodes: {worker_nodes}")
-        nodes.restart_nodes_by_stop_and_start(node.get_node_objs(worker_nodes))
+        worker_node_objs = node.get_node_objs(worker_nodes)
+        if config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
+            nodes.restart_nodes_by_stop_and_start(worker_node_objs, force=False)
+        else:
+            nodes.restart_nodes_by_stop_and_start(worker_node_objs)
 
         try:
             node.wait_for_nodes_status(

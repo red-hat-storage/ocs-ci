@@ -3830,7 +3830,7 @@ def node_drain_teardown(request):
 
 
 @pytest.fixture(scope="function")
-def node_restart_teardown(request, nodes_multicluster):
+def node_restart_teardown(request, nodes_multicluster, nodes):
     """
     Make sure all nodes are up and in 'Ready' state and if not,
     try to make them 'Ready' by restarting the nodes.

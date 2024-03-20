@@ -572,6 +572,11 @@ skipif_multus_enabled = pytest.mark.skipif(
     reason="This test doesn't work correctly with multus deployments",
 )
 
+skipif_gcp_platform = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "gcp",
+    reason="Test will not run on GCP deployed cluster",
+)
+
 # Squad marks
 aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
