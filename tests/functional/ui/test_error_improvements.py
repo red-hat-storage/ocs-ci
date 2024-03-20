@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ui,
     skipif_hci_provider_or_client,
     runs_on_provider,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -81,6 +82,7 @@ class TestErrorMessageImprovements(ManageTest):
     @mcg
     @bugzilla("2193109")
     @polarion_id("OCS-4871")
+    @skipif_disconnected_cluster
     def test_namespace_store_creation_rules(
         self, cld_mgr, namespace_store_factory, setup_ui_class
     ):
@@ -112,6 +114,7 @@ class TestErrorMessageImprovements(ManageTest):
     @bugzilla("2193109")
     @polarion_id("OCS-4873")
     @skipif_hci_provider_or_client
+    @skipif_disconnected_cluster
     def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
         """
         Test to verify
