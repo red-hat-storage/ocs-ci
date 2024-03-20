@@ -15,27 +15,9 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
-
+from ocs_ci.ocs.resources.pod import verify_mon_pod_running
 
 log = logging.getLogger(__name__)
-
-
-def verify_mon_pod_running(pods):
-    """
-    Verify that all five mon pods are in Running state.
-
-    Returns:
-        bool: True if all mon pods are in running state, False otherwise
-
-    """
-    ret = pods.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector="app=rook-ceph-mon",
-        resource_count=5,
-        timeout=660,
-    )
-    log.info(f"Waited for all mon pods to come up and running {ret}")
-    return ret
 
 
 @brown_squad
@@ -52,12 +34,10 @@ class TestFiveMonInCluster(ManageTest):
         and will wait for the CephMonLowNumber alert to get cleared
 
         """
+        mon_count = 5
+
         target_msg = "The current number of Ceph monitors can be increased in order to improve cluster resilience."
         target_label = constants.ALERT_CEPHMONLOWCOUNT
-
-        pods = ocp.OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        )
 
         ceph_cluster = CephCluster()
 
@@ -68,7 +48,7 @@ class TestFiveMonInCluster(ManageTest):
         )
 
         list_mons = ceph_cluster.get_mons_from_cluster()
-        assert len(list_mons) < 5, pytest.skip(
+        assert len(list_mons) < mon_count, pytest.skip(
             "INVALID: Mon count is already above three."
         )
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
@@ -104,14 +84,14 @@ class TestFiveMonInCluster(ManageTest):
 
             log.info("Verifying that all five mon pods are in running state")
             assert verify_mon_pod_running(
-                pods
+                mon_count
             ), "All five mon pods are not up and running state"
 
             ceph_cluster.cluster_health_check(timeout=60)
 
             measure_end_time = time.time()
 
-            assert len(list_mons) != 5, pytest.skip(
+            assert len(list_mons) != mon_count, pytest.skip(
                 "INVALID: Mon count is already set to five."
             )
         else:
@@ -121,7 +101,7 @@ class TestFiveMonInCluster(ManageTest):
             )
 
         log.info(
-            "Verify that CephMonLowNumber alert got cleared post updating monCount to 5"
+            f"Verify that CephMonLowNumber alert got cleared post updating monCount to {mon_count}"
         )
         api.check_alert_cleared(
             label=target_label, measure_end_time=measure_end_time, time_min=300

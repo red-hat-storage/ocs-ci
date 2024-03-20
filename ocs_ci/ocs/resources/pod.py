@@ -3564,3 +3564,24 @@ def wait_for_pods_deletion(
         namespace=namespace,
     )
     sampler.wait_for_func_status(True)
+
+
+def verify_mon_pod_running(mon_count):
+    """
+    Verify that all the mon pods are in Running state.
+
+    Returns:
+        bool: True if all mon pods are in running state, False otherwise
+
+    """
+    pod_objs = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    ret = pod_objs.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector="app=rook-ceph-mon",
+        resource_count=mon_count,
+        timeout=660,
+    )
+    logger.info(f"Waited for all mon pods to come up and running {ret}")
+    return ret
