@@ -2286,7 +2286,7 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler = TimeoutSampler(
         timeout=timeout, sleep=sleep, func=check_ceph_health_not_ok
     )
-    sampler.wait_for_func_status(False)
+    sampler.wait_for_func_status(True)
 
 
 def ceph_health_check(namespace=None, tries=20, delay=30):

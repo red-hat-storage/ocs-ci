@@ -9,7 +9,6 @@ from ocs_ci.helpers.stretchcluster_helper import (
     recover_from_ceph_stuck,
     recover_workload_pods_post_recovery,
 )
-from ocs_ci.utility.utils import wait_for_ceph_health_not_ok
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -124,11 +123,11 @@ class TestZoneShutdownsAndCrashes:
                     pytest.mark.polarion_id("OCS-5088"),
                 ],
             ),
-            # pytest.param(1, True, 5, marks=[pytest.mark.polarion_id("OCS-5064")]),
+            pytest.param(1, True, 5, marks=[pytest.mark.polarion_id("OCS-5064")]),
         ],
         ids=[
             "Normal-Shutdown",
-            # "Immediate-Shutdown",
+            "Immediate-Shutdown",
         ],
     )
     def test_zone_shutdowns(
@@ -176,7 +175,7 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
-        # Generate 5 minutes worth of logs before inducing the netsplit
+        # Generate 2 minutes worth of logs before inducing the netsplit
         log.info("Generating 2 mins worth of log")
         time.sleep(120)
 
@@ -187,21 +186,17 @@ class TestZoneShutdownsAndCrashes:
         )
         log.info("All the workloads pods are successfully up and running")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = None
         end_time = None
+
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
-            if not immediate:
-                start_time = datetime.now(timezone.utc)
-            end_time = start_time + timedelta(
-                minutes=sc_obj.default_shutdown_duration / 60
-            )
 
             # note the file names created
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
             sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
-            # Fetch the nodes in zone that needs to be crashed
+            # Fetch the nodes in zone that needs to be shutdown
             zone = random.choice(self.zones)
             nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
 
@@ -217,12 +212,19 @@ class TestZoneShutdownsAndCrashes:
             )
             log.info(f"Nodes of zone {zone} are shutdown successfully")
 
-            # wait for the ceph to be unhealthy
-            wait_for_ceph_health_not_ok(timeout=600)
+            # note down the start_time and calculate the end_time
+            if not immediate or not start_time:
+                start_time = datetime.now(timezone.utc)
+                end_time = start_time + timedelta(
+                    minutes=sc_obj.default_shutdown_duration / 60
+                )
+            else:
+                end_time += timedelta(minutes=sc_obj.default_shutdown_duration / 60)
 
-            # get the nodes which are present in the
-            # out of quorum zone
-            retry(CommandFailed, tries=8, delay=10)(sc_obj.get_out_of_quorum_nodes)()
+            # get the nodes not in quorum
+            sc_obj.non_quorum_nodes = [
+                node_obj.name for node_obj in sc_obj.get_nodes_in_zone(zone)
+            ]
 
             # check ceph accessibility while the nodes are down
             if not sc_obj.check_ceph_accessibility(
@@ -286,7 +288,6 @@ class TestZoneShutdownsAndCrashes:
             time.sleep(delay * 60)
 
         if immediate:
-            # end_time = datetime.now(timezone.utc)
             sc_obj.post_failure_checks(
                 start_time, end_time, wait_for_read_completion=False
             )
@@ -413,7 +414,6 @@ class TestZoneShutdownsAndCrashes:
             # crash zone nodes
             log.info(f"Crashing zone {zone}")
             thread_exec = futures.ThreadPoolExecutor(max_workers=len(nodes_to_shutdown))
-            start_time = datetime.now(timezone.utc)
             futures_obj = []
             crash_cmd = "echo c > /proc/sysrq-trigger"
             for node in nodes_to_shutdown:
@@ -423,13 +423,12 @@ class TestZoneShutdownsAndCrashes:
                     )
                 )
                 log.info(f"Crashed {node.name}")
+            start_time = datetime.now(timezone.utc)
 
-            # wait for the ceph to be unhealthy
-            wait_for_ceph_health_not_ok()
-
-            # get the nodes which are present in the
-            # out of quorum zone
-            retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
+            # get the nodes not in quorum
+            sc_obj.non_quorum_nodes = [
+                node_obj.name for node_obj in sc_obj.get_nodes_in_zone(zone)
+            ]
 
             # wait for the crash tasks to complete
             log.info("Wait for the crash tasks to complete!")
