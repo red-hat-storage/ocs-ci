@@ -7,6 +7,7 @@ import logging
 import tempfile
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.acm.acm import import_recovery_clusters_with_acm
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
@@ -26,11 +27,15 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
+
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     CommandFailed,
     run_cmd,
 )
+from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
+from ocs_ci.deployment.deployment import Deployment, MultiClusterDROperatorsDeploy
+
 
 logger = logging.getLogger(__name__)
 
@@ -1322,3 +1327,104 @@ def add_label_to_appsub(workloads, label="test", value="test1"):
                 f"oc label appsub -n {wl.workload_namespace} {name} {label}={value}"
             )
     config.switch_ctx(old_ctx)
+
+def disable_dr_from_app(secondary_cluster_name):
+    old_ctx = config.cur_index
+    config.switch_acm_ctx()
+
+    # get all placement and replace value with surviving cluster
+    config.switch_acm_ctx()
+    placement_obj = ocp.OCP(kind=constants.PLACEMENT)
+    placements = placement_obj.get(all_namespaces=True).get("items")
+    for placement in placements:
+        name = placement["metadata"]["name"]
+        if name != "all-openshift-clusters":
+            path = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
+            params = f"""[{{"op": "replace", "path": "{path}", "value": "{secondary_cluster_name}"}}]"""
+            placement_obj.patch(resource_name=name, params=params, format_type="json")
+
+    '''
+    placements = placement_obj.get(all_namespaces=True).get("items")
+    for placement in placements:
+        namespace = placement["metadata"]["namepsace"]
+        name = placement["metadata"]["name"]
+        placements_dict = dict()
+        if namespace != "all-openshift-clusters":
+            placements_dict.update({name: namespace})
+
+    for name, namespace in placements_dict.items():
+        patch_cmd = f"""[{ "op": "replace",
+                    "path": "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0",
+                    "value": {secondary_cluster_name}}]"""
+        cmd = f"oc patch placement {name} --type=json -p '{patch_cmd}' -n namespace"
+        run_cmd(cmd)
+    '''
+
+    # Delete all drpc
+    run_cmd("oc delete drpc --all -A")
+
+    # Remove annotation from placements
+    for placement in placements:
+        name = placement["metadata"]["name"]
+        if name != "all-openshift-clusters":
+            path = "/metadata/annotations/cluster.open-cluster-management.io~1experimental-scheduling-disable"
+            params = f"""[{{"op": "remove", "path": "{path}"}}]"""
+            placement_obj.patch(resource_name=name, params=params, format_type="json")
+
+    return placement_obj
+
+    config.switch_ctx(old_ctx)
+
+
+def replace_cluster(primary_cluster_name, secondary_cluster_name):
+
+    """
+    Function to do core replace cluster task
+    """
+
+    # Delete dr cluster
+    config.switch_acm_ctx()
+    run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
+
+    # Disable DR on hub for each app
+    # run_cmd(cmd =f"sh {constants.DISABLE_DR_EACH_APP} {secondary_cluster_name}")
+    placement_obj = disable_dr_from_app(secondary_cluster_name)
+
+    # Remove DR configuration from hub and surviving cluster
+    run_cmd(cmd=f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+
+    # add label to openshift-opeartors namespace
+    ocp_obj = ocp.OCP(kind="namespace")
+    label = "openshift.io/cluster-monitoring='true'"
+    ocp_obj.add_label(
+        kind="namespace", resource_name=constants.OPENSHIFT_OPERATORS, label=label
+    )
+
+    # Detach old primary
+    run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
+
+    # To Do Import Recovery cluster
+    import_recovery_clusters_with_acm()
+
+    # Install MCO and gitops operator on active hub again
+    dep_obj = Deployment()
+    dep_obj.deploy_gitops_operator(switch_ctx=get_active_acm_index())
+    dep_mco = MultiClusterDROperatorsDeploy()
+    dep_mco.deploy_dr_multicluster_orchestrator()
+
+    # Create DR policy
+    dep_multi_obj = MultiClusterDROperatorsDeploy()
+    dep_multi_obj.deploy_dr_policy()
+
+    # Validate drpolicy
+    verify_drpolicy_cli(switch_ctx=get_active_acm_index())
+
+    """
+    To Do apply dr policy on all app on secondary cluster
+    1.Create DRPC with placement Ref(name and kind of placement),
+    DRPolicy Ref(name of the policy), pvc Selector and prefered cluster
+    2.Update placement annotation cluster.open-cluster-management.io/experimental-scheduling-disable: true
+    """
+    placement_obj.annotate(
+        annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
+    )

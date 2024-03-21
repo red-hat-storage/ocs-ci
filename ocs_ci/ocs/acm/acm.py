@@ -24,7 +24,11 @@ from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
+from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config,
+    get_primary_cluster_config,
+    get_recovery_cluster_config,
+)
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_ocp_version,
@@ -116,6 +120,16 @@ class AcmAddClusters(AcmPageNavigator):
                 self.do_click(locator=self.page_nav["cc_next_page_button"], timeout=10)
         log.info(f"Submitting import of {cluster_name}")
         self.do_click(self.page_nav["Submit_import"], timeout=600)
+
+    def dettach_cluster_ui(
+        self,
+        cluster_name,
+    ):
+        """
+
+        Args:
+            cluster_name (str): cluster name to dettach
+        """
 
     def import_cluster(self, cluster_name, kubeconfig_location):
         """
@@ -630,6 +644,32 @@ def import_clusters_with_acm():
         acm_nav.import_cluster(
             cluster_name=cluster_name_a,
             kubeconfig_location=kubeconfig_a,
+        )
+    else:
+        import_clusters_via_cli(clusters)
+
+
+def import_recovery_clusters_with_acm():
+    """
+    Run Procedure of: detecting acm, login to ACM console, import recoevry cluster
+
+    """
+    clusters_env = get_clusters_env()
+    recovery_index = get_recovery_cluster_config().MULTICLUSTER["multicluster_index"]
+    log.info(clusters_env)
+    kubeconfig_recovery = copy_kubeconfig(
+        file=clusters_env.get(f"kubeconfig_location_c{recovery_index}"), return_str=True
+    )
+
+    cluster_name_recoevry = clusters_env.get(f"cluster_name_{recovery_index}")
+    clusters = (cluster_name_recoevry, kubeconfig_recovery)
+    verify_running_acm()
+    if config.DEPLOYMENT.get("ui_acm_import"):
+        login_to_acm()
+        acm_nav = AcmAddClusters()
+        acm_nav.import_cluster(
+            cluster_name=cluster_name_recoevry,
+            kubeconfig_location=kubeconfig_recovery,
         )
     else:
         import_clusters_via_cli(clusters)

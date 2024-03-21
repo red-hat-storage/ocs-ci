@@ -1632,6 +1632,19 @@ def get_primary_cluster_config():
             return cluster
 
 
+def get_recovery_cluster_config():
+    """
+    Get the recovery cluster config object in a DR scenario
+
+    Return:
+        framework.config: primary cluster config obhect from config.clusters
+
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["recovery_cluster"]:
+            return cluster
+
+
 def thread_init_class(class_init_operations, shutdown):
     if len(class_init_operations) > 0:
         executor = ThreadPoolExecutor(max_workers=len(class_init_operations))
