@@ -1028,6 +1028,14 @@ class CephCluster(object):
         time.sleep(30)
         self.RBD.exec_oc_cmd(f"patch {patch}")
 
+    def ceph_config_set_debug(self):
+        # default value is 1/5, setting debug level for mds to 25
+        self.toolbox.exec_cmd_on_pod("ceph config set mds debug_mds 25")
+
+    def ceph_config_unset_debug(self):
+        # default value is 1/5, setting debug level for mds to default
+        self.toolbox.exec_cmd_on_pod("ceph config set mds debug_mds 1/5")
+
 
 class CephHealthMonitor(threading.Thread):
     """
