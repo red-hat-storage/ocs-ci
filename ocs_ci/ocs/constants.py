@@ -2494,3 +2494,6 @@ OPERATION_STOP = "stop"
 OPERATION_START = "start"
 OPERATION_RESTART = "restart"
 OPERATION_TERMINATE = "terminate"
+
+# Large size chunk IO
+CHUNK = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/chunk.py")
