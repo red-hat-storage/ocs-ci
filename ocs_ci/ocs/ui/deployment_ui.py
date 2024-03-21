@@ -247,6 +247,10 @@ class DeploymentUI(PageNavigator):
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError("Nodes not found after 600 seconds")
 
+        self.enable_taint_nodes()
+
+        self.configure_performance()
+
         if self.operator_name == OCS_OPERATOR:
             logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
             self.choose_expanded_mode(
@@ -259,8 +263,6 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
-
-        self.enable_taint_nodes()
 
         self.configure_encryption()
 
@@ -296,6 +298,8 @@ class DeploymentUI(PageNavigator):
 
         self.configure_osd_size()
 
+        self.configure_performance()
+
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
@@ -315,6 +319,24 @@ class DeploymentUI(PageNavigator):
         self.configure_data_protection()
 
         self.create_storage_cluster()
+
+    def configure_performance(self):
+        """
+        Configure performance mode
+
+        """
+        mode = config.ENV_DATA.get("performance_profile")
+        if self.ocs_version_semantic >= version.VERSION_4_15 and mode in (
+            "lean",
+            "performance",
+        ):
+            self.do_click(
+                locator=self.dep_loc["drop_down_performance"], enable_screenshot=True
+            )
+            if mode == "lean":
+                self.do_click(locator=self.dep_loc["lean_mode"])
+            elif mode == "performance":
+                self.do_click(locator=self.dep_loc["performance_mode"])
 
     def create_storage_cluster(self):
         """

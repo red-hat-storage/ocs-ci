@@ -207,7 +207,23 @@ deployment_4_15 = {
     "drop_down_projects": (
         'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
-    )
+    ),
+    "drop_down_performance": (
+        "//*[@class='pf-c-select odf-configure-performance__selector pf-u-mb-md']",
+        By.XPATH,
+    ),
+    "lean_mode": (
+        "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Lean mode')]",
+        By.XPATH,
+    ),
+    "balanced_mode": (
+        "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Balanced mode')]",
+        By.XPATH,
+    ),
+    "performance_mode": (
+        "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Performance mode')]",
+        By.XPATH,
+    ),
 }
 
 generic_locators = {
