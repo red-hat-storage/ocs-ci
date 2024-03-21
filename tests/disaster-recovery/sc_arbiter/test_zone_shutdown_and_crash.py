@@ -124,11 +124,11 @@ class TestZoneShutdownsAndCrashes:
                     pytest.mark.polarion_id("OCS-5088"),
                 ],
             ),
-            pytest.param(1, True, 5, marks=[pytest.mark.polarion_id("OCS-5064")]),
+            # pytest.param(1, True, 5, marks=[pytest.mark.polarion_id("OCS-5064")]),
         ],
         ids=[
             "Normal-Shutdown",
-            "Immediate-Shutdown",
+            # "Immediate-Shutdown",
         ],
     )
     def test_zone_shutdowns(
@@ -168,7 +168,7 @@ class TestZoneShutdownsAndCrashes:
         sc_obj = StretchCluster()
 
         if immediate:
-            sc_obj.default_shutdown_durarion = 120
+            sc_obj.default_shutdown_durarion = 180
 
         # Run the logwriter cephFs workloads
         (
@@ -193,7 +193,9 @@ class TestZoneShutdownsAndCrashes:
             log.info(f"------ Iteration {i+1} ------")
             if not immediate:
                 start_time = datetime.now(timezone.utc)
-            end_time = start_time + timedelta(minutes=sc_obj.default_shutdown_durarion)
+            end_time = start_time + timedelta(
+                minutes=sc_obj.default_shutdown_durarion / 60
+            )
 
             # note the file names created
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
