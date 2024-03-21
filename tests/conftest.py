@@ -7526,6 +7526,7 @@ def aws_log_based_replication_setup(
     return factory
 
 
+@pytest.fixture()
 def scale_noobaa_db_pod_pv_size(request):
     """
     This fixtue helps to scale the noobaa db pv size.
