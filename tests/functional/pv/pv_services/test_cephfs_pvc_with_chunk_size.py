@@ -7,6 +7,7 @@ from ocs_ci.ocs.resources import pod
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 )
 @tier2
 @bugzilla("2171225")
+@magenta_squad
 class TestCephfsWithChunkIo:
     """
     This class takes care of create Cephfs PVC, create Fedora dc pod and run Chunk IO on fedora pod
