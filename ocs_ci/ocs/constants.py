@@ -2869,3 +2869,6 @@ NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
 
 # ascii characters
 ENTER_KEY = chr(13)
+
+# Large size chunk IO
+CHUNK = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/chunk.py")
