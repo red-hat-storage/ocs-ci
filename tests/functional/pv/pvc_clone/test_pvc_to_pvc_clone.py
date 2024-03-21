@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import skipif_hci_provider_and_client
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -227,6 +228,7 @@ class TestClone(ManageTest):
         ), f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
+    @skipif_hci_provider_and_client
     @pytest.mark.polarion_id("OCS-5444")
     @pytest.mark.polarion_id("OCS-5446")
     @pytest.mark.parametrize(
@@ -332,6 +334,7 @@ class TestClone(ManageTest):
         ), f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {snapshot_restore_pod_obj.name}")
 
+    @skipif_hci_provider_and_client
     @pytest.mark.polarion_id("OCS-5445")
     @pytest.mark.polarion_id("OCS-5447")
     @pytest.mark.parametrize(
