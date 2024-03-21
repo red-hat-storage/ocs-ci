@@ -114,7 +114,6 @@ class TestErrorMessageImprovements(ManageTest):
     @bugzilla("2193109")
     @polarion_id("OCS-4873")
     @skipif_hci_provider_or_client
-    @skipif_disconnected_cluster
     def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
         """
         Test to verify
