@@ -42,7 +42,7 @@ class StretchCluster(OCS):
         self.rbd_logwriter_sts = None
         self.rbd_read_logs = None
         self.cephfs_read_logs = None
-        self.default_shutdown_durarion = 600
+        self.default_shutdown_duration = 900
         self.workload_map = {
             f"{constants.LOGWRITER_CEPHFS_LABEL}": [
                 None,

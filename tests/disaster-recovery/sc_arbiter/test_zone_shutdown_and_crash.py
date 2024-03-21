@@ -168,7 +168,7 @@ class TestZoneShutdownsAndCrashes:
         sc_obj = StretchCluster()
 
         if immediate:
-            sc_obj.default_shutdown_durarion = 180
+            sc_obj.default_shutdown_duration = 180
 
         # Run the logwriter cephFs workloads
         (
@@ -194,7 +194,7 @@ class TestZoneShutdownsAndCrashes:
             if not immediate:
                 start_time = datetime.now(timezone.utc)
             end_time = start_time + timedelta(
-                minutes=sc_obj.default_shutdown_durarion / 60
+                minutes=sc_obj.default_shutdown_duration / 60
             )
 
             # note the file names created
@@ -218,15 +218,16 @@ class TestZoneShutdownsAndCrashes:
             log.info(f"Nodes of zone {zone} are shutdown successfully")
 
             # wait for the ceph to be unhealthy
-            wait_for_ceph_health_not_ok()
+            wait_for_ceph_health_not_ok(timeout=600)
 
             # get the nodes which are present in the
             # out of quorum zone
-            retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
+            retry(CommandFailed, tries=8, delay=10)(sc_obj.get_out_of_quorum_nodes)()
 
             # check ceph accessibility while the nodes are down
             if not sc_obj.check_ceph_accessibility(
-                timeout=sc_obj.default_shutdown_durarion
+                timeout=sc_obj.default_shutdown_duration
+                - int(((datetime.now(timezone.utc)) - start_time).total_seconds())
             ):
                 assert recover_from_ceph_stuck(
                     sc_obj,
