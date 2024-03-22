@@ -8,6 +8,8 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
     skipif_hci_provider_and_client,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
 )
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
@@ -20,6 +22,8 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @tier2
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestPvcSnapshotOfWorkloads(E2ETest):
     """
     Tests to verify PVC snapshot feature for pgsql workloads
