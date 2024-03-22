@@ -3209,6 +3209,23 @@ def exit_osd_maintenance_mode(osd_deployment):
             os.remove(f"backup_{deployment.name}.yaml")
 
 
+def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Restart the pods having particular label
+
+    Args:
+        label (str): Label of the pod
+        namespace (str): namespace where the pods are running
+
+    """
+    pods_to_restart = [
+        Pod(**pod_data)
+        for pod_data in get_pods_having_label(label, namespace=namespace)
+    ]
+    delete_pods(pods_to_restart, wait=True)
+    logger.info(f"Deleted all the pods with label {label} and in namespace {namespace}")
+
+
 def restart_pods_in_statuses(
     status_options, namespace=config.ENV_DATA["cluster_namespace"], wait=True
 ):
