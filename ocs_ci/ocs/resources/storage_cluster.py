@@ -680,7 +680,7 @@ def ocs_install_verification(
     if not (fusion_aas_consumer or hci_cluster):
         # Temporarily disable health check for hci until we have enough healthy clusters
         assert utils.ceph_health_check(
-            namespace, health_check_tries, health_check_delay
+            namespace=namespace, tries=health_check_tries, delay=health_check_delay
         )
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.

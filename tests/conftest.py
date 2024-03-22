@@ -1636,6 +1636,12 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
         ):
             return
 
+    cluster_type = constants.CLUSTER_TYPE_INTERNAL
+    if ocsci_config.DEPLOYMENT.get("external_mode"):
+        cluster_type = constants.CLUSTER_TYPE_EXTERNAL
+    if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
+        cluster_type = constants.CLUSTER_TYPE_MULTI_SC
+
     node = request.node
 
     # ignore ceph health check for the TestFailurePropagator test cases
@@ -1657,9 +1663,8 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     # We are allowing 20 re-tries for health check, to avoid teardown failures for cases like:
                     # "flip-flopping ceph health OK and warn because of:
                     # HEALTH_WARN Reduced data availability: 2 pgs peering
-                    ceph_health_check(
-                        namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-                    )
+
+                    ceph_health_check(cluster_type=cluster_type)
                     log.info("Ceph health check passed at teardown!")
             except CephHealthException:
                 if not ocsci_config.RUN["skip_reason_test_found"]:
@@ -1675,7 +1680,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 log.info("Ceph health check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_health_check(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+                ceph_health_check(cluster_type=cluster_type)
                 raise
 
     request.addfinalizer(finalizer)
@@ -1686,7 +1691,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check(
-                    namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                    cluster_type=cluster_type,
                     tries=10,
                     delay=15,
                 )

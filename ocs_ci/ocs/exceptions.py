@@ -690,3 +690,11 @@ class NoRunningCephToolBoxException(Exception):
 
 class UsernameNotFoundException(Exception):
     pass
+
+
+class CephHealthExceptionInternal(CephHealthException):
+    pass
+
+
+class CephHealthExceptionExternal(CephHealthException):
+    pass

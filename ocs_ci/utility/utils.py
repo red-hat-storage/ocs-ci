@@ -57,7 +57,10 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     CephToolBoxNotFoundException,
     NoRunningCephToolBoxException,
+    CephHealthExceptionExternal,
+    CephHealthExceptionInternal,
 )
+
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -2267,13 +2270,15 @@ def get_az_count():
         return 1
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30):
+def ceph_health_check(namespace=None, tries=20, delay=30, cluster_type="internal"):
     """
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
         tries (int): Number of retries
         delay (int): Delay in seconds between retries
+        cluster_type (str): The type of cluster, can be "internal", "external" and "multi_sc" for multi-storagecluster.
+            check constants that start with CLUSTER_TYPE.
 
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
@@ -2282,17 +2287,42 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
     """
     if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM:
         delay = 60
-    return retry(
-        (
-            CephHealthException,
-            CommandFailed,
-            subprocess.TimeoutExpired,
-            NoRunningCephToolBoxException,
-        ),
-        tries=tries,
-        delay=delay,
-        backoff=1,
-    )(ceph_health_check_base)(namespace)
+    if (
+        cluster_type == constants.CLUSTER_TYPE_EXTERNAL
+        or cluster_type == constants.CLUSTER_TYPE_INTERNAL
+    ):
+        # checking if external mode is standalone or multi-storagecluster to determine namespace
+        if namespace is None:
+            if cluster_type == constants.CLUSTER_TYPE_EXTERNAL:
+                if config.DEPLOYMENT.get("multi_storagecluster"):
+                    namespace = constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
+
+        return retry(
+            (
+                CephHealthException,
+                CommandFailed,
+                subprocess.TimeoutExpired,
+                NoRunningCephToolBoxException,
+            ),
+            tries=tries,
+            delay=delay,
+            backoff=1,
+        )(ceph_health_check_base)(namespace)
+
+    if cluster_type == constants.CLUSTER_TYPE_MULTI_SC:
+        return retry(
+            (
+                CephHealthException,
+                CommandFailed,
+                subprocess.TimeoutExpired,
+                NoRunningCephToolBoxException,
+                CephHealthExceptionExternal,
+                CephHealthExceptionInternal,
+            ),
+            tries=tries,
+            delay=delay,
+            backoff=1,
+        )(ceph_health_check_base_multi_storagecluster)()
 
 
 def ceph_health_check_base(namespace=None):
@@ -2313,12 +2343,53 @@ def ceph_health_check_base(namespace=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     health = run_ceph_health_cmd(namespace)
-
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
         raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
+
+
+def ceph_health_check_base_multi_storagecluster():
+    """
+    Send ceph health to both internal and external cluster for multi-storagecluster purpose.
+
+    Raises:
+        CephHealthExceptionInternal: Internal cluster ceph health problem.
+        CephHealthExceptionExternal: External cluster ceph health problem.
+        CommandFailed: Incase command failed.
+        subprocess.TimeoutExpired: Incase timeout.
+        NoRunningCephToolBoxException: Incase toolbox doesn't exist - relevant only for internal cluster as
+                                       multi-storagecluster external uses ssh
+
+    Returns:
+        True: True if both ceph clusters are healthy.
+
+    """
+    try:
+        ceph_health_check_base()
+    except CephHealthException as ex:
+        log.error(f"CephHealthException was caught for internal cluster - {ex}")
+        raise CephHealthExceptionInternal
+    except CommandFailed as ex:
+        log.error(f"CommandFailed was caught for internal cluster - {ex}")
+        raise CommandFailed
+    except subprocess.TimeoutExpired as ex:
+        log.error(f"subprocess.TimeoutExpired was caught for internal cluster - {ex}")
+    except NoRunningCephToolBoxException as ex:
+        log.error(
+            f"NoRunningCephToolBoxException was caught for internal cluster - {ex}"
+        )
+
+    try:
+        ceph_health_check_base(namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE)
+    except CephHealthException as ex:
+        log.error(f"CephHealthException was caught for external cluster - {ex}")
+        raise CephHealthExceptionExternal
+    except CommandFailed as ex:
+        log.error(f"CommandFailed was caught for external cluster - {ex}")
+        raise CommandFailed
+    return True
 
 
 def create_ceph_health_cmd(namespace):
@@ -2356,16 +2427,30 @@ def run_ceph_health_cmd(namespace):
 
     """
     # Import here to avoid circular loop
-    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+    if namespace == constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE:
+        from ocs_ci.utility.connection import Connection
+        from ocs_ci.deployment.helpers.external_cluster_helpers import (
+            get_external_cluster_client,
+        )
 
-    try:
-        ct_pod = get_ceph_tools_pod(namespace=namespace)
-    except (AssertionError, CephToolBoxNotFoundException) as ex:
-        raise CommandFailed(ex)
+        host, user, password, ssh_key = get_external_cluster_client()
+        connection_to_cephcluster = Connection(
+            host=host, user=user, password=password, private_key=ssh_key
+        )
+        ceph_health_tuple = connection_to_cephcluster.exec_cmd("ceph health")
+        return ceph_health_tuple[1]
 
-    return ct_pod.exec_ceph_cmd(
-        ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
-    )
+    else:
+        from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+        try:
+            ct_pod = get_ceph_tools_pod(namespace=namespace)
+        except (AssertionError, CephToolBoxNotFoundException) as ex:
+            raise CommandFailed(ex)
+
+        return ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
+        )
 
 
 def get_rook_repo(branch="master", to_checkout=None):
