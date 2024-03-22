@@ -117,6 +117,9 @@ DEPLOYMENT:
   # AWS profile ( profile must exist in ~/.aws/credentials )
   aws_profile: "ocs_ci"
   aws_cred_path: "~/.aws/credentials"
+  # STS in CCO manual mode
+  sts_enabled: false
+
 
 
 # Section for reporting configuration

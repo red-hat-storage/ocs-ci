@@ -12,10 +12,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import utils, templating, system
-from ocs_ci.deployment.disconnected import (
-    get_ocp_release_image,
-    mirror_ocp_release_images,
-)
+from ocs_ci.utility.deployment import get_ocp_release_image
+from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 
 
 logger = logging.getLogger(__name__)

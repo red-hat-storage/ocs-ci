@@ -1,0 +1,22 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  sts_enabled: true
+
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'ipi'
+  region: 'us-east-2'
+  worker_availability_zones:
+    - 'us-east-2a'
+    - 'us-east-2b'
+    - 'us-east-2c'
+  master_availability_zones:
+    - 'us-east-2a'
+    - 'us-east-2b'
+    - 'us-east-2c'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_instance_type: 'm5.4xlarge'
+
+# TODO: Add polarion ID

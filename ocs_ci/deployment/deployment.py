@@ -108,7 +108,7 @@ from ocs_ci.utility import (
     pgsql,
     version,
 )
-from ocs_ci.utility.aws import update_config_from_s3
+from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -177,6 +177,7 @@ class Deployment(object):
         self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.namespace = config.ENV_DATA["cluster_namespace"]
+        self.sts_role_arn = None
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -787,6 +788,14 @@ class Deployment(object):
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
+        if config.DEPLOYMENT.get("sts_enabled"):
+            if "config" not in subscription_yaml_data["spec"]:
+                subscription_yaml_data["spec"]["config"] = {}
+            role_arn_data = {"name": "ROLEARN", "value": self.sts_role_arn}
+            if "env" not in subscription_yaml_data["spec"]["config"]:
+                subscription_yaml_data["spec"]["config"]["env"] = [role_arn_data]
+            else:
+                subscription_yaml_data["spec"]["config"]["env"].append([role_arn_data])
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription_manifest", delete=False
         )
@@ -907,6 +916,10 @@ class Deployment(object):
         else:
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
+
+        if config.DEPLOYMENT.get("sts_enabled"):
+            role_data = create_and_attach_sts_role()
+            self.sts_role_arn = role_data["Role"]["Arn"]
 
         if not live_deployment:
             create_catalog_source(image)

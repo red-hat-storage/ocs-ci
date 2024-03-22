@@ -143,6 +143,7 @@ anywhere else.
 * `sc_encryption` - Enable StorageClass encryption.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
+* `sts_enabled` - Enable STS deployment functionality.
 
 #### REPORTING
 
