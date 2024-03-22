@@ -3,6 +3,8 @@ import logging
 import time
 import ocpnetsplit
 
+from ocs_ci.utility.utils import wait_for_ceph_health_not_ok
+from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
@@ -12,7 +14,7 @@ from ocs_ci.helpers.stretchcluster_helper import (
     recover_workload_pods_post_recovery,
     recover_from_ceph_stuck,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -61,10 +63,10 @@ class TestNetSplit:
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
-            pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
+            pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 13),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 13),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 13),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 13),
         ],
         ids=[
             "Data-1-Data-2",
@@ -109,7 +111,7 @@ class TestNetSplit:
         (
             sc_obj.cephfs_logwriter_dep,
             sc_obj.cephfs_logreader_job,
-        ) = setup_logwriter_cephfs_workload_factory(read_duration=(duration + 5))
+        ) = setup_logwriter_cephfs_workload_factory(read_duration=(duration + 10))
         logger.info("Workloads are running")
 
         # Generate 5 minutes worth of logs before inducing the netsplit
@@ -131,6 +133,7 @@ class TestNetSplit:
         # note the start time (UTC)
         target_time = datetime.now() + timedelta(minutes=5)
         start_time = target_time.astimezone(timezone.utc)
+        end_time = start_time + timedelta(minutes=duration)
         ocpnetsplit.main.schedule_split(
             nodes=get_all_nodes(),
             split_name=zones,
@@ -139,17 +142,26 @@ class TestNetSplit:
         )
         logger.info(f"Netsplit induced at {start_time} for zones {zones}")
 
+        # wait for the ceph to be unhealthy
+        wait_for_ceph_health_not_ok()
+
+        # get the nodes which are present in the
+        # out of quorum zone
+        retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
+
         # note the end time (UTC)
-        if not sc_obj.check_ceph_accessibility(timeout=((duration + 5) * 60)):
+        if not sc_obj.check_ceph_accessibility(timeout=(duration * 60)):
             assert recover_from_ceph_stuck(
                 sc_obj
             ), "Something went wrong. not expected. please check rook-ceph logs"
-        end_time = datetime.now(timezone.utc)
-        time_passed = (end_time - start_time).total_seconds() / 60
-        if int(time_passed) < (duration + 5):
-            time.sleep(((duration + 5) - int(time_passed)) * 60)
-            end_time = datetime.now(timezone.utc)
+        time_now = datetime.now(timezone.utc)
+        if time_now < end_time:
+            time.sleep((end_time - time_now).total_seconds())
+
         logger.info(f"Ended netsplit at {end_time}")
+
+        # check if all the read operations are successful during the failure window, check for every minute
+        sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
         # wait for the logreader workload to finish
         try:
@@ -168,9 +180,6 @@ class TestNetSplit:
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE
             )
             recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-
-        # check if all the read operations are successful during the failure window, check for every minute
-        sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
         sc_obj.cephfs_logreader_job.delete()
         logger.info(sc_obj.cephfs_logreader_pods)
