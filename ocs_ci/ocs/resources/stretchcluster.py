@@ -419,21 +419,20 @@ class StretchCluster(OCS):
 
     def get_out_of_quorum_nodes(self):
         """
-        Get the zone where the mon's are not in quorum
+        Get the zone nodes where the mon's are not in quorum
 
         Returns:
-            String: zone in which mons are out of quorum
+            List of non-quorum node names
 
         """
-
         # find out the mons in quorum
         ceph_tools_pod = pod.get_ceph_tools_pod()
         output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
         quorum_mons = output.get("quorum_names")
+        logger.info(f"Mon's in quorum are: {quorum_mons}")
         mon_meta_data = list(
             ceph_tools_pod.exec_cmd_on_pod(command="ceph mon metadata")
         )
-        logger.info(quorum_mons)
 
         # find out the mon's that are not in quorum and the
         # respective pod nodes
@@ -441,7 +440,7 @@ class StretchCluster(OCS):
         for mon in mon_meta_data:
             if mon["name"] not in quorum_mons:
                 non_quorum_nodes.append(mon["hostname"])
-        logger.info(non_quorum_nodes)
+
         assert len(non_quorum_nodes) <= len(
             self.get_nodes_in_zone(constants.ZONES_LABELS[0])
         ), (

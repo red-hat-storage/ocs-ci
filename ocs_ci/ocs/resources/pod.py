@@ -3355,6 +3355,10 @@ def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespac
     """
     Restart the pods having particular label
 
+    Args:
+        label (str): Label of the pod
+        namespace (str): namespace where the pods are running
+
     """
     pods_to_restart = [
         Pod(**pod_data)
