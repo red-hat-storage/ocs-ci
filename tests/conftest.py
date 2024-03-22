@@ -127,6 +127,7 @@ from ocs_ci.utility.utils import (
     get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
+    get_random_str,
     get_testrun_name,
     load_auth_config,
     ocsci_log_path,
@@ -2511,6 +2512,7 @@ def awscli_pod_client_session(
 def awscli_pod_fixture(request, scope_name):
     """
     Creates a new AWSCLI pod for relaying commands
+
     Args:
         scope_name (str): The name of the fixture's scope,
         used for giving a descriptive name to the pod and configmap
@@ -2519,12 +2521,19 @@ def awscli_pod_fixture(request, scope_name):
         pod: A pod running the AWS CLI
 
     """
+    project = f"s3cli-{get_random_str()}"
+    ocp_obj = ocp.OCP(namespace=project)
 
-    request.addfinalizer(awscli_pod_cleanup)
+    def delete_project(namespace):
+        if "openshift" not in namespace:
+            ocp_obj.delete_project(project)
 
-    log.info("Cleaning up any previous AWS CLI resources")
-    awscli_pod_cleanup()
-    return create_awscli_pod(scope_name)
+    request.addfinalizer(lambda: delete_project(namespace=project))
+    request.addfinalizer(lambda: awscli_pod_cleanup(namespace=project))
+
+    ocp_obj.new_project(project)
+    ocp.switch_to_default_rook_cluster_project()
+    return create_awscli_pod(scope_name, project)
 
 
 @pytest.fixture(scope="session")
