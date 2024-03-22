@@ -38,11 +38,11 @@ class OCPDeployment:
             and self.deployment_type == "managed"
         )
         # deployment via assisted installer
-        ai_deplyoment = config.ENV_DATA["deployment_type"] == "ai"
+        ai_deployment = config.ENV_DATA["deployment_type"] == "ai"
         if (
             not self.flexy_deployment
             and not ibmcloud_managed_deployment
-            and not ai_deplyoment
+            and not ai_deployment
         ):
             self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA["cluster_path"]
