@@ -17,3 +17,4 @@ spec:
   # retryDeadlineSeconds specifies the duration in seconds relative to the start time that the operation may be retried;
   # value must be positive integer. If not specified, defaults to 600 seconds. Maximum allowed value is 1800.
   retryDeadlineSeconds: 900
+  timeout: 360
