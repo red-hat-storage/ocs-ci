@@ -1,4 +1,3 @@
-import ipaddress
 import json
 import logging
 import tempfile
@@ -304,16 +303,6 @@ class MetalLBInstaller:
             NotImplementedError: if platform is not supported
             ValueError: if number of reserved IP addresses for MetalLB is not specified
         """
-        reserved_ips_num = config.ENV_DATA.get("ips_to_reserve")
-        if not reserved_ips_num:
-            raise ValueError(
-                "Number of reserved IP addresses for MetalLB is not specified"
-            )
-        else:
-            for num in range(1, reserved_ips_num + 1):
-                self.hostnames.append(
-                    f"clustername-{config.ENV_DATA['cluster_name']}-{num}"
-                )
 
         # common part for both platforms
         ipaddresspool_data = templating.load_yaml(METALLB_IPADDRESSPOOL_PATH)
@@ -329,6 +318,16 @@ class MetalLBInstaller:
             return True
 
         if config.ENV_DATA["platform"] == constants.HCI_VSPHERE:
+            reserved_ips_num = config.ENV_DATA.get("ips_to_reserve")
+            if not reserved_ips_num:
+                raise ValueError(
+                    "Number of reserved IP addresses for MetalLB is not specified"
+                )
+            else:
+                for num in range(1, reserved_ips_num + 1):
+                    self.hostnames.append(
+                        f"clustername-{config.ENV_DATA['cluster_name']}-{num}"
+                    )
 
             # due to circular import error, import is here
             from ocs_ci.deployment.vmware import assign_ips
@@ -340,18 +339,11 @@ class MetalLBInstaller:
             ipaddresspool_data.get("spec").update({"addresses": ip_addresses_with_mask})
 
         elif config.ENV_DATA["platform"] == constants.HCI_BAREMETAL:
-            cidr = config.ENV_DATA["machine_cidr"]
-            network = ipaddress.ip_network(cidr)
-            ip_list_by_cidr = list(network)
-            ip_list_for_hosted_clusters = list()
+            if "ip_address_pool" not in config.ENV_DATA:
+                raise ValueError("IP address pool is not specified in the config file")
 
-            # skip ip addresses reserved for machines, Network, Gateway, and Broadcast; first 10
-            for i, ip in enumerate(ip_list_by_cidr):
-                if i < 10 + 1 or i == len(ip_list_by_cidr) - 1:
-                    continue
-                ip_list_for_hosted_clusters.append(f"{ip}/32")
             ipaddresspool_data.get("spec").update(
-                {"addresses": ip_list_for_hosted_clusters}
+                {"addresses": config.ENV_DATA["ip_address_pool"]}
             )
         else:
             raise NotImplementedError(
@@ -507,7 +499,8 @@ class MetalLBInstaller:
         # due to circular import error, import is here
         from ocs_ci.deployment.vmware import release_ips
 
-        release_ips(hosts=self.hostnames)
+        if config.ENV_DATA["platform"] == constants.HCI_VSPHERE:
+            release_ips(hosts=self.hostnames)
 
         self.delete_ipaddresspool()
 

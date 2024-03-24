@@ -273,7 +273,6 @@ HCI_CLIENT = "hci_client"
 HCI_PROVIDER = "provider"
 
 # provider mode constants
-AUTH_PATH_PATTERN = "~/clusters/{}/openshift-cluster-dir/auth"
 PROVIDER_MODE_OCS_DEPLOYMENT_PATH = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "provider-mode"
 )

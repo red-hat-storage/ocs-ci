@@ -3,11 +3,13 @@ import logging
 import os
 import tempfile
 import time
-
+from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
     get_hosted_cluster_names,
+    kubeconfig_exists_decorator,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
@@ -38,31 +40,42 @@ from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-class DeployClients:
+class HostedClients(HyperShiftBase):
+    """
+    The class is intended to deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them.
+    All functions are for multiple clusters deployment or the helper functions.
+    All functions related to OCP deployment or ODF client setup are in the respective classes.
+    """
+
     def __init__(self):
-        pass
+        HyperShiftBase.__init__(self)
+        if not ("cluster_names" in config.default_cluster_ctx.ENV_DATA):
+            raise ValueError("No 'cluster_names' set to ENV_DATA")
+        if not ("cluster_paths" in config.default_cluster_ctx.ENV_DATA):
+            raise ValueError("No 'cluster_paths' set to ENV_DATA")
+        if not len(config.default_cluster_ctx.ENV_DATA.get("cluster_names")) != len(
+            "cluster_paths"
+        ):
+            raise ValueError(
+                "The number of 'ENV_DATA.cluster_names' and 'ENV_DATA.cluster_paths' should be the same"
+            )
 
     def do_deploy(self):
-        hypershiftHostedOCP = HypershiftHostedOCP()
 
         # stage 1 deploy multiple hosted OCP clusters
-        cluster_names = hypershiftHostedOCP.deploy_hosted_ocp_clusters()
+        cluster_names = self.deploy_hosted_ocp_clusters()
 
         # stage 2 verify OCP clusters are ready
         logger.info(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
-        verification_passed = (
-            hypershiftHostedOCP.verify_hosted_ocp_clusters_from_provider()
-        )
+        verification_passed = self.verify_hosted_ocp_clusters_from_provider()
         if not verification_passed:
             logger.error("\n\n*** Some of the clusters are not ready ***\n")
 
         # stage 3 download all available kubeconfig files
         logger.info("Download kubeconfig for all clusters")
-        kubeconfig_paths = (
-            hypershiftHostedOCP.download_hosted_clusters_kubeconfig_files()
-        )
+        kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
 
         # if all desired clusters were already deployed and step 1 returns None instead of the list,
         # we proceed to ODF installation and storage client setup
@@ -115,6 +128,107 @@ class DeployClients:
             client_setup
         ), "Storage client was not setup on all hosted ODF clusters"
 
+    def deploy_hosted_ocp_clusters(
+        self,
+    ):
+        """
+        Deploy multiple hosted OCP clusters on Provider platform
+
+        Returns:
+            list: the list of cluster names for all hosted OCP clusters deployed by the func successfully
+        """
+
+        cluster_names_desired = config.ENV_DATA["cluster_names"]
+        number_of_clusters_to_deploy = len(config.ENV_DATA["cluster_names"])
+        logger.info(f"Deploying '{number_of_clusters_to_deploy}' number of clusters")
+
+        cluster_names = []
+
+        for index, cluster_name in enumerate(
+            config.default_cluster_ctx.ENV_DATA["cluster_names"]
+        ):
+            logger.info(f"Creating hosted OCP cluster: {cluster_name}")
+            hosted_ocp_cluster = HypershiftHostedOCP(cluster_name)
+            # we need to ensure that all dependencies are installed so for the first cluster we will install all,
+            # operators and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP
+            # with hcp command.
+            first_ocp_deployment = index == 0
+            cluster_name = hosted_ocp_cluster.deploy_ocp(
+                deploy_cnv=first_ocp_deployment,
+                deploy_acm_hub=first_ocp_deployment,
+                deploy_metallb=first_ocp_deployment,
+                download_hcp_binary=first_ocp_deployment,
+            )
+            if cluster_name:
+                cluster_names.append(cluster_name)
+
+        cluster_names_existing = get_hosted_cluster_names()
+        cluster_names_desired_left = [
+            cluster_name
+            for cluster_name in cluster_names_desired
+            if cluster_name not in cluster_names_existing
+        ]
+        if cluster_names_desired_left:
+            logger.error("Some of the desired hosted OCP clusters were not created")
+        else:
+            logger.info("All desired hosted OCP clusters exist")
+
+        return cluster_names
+
+    def verify_hosted_ocp_clusters_from_provider(self):
+        """
+        Verify multiple HyperShift hosted clusters from provider. If cluster_names is not provided at ENV_DATA,
+        it will get the list of hosted clusters from the provider to verify them all
+
+        Returns:
+            bool: True if all hosted clusters passed verification, False otherwise
+        """
+        cluster_names = config.ENV_DATA.get("cluster_names")
+        if not cluster_names:
+            cluster_names = get_hosted_cluster_names()
+        futures = []
+        try:
+            with ThreadPoolExecutor(len(cluster_names)) as executor:
+                for name in cluster_names:
+                    futures.append(
+                        executor.submit(
+                            self.verify_hosted_ocp_cluster_from_provider,
+                            name,
+                        )
+                    )
+            return all(future.result() for future in futures)
+        except Exception as e:
+            logger.error(
+                f"Failed to verify HyperShift hosted clusters from provider: {e}"
+            )
+            return False
+
+    def download_hosted_clusters_kubeconfig_files(self):
+        """
+        Get HyperShift hosted cluster kubeconfig for multiple clusters
+        Returns:
+            list: the list of hosted cluster kubeconfig paths
+        """
+
+        if not self.hcp_binary_exists():
+            self.download_hcp_binary()
+
+        cluster_names = get_hosted_cluster_names()
+        cluster_paths = config.default_cluster_ctx.ENV_DATA.get("cluster_paths")
+
+        name_to_path = {
+            name: path
+            for name in cluster_names
+            for path in cluster_paths
+            if name in path
+        }
+
+        kubeconfig_paths = []
+        for name, path in name_to_path.items():
+            kubeconfig_paths.append(self.download_hosted_cluster_kubeconfig(name, path))
+
+        return kubeconfig_paths
+
     def deploy_multiple_odf_clients(self):
         """
         Deploy multiple ODF clients on hosted OCP clusters. Method tries to deploy ODF client on all hosted OCP clusters
@@ -123,7 +237,7 @@ class DeployClients:
         Returns:
             list: the list of kubeconfig paths for all hosted OCP clusters
         """
-        kubeconfig_paths = HyperShiftBase().download_hosted_clusters_kubeconfig_files()
+        kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
 
         hosted_cluster_names = get_hosted_cluster_names()
 
@@ -135,11 +249,35 @@ class DeployClients:
         return kubeconfig_paths
 
 
-class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
-    def __init__(self):
+class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment):
+    def __init__(self, name):
         HyperShiftBase.__init__(self)
         MetalLBInstaller.__init__(self)
         CNVInstaller.__init__(self)
+        self.name = name
+        if "cluster_paths" in config.ENV_DATA:
+            cluster_paths = config.ENV_DATA["cluster_paths"]
+            for path in cluster_paths:
+                if self.name in path:
+                    self.cluster_kubeconfig = os.path.expanduser(
+                        os.path.join(path, "kubeconfig")
+                    )
+                    break
+        else:
+            # avoid throwing an exception if the cluster path is not found for some reason
+            # this way we can continue with the next cluster
+            logger.error(
+                f"Cluster path for desired cluster with name '{self.name}' was not found in ENV_DATA.cluster_paths"
+            )
+
+    def kubeconfig_exists(self):
+        """
+        Check if the kubeconfig exists
+
+        Returns:
+            bool: True if the kubeconfig exists, False otherwise
+        """
+        return os.path.exists(self.cluster_kubeconfig)
 
     def deploy_ocp(
         self,
@@ -166,62 +304,11 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         ):
             raise ProviderModeNotFoundException()
 
-        cluster_names_desired = []
-        if "cluster_paths" in config.default_cluster_ctx.ENV_DATA:
-            cluster_paths = config.default_cluster_ctx.ENV_DATA["cluster_paths"]
-            for path in cluster_paths:
-                if path.find("clusters/") == -1:
-                    raise ValueError(
-                        "cluster_paths must contain a path with 'clusters/', "
-                        "similar to '~/clusters/hcp-739881/openshift-cluster-dir'"
-                    )
+        self.deploy_dependencies(
+            deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
+        )
 
-                start_index = path.find("clusters/") + len("clusters/")
-
-                end_index = path.find("/", start_index)
-                cluster_name = path[start_index:end_index]
-                cluster_names_desired.append(cluster_name)
-
-        if "cluster_names" in config.default_cluster_ctx.ENV_DATA:
-            cluster_names_desired = config.default_cluster_ctx.ENV_DATA["cluster_names"]
-
-        if cluster_names_desired:
-            try:
-                cluster_names_existing = get_hosted_cluster_names()
-            except CommandFailed as e:
-                logger.warning(
-                    f"Error during getting hosted cluster names: {e}, most likely CNV is not installed yet."
-                )
-                cluster_names_existing = []
-
-            cluster_names_desired_left = [
-                cluster_name
-                for cluster_name in cluster_names_desired
-                if cluster_name not in cluster_names_existing
-            ]
-            if cluster_names_desired_left:
-                logger.info(
-                    f"Creating hosted OCP cluster: {cluster_names_desired_left[-1]}"
-                )
-                self.deploy_dependencies(
-                    deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
-                )
-
-                return self.create_kubevirt_ocp_cluster(
-                    name=cluster_names_desired_left[-1]
-                )
-            else:
-                logger.info("All desired hosted OCP clusters already exist")
-                return None
-        else:
-            logger.info(
-                "\n--- No cluster_paths or cluster_names set to ENV_DATA. "
-                "Creating hosted OCP cluster with random name ---\n"
-            )
-            self.deploy_dependencies(
-                deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
-            )
-            return self.create_kubevirt_ocp_cluster()
+        return self.create_kubevirt_ocp_cluster(name=self.name)
 
     def deploy_dependencies(
         self, deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
@@ -251,63 +338,15 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller):
         if download_hcp_binary:
             self.download_hcp_binary()
 
-    def deploy_hosted_ocp_clusters(
-        self,
-    ):
-        """
-        Deploy multiple hosted OCP clusters on Provider platform
 
-        Returns:
-            list: the list of cluster names for all hosted OCP clusters deployed by the func successfully
-        """
-
-        if "cluster_names" in config.default_cluster_ctx.ENV_DATA:
-            number_of_clusters_to_deploy = len(
-                config.default_cluster_ctx.ENV_DATA["cluster_names"]
-            )
-        else:
-            cluster_paths = config.default_cluster_ctx.ENV_DATA["cluster_paths"]
-            number_of_clusters_to_deploy = len(cluster_paths)
-
-        logger.info(f"Deploying {number_of_clusters_to_deploy} clusters")
-
-        cluster_names = []
-        for i in range(number_of_clusters_to_deploy):
-            # we need to ensure that all dependencies are installed so for the first cluster we will install all
-            # operators and finish the rest preparation steps.
-            # For the rest of the clusters we will only deploy OCP with hcp command.
-            if i == 0:
-                cluster_deployed = self.deploy_ocp(
-                    deploy_cnv=True,
-                    deploy_acm_hub=True,
-                    deploy_metallb=True,
-                    download_hcp_binary=True,
-                )
-                if cluster_deployed is not None:
-                    cluster_names.append(cluster_deployed)
-            else:
-                cluster_deployed = self.deploy_ocp(
-                    deploy_cnv=False,
-                    deploy_acm_hub=False,
-                    deploy_metallb=False,
-                    download_hcp_binary=False,
-                )
-                if cluster_deployed is not None:
-                    cluster_names.append(cluster_deployed)
-
-        logger.info(f"All deployment jobs have finished: {cluster_names}")
-        return cluster_names
-
-
-class HostedODF:
+class HostedODF(HyperShiftBase, HypershiftHostedOCP):
     def __init__(self, name: str):
+        HyperShiftBase.__init__(self)
+        HypershiftHostedOCP.__init__(self, name)
         self.namespace_client = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
-        self.timeout_check_resources_existence = 6
-        self.name = name
-        self.cluster_kubeconfig = os.path.expanduser(
-            f"{constants.AUTH_PATH_PATTERN.format(name)}/kubeconfig"
-        )
+        self.timeout_check_resources_exist = 6
 
+    @kubeconfig_exists_decorator
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
         """
         Execute command on the system
@@ -334,6 +373,7 @@ class HostedODF:
             cmd=cmd, timeout=timeout, ignore_error=ignore_error, **kwargs
         )
 
+    @kubeconfig_exists_decorator
     def create_ns(self):
         """
         Create namespace for ODF client
@@ -348,7 +388,7 @@ class HostedODF:
         )
 
         if ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name=self.namespace_client,
             should_exist=True,
         ):
@@ -362,7 +402,7 @@ class HostedODF:
             return False
 
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name=self.namespace_client,
             should_exist=True,
         )
@@ -398,6 +438,7 @@ class HostedODF:
 
         return self.network_policy_exists(namespace=namespace)
 
+    @kubeconfig_exists_decorator
     def do_deploy(self):
         """
         Deploy ODF client on hosted OCP cluster
@@ -419,6 +460,7 @@ class HostedODF:
         logger.info("Creating ODF client subscription")
         self.create_subscription()
 
+    @kubeconfig_exists_decorator
     def setup_storage_client(self):
         """
         Setup storage client
@@ -453,6 +495,7 @@ class HostedODF:
             return False
         return True
 
+    @kubeconfig_exists_decorator
     def odf_client_installed(self):
         """
         Check if ODF client is installed
@@ -501,6 +544,7 @@ class HostedODF:
             logger.info("ODF client pods are running, CSV's are installed")
             return True
 
+    @kubeconfig_exists_decorator
     def storage_client_exists(self):
         """
         Check if the storage client exists
@@ -514,11 +558,12 @@ class HostedODF:
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name=constants.STORAGE_CLIENT_NAME,
             should_exist=True,
         )
 
+    @kubeconfig_exists_decorator
     def create_storage_client(self):
         """
         Create storage client
@@ -584,6 +629,7 @@ class HostedODF:
 
         return True
 
+    @kubeconfig_exists_decorator
     def get_storage_client_status(self):
         """
         Check the status of the storage client
@@ -650,6 +696,7 @@ class HostedODF:
 
         return onboarding_key
 
+    @kubeconfig_exists_decorator
     def operator_group_exists(self):
         """
         Check if the operator group exists
@@ -662,11 +709,12 @@ class HostedODF:
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name="openshift-storage-client-operator-group",
             should_exist=True,
         )
 
+    @kubeconfig_exists_decorator
     def create_operator_group(self):
         """
         Create operator group for ODF
@@ -694,6 +742,7 @@ class HostedODF:
             return False
         return self.operator_group_exists()
 
+    @kubeconfig_exists_decorator
     def catalog_source_exists(self):
         """
         Check if the catalog source exists
@@ -707,11 +756,12 @@ class HostedODF:
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name="ocs-catalogsource",
             should_exist=True,
         )
 
+    @kubeconfig_exists_decorator
     def create_catalog_source(self):
         """
         Create catalog source for ODF
@@ -781,11 +831,12 @@ class HostedODF:
         """
         ocp = OCP(kind=constants.NETWORK_POLICY, namespace=namespace)
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name="openshift-storage-egress",
             should_exist=True,
         )
 
+    @kubeconfig_exists_decorator
     def subscription_exists(self):
         """
         Check if the subscription exists
@@ -799,11 +850,12 @@ class HostedODF:
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name="ocs-client-operator",
             should_exist=True,
         )
 
+    @kubeconfig_exists_decorator
     def create_subscription(self):
         """
         Create subscription for ODF
@@ -848,6 +900,7 @@ class HostedODF:
         logger.info(f"Provider address: {storage_provider_endpoint}")
         return storage_provider_endpoint
 
+    @kubeconfig_exists_decorator
     def storage_class_claim_exists_cephfs(self):
         """
         Check if storage class claim for CephFS exists
@@ -861,11 +914,12 @@ class HostedODF:
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name="ocs-storagecluster-cephfs",
             should_exist=True,
         )
 
+    @kubeconfig_exists_decorator
     def create_storage_class_claim_cephfs(self):
         """
         Create storage class claim for CephFS
@@ -897,6 +951,7 @@ class HostedODF:
 
         return self.storage_class_claim_exists_cephfs()
 
+    @kubeconfig_exists_decorator
     def storage_class_claim_exists_rbd(self):
         """
         Check if storage class claim for RBD exists
@@ -910,11 +965,12 @@ class HostedODF:
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return ocp.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
+            timeout=self.timeout_check_resources_exist,
             resource_name="ocs-storagecluster-ceph-rbd",
             should_exist=True,
         )
 
+    @kubeconfig_exists_decorator
     def create_storage_class_claim_rbd(self):
         """
         Create storage class claim for RBD
@@ -946,6 +1002,7 @@ class HostedODF:
 
         return self.storage_class_claim_exists_rbd()
 
+    @kubeconfig_exists_decorator
     def storage_class_exists(self, sc_name):
         """
         Check if storage class is ready

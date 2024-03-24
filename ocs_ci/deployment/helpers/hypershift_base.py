@@ -2,10 +2,8 @@ import logging
 import os
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_file
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import download_pull_secret
@@ -14,6 +12,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 """
@@ -29,6 +28,7 @@ Main tasks include:
 logger = logging.getLogger(__name__)
 
 
+@retry((CommandFailed, TimeoutError), tries=3, delay=5, backoff=1)
 def get_hosted_cluster_names():
     """
     Get HyperShift hosted cluster names
@@ -40,7 +40,23 @@ def get_hosted_cluster_names():
     return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip().split()
 
 
-class HyperShiftBase(Deployment):
+def kubeconfig_exists_decorator(func):
+    """
+    Decorator to check if the kubeconfig exists before executing the decorated method
+    :param func: func to decorate; should be used only for methods of class having 'cluster_kubeconfig' attribute !
+    :return: wrapper
+    """
+
+    def wrapper(self, *args, **kwargs):
+        if not os.path.exists(self.cluster_kubeconfig):
+            logger.error(f"no kubeconfig found for cluster {self.name}")
+            return  # Skip executing the decorated method
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
+
+class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
     """
@@ -55,6 +71,14 @@ class HyperShiftBase(Deployment):
         self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
             mode="w+", prefix="icsp_mirrors-", delete=False
         ).name
+
+    def hcp_binary_exists(self):
+        """
+        Check if hcp binary exists
+        Returns:
+            bool: True if hcp binary exists, False otherwise
+        """
+        return os.path.isfile(self.hcp_binary_path)
 
     def download_hcp_binary(self):
         """
@@ -133,10 +157,8 @@ class HyperShiftBase(Deployment):
                 "cpu_cores_per_hosted_cluster"
             )
 
-        if config.default_cluster_ctx.ENV_DATA.get("memory_per_hosted_cluster"):
-            memory = config.default_cluster_ctx.ENV_DATA.get(
-                "memory_per_hosted_cluster"
-            )
+        if config.ENV_DATA.get("memory_per_hosted_cluster"):
+            memory = config.ENV_DATA.get("memory_per_hosted_cluster")
 
         self.save_mirrors_list_to_file()
         pull_secret_path = download_pull_secret()
@@ -172,33 +194,6 @@ class HyperShiftBase(Deployment):
         exec_cmd(create_hcp_cluster_cmd)
 
         return name
-
-    def verify_hosted_ocp_clusters_from_provider(self):
-        """
-        Verify multiple HyperShift hosted clusters from provider. If cluster_names is not provided at ENV_DATA,
-        it will get the list of hosted clusters from the provider to verify them all
-
-        Returns:
-            bool: True if all hosted clusters passed verification, False otherwise
-        """
-        cluster_names = config.default_cluster_ctx.ENV_DATA.get("cluster_names")
-        if not cluster_names:
-            cluster_names = get_hosted_cluster_names()
-        futures = []
-        try:
-            with ThreadPoolExecutor(len(cluster_names)) as executor:
-                for name in cluster_names:
-                    futures.append(
-                        executor.submit(
-                            self.verify_hosted_ocp_cluster_from_provider, name
-                        )
-                    )
-            return all(future.result() for future in futures)
-        except Exception as e:
-            logger.error(
-                f"Failed to verify HyperShift hosted clusters from provider: {e}"
-            )
-            return False
 
     def verify_hosted_ocp_cluster_from_provider(self, name):
         """
@@ -356,52 +351,38 @@ class HyperShiftBase(Deployment):
         cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
-    def download_hosted_clusters_kubeconfig_files(self):
-        """
-        Get HyperShift hosted cluster kubeconfig for multiple clusters
-        Returns:
-            list: the list of hosted cluster kubeconfig paths
-        """
-        names = get_hosted_cluster_names()
-
-        kubeconfig_paths = []
-        for name in names:
-            kubeconfig_paths.append(self.download_hosted_cluster_kubeconfig(name))
-
-        return kubeconfig_paths
-
-    def download_hosted_cluster_kubeconfig(self, name: str, auth_path: str = None):
+    def download_hosted_cluster_kubeconfig(self, name: str, auth_path: str):
         """
         Download HyperShift hosted cluster kubeconfig
         Args:
             name (str): name of the cluster
-            auth_path (str): path to download kubeconfig
+            auth_path (str): path to download kubeconfig, usually it's "~/clusters/<cluster>/openshift-cluster-dir/auth"
         Returns:
             str: path to the downloaded kubeconfig, None if failed
         """
-        if not auth_path:
-            auth_path = constants.AUTH_PATH_PATTERN.format(name)
 
-        auth_path_abs = os.path.expanduser(auth_path)
-        os.makedirs(auth_path_abs, exist_ok=True)
+        path_abs = os.path.expanduser(auth_path)
+        kubeconfig_path = os.path.join(path_abs, "kubeconfig")
 
-        kubeconfig_path_abs = f"{auth_path_abs}/kubeconfig"
-        if os.path.isfile(kubeconfig_path_abs):
+        os.makedirs(path_abs, exist_ok=True)
+
+        if os.path.isfile(kubeconfig_path):
             logger.info(
-                f"Kubeconfig for HyperShift hosted cluster {name} already exists at {kubeconfig_path_abs}, removing it"
+                f"Kubeconfig file for HyperShift hosted cluster {name} already exists at {path_abs}, removing it"
             )
-            exec_cmd(f"rm -f {kubeconfig_path_abs}")
+            exec_cmd(f"rm -f {kubeconfig_path}")
 
+        # touch the file
         time.sleep(0.5)
-        open(kubeconfig_path_abs, "a").close()
+        open(kubeconfig_path, "a").close()
 
         logger.info(
-            f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path_abs}"
+            f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
         )
 
         try:
             resp = exec_cmd(
-                f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path_abs}",
+                f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}",
                 shell=True,
             )
             if resp.returncode != 0:
@@ -416,10 +397,14 @@ class HyperShiftBase(Deployment):
             return
 
         if (
-            os.path.isfile(kubeconfig_path_abs)
-            and os.stat(kubeconfig_path_abs).st_size > 0
+            not os.path.isfile(kubeconfig_path)
+            or not os.stat(kubeconfig_path).st_size > 0
         ):
-            return kubeconfig_path_abs
+            logger.error(
+                f"Failed to download kubeconfig for HyperShift hosted cluster {name}"
+            )
+            return
+        return kubeconfig_path
 
     def get_hosted_cluster_progress(self, name: str):
         """
