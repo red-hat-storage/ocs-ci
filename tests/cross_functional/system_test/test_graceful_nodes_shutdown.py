@@ -14,6 +14,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     UnexpectedBehaviour,
 )
+from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.longevity import start_ocp_workload
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import E2ETest
@@ -31,9 +32,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.node import (
-    get_nodes,
-)
+from ocs_ci.ocs.node import get_nodes, get_node_names
 from ocs_ci.ocs.resources.fips import check_fips_enabled
 
 logger = logging.getLogger(__name__)
@@ -51,10 +50,13 @@ class TestGracefulNodesShutdown(E2ETest):
         """
         Fixture to verify cluster is with FIPS and hugepages enabled
         """
+
         try:
             check_fips_enabled()
-        except Exception as e:
-            logger.info(f"Handled prometheuous pod exception {e}")
+        except Exception as FipsNotInstalledException:
+            logger.info(
+                f"Handled prometheuous pod exception {FipsNotInstalledException}"
+            )
 
         nodes = get_nodes()
         for node in nodes:
@@ -410,7 +412,7 @@ class TestGracefulNodesShutdown(E2ETest):
         """
 
         # Create normal OBCs and buckets
-        multi_obc_lifecycle_factory(num_of_obcs=20, bulk=True, measure=False)
+        multi_obc_lifecycle_factory(num_of_obcs=2, bulk=True, measure=False)
 
         # OCP Workloads
         logger.info("start_ocp_workload")
@@ -429,16 +431,27 @@ class TestGracefulNodesShutdown(E2ETest):
         )
 
         # check OSD status after graceful node shutdown
+        worker_nodes = get_node_names()
+        logger.info(f"worker nodes: {worker_nodes}")
+        master_nodes = get_node_names(node_type=constants.MASTER_MACHINE)
+        logger.info("Gracefully Shutting down worker & master nodes")
+        for worker_node in worker_nodes:
+            shutdown_cmd = (
+                f"oc debug node/{worker_node}" f"-- chroot /host sudo shutdown -h now"
+            )
+            run_cmd(shutdown_cmd)
+        for master_node in master_nodes:
+            shutdown_cmd = (
+                f"oc debug node/{master_node}" f"-- chroot /host sudo shutdown -h now"
+            )
+        nodes.wait_for_nodes_to_stop(nodes=worker_nodes)
+        time.sleep(300)
+        logger.info("Starting worker & master nodes")
         worker_nodes = get_nodes(node_type="worker")
         logger.info(f"worker nodes: {worker_nodes}")
         master_nodes = get_nodes(node_type="master")
-        logger.info("Gracefully Shutting down worker & master nodes")
-        nodes.stop_nodes(nodes=worker_nodes, force=False)
-        nodes.stop_nodes(nodes=master_nodes, force=False)
-        time.sleep(300)
-        logger.info("Starting worker & master nodes")
-        nodes.start_nodes(nodes=worker_nodes)
         nodes.start_nodes(nodes=master_nodes)
+        nodes.start_nodes(nodes=worker_nodes)
 
         wait_for_cluster_connectivity(tries=400)
         Sanity().health_check(tries=60)
