@@ -339,7 +339,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             self.download_hcp_binary()
 
 
-class HostedODF(HyperShiftBase, HypershiftHostedOCP):
+class HostedODF(HypershiftHostedOCP):
     def __init__(self, name: str):
         HyperShiftBase.__init__(self)
         HypershiftHostedOCP.__init__(self, name)
