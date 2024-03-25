@@ -2049,4 +2049,4 @@ def set_kms_endpoint(address):
         addr_attribute = "VAULT_ADDR"
     params = f'{{"data": {{"{addr_attribute}": "{address}"}}}}'
     ocs_kms_configmap.patch(params=params, format_type="merge")
-    return ocs_kms_configmap.get().get("data")["VAULT_ADDR"]
+    return ocs_kms_configmap.get().get("data")[addr_attribute]
