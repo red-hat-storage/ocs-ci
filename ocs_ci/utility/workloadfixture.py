@@ -186,6 +186,7 @@ def measure_operation(
                 json.dump(results, outfile)
     return results
 
+
 def ignore_next_measurement_file():
     """
     Sets config.RUN["ignore_next_measurement_file"] to True. This is supposed
