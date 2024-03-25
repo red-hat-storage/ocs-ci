@@ -1,5 +1,7 @@
 import logging
 import random
+import time
+
 import pytest
 
 from ocs_ci.helpers import helpers
@@ -22,8 +24,14 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence
-from ocs_ci.helpers.helpers import fetch_used_size, create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    fetch_used_size,
+    create_unique_resource_name,
+    verify_log_exist_in_pods_logs,
+)
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
+from ocs_ci.framework import config as ocsci_config
 
 log = logging.getLogger(__name__)
 
@@ -258,7 +266,92 @@ class TestRbdSpaceReclaim(ManageTest):
             pvc_to_chron_job_dict[chron_job_name] == chron_job_schedule
         ), "Reclaim space cron job does not exist, or schedule is not correct"
 
-    def wait_for_cronjobs(self, cronjobs_exist, timeout=60):
+    @tier1
+    @bugzilla("2183444")
+    @skipif_hci_provider_and_client
+    @skipif_external_mode
+    def test_modify_scedule_reclaim_spacejob(
+        self,
+        pvc_factory,
+    ):
+        """
+        Test case to check that the schedule to run ReclaimSpaceJob accidentally disabled CronJob is modified
+        if schedule has changed after 100 * new-interval seconds passed since rsCronJob.Status.LastScheduleTime.
+
+        Steps:
+        1. Create a pvc.
+        2. Enabling reclaim space operation using Annotating PVC
+        3. Wait for more than 100 * 1 minutes = ~ 2 hours
+        4. Modify the schedule to run ReclaimSpaceJob job every minute
+        5. Grep for updated error message "delete and recreate reclaimspacecronjob" in csi-addons-controller pod logs.
+        """
+
+        # get random size for pvc
+        ceph_cluster = CephCluster()
+        pvc_size = random.randint(1, int(ceph_cluster.get_ceph_free_capacity()))
+
+        pvc_status = constants.STATUS_BOUND
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            size=pvc_size,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=pvc_status,
+            volume_mode=constants.VOLUME_MODE_BLOCK,
+        )
+
+        helpers.wait_for_resource_state(pvc_obj, pvc_status)
+
+        log.info("add reclaimspace.csiaddons.openshift.io/schedule label to PVC ")
+        OCP(kind=constants.PVC, namespace=pvc_obj.project.namespace).annotate(
+            "reclaimspace.csiaddons.openshift.io/schedule=@midnight", pvc_obj.name
+        )
+
+        time.sleep(6000)
+        pvc_to_chron_job_dict = self.wait_for_cronjobs(
+            True, pvc_obj.project.namespace, 60
+        )
+        assert pvc_to_chron_job_dict, "Reclaim space cron job does not exist"
+
+        chron_job_name = (
+            pvc_obj.get()
+            .get("metadata")
+            .get("annotations")
+            .get("reclaimspace.csiaddons.openshift.io/cronjob")
+        )
+        chron_job_schedule = (
+            pvc_obj.get()
+            .get("metadata")
+            .get("annotations")
+            .get("reclaimspace.csiaddons.openshift.io/schedule")
+        )
+
+        assert (
+            pvc_to_chron_job_dict[chron_job_name] == chron_job_schedule
+        ), "Reclaim space cron job does not exist, or schedule is not correct"
+
+        OCP(kind=constants.PVC, namespace=pvc_obj.project.namespace).annotate(
+            "reclaimspace.csiaddons.openshift.io/schedule=*/1****", pvc_obj.name
+        )
+        expected_log = "delete and recreate reclaimspacecronjob"
+        pod_name = get_pod_name_by_pattern(
+            "csi-addons-controller-manager",
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        )
+
+        log.info(f"Check logs of csi-addons-controller-manager pod {pod_name}")
+        sample = TimeoutSampler(
+            timeout=100,
+            sleep=5,
+            func=verify_log_exist_in_pods_logs,
+            pod_names=pod_name,
+            expected_log=expected_log,
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise ValueError(
+                f"The expected log '{expected_log}' does not exist in {pod_name}"
+            )
+
+    def wait_for_cronjobs(self, cronjobs_exist, namespace=None, timeout=60):
         """
         Runs 'oc get reclaimspacecronjob' with the TimeoutSampler
 
@@ -271,13 +364,15 @@ class TestRbdSpaceReclaim(ManageTest):
             None if no cronjobs exist
 
         """
+        if namespace is None:
+            namespace = self.namespace
         name_json_path = '{.items[*].metadata.name}{"\t"}{.items[*].spec.schedule}'
         try:
             for sample in TimeoutSampler(
                 timeout=timeout,
                 sleep=5,
                 func=exec_cmd,
-                cmd=f"oc get reclaimspacecronjob -n {self.namespace} -o jsonpath='{name_json_path}'",
+                cmd=f"oc get reclaimspacecronjob -n {namespace} -o jsonpath='{name_json_path}'",
             ):
                 if len(sample.stderr) > 0:
                     return None
