@@ -981,7 +981,7 @@ def measure_noobaa_ns_target_bucket_deleted(
 
         """
         # run_time of operation
-        run_time = 60 * 12
+        run_time = 60 * 14
         nonlocal ns_stores
         nonlocal cld_mgr
 
