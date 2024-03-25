@@ -102,7 +102,7 @@ class TestPodReattachTimePerformance(PASTest):
                 marks=pytest.mark.polarion_id("OCS-2044"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, 12, 600, 720],
+                *[constants.CEPHFILESYSTEM, 11, 600, 720],
                 marks=pytest.mark.polarion_id("OCS-2674"),
             ),
         ],
@@ -148,7 +148,6 @@ class TestPodReattachTimePerformance(PASTest):
 
         self.sc_obj = storageclass_factory(self.interface)
         for sample_index in range(1, samples_num + 1):
-
             csi_start_time = self.get_time("csi")
 
             logger.info(f"Start creating PVC number {sample_index}.")
