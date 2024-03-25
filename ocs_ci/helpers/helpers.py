@@ -815,9 +815,9 @@ def create_storage_class(
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
-        sc_data["parameters"][
-            f"csi.storage.k8s.io/{key}-secret-namespace"
-        ] = config.ENV_DATA["cluster_namespace"]
+        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-namespace"] = (
+            config.ENV_DATA["cluster_namespace"]
+        )
 
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -2976,12 +2976,12 @@ def collect_performance_stats(dir_name):
 
     performance_stats["master_node_utilization"] = master_node_utilization_from_adm_top
     performance_stats["worker_node_utilization"] = worker_node_utilization_from_adm_top
-    performance_stats[
-        "master_node_utilization_from_oc_describe"
-    ] = master_node_utilization_from_oc_describe
-    performance_stats[
-        "worker_node_utilization_from_oc_describe"
-    ] = worker_node_utilization_from_oc_describe
+    performance_stats["master_node_utilization_from_oc_describe"] = (
+        master_node_utilization_from_oc_describe
+    )
+    performance_stats["worker_node_utilization_from_oc_describe"] = (
+        worker_node_utilization_from_oc_describe
+    )
 
     file_name = os.path.join(log_dir_path, "performance")
     with open(file_name, "w") as outfile:
@@ -4790,6 +4790,7 @@ def is_rbd_default_storage_class(custom_sc=None):
     return False
 
 
+<<<<<<< HEAD
 def get_network_attachment_definitions(
     nad_name, namespace=config.ENV_DATA["cluster_namespace"]
 ):
@@ -5120,4 +5121,52 @@ def wait_for_reclaim_space_job(reclaim_space_job):
     except TimeoutExpiredError:
         raise UnexpectedBehaviour(
             f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output: {reclaim_space_job.get()}"
+
+def get_volsync_channel():
+    """
+
+    Returns:
+
+    """
+    volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
+    return volsync_product_obj.data.get("status").get("channels")[1].get("name")
+
+
+def get_managed_cluster_addons(resource_name, namespace):
+    """"""
+    return OCP(
+        kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
+        resource_name=resource_name,
+        namespace=namespace,
+    )
+
+
+def update_volsync_channel():
+    from ocs_ci.ocs.utils import get_non_acm_cluster_config
+    from ocs_ci.ocs.acm.acm import RunWithConfigContext, RunWithAcmConfigContext
+
+    if config.ENV_DATA.get("acm_hub_unreleased") is not True:
+        return
+    non_acm_clusters = get_non_acm_cluster_config()
+    with RunWithConfigContext(
+        non_acm_clusters[0].MULTICLUSTER.get("multicluster_index")
+    ):
+        channel = get_volsync_channel()
+
+    with RunWithAcmConfigContext():
+        # sc = get_storage_cluster()
+        ms_addon = OCP(
+            kind="managedclusteraddons.addon.open-cluster-management.io",
+            resource_name="volsync",
+            namespace="prsurve-upg-1",
+        )
+
+        # params = f"""[{{"op": "add", "path": "/metadata", "value":
+        # {{"annotations": {{"operator-subscription-channel": "{channel}"}}}}}}]"""
+        params = f"""[{{"op": "add", "path": "/metadata/annotations",
+        "value": {{"operator-subscription-channel": "{channel}"}}}}]"""
+        ms_addon.patch(
+            resource_name=ms_addon.resource_name,
+            params=params.strip("\n"),
+            format_type="json",
         )
