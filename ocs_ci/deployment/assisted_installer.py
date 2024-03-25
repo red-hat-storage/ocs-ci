@@ -37,6 +37,7 @@ class AssistedInstallerCluster(object):
         cpu_architecture="x86_64",
         high_availability_mode="Full",
         image_type="minimal-iso",
+        static_network_config=None,
     ):
         """
         Args:
@@ -59,6 +60,11 @@ class AssistedInstallerCluster(object):
                 (default: x86_64)
             high_availability_mode (str): High availability mode: Full or None (default: "Full")
             image_type (str): Type of discovery image full-iso or minimal-iso (default: minimal-iso)
+            static_network_config (list(dict)): Static network configuration of hosts, where network_yaml is yaml string
+                that can be processed by nmstate
+                [{"mac_interface_map": [{"logical_nic_name": "string", "mac_address": "string"}],
+                    "network_yaml": "string"},
+                    ...]
 
         """
         self.api = ai.AssistedInstallerAPI()
@@ -108,6 +114,7 @@ class AssistedInstallerCluster(object):
             self.cpu_architecture = cpu_architecture
             self.high_availability_mode = high_availability_mode
             self.image_type = image_type
+            self.static_network_config = static_network_config
 
     def load_existing_cluster_configuration(self):
         """
@@ -210,6 +217,12 @@ class AssistedInstallerCluster(object):
             "ssh_authorized_key": self.ssh_public_key,
             "pull_secret": self.pull_secret,
         }
+
+        if self.static_network_config:
+            infra_env_configuration[
+                "static_network_config"
+            ] = self.static_network_config
+
         infra_data = self.api.create_infra_env(infra_env_configuration)
         self.infra_id = infra_data["id"]
         logger.info(
@@ -227,6 +240,26 @@ class AssistedInstallerCluster(object):
         iso_url = self.api.get_discovery_iso_url(self.infra_id)
         download_file(iso_url, local_path)
         logger.info(f"Downloaded discovery iso from '{iso_url}' to {local_path}")
+
+    def download_ipxe_config(self, local_path):
+        """
+        Download the ipxe config for discovery boot
+
+        Args:
+            local_path (str): path where to store the ipxe config
+
+        Return:
+            str: path to the downloaded ipxe config file
+
+        """
+        ipxe_config_path = self.api.download_infra_file(
+            infra_env_id=self.infra_id,
+            dest_dir=local_path,
+            file_name="ipxe-script",
+            ipxe_script_type="discovery-image-always",
+        )
+        logger.info(f"Downloaded iPXE config {ipxe_config_path}")
+        return ipxe_config_path
 
     def wait_for_discovered_nodes(self, expected_nodes):
         """
@@ -271,13 +304,16 @@ class AssistedInstallerCluster(object):
         """
         failed_validations = []
         for host in self.api.get_cluster_hosts(self.id):
-            vi = json.loads(host["validations_info"])
-            for section in vi:
-                for v in vi[section]:
-                    if v["status"] in ("failure", "pending"):
-                        failed_validations.append(
-                            f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
-                        )
+            try:
+                vi = json.loads(host["validations_info"])
+                for section in vi:
+                    for v in vi[section]:
+                        if v["status"] in ("failure", "pending"):
+                            failed_validations.append(
+                                f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
+                            )
+            except KeyError as err:
+                failed_validations.append(f"host {host['id']}: {err}")
         if failed_validations:
             msg = f"Failed hosts validations: \n{os.linesep.join(failed_validations)}"
             logger.debug(msg)
@@ -413,7 +449,7 @@ class AssistedInstallerCluster(object):
         """
         self.api.delete_cluster(self.id)
         logger.info(
-            "Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
+            f"Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
         )
 
     def delete_infrastructure_environment(self):
