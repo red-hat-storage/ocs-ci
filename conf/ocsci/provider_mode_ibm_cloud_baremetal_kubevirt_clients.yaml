@@ -1,0 +1,20 @@
+---
+DEPLOYMENT:
+  cnv_deployment: true
+  metallb_operator: true
+ENV_DATA:
+  platform: "hci_baremetal"
+  cluster_type: "provider"
+  deploy_acm_hub_cluster: true
+  skip_ocs_deployment: true
+  acm_version: "2.9" # this is an example, please provide the desired version
+  acm_hub_channel: "release-2.9" # this is an example, please provide the desired version
+  hcp_version: "4.14" # this is an example, please provide the desired version
+  hosted_odf_version: "latest-stable-4.14.5" # this is an example, please provide the desired version
+  metallb_version: "4.14" # this is an example, please provide the desired version
+  cpu_cores_per_hosted_cluster: 6 # minimal, tested value for the kubevirt cluster is 6
+  memory_per_hosted_cluster: "12Gi" # minimal, tested value for the kubevirt cluster is 12Gi
+  cluster_names:
+    - "hcp414-bm2-h" # this is an example, please provide the desired cluster_names
+  cluster_paths:
+    - "~/clusters/hcp414-bm2-h/openshift-cluster-dir/auth" # this is an example, provide the desired cluster_paths
