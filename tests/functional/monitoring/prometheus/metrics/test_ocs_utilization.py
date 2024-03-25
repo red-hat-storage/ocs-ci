@@ -5,12 +5,14 @@ memory utilization) of OCS components (such as ceph or noobaa) to find excesive
 resource usage.
 """
 
+from flaky import flaky
 import logging
 
 from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.prometheus import check_query_range_result_limits
+from ocs_ci.utility.workloadfixture import ignore_next_measurement_file
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     blue_squad,
@@ -27,10 +29,10 @@ CPU_USAGE_POD = (
     "node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate"
 )
 
-
 @mcg
 @blue_squad
 @tier1
+@flaky(rerun_filter=ignore_next_measurement_file)
 @marks.polarion_id("OCS-2364")
 @marks.bugzilla("1849309")
 @skipif_managed_service
