@@ -22,7 +22,7 @@ def test_kms_unavailable(measure_rewrite_kms_endpoint, threading_lock):
     this alert is cleared when the KMS endpoint is back online.
 
     """
-    api = prometheus.PrometheusAPI(threading_lock)
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_rewrite_kms_endpoint.get("prometheus_alerts")
