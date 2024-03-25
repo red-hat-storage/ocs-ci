@@ -4680,3 +4680,53 @@ def flatten_multilevel_dict(d):
         else:
             leaves_list.append(value)
     return leaves_list
+
+
+def get_volsync_channel():
+    """
+
+    Returns:
+
+    """
+    volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
+    return volsync_product_obj.data.get("status").get("channels")[1].get("name")
+
+
+def get_managed_cluster_addons(resource_name, namespace):
+    """"""
+    return OCP(
+        kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
+        resource_name=resource_name,
+        namespace=namespace,
+    )
+
+
+def update_volsync_channel():
+    from ocs_ci.ocs.utils import get_non_acm_cluster_config
+    from ocs_ci.ocs.acm.acm import RunWithConfigContext, RunWithAcmConfigContext
+
+    if config.ENV_DATA.get("acm_hub_unreleased") is not True:
+        return
+    non_acm_clusters = get_non_acm_cluster_config()
+    with RunWithConfigContext(
+        non_acm_clusters[0].MULTICLUSTER.get("multicluster_index")
+    ):
+        channel = get_volsync_channel()
+
+    with RunWithAcmConfigContext():
+        # sc = get_storage_cluster()
+        ms_addon = OCP(
+            kind="managedclusteraddons.addon.open-cluster-management.io",
+            resource_name="volsync",
+            namespace="prsurve-upg-1",
+        )
+
+        # params = f"""[{{"op": "add", "path": "/metadata", "value":
+        # {{"annotations": {{"operator-subscription-channel": "{channel}"}}}}}}]"""
+        params = f"""[{{"op": "add", "path": "/metadata/annotations",
+        "value": {{"operator-subscription-channel": "{channel}"}}}}]"""
+        ms_addon.patch(
+            resource_name=ms_addon.resource_name,
+            params=params.strip("\n"),
+            format_type="json",
+        )
