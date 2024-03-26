@@ -945,13 +945,16 @@ DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
 MDR_MODE = "metro-dr"
 MDR_DR_POLICY = "odr-policy-mdr"
-RESTIC_POD_COUNT = 3
+RESTIC_OR_NODE_POD_COUNT = 3
 VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
 MULTICLUSTER_ENGINE = "multiclusterengine"
 BACKUP_SCHEDULE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "backupschedule.yaml")
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
-
+ACM_POLICY_COMPLIANT = "Compliant"
+ACM_POLICY_NONCOMPLIANT = "NonCompliant"
+ACM_POLICY = "policies.policy.open-cluster-management.io"
+ACM_POLICY_BACKUP_RESTORE = "backup-restore-enabled"
 
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"

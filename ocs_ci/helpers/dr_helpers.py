@@ -15,6 +15,8 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
     ACMClusterConfigurationException,
+    ResourceNotFoundError,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pods_having_label
@@ -1264,7 +1266,7 @@ def create_dpa(bucket_name):
 def validate_dpa():
     """
     Validate
-    1. 3 restic pods
+    1. 3 restic / Node pods
     2. 1 velero pod
     3. backupstoragelocation resource in "Available" phase
     """
@@ -1273,17 +1275,19 @@ def validate_dpa():
     oadp_version = get_oadp_version()
 
     if version.compare_versions(f"{oadp_version} >= 1.2"):
-        restic_pod_prefix = "node-agent"
+        restic_or_node_pod_prefix = "node-agent"
     else:
-        restic_pod_prefix = "restic"
-    restic_list = get_pods_having_label(
-        f"name={restic_pod_prefix}", constants.ACM_HUB_BACKUP_NAMESPACE
+        restic_or_node_pod_prefix = "restic"
+    restic_or_node_list = get_pods_having_label(
+        f"name={restic_or_node_pod_prefix}", constants.ACM_HUB_BACKUP_NAMESPACE
     )
-    if len(restic_list) != constants.RESTIC_POD_COUNT:
-        raise ACMClusterConfigurationException("restic pod count mismatch")
-    for pod in restic_list:
+    if len(restic_or_node_list) != constants.RESTIC_OR_NODE_POD_COUNT:
+        raise ACMClusterConfigurationException("restic/node pod count mismatch")
+    for pod in restic_or_node_list:
         if pod["status"]["phase"] != "Running":
-            raise ACMClusterConfigurationException("restic pod not in 'Running' phase")
+            raise ACMClusterConfigurationException(
+                "restic/node pod not in 'Running' phase"
+            )
 
     # Check velero pod
     veleropod = get_pods_having_label(
@@ -1303,6 +1307,48 @@ def validate_dpa():
     resource = backupstorage.get()
     if resource["status"].get("phase") != "Available":
         raise ACMClusterConfigurationException(
-            "Backupstoragelocation resource is no in 'Avaialble' phase"
+            "Backupstoragelocation resource is not in 'Avaialble' phase"
         )
     logger.info("Dataprotection application successful")
+
+
+def validate_secret_creation_oadp():
+    """
+    Verify Secret are created
+
+    Raises:
+        ResourceNotFoundError: raised when secret not found
+    """
+    try:
+        secret = ocp.OCP(
+            kind=constants.SECRET,
+            resource_name="cloud-credentials",
+            namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
+        )
+        secret.get()
+        logger.info("Secret found")
+    except CommandFailed:
+        raise ResourceNotFoundError("Secret Not found")
+
+
+def validate_policy_compliance_status(
+    resource_name, resource_namespace, compliance_state
+):
+    """
+    Validate policy status for given resource
+
+    Raises:
+        ResourceWrongStatusException: Raised when resource state does not match
+
+    """
+
+    compliance_output = ocp.OCP(
+        kind=constants.ACM_POLICY,
+        resource_name=resource_name,
+        namespace=resource_namespace,
+    )
+    compliance_status = compliance_output.get()
+    if compliance_status["status"]["compliant"] == compliance_state:
+        logger.info("Compliance status Matches ")
+    else:
+        raise ResourceWrongStatusException("Compliance status does not matches")

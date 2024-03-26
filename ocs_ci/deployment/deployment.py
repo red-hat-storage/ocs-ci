@@ -38,6 +38,8 @@ from ocs_ci.helpers.dr_helpers import (
     create_s3_bucket,
     enable_cluster_backup,
     enable_managed_serviceaccount,
+    validate_secret_creation_oadp,
+    validate_policy_compliance_status,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -143,6 +145,7 @@ from ocs_ci.utility.utils import (
     get_latest_acm_tag_unreleased,
     get_oadp_version,
     ceph_health_check_multi_storagecluster_external,
+    get_acm_version,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2963,13 +2966,25 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         create_generic_credentials(
             self.meta_obj.access_key, self.meta_obj.access_key, acm_indexes
         )
+        validate_secret_creation_oadp()
         # Reconfigure OADP on all ACM clusters
         for i in acm_indexes:
             config.switch_ctx(i)
             create_dpa(self.meta_obj.bucket_name)
         # Only on the active hub enable managedserviceaccount-preview
         config.switch_acm_ctx()
-        enable_managed_serviceaccount()
+        acm_version = get_acm_version()
+
+        if version.compare_versions(f"{acm_version} >= 2.10"):
+            logger.info("Skipping Enabling Managed ServiceAccount")
+        else:
+            enable_managed_serviceaccount()
+
+        validate_policy_compliance_status(
+            resource_name=constants.ACM_POLICY_BACKUP_RESTORE,
+            resource_namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
+            compliance_state=constants.ACM_POLICY_COMPLIANT,
+        )
 
 
 class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
@@ -3012,6 +3027,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         create_generic_credentials(
             self.meta_obj.access_key, self.meta_obj.access_key, acm_indexes
         )
+        validate_secret_creation_oadp()
         # Reconfigure OADP on all ACM clusters
         old_ctx = config.cur_index
         for i in acm_indexes:
@@ -3019,7 +3035,18 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             create_dpa(self.meta_obj.bucket_name)
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
-        enable_managed_serviceaccount()
+        acm_version = get_acm_version()
+
+        if version.compare_versions(f"{acm_version} >= 2.10"):
+            logger.info("Skipping Enabling Managed ServiceAccount")
+        else:
+            enable_managed_serviceaccount()
+
+        validate_policy_compliance_status(
+            resource_name=constants.ACM_POLICY_BACKUP_RESTORE,
+            resource_namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
+            compliance_state=constants.ACM_POLICY_COMPLIANT,
+        )
 
     def deploy_multicluster_orchestrator(self):
         super().deploy()
