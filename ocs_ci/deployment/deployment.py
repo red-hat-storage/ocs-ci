@@ -2041,7 +2041,9 @@ class Deployment(object):
         logger.info("Writing tag data to snapshot.ver")
         acm_version = config.ENV_DATA.get("acm_version")
 
-        image_tag = get_latest_acm_tag_unreleased(version=acm_version)
+        image_tag = config.ENV_DATA.get(
+            "acm_unreleased_image"
+        ) or get_latest_acm_tag_unreleased(version=acm_version)
 
         with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
