@@ -90,6 +90,7 @@ def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
     # the time to wait is increased because it takes more time for Ceph
     # cluster to resolve its issues
     health_wait = 420
+    stop_time = max(measure_stop_ceph_osd.get("stop"), measure_corrupt_pg.get("stop"))
 
     alerts = measure_stop_ceph_osd.get("prometheus_alerts")
     target_label = constants.ALERT_CLUSTERWARNINGSTATE
@@ -105,7 +106,7 @@ def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
     )
     api.check_alert_cleared(
         label=target_label,
-        measure_end_time=measure_stop_ceph_osd.get("stop"),
+        measure_end_time=stop_time,
         time_min=health_wait,
     )
 
@@ -123,7 +124,7 @@ def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
     )
     api.check_alert_cleared(
         label=target_label,
-        measure_end_time=measure_corrupt_pg.get("stop"),
+        measure_end_time=stop_time,
         time_min=health_wait,
     )
 
