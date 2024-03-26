@@ -4810,19 +4810,17 @@ def update_volsync_channel():
         channel = get_volsync_channel()
 
     with RunWithAcmConfigContext():
-        # sc = get_storage_cluster()
-        ms_addon = OCP(
-            kind="managedclusteraddons.addon.open-cluster-management.io",
-            resource_name="volsync",
-            namespace="prsurve-upg-1",
-        )
-
-        # params = f"""[{{"op": "add", "path": "/metadata", "value":
-        # {{"annotations": {{"operator-subscription-channel": "{channel}"}}}}}}]"""
-        params = f"""[{{"op": "add", "path": "/metadata/annotations",
-        "value": {{"operator-subscription-channel": "{channel}"}}}}]"""
-        ms_addon.patch(
-            resource_name=ms_addon.resource_name,
-            params=params.strip("\n"),
-            format_type="json",
-        )
+        for non_acm_cluster in non_acm_clusters:
+            ms_addon = get_managed_cluster_addons(
+                resource_name="volsync",
+                namespace=non_acm_cluster.ENV_DATA.get("cluster_name"),
+            )
+            params = (
+                f"""[{{"op": "add", "path": "/metadata/annotations", """
+                f""""value": {{"operator-subscription-channel": "{channel}"}}}}]"""
+            )
+            ms_addon.patch(
+                resource_name=ms_addon.resource_name,
+                params=params.strip("\n"),
+                format_type="json",
+            )
