@@ -30,6 +30,7 @@ from ocs_ci.ocs.constants import (
     HCI_CLIENT,
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
+    BAREMETAL_PLATFORMS,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -592,8 +593,8 @@ ignore_owner = pytest.mark.ignore_owner
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
 
-baremetal_or_vsphere_deployment_required = pytest.mark.skipif(
-    config.ENV_DATA["platform"].lower() not in ["baremetal", "vsphere"],
+baremetal_deployment_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() not in BAREMETAL_PLATFORMS,
     reason="Test required baremetal or vsphere deployment.",
 )
 

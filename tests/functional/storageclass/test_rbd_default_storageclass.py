@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     green_squad,
     polarion_id,
-    baremetal_or_vsphere_deployment_required,
+    baremetal_deployment_required,
     ui_deployment_required,
 )
 
@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@baremetal_or_vsphere_deployment_required
+@baremetal_deployment_required
 @ui_deployment_required
 class TestRBDStorageClassAsDefaultStorageClass:
     @tier1
