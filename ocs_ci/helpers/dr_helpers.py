@@ -1318,6 +1318,7 @@ def validate_secret_creation_oadp():
 
     Raises:
         ResourceNotFoundError: raised when secret not found
+
     """
     try:
         secret = ocp.OCP(
