@@ -10,8 +10,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     ui,
     skipif_ibm_cloud_managed,
-    green_squad,
     skipif_hci_provider_or_client,
+    black_squad,
 )
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
@@ -23,7 +23,7 @@ from ocs_ci.ocs.constants import CEPHBLOCKPOOL
 log = logging.getLogger(__name__)
 
 
-@green_squad
+@black_squad
 @ui
 @tier1
 @skipif_external_mode

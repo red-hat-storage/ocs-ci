@@ -1467,8 +1467,8 @@ validation_4_9 = {
 validation_4_10 = {
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "ocs-storagecluster-storagesystem": (
-        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
-        By.CSS_SELECTOR,
+        "//a[.='ocs-storagecluster-storagesystem']",
+        By.XPATH,
     ),
     "ocs-external-storagecluster-storagesystem": (
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']",
