@@ -10,7 +10,7 @@ DEPLOYMENT:
   ignition_version: "3.2.0"
 ENV_DATA:
   # TODO: replace with 4.16 once template is available
-  vm_template: "rhcos-415.92.202311241643-0-vmware.x86_64"
+  vm_template: "rhcos-416.94.202403071059-0-vmware.x86_64"
   acm_hub_channel: release-2.10
   acm_version: "2.10"
   submariner_version: "0.17.0"

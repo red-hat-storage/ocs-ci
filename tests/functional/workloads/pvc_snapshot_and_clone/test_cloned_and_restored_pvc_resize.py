@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     E2ETest,
     tier2,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
 )
 from ocs_ci.ocs.constants import VOLUME_MODE_FILESYSTEM
 
@@ -18,6 +20,8 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @pytest.mark.polarion_id("OCS-2309")
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestPvcResizeOfClonedAndRestoredPVC(E2ETest):
     """
     Tests to verify PVC resize feature for

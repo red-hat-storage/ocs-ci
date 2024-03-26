@@ -10,6 +10,7 @@ import re
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import version
@@ -227,6 +228,8 @@ def read_csi_logs(log_names, container_name, start_time):
     return logs
 
 
+# Sometimes, the logs are not available due to the connection issues, retry added
+@retry(Exception, tries=6, delay=5, backoff=2)
 def measure_pvc_creation_time(interface, pvc_name, start_time):
     """
 
@@ -278,6 +281,8 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
     return total_time
 
 
+# Sometimes, the logs are not available due to the connection issues, retry added
+@retry(Exception, tries=6, delay=5, backoff=2)
 def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
     """
 

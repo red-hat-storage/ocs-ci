@@ -240,6 +240,8 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
+    if config.ENV_DATA.get("noobaa_external_pgsql"):
+        del resources_dict[nb_db_label]
 
     if provider_cluster:
         resources_dict.update(
@@ -1165,6 +1167,8 @@ def verify_mcg_only_pods():
         constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
     }
+    if config.ENV_DATA.get("noobaa_external_pgsql"):
+        del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         resources_dict.update(
             {

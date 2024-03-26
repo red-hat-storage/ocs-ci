@@ -16,13 +16,13 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-5154")
 @skipif_no_kms
 @skipif_managed_service
-def test_kms_unavailable(measure_rewrite_kms_endpoint):
+def test_kms_unavailable(measure_rewrite_kms_endpoint, threading_lock):
     """
     Test that there is appropriate alert when KMS is unavailable and that
     this alert is cleared when the KMS endpoint is back online.
 
     """
-    api = prometheus.PrometheusAPI()
+    api = prometheus.PrometheusAPI(threading_lock)
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_rewrite_kms_endpoint.get("prometheus_alerts")

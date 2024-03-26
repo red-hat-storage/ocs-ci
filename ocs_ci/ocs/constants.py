@@ -91,6 +91,9 @@ CHRONY_TEMPLATE = os.path.join(
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 BUSYBOX_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "busybox.yaml")
+AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
+    "ocp-deployment", "ai-host-network-config.yaml.j2"
+)
 # Statuses
 STATUS_READY = "Ready"
 PEER_READY = "Peer ready"
@@ -288,6 +291,7 @@ IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 DEFAULT_NOOBAA_BUCKETCLASS = "noobaa-default-bucket-class"
 NOOBAA_RESOURCE_NAME = "noobaa"
+NOOBAA_DB_PVC_NAME = "db-noobaa-db-pg-0"
 MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
 JENKINS_BUILD = "jax-rs-build"
 JENKINS_BUILD_COMPLETE = "Complete"
@@ -744,6 +748,10 @@ EXTERNAL_CLUSTER_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-cluster-secret.yaml"
 )
 
+EXTERNAL_PGSQL_NOOBAA_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "external-pgsql-noobaa-secret.yaml"
+)
+
 OPERATOR_SOURCE_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
 )
@@ -1110,6 +1118,7 @@ BAREMETAL_PLATFORMS = [
     HCI_BAREMETAL,
     IBM_POWER_PLATFORM,
 ]
+DEFAULT_AWS_REGION = "us-east-2"
 
 HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_BAREMETAL,
@@ -1136,8 +1145,6 @@ TERRAFORM_IGNITION_PROVIDER_VERSION = "v2.1.0"
 MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 
 # vSphere related constants
-# importing here due to circular dependency
-from ocs_ci.utility.utils import get_ocp_version
 
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
@@ -1159,21 +1166,6 @@ VM_VAR = os.path.join(VSPHERE_DIR, "vm/variables.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_PLUGINS_DIR = ".terraform"
 SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
-SCALEUP_VSPHERE_DIR = os.path.join(
-    EXTERNAL_DIR,
-    f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
-)
-SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
-SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
-SCALEUP_VSPHERE_ROUTE53 = os.path.join(
-    SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf"
-)
-SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(
-    SCALEUP_VSPHERE_DIR, "route53/variables.tf"
-)
-SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(
-    SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf"
-)
 RUST_URL = "https://sh.rustup.rs"
 COREOS_INSTALLER_REPO = "https://github.com/coreos/coreos-installer.git"
 
@@ -1217,6 +1209,7 @@ config_keys_expressions_to_censor = [
     "ApplicationSecret",
     "LogsAnalyticsWorkspaceID",
     "TenantID",
+    "db_url",
 ]
 
 # packages
@@ -1264,6 +1257,7 @@ ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
+NOOBAA_POSTGRES_SECRET = "noobaa-pgsql-secret"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
 PDBSTATEMAP = "rook-ceph-pdbstatemap"
@@ -1625,7 +1619,7 @@ AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
 MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
-ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf4-odf-cli-rhel9"
+ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -1872,6 +1866,8 @@ DNSMASQ_PXE_CONF_FILE_TEMPLATE = os.path.join("ocp-deployment", "dnsmasq.pxe.con
 DNSMASQ_COMMON_CONF_FILE_TEMPLATE = os.path.join(
     "ocp-deployment", "dnsmasq.common.conf.j2"
 )
+PXELINUX_CFG_IPXE_TEMPLATE = os.path.join("ocp-deployment", "pxelinux.cfg.ipxe.j2")
+PXELINUX_CFG_DISK0_TEMPLATE = os.path.join("ocp-deployment", "pxelinux.cfg.disk0.j2")
 RHCOS_IMAGES_FILE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "rhcos_images.yaml")
 PXE_FILE = os.path.join(TEMPLATE_DIR, "baremetal-pxefile")
 coreos_url_prefix = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos"

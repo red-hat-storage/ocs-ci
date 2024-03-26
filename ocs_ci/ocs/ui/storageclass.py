@@ -42,6 +42,7 @@ class StorageClassUI(PageNavigator):
         self.do_click(self.sc_loc["pool_dropdown"])
         self.do_click([f"button[data-test={pool_name}", By.CSS_SELECTOR])
         self.do_click(self.sc_loc["save_storageclass"])
+        self.page_has_loaded()
         if self.verify_storageclass_existence(sc_name):
             return sc_name
         else:

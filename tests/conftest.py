@@ -56,6 +56,8 @@ from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
+from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
+from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -125,6 +127,7 @@ from ocs_ci.utility.utils import (
     get_default_if_keyval_empty,
     get_ocs_build_number,
     get_openshift_client,
+    get_random_str,
     get_testrun_name,
     load_auth_config,
     ocsci_log_path,
@@ -2509,6 +2512,7 @@ def awscli_pod_client_session(
 def awscli_pod_fixture(request, scope_name):
     """
     Creates a new AWSCLI pod for relaying commands
+
     Args:
         scope_name (str): The name of the fixture's scope,
         used for giving a descriptive name to the pod and configmap
@@ -2517,12 +2521,19 @@ def awscli_pod_fixture(request, scope_name):
         pod: A pod running the AWS CLI
 
     """
+    project = f"s3cli-{get_random_str()}"
+    ocp_obj = ocp.OCP(namespace=project)
 
-    request.addfinalizer(awscli_pod_cleanup)
+    def delete_project(namespace):
+        if "openshift" not in namespace:
+            ocp_obj.delete_project(project)
 
-    log.info("Cleaning up any previous AWS CLI resources")
-    awscli_pod_cleanup()
-    return create_awscli_pod(scope_name)
+    request.addfinalizer(lambda: delete_project(namespace=project))
+    request.addfinalizer(lambda: awscli_pod_cleanup(namespace=project))
+
+    ocp_obj.new_project(project)
+    ocp.switch_to_default_rook_cluster_project()
+    return create_awscli_pod(scope_name, project)
 
 
 @pytest.fixture(scope="session")
@@ -3828,7 +3839,7 @@ def node_drain_teardown(request):
 
 
 @pytest.fixture(scope="function")
-def node_restart_teardown(request, nodes_multicluster):
+def node_restart_teardown(request, nodes_multicluster, nodes):
     """
     Make sure all nodes are up and in 'Ready' state and if not,
     try to make them 'Ready' by restarting the nodes.
@@ -6515,59 +6526,51 @@ def cnv_dr_workload(request):
     """
     instances = []
 
-    def factory(
-        num_of_vm_subscription=1,
-        num_of_vm_appset=0,
-    ):
+    def factory(num_of_vm_subscription=1, num_of_vm_appset=0):
         """
         Args:
             num_of_vm_subscription (int): Number of Subscription type workload to be created
-            num_of_vm_appset (int): Number of  ApplicationSet type workload to be created
+            num_of_vm_appset (int): Number of ApplicationSet type workload to be created
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
 
         Returns:
-            list: objects of workload class.
+            list: objects of workload class
 
         """
         total_pvc_count = 0
+        workload_types = [
+            (constants.SUBSCRIPTION, "dr_cnv_workload_sub"),
+            (constants.APPLICATION_SET, "dr_cnv_workload_appset"),
+        ]
 
-        for index in range(num_of_vm_subscription):
-            workload_details = ocsci_config.ENV_DATA["dr_cnv_workload_sub"][index]
-            workload = CnvWorkload(
-                workload_type=constants.SUBSCRIPTION,
-                workload_dir=workload_details["workload_dir"],
-                vm_name=workload_details["vm_name"],
-                workload_name=workload_details["name"],
-                workload_pod_count=workload_details["pod_count"],
-                workload_pvc_count=workload_details["pvc_count"],
-                workload_placement_name=workload_details[
-                    "dr_workload_app_placement_name"
-                ],
-                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
-            )
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
-
-        for index in range(num_of_vm_appset):
-            workload_details = ocsci_config.ENV_DATA["dr_cnv_workload_appset"][index]
-            workload = CnvWorkload(
-                workload_type=constants.APPLICATION_SET,
-                workload_dir=workload_details["workload_dir"],
-                vm_name=workload_details["vm_name"],
-                workload_name=workload_details["name"],
-                workload_pod_count=workload_details["pod_count"],
-                workload_pvc_count=workload_details["pvc_count"],
-                workload_placement_name=workload_details[
-                    "dr_workload_app_placement_name"
-                ],
-                workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
-            )
-            instances.append(workload)
-            total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+        for workload_type, data_key in workload_types:
+            for index in range(
+                num_of_vm_subscription
+                if workload_type == constants.SUBSCRIPTION
+                else num_of_vm_appset
+            ):
+                workload_details = ocsci_config.ENV_DATA[data_key][index]
+                workload = CnvWorkload(
+                    workload_type=workload_type,
+                    workload_dir=workload_details["workload_dir"],
+                    vm_name=workload_details["vm_name"],
+                    vm_secret=workload_details["vm_secret"],
+                    vm_username=workload_details["vm_username"],
+                    workload_name=workload_details["name"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                    workload_placement_name=workload_details[
+                        "dr_workload_app_placement_name"
+                    ],
+                    workload_pvc_selector=workload_details[
+                        "dr_workload_app_pvc_selector"
+                    ],
+                )
+                instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workload()
 
         return instances
 
@@ -7438,4 +7441,84 @@ def create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(request):
                 fio_scale.cleanup()
 
     request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def reduce_replication_delay_setup(add_env_vars_to_noobaa_core_class):
+    """
+    A fixture to reduce the replication delay to one minute.
+
+    Args:
+        new_delay_in_miliseconds (function): A function to add env vars to the noobaa-core pod
+
+    """
+    log.warning("Reducing replication delay")
+
+    def factory(new_delay_in_miliseconds=60 * 1000):
+        new_env_var_tuples = [
+            (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
+            (constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
+        ]
+        add_env_vars_to_noobaa_core_class(new_env_var_tuples)
+
+    return factory
+
+
+@pytest.fixture()
+def aws_log_based_replication_setup(
+    awscli_pod_session, mcg_obj_session, bucket_factory, reduce_replication_delay_setup
+):
+    """
+    A fixture to set up standard log-based replication with deletion sync.
+
+    Args:
+        awscli_pod_session(Pod): A pod running the AWS CLI
+        mcg_obj_session(MCG): An MCG object
+        bucket_factory: A bucket factory fixture
+
+    Returns:
+        MockupBucketLogger: A MockupBucketLogger object
+        Bucket: The source bucket
+        Bucket: The target bucket
+
+    """
+
+    reduce_replication_delay_setup()
+
+    def factory(bucketclass_dict=None):
+        log.info("Starting log-based replication setup")
+        if bucketclass_dict is None:
+            bucketclass_dict = {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Single",
+                    "namespacestore_dict": {
+                        constants.AWS_PLATFORM: [(1, constants.DEFAULT_AWS_REGION)]
+                    },
+                },
+            }
+        target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
+
+        mockup_logger = MockupBucketLogger(
+            awscli_pod=awscli_pod_session,
+            mcg_obj=mcg_obj_session,
+            bucket_factory=bucket_factory,
+            platform=constants.AWS_PLATFORM,
+            region=constants.DEFAULT_AWS_REGION,
+        )
+        replication_policy = AwsLogBasedReplicationPolicy(
+            destination_bucket=target_bucket.name,
+            sync_deletions=True,
+            logs_bucket=mockup_logger.logs_bucket_uls_name,
+        )
+
+        source_bucket = bucket_factory(
+            1, bucketclass=bucketclass_dict, replication_policy=replication_policy
+        )[0]
+
+        log.info("log-based replication setup complete")
+
+        return mockup_logger, source_bucket, target_bucket
+
     return factory

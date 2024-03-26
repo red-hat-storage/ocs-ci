@@ -4,7 +4,8 @@ import re
 
 from datetime import timedelta
 
-from ocs_ci.ocs.node import get_nodes_having_label
+from ocs_ci.ocs.node import get_nodes_having_label, get_node_objs
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import (
@@ -21,6 +22,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_mon_pods,
     get_mon_pod_id,
+    get_pod_node,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ class StretchCluster(OCS):
         self.rbd_logwriter_sts = None
         self.rbd_read_logs = None
         self.cephfs_read_logs = None
-        self.default_shutdown_durarion = 600
+        self.default_shutdown_duration = 900
         self.workload_map = {
             f"{constants.LOGWRITER_CEPHFS_LABEL}": [
                 None,
@@ -71,6 +73,8 @@ class StretchCluster(OCS):
                 list(),
             ],
         }
+        self.out_of_qourum_zone = None
+        self.non_quorum_nodes = list()
 
     @property
     def cephfs_logwriter_pods(self):
@@ -142,13 +146,18 @@ class StretchCluster(OCS):
 
         """
         paused = 0
-        for pod in self.workload_map[label][0]:
+        for pod_obj in self.workload_map[label][0]:
+            if get_pod_node(pod_obj).name in self.non_quorum_nodes:
+                logger.info(
+                    f"Not checking the logs from {pod_obj.name} as it belongs to non-quorum zone"
+                )
+                continue
             pause_count = 0
             time_var = start_time
             pod_log = get_pod_logs(
-                pod_name=pod.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
+                pod_name=pod_obj.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
             )
-            logger.info(f"Current pod: {pod.name}")
+            logger.info(f"Current pod: {pod_obj.name}")
             while time_var <= (end_time + timedelta(minutes=1)):
                 t_time = time_var.strftime("%H:%M")
                 if f" {t_time}" not in pod_log:
@@ -176,12 +185,17 @@ class StretchCluster(OCS):
 
         """
         paused = 0
-        for pod in self.workload_map[label][0]:
+        for pod_obj in self.workload_map[label][0]:
+            if get_pod_node(pod_obj).name in self.non_quorum_nodes:
+                logger.info(
+                    f"Not checking the logs from {pod_obj.name} as it belongs to non-quorum zone"
+                )
+                continue
             excepted = 0
             for file_name in self.logfile_map[label][0]:
                 pause_count = 0
                 try:
-                    file_log = pod.exec_sh_cmd_on_pod(command=f"cat {file_name}")
+                    file_log = pod_obj.exec_sh_cmd_on_pod(command=f"cat {file_name}")
                     time_var = start_time
                     logger.info(f"Current file: {file_name}")
                     while time_var <= (end_time + timedelta(minutes=1)):
@@ -201,7 +215,7 @@ class StretchCluster(OCS):
                     ):
                         if excepted == 0:
                             logger.info(
-                                f"Seems like file {file_name} is not in RBD pod {pod.name}"
+                                f"Seems like file {file_name} is not in RBD pod {pod_obj.name}"
                             )
                             excepted += 1
                         else:
@@ -223,8 +237,8 @@ class StretchCluster(OCS):
         """
 
         logfiles = []
-        for pod in self.workload_map[label][0]:
-            logfiles = pod.exec_sh_cmd_on_pod(
+        for pod_obj in self.workload_map[label][0]:
+            logfiles = pod_obj.exec_sh_cmd_on_pod(
                 command="ls -lt *.log 2>/dev/null | awk '{print $9}'"
             ).split("\n")
 
@@ -264,8 +278,8 @@ class StretchCluster(OCS):
             else exp_num_replicas
         )
         self.workload_map[label][0] = [
-            Pod(**pod)
-            for pod in get_pods_having_label(
+            Pod(**pod_data)
+            for pod_data in get_pods_having_label(
                 label=label,
                 namespace=namespace,
             )
@@ -274,14 +288,14 @@ class StretchCluster(OCS):
         statuses = self.workload_map[label][1] if statuses is None else statuses
         pods_with_statuses = list()
         try:
-            for pod in self.workload_map[label][0]:
-                if pod.status() in statuses:
-                    pods_with_statuses.append(pod)
+            for pod_obj in self.workload_map[label][0]:
+                if pod_obj.status() in statuses:
+                    pods_with_statuses.append(pod_obj)
         except CommandFailed:
             raise UnexpectedBehaviour
 
         logger.info(
-            f"These are the pods {[pod.name for pod in pods_with_statuses]} "
+            f"These are the pods {[pod_obj.name for pod_obj in pods_with_statuses]} "
             f"found in statues {statuses}"
         )
 
@@ -291,7 +305,7 @@ class StretchCluster(OCS):
                 f"Expected replicas is {exp_num_replicas} but found {len(self.workload_map[label][0])}"
             )
             logger.warning(
-                f"These are pods statuses: {[pod.status for pod in self.workload_map[label][0]]}"
+                f"These are pods statuses: {[pod_obj.status for pod_obj in self.workload_map[label][0]]}"
             )
             raise UnexpectedBehaviour
 
@@ -315,11 +329,11 @@ class StretchCluster(OCS):
         self.get_logwriter_reader_pods(
             label, statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
         )
-        for pod in self.workload_map[label][0]:
+        for pod_obj in self.workload_map[label][0]:
             if label == constants.LOGREADER_CEPHFS_LABEL:
-                read_logs = get_pod_logs(pod_name=pod.name, namespace=namespace)
+                read_logs = get_pod_logs(pod_name=pod_obj.name, namespace=namespace)
             else:
-                read_logs = pod.exec_sh_cmd_on_pod(
+                read_logs = pod_obj.exec_sh_cmd_on_pod(
                     command="/opt/logreader.py -t 5 *.log -d",
                 )
             return "corrupt" not in read_logs
@@ -338,11 +352,11 @@ class StretchCluster(OCS):
         """
         self.get_logfile_map(label)
         log_files_now = list()
-        for pod in self.workload_map[label][0]:
+        for pod_obj in self.workload_map[label][0]:
             logfiles = list(
                 filter(
                     lambda file_name: file_name != "",
-                    pod.exec_sh_cmd_on_pod(
+                    pod_obj.exec_sh_cmd_on_pod(
                         command="ls -lt *.log | awk '{print $9}'"
                     ).split("\n"),
                 )
@@ -403,16 +417,62 @@ class StretchCluster(OCS):
                 ceph_tools_pod.delete(wait=False)
             raise
 
+    def get_out_of_quorum_nodes(self):
+        """
+        Get the zone nodes where the mon's are not in quorum
+
+        Returns:
+            List of non-quorum node names
+
+        """
+        # find out the mons in quorum
+        ceph_tools_pod = pod.get_ceph_tools_pod()
+        output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+        quorum_mons = output.get("quorum_names")
+        logger.info(f"Mon's in quorum are: {quorum_mons}")
+        mon_meta_data = list(
+            ceph_tools_pod.exec_cmd_on_pod(command="ceph mon metadata")
+        )
+
+        # find out the mon's that are not in quorum and the
+        # respective pod nodes
+        non_quorum_nodes = list()
+        for mon in mon_meta_data:
+            if mon["name"] not in quorum_mons:
+                non_quorum_nodes.append(mon["hostname"])
+
+        assert len(non_quorum_nodes) <= len(
+            self.get_nodes_in_zone(constants.ZONES_LABELS[0])
+        ), (
+            f"something is wrong, seems like mons from both the zones are out of quorum. "
+            f"Non-quorum nodes are: {non_quorum_nodes}"
+        )
+
+        # find out the zone where the non-quorum nodes belong to
+        # then update non_quorum nodes with all the nodes that
+        # belong to that zone
+        if len(non_quorum_nodes) != 0:
+            self.non_quorum_nodes = [
+                node_obj.name
+                for node_obj in self.get_nodes_in_zone(
+                    get_node_objs(non_quorum_nodes)[0]
+                    .data["metadata"]["labels"]
+                    .get(constants.ZONE_LABEL)
+                )
+            ]
+            logger.info(f"These are the non-quorum nodes: {self.non_quorum_nodes}")
+        return self.non_quorum_nodes
+
     def reset_conn_score(self):
         """
         Reset connection scores for all the mon's
 
         """
         mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
-        for pod in mon_pods:
-            mon_pod_id = get_mon_pod_id(pod)
+        for pod_obj in mon_pods:
+            mon_pod_id = get_mon_pod_id(pod_obj)
             cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
-            pod.exec_cmd_on_pod(command=cmd)
+            pod_obj.exec_cmd_on_pod(command=cmd)
         return mon_pods
 
     def validate_conn_score(self, conn_score_map, quorum_ranks):
@@ -480,37 +540,29 @@ class StretchCluster(OCS):
         if wait_for_read_completion:
             wait_for_pods_to_be_in_statuses(
                 expected_statuses=["Completed"],
-                pod_names=[pod.name for pod in self.cephfs_logreader_pods],
+                pod_names=[pod_obj.name for pod_obj in self.cephfs_logreader_pods],
                 timeout=900,
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             )
             logger.info("Logreader job pods have reached 'Completed' state!")
 
-        # check if all the read operations are successful during the failure window, check for every minute
-        if (
-            self.check_for_read_pause(
-                constants.LOGREADER_CEPHFS_LABEL, start_time, end_time
-            )
-            > 2
-        ):
-            logger.error(
-                "Read operations are paused for CephFS workloads even for the ones in available zones"
-            )
-        else:
-            logger.info("All or some read operations are successful!!")
-
         # check if all the write operations are successful during the failure window, check for every minute
-        if (
+        assert (
             self.check_for_write_pause(
                 constants.LOGWRITER_CEPHFS_LABEL, start_time, end_time
             )
-            > 2
-        ):
-            logger.error(
-                "Write operations paused for CephFS workloads even for the ones in available zones"
+            <= 2
+        ), "Write operations paused for CephFS workloads even for the ones in available zones"
+        logger.info("All write operations are successful for CephFS workload")
+
+        # check if all the read operations are successful during the failure window, check for every minute
+        assert (
+            self.check_for_read_pause(
+                constants.LOGREADER_CEPHFS_LABEL, start_time, end_time
             )
-        else:
-            logger.info("All or some write operations are successful!!")
+            == 0
+        ), "Read operations are paused for CephFS workloads even for the ones in available zones"
+        logger.info("All read operations are successful for CephFs workload")
 
     def rbd_failure_checks(self, start_time, end_time, **kwargs):
         """
@@ -521,21 +573,15 @@ class StretchCluster(OCS):
             end_time (datetime): End time of the failure
 
         """
-        if (
+        assert (
             self.check_for_write_pause(
                 constants.LOGWRITER_RBD_LABEL,
                 start_time,
                 end_time,
             )
-            > 1
-        ):
-            logger.error(
-                "Write operations paused for RBD workloads even for the ones in available zone"
-            )
-        else:
-            logger.info(
-                "All or some write operations are successful for RBD workloads!!"
-            )
+            <= 2
+        ), "Write operations paused for RBD workloads even for the ones in available zone"
+        logger.info("all write operations are successful for RBD workloads")
 
     def post_failure_checks(
         self,

@@ -1,0 +1,34 @@
+---
+interfaces:
+{% if provisioning_network_config | default('dhcp') == 'dhcp' %}
+  - name: eth0
+    type: ethernet
+    state: up
+    ipv4:
+      enabled: true
+      dhcp: true
+      auto-dns: true
+      auto-gateway: true
+      auto-routes: true
+{% endif %}
+{% if provisioning_network_config | default('dhcp') == "static" %}
+  - name: eth0
+    type: ethernet
+    state: up
+    ipv4:
+      address:
+        - ip: {{ provisioning_ip }}
+          prefix-length: {{ provisioning_prefix_length }}
+      dhcp: false
+      enabled: true
+routes:
+  config:
+  - destination: 0.0.0.0/0
+    next-hop-address: {{ provisioning_gw }}
+    next-hop-interface: eth0
+dns-resolver:
+  config:
+    server:
+      - 8.8.8.8
+      - 1.1.1.1
+{% endif %}

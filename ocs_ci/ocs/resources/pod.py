@@ -2102,6 +2102,8 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
             constants.NOOBAA_OPERATOR_POD_LABEL,
             constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
         ]
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            nb_pod_labels.remove(constants.NOOBAA_DB_LABEL_47_AND_ABOVE)
         nb_pods_running = list()
         for pod_label in nb_pod_labels:
             pods = get_pods_having_label(pod_label, statuses=[constants.STATUS_RUNNING])
@@ -3347,6 +3349,23 @@ def exit_osd_maintenance_mode(osd_deployment):
     for deployment in osd_deployment:
         if os.path.isfile(f"backup_{deployment.name}.yaml"):
             os.remove(f"backup_{deployment.name}.yaml")
+
+
+def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Restart the pods having particular label
+
+    Args:
+        label (str): Label of the pod
+        namespace (str): namespace where the pods are running
+
+    """
+    pods_to_restart = [
+        Pod(**pod_data)
+        for pod_data in get_pods_having_label(label, namespace=namespace)
+    ]
+    delete_pods(pods_to_restart, wait=True)
+    logger.info(f"Deleted all the pods with label {label} and in namespace {namespace}")
 
 
 def restart_pods_in_statuses(

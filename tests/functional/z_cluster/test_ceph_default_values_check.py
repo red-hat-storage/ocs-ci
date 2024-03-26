@@ -156,13 +156,33 @@ class TestCephDefaultValuesCheck(ManageTest):
         Testcase to check mds cache memory limit post ocs upgrade
 
         """
-        mds_cache_memory_limit = retry(
-            (IOError, CommandFailed),
-            tries=6,
-            delay=20,
-            backoff=1,
-            text_in_exception="ENOENT",
-        )(get_mds_cache_memory_limit)()
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+
+        try:
+            log.info("Getting the mds cache memory limit")
+            mds_cache_memory_limit = get_mds_cache_memory_limit()
+        except (IOError, CommandFailed) as ex:
+            if "ENOENT" in str(ex):
+                log.info("Restarting the mds pods")
+                mds_pods = pod.get_mds_pods()
+                pod.delete_pods(mds_pods)
+                log.info("Wait for the mds pods to be running")
+                pod_obj.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector=constants.MDS_APP_LABEL,
+                    resource_count=len(mds_pods),
+                    timeout=30,
+                )
+                log.info("Trying to get the mds cache memory limit again")
+                mds_cache_memory_limit = retry(
+                    CommandFailed,
+                    tries=4,
+                    delay=10,
+                    backoff=1,
+                )(get_mds_cache_memory_limit)()
+
         expected_mds_value = 3221225472
         expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
         assert mds_cache_memory_limit == expected_mds_value, (

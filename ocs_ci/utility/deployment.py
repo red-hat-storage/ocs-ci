@@ -160,3 +160,37 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
             wait_for_machineconfigpool_status("all")
 
     return icsp_file_dest_location
+
+
+def get_ocp_release_image():
+    """
+    Get the url of ocp release image
+    * from DEPLOYMENT["custom_ocp_image"] or
+    * from openshift-install version command output
+
+    Returns:
+        str: Release image of the openshift installer
+
+    """
+    if not config.DEPLOYMENT.get("ocp_image"):
+        if config.DEPLOYMENT.get("custom_ocp_image"):
+            config.DEPLOYMENT["ocp_image"] = config.DEPLOYMENT.get("custom_ocp_image")
+        else:
+            config.DEPLOYMENT["ocp_image"] = get_ocp_release_image_from_installer()
+    return config.DEPLOYMENT["ocp_image"]
+
+
+def get_ocp_release_image_from_installer():
+    """
+    Retrieve release image using the openshift installer.
+
+    Returns:
+        str: Release image of the openshift installer
+
+    """
+    logger.info("Retrieving release image from openshift installer")
+    cmd = f"{config.RUN['bin_dir']}/openshift-install version"
+    proc = exec_cmd(cmd)
+    for line in proc.stdout.decode().split("\n"):
+        if "release image" in line:
+            return line.split(" ")[2].strip()

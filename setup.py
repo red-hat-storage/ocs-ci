@@ -9,7 +9,7 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.15.0",
+    version="4.16.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
@@ -96,6 +96,7 @@ setup(
         "google-resumable-media==2.4.1",
         "googleapis-common-protos==1.59.0",
         "urllib3==1.26.18",
+        "psycopg2-binary==2.9.9",
     ],
     entry_points={
         "console_scripts": [

@@ -224,8 +224,14 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
             )
-        self.verify_disks_lso_attached()
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+        if config.ENV_DATA.get("platform") != constants.BAREMETAL_PLATFORM:
+            self.verify_disks_lso_attached()
+            timeout_next = 60
+        else:
+            timeout_next = 600
+        self.do_click(
+            self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
+        )
 
         logger.info("Confirm new storage class")
         self.do_click(self.dep_loc["yes"], enable_screenshot=True)
@@ -241,6 +247,10 @@ class DeploymentUI(PageNavigator):
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError("Nodes not found after 600 seconds")
 
+        self.enable_taint_nodes()
+
+        self.configure_performance()
+
         if self.operator_name == OCS_OPERATOR:
             logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
             self.choose_expanded_mode(
@@ -253,8 +263,6 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
         )
-
-        self.enable_taint_nodes()
 
         self.configure_encryption()
 
@@ -290,6 +298,8 @@ class DeploymentUI(PageNavigator):
 
         self.configure_osd_size()
 
+        self.configure_performance()
+
         logger.info("Select all worker nodes")
         self.select_checkbox_status(status=True, locator=self.dep_loc["all_nodes"])
 
@@ -309,6 +319,24 @@ class DeploymentUI(PageNavigator):
         self.configure_data_protection()
 
         self.create_storage_cluster()
+
+    def configure_performance(self):
+        """
+        Configure performance mode
+
+        """
+        mode = config.ENV_DATA.get("performance_profile")
+        if self.ocs_version_semantic >= version.VERSION_4_15 and mode in (
+            "lean",
+            "performance",
+        ):
+            self.do_click(
+                locator=self.dep_loc["drop_down_performance"], enable_screenshot=True
+            )
+            if mode == "lean":
+                self.do_click(locator=self.dep_loc["lean_mode"])
+            elif mode == "performance":
+                self.do_click(locator=self.dep_loc["performance_mode"])
 
     def create_storage_cluster(self):
         """
@@ -460,12 +488,13 @@ class DeploymentUI(PageNavigator):
 
     def install_ocs_ui(self):
         """
-        Install OCS/ODF via UI.
+        Install OCS/ODF via UI
 
         """
         if config.DEPLOYMENT.get("local_storage"):
             create_optional_operators_catalogsource_non_ga()
-            add_disk_for_vsphere_platform()
+            if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
+                add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         self.install_ocs_operator()
         if not config.UPGRADE.get("ui_upgrade"):

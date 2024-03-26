@@ -2604,3 +2604,39 @@ def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
             Bucket=bucket.name, LifecycleConfiguration=lifecycle_config
         )
     logger.info("Applied lifecyle rule on all the buckets")
+
+
+def upload_test_objects_to_source_and_wait_for_replication(
+    mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
+):
+    """
+    Upload a set of objects to the source bucket, logs the operations and wait for the replication to complete.
+
+    """
+    logger.info("Uploading test objects and waiting for replication to complete")
+    mockup_logger.upload_test_objs_and_log(source_bucket.name)
+
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Standard replication failed to complete in {timeout} seconds"
+
+
+def delete_objects_from_source_and_wait_for_deletion_sync(
+    mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
+):
+    """
+    Delete all objects from the source bucket,logs the operations and wait for the deletion sync to complete.
+
+    """
+    logger.info("Deleting source objects and waiting for deletion sync with target")
+    mockup_logger.delete_all_objects_and_log(source_bucket.name)
+
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Deletion sync failed to complete in {timeout} seconds"

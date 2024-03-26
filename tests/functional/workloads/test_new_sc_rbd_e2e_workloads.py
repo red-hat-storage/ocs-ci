@@ -10,6 +10,8 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     skipif_external_mode,
     skipif_hci_provider_and_client,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
 )
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
@@ -25,6 +27,8 @@ log = logging.getLogger(__name__)
 @skipif_hci_provider_and_client
 @ignore_leftovers
 @tier2
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
     @pytest.mark.parametrize(
         argnames=["replica", "compression"],

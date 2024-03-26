@@ -5,7 +5,6 @@ import os
 import gc
 import time
 import zipfile
-import traceback
 from functools import reduce
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -890,7 +889,7 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
     proceed_to_login_console()
 
     try:
-        wait = WebDriverWait(driver, 40)
+        wait = WebDriverWait(driver, 15)
         if username is not None:
             element = wait.until(
                 ec.element_to_be_clickable(
@@ -915,7 +914,9 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
     except TimeoutException:
         take_screenshot("login")
         copy_dom("login")
-        logger.error(traceback.format_stack())
+        logger.warning(
+            "Login with my_htpasswd_provider or kube:admin text not found, trying to login"
+        )
 
     username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
     if username is None:

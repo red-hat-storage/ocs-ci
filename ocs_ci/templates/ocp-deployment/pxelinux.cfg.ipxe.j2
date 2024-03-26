@@ -1,0 +1,11 @@
+DEFAULT menu.c32
+TIMEOUT 20
+PROMPT 0
+LABEL pxeboot
+    MENU LABEL iPXE Boot
+    MENU DEFAULT
+    KERNEL ipxe/ipxe.lkrn
+    APPEND dhcp && chain {{ ipxe_file_url }}
+LABEL disk0
+  MENU LABEL Boot disk (0x80)
+  LOCALBOOT 0
