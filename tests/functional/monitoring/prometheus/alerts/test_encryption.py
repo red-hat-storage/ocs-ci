@@ -1,6 +1,6 @@
 import logging
 import pytest
-
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import tier4a, skipif_managed_service, skipif_no_kms
 from ocs_ci.ocs import constants
@@ -27,8 +27,11 @@ def test_kms_unavailable(measure_rewrite_kms_endpoint, threading_lock):
     # get alerts from time when manager deployment was scaled down
     alerts = measure_rewrite_kms_endpoint.get("prometheus_alerts")
     target_label = constants.ALERT_KMSSERVERCONNECTIONALERT
+    config_namespace = config.ENV_DATA["cluster_namespace"]
+    config_cluster = config.ENV_DATA["storage_cluster_name"]
     target_msg = (
-        "Storage Cluster KMS Server is in un-connected state. Please check KMS config."
+        "Storage Cluster KMS Server is in un-connected state. Please check "
+        f"KMS config in namespace:cluster {config_namespace}:{config_cluster}."
     )
     states = ["pending", "firing"]
 
