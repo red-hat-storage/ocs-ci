@@ -4656,6 +4656,36 @@ def get_ceph_log_level(service, subsystem):
     return int(log_value)
 
 
+def is_rbd_default_storage_class(custom_sc=None):
+    """
+    Check if RDB is a default storageclass for the cluster
+
+    Args:
+        custom_sc: custom storageclass name.
+
+    Returns:
+        True : If RBD is set as Default storage class for the cluster else False.
+    """
+    default_rbd_sc = (
+        constants.DEFAULT_STORAGECLASS_RBD if custom_sc is None else custom_sc
+    )
+    cmd = (
+        f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
+    )
+    try:
+        check_annotations = json.loads(run_cmd(cmd))
+    except json.decoder.JSONDecodeError:
+        logger.error("Error to get annotation value from storageclass.")
+        return False
+
+    if check_annotations.get("storageclass.kubernetes.io/is-default-class") == "true":
+        logger.info(f"Storageclass {default_rbd_sc} is a default  RBD StorageClass.")
+        return True
+
+    logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
+    return False
+
+
 def flatten_multilevel_dict(d):
     """
     Recursively extracts the leaves of a multi-level dictionary and returns them as a list.
