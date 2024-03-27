@@ -31,7 +31,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
+from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd, exec_cmd
 
 
 log = logging.getLogger(__name__)
@@ -1222,6 +1222,29 @@ def _collect_ocs_logs(
             run_must_gather(
                 acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
             )
+
+        # Check if subctl exists
+        # If we have deployed submariner then we should have binary in the
+        # path else submariner may not be in the picture and we will skip log collection
+        try:
+            run_cmd("subctl -h")
+        except FileNotFoundError:
+            log.warning(
+                "Subctl binary doesn't exists, checking if submariner pods exists..."
+            )
+            out = exec_cmd("oc get pods -n submariner-operator")
+            if out.stderr and ("No resources" in out.stderr):
+                log.warning(
+                    "Not able to find submariner resources, skipping submariner log collection"
+                )
+                return
+            else:
+                # submariner resources exists but subctl binary missing
+                # download subctl
+                # Importing here to avoid circular imports issue and tox failure
+                from ocs_ci.deployment.acm import download_subctl_binary
+
+                download_subctl_binary()
 
         submariner_log_path = os.path.join(
             log_dir_path,
