@@ -948,6 +948,11 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"worker-machineset-*.yaml"
                 )
             )
+            files_to_remove.extend(
+                glob.glob(
+                    f"{manifest_files_path}/99_openshift-machine-api_master-control-plane-machine-set.yaml"
+                )
+            )
             logger.debug(f"Removing machines and machineset files: {files_to_remove}")
             for each_file in files_to_remove:
                 os.remove(each_file)
