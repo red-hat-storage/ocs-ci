@@ -2,7 +2,11 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.helpers.helpers import create_unique_resource_name, get_snapshot_content_obj
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    get_snapshot_content_obj,
+    default_ceph_block_pool,
+)
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.framework.pytest_customization.marks import (
@@ -67,7 +71,7 @@ class TestRbdImageMetadata:
         rbd_pool_name = (
             (config.ENV_DATA.get("rbd_name") or RBD_NAME)
             if config.DEPLOYMENT["external_mode"]
-            else constants.DEFAULT_CEPHBLOCKPOOL
+            else default_ceph_block_pool()
         )
         ceph_tool_pod = get_ceph_tools_pod()
         for image in rbd_images:
