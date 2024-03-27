@@ -2669,3 +2669,21 @@ def validate_serviceexport():
     assert mon_count == len(
         get_mon_pods()
     ), f"Mon serviceexport count mismatch {mon_count} != {len(get_mon_pods())}"
+
+
+def check_storage_client_status(namespace=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE):
+    """
+    Check storageclient status
+
+    Inputs:
+        namespace(str): Namespace where the storage client is created
+
+    Returns:
+        storageclient_status(str): storageclient phase
+
+    """
+    cmd = (
+        f"oc get storageclient -n {namespace} " "-o=jsonpath='{.items[*].status.phase}'"
+    )
+    storageclient_status = run_cmd(cmd=cmd)
+    return storageclient_status

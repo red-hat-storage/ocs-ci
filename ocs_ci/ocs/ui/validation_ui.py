@@ -184,7 +184,7 @@ class ValidationUI(PageNavigator):
         refresh_web_console_popup = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["warning-alert"],
             expected_text="Refresh web console",
-            timeout=120,
+            timeout=180,
         )
         if refresh_web_console_popup:
             logger.info(
@@ -642,3 +642,40 @@ class ValidationUI(PageNavigator):
             expected_text="OpenShift Container Storage",
         )
         return odf_operator_presence, ocs_operator_presence
+
+    def verify_storage_clients_page(self):
+        """
+        Verify storage clients page in UI
+
+        """
+        self.refresh_web_console()
+        self.navigate_to_storageclients_page()
+        self.do_click(
+            self.validation_loc["generate_client_onboarding_token_button"],
+            enable_screenshot=True,
+        )
+        strings_object_service_tab = [
+            "Client onboarding token",
+            "How to use this token",
+        ]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_object_service_tab,
+            page_name="client_onboarding_token_page",
+        )
+
+    def verify_onboarding_token_generation_from_ui(self):
+        """
+        Verify onboarding token generation for client onboarding from Storage Clients page
+
+        Returns:
+        onboarding_token(str): client onboarding token
+
+        """
+        self.verify_storage_clients_page()
+        # onboarding_token = self.do_click(self.validation_loc["copy to clipboard"],enable_screenshot=True).text
+        onboarding_token = self.find_an_element_by_xpath(
+            "//*[@class='odf-onboarding-modal__text-area']"
+        ).text
+        logger.info(f"Onboarding token generated successfully: {onboarding_token}")
+
+        return onboarding_token
