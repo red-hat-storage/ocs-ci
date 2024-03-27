@@ -838,9 +838,14 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         cld_mgr (CloudManager): holds secret for backingstore creation
         backingstore_name (str): backingstore name
         uls_name (str): underlying storage name
-        region (str): which region to create backingstore (should be the same as uls)
+        region (str): we're using this placeholder to pass whether to use the secure endpoint or not
 
     """
+    if region == "secure-endpoint":
+        endpoint = cld_mgr.rgw_client.secure_endpoint
+    else:
+        endpoint = cld_mgr.rgw_client.endpoint
+
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
@@ -848,7 +853,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": "s3-compatible",
         "s3Compatible": {
             "targetBucket": uls_name,
-            "endpoint": cld_mgr.rgw_client.endpoint,
+            "endpoint": endpoint,
             "signatureVersion": "v2",
             "secret": {
                 "name": cld_mgr.rgw_client.secret.name,
@@ -867,12 +872,17 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         cld_mgr (CloudManager): holds secret for backingstore creation
         backingstore_name (str): backingstore name
         uls_name (str): underlying storage name
-        region (str): which region to create backingstore (should be the same as uls)
+        region (str): we're using this placeholder to pass whether to use the secure endpoint or not
 
     """
+    if region == "secure-endpoint":
+        endpoint = cld_mgr.rgw_client.secure_endpoint
+    else:
+        endpoint = cld_mgr.rgw_client.endpoint
+
     mcg_obj.exec_mcg_cmd(
         f"backingstore create s3-compatible {backingstore_name} "
-        f"--endpoint {cld_mgr.rgw_client.endpoint} "
+        f"--endpoint {endpoint} "
         f"--access-key {cld_mgr.rgw_client.access_key} "
         f"--secret-key {cld_mgr.rgw_client.secret_key} "
         f"--target-bucket {uls_name}",
@@ -1952,7 +1962,6 @@ def write_random_test_objects_to_s3_path(
 def patch_replication_policy_to_bucket(
     bucket_name, rule_id, destination_bucket_name, prefix=""
 ):
-
     """
     Patches replication policy to a bucket
 

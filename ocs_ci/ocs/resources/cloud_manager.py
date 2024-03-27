@@ -85,11 +85,17 @@ class CloudManager(ABC):
 
         try:
             rgw_conn = RGW()
-            endpoint, access_key, secret_key = rgw_conn.get_credentials()
+            (
+                endpoint,
+                secure_endpoint,
+                access_key,
+                secret_key,
+            ) = rgw_conn.get_credentials()
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
                 "DATA_PREFIX": "AWS",
                 "ENDPOINT": endpoint,
+                "SECURE_ENDPOINT": secure_endpoint,
                 "RGW_ACCESS_KEY_ID": access_key,
                 "RGW_SECRET_ACCESS_KEY": secret_key,
             }
