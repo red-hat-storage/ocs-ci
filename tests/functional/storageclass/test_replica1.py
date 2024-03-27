@@ -2,7 +2,11 @@ import pytest
 from logging import getLogger
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.pod import get_pods_having_label, get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    get_ceph_tools_pod,
+    run_osd_removal_job,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.storage_cluster import (
     set_non_resilient_pool,
@@ -54,15 +58,17 @@ def get_failures_domain_name() -> list[str]:
     return failure_domains
 
 
-def get_replica_1_osds() -> list[str]:
+def get_replica_1_osds() -> tuple[list[str], list[str]]:
+    replica1_osds_id = list()
     replica1_osds = list()
     all_osds = get_pods_having_label(label=OSD_APP_LABEL)
     for domain in config.ENV_DATA["worker_availability_zones"]:
         for osd in all_osds:
             if osd["metadata"]["labels"]["ceph.rook.io/DeviceSet"] == domain:
                 replica1_osds.append(osd["metadata"]["name"])
+                replica1_osds_id.append(osd["metadata"]["labels"]["ceph-osd-id"])
     log.info(replica1_osds)
-    return replica1_osds
+    return (replica1_osds, replica1_osds_id)
 
 
 def get_replica1_osd_deployment() -> list[str]:
@@ -90,11 +96,11 @@ def get_replica1_osd_deployment() -> list[str]:
     return replica1_osd_deployment
 
 
-def delete_replica1_osd_deployment(deployments_name=list[str]) -> None:
+def scaledown_replica1_osd_deployment(deployments_name=list[str]) -> None:
     deployment_obj = OCP(kind=DEPLOYMENT)
     for deployment in deployments_name:
-        deployment_obj.delete(resource_name=deployment)
-        log.info(f"Deleting {deployment}")
+        deployment_obj.exec_oc_cmd(f"scale deployment {deployment} --replicas=0")
+        log.info(f"scaling to 0: {deployment}")
 
 
 def count_osd_pods() -> int:
@@ -112,6 +118,18 @@ def delete_replica_1_sc() -> None:
             )
         else:
             log.error("Failed to delete storage class")
+
+
+def purge_replica1_osd():
+    deployments_name = get_replica1_osd_deployment()
+    scaledown_replica1_osd_deployment(deployments_name)
+    osds_id = get_replica_1_osds(1)
+    log.info(f"OSD IDs: {osds_id}")
+    run_osd_removal_job(osd_ids=osds_id)
+
+
+def delete_replica1_cephblockpools_cr():
+    pass
 
 
 def delete_replica1_cephblockpools(cpb_object: OCP):
@@ -190,7 +208,7 @@ class TestReplicaOne:
         delete_replica1_cephblockpools(cephblockpools)
         deployments_name = get_replica1_osd_deployment()
         log.info(deployments_name)
-        delete_replica1_osd_deployment(deployments_name)
+        scaledown_replica1_osd_deployment(deployments_name)
 
     def test_topology_validation(self):
         pass
