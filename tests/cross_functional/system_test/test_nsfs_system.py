@@ -30,6 +30,8 @@ from ocs_ci.ocs.resources import pod
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_storage_pods
+from tests.conftest import revert_noobaa_endpoint_scc_class
+
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ logger = logging.getLogger(__name__)
 @skipif_mcg_only
 @ignore_leftovers
 @skipif_ocs_version("<4.10")
+@pytest.mark.usefixtures(revert_noobaa_endpoint_scc_class.__name__)
 class TestNSFSSystem(MCGTest):
     """
     NSFS system test
@@ -150,7 +153,7 @@ class TestNSFSSystem(MCGTest):
                 pattern=nsfs_obj_pattern,
                 s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
-                result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_pod_path=nsfs_obj.mounted_bucket_path,
             )
         pods_to_respin = [
             pod.Pod(
@@ -186,13 +189,13 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                target=nsfs_obj.mounted_bucket_path,
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_dir=nsfs_obj.mounted_bucket_path,
                 amount=5,
                 pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
@@ -203,13 +206,13 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                target=nsfs_obj.mounted_bucket_path,
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_dir=nsfs_obj.mounted_bucket_path,
                 amount=5,
                 pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
@@ -231,13 +234,13 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                target=nsfs_obj.mounted_bucket_path,
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_dir=nsfs_obj.mounted_bucket_path,
                 amount=5,
                 pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
