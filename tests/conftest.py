@@ -1194,6 +1194,7 @@ def pod_factory_fixture(request, pvc_factory):
         deployment_config=False,
         service_account=None,
         security_context=None,
+        node_selector=None,
         replica_count=1,
         pod_name=None,
         command=None,
@@ -1250,6 +1251,7 @@ def pod_factory_fixture(request, pvc_factory):
                 sa_name=sa_name,
                 replica_count=replica_count,
                 pod_name=pod_name,
+                node_selector=node_selector,
                 security_context=security_context,
                 command=command,
                 command_args=command_args,
@@ -1262,9 +1264,11 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment_config or deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=constants.DEPLOYMENTCONFIG
-                if deployment_config
-                else constants.DEPLOYMENT,
+                kind=(
+                    constants.DEPLOYMENTCONFIG
+                    if deployment_config
+                    else constants.DEPLOYMENT
+                ),
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)
@@ -7326,7 +7330,6 @@ def scale_noobaa_resources_fixture():
 
 
 def scale_noobaa_resources():
-
     """
     Scale the noobaa pod resources and scale endpoint count
 
