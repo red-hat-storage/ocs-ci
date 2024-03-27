@@ -52,6 +52,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     get_ocs_build_number,
 )
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_pod_name_by_pattern
 from ocs_ci.utility.utils import convert_device_size
 
 
@@ -4791,6 +4792,7 @@ def is_rbd_default_storage_class(custom_sc=None):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def get_network_attachment_definitions(
     nad_name, namespace=config.ENV_DATA["cluster_namespace"]
 ):
@@ -5122,18 +5124,69 @@ def wait_for_reclaim_space_job(reclaim_space_job):
         raise UnexpectedBehaviour(
             f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output: {reclaim_space_job.get()}"
 
-def get_volsync_channel():
+def check_pods_status_by_pattern(pattern, namespace, expected_status):
     """
+    Check if the pod state is as expected.
+
+    Args:
+        pattern (str):
+        namespace (str):
+        expected_status (str):
 
     Returns:
+        bool: return True if pod in expected status otherwise False
 
     """
+    from ocs_ci.ocs.resources.pod import get_pod_obj
+
+    pod_names = get_pod_name_by_pattern(
+        pattern=pattern,
+        namespace=namespace,
+    )
+    if len(pod_names) == 0:
+        logger.info(f"pod pattern {pattern} does not exist in {namespace} namespace")
+        return False
+    pod_objs = []
+    for pod_name in pod_names:
+        pod_obj = get_pod_obj(name=pod_name, namespace=namespace)
+        pod_objs.append(pod_obj)
+    for pod_obj in pod_objs:
+        pod_status = pod_obj.status()
+        if pod_status != expected_status:
+            logger.info(
+                f"The status of pod {pod_obj.name} in namespace {namespace} is "
+                f"{pod_status} while the expected status is {expected_status}"
+            )
+            return False
+    return True
+
+
+def get_volsync_channel():
+    """
+    Get Volsync Channel
+
+    Returns:
+        str: volsync channel
+    """
     volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
-    return volsync_product_obj.data.get("status").get("channels")[1].get("name")
+    last_index = len(volsync_product_obj.data.get("status").get("channels")) - 1
+    return (
+        volsync_product_obj.data.get("status").get("channels")[last_index].get("name")
+    )
 
 
 def get_managed_cluster_addons(resource_name, namespace):
-    """"""
+    """
+    Get Managed Cluster Addons obj
+
+    Args:
+        resource_name (str): resource name
+        namespace (str): namespace
+
+    Returns:
+        ocp_obj: ocp object of managed cluster addons resource
+
+    """
     return OCP(
         kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
         resource_name=resource_name,
@@ -5142,15 +5195,27 @@ def get_managed_cluster_addons(resource_name, namespace):
 
 
 def update_volsync_channel():
-    from ocs_ci.ocs.utils import get_non_acm_cluster_config
+    """
+    Update Volsync Channel
+
+    """
     from ocs_ci.ocs.acm.acm import RunWithConfigContext, RunWithAcmConfigContext
 
     if config.ENV_DATA.get("acm_hub_unreleased") is not True:
         return
     non_acm_clusters = get_non_acm_cluster_config()
+
     with RunWithConfigContext(
         non_acm_clusters[0].MULTICLUSTER.get("multicluster_index")
     ):
+        from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
+        pods = get_pod_name_by_pattern(
+            pattern="volsync-controller-manager",
+            namespace=constants.OPENSHIFT_OPERATORS,
+        )
+        if len(pods) > 0:
+            return
         channel = get_volsync_channel()
 
     with RunWithAcmConfigContext():
@@ -5168,3 +5233,20 @@ def update_volsync_channel():
                 params=params.strip("\n"),
                 format_type="json",
             )
+
+    for non_acm_cluster in non_acm_clusters:
+        with RunWithConfigContext(
+            non_acm_cluster.MULTICLUSTER.get("multicluster_index")
+        ):
+            sample = TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=check_pods_status_by_pattern,
+                pattern="volsync-controller-manager",
+                namespace=constants.OPENSHIFT_OPERATORS,
+                expected_status=constants.STATUS_RUNNING,
+            )
+            if not sample.wait_for_func_status(result=True):
+                logger.error(
+                    f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
+                )
