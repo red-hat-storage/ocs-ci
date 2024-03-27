@@ -13,6 +13,9 @@ from ocs_ci.ocs.constants import (
     ORDER_BEFORE_OCP_UPGRADE,
     ORDER_BEFORE_UPGRADE,
     ORDER_OCP_UPGRADE,
+    ORDER_MCO_UPGRADE,
+    ORDER_DR_HUB_UPGRADE,
+    ORDER_ACM_UPGRADE,
     ORDER_OCS_UPGRADE,
     ORDER_AFTER_OCP_UPGRADE,
     ORDER_AFTER_OCS_UPGRADE,
@@ -33,7 +36,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
-from ocs_ci.utility.utils import load_auth_config
+from ocs_ci.utility.utils import is_z_stream_upgrade, load_auth_config
 
 # tier marks
 
@@ -109,12 +112,28 @@ order_pre_upgrade = pytest.mark.order(ORDER_BEFORE_UPGRADE)
 order_pre_ocp_upgrade = pytest.mark.order(ORDER_BEFORE_OCP_UPGRADE)
 order_pre_ocs_upgrade = pytest.mark.order(ORDER_BEFORE_OCS_UPGRADE)
 order_ocp_upgrade = pytest.mark.order(ORDER_OCP_UPGRADE)
+order_mco_upgrade = pytest.mark.order(ORDER_MCO_UPGRADE)
+order_dr_hub_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
+# dr cluster operator order is same as hub operator order except that
+# it's applicable only on the managed clusters
+order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
+order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
+# multicluster orchestrator
+mco_upgrade = compose(order_mco_upgrade, pytest.mark.mco_upgrade)
+# dr hub operator
+dr_hub_upgrade = compose(order_dr_hub_upgrade, pytest.mark.dr_hub_upgrade)
+dr_cluster_operator_upgrade = compose(
+    order_dr_cluster_operator_upgrade, pytest.mark.dr_cluster_operator_upgrade
+)
+# acm operator
+acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+# pre_*_upgrade markers
 pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
 pre_ocp_upgrade = compose(
     order_pre_ocp_upgrade,
@@ -124,12 +143,16 @@ pre_ocs_upgrade = compose(
     order_pre_ocs_upgrade,
     pytest.mark.pre_ocs_upgrade,
 )
+# post_*_upgrade markers
 post_upgrade = compose(order_post_upgrade, pytest.mark.post_upgrade)
 post_ocp_upgrade = compose(order_post_ocp_upgrade, pytest.mark.post_ocp_upgrade)
 post_ocs_upgrade = compose(order_post_ocs_upgrade, pytest.mark.post_ocs_upgrade)
 
 upgrade_marks = [
     ocp_upgrade,
+    mco_upgrade,
+    dr_hub_upgrade,
+    acm_upgrade,
     ocs_upgrade,
     pre_upgrade,
     pre_ocp_upgrade,
@@ -164,6 +187,13 @@ skip_inconsistent = pytest.mark.skip(
 skipif_more_than_three_workers = pytest.mark.skipif(
     config.ENV_DATA["worker_replicas"] > 3,
     reason="This test cannot run on setup having more than three worker nodes",
+)
+
+# Skip if we are running z-stream upgrades
+# Useful marker for DR upgrade cases
+skipif_z_stream_upgrade = pytest.mark.skipif(
+    is_z_stream_upgrade(),
+    reason="This is z-stream upgrade and this component upgrade should have been taken care by other components",
 )
 
 # Skipif marks
@@ -596,3 +626,12 @@ ignore_owner = pytest.mark.ignore_owner
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
+
+# Mark the test with marker below to allow re-tries in ceph health fixture
+# for known issues when waiting in re-balance and flip flop from health OK
+# to 1-2 PGs waiting to be Clean
+ceph_health_retry = pytest.mark.ceph_health_retry
+
+# Mark for Multicluster upgrade scenarios
+config_index = pytest.mark.config_index
+multicluster_roles = pytest.mark.multicluster_roles
