@@ -1463,6 +1463,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
         raw_block_pv=False,
         sa_obj=None,
         wait=True,
+        timeout=180,
     ):
         """
         Args:
@@ -1484,6 +1485,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
             replica_count (int): Replica count for deployment config
             raw_block_pv (str): True if pod with raw block pvc
             sa_obj (object) : If specific service account is needed
+            timeout (int): Time in seconds to wait
 
         """
         if custom_data:
@@ -1512,7 +1514,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
         log.info(dc_pod_obj.name)
         if wait:
             helpers.wait_for_resource_state(
-                dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+                dc_pod_obj, constants.STATUS_RUNNING, timeout=timeout
             )
         dc_pod_obj.pvc = pvc
         return dc_pod_obj

@@ -3,6 +3,7 @@ from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework import config
 
 
 @green_squad
@@ -59,7 +60,13 @@ class TestRunIOMultipleDcPods(ManageTest):
 
         dc_pod_objs = list()
         for pvc_obj in pvc_objs:
-            dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
+            if (
+                config.ENV_DATA["platform"].lower()
+                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            ):
+                dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj, timeout=360))
+            else:
+                dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
         return dc_pod_objs
 
     def test_run_io_multiple_dc_pods(self, dc_pods):
