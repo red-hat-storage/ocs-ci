@@ -26,22 +26,21 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @tier3
-@pytest.mark.skip(
-    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8531"
-)
 @pytest.mark.polarion_id("OCS-4942")
 @pytest.mark.bugzilla("2151591")
 @skipif_external_mode
 class TestMonCrashRecoveryScenario:
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):
-        def scale_up_deployments():
+        def scale_up_deployments_and_archieve_crashes():
             """Teardown function to scale deployments back to 1 replica."""
             for dep in [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR]:
                 log.info(f"Teardown: Scaling up {dep} to replica=1")
                 modify_deployment_replica_count(dep, 1)
+            tool_pod = get_ceph_tools_pod()
+            tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
 
-        request.addfinalizer(scale_up_deployments)
+        request.addfinalizer(scale_up_deployments_and_archieve_crashes)
 
     def test_mon_crash_recovery_scenario(self, pod_factory, request):
         """
@@ -52,7 +51,7 @@ class TestMonCrashRecoveryScenario:
             2. Start the IO workload in the background.
             3. Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-a.
             4. Delete the Deployment of rook-ceph-mon-x and pvc rook-ceph-mon-x
-            5. Scale up the operators to replicas = 1
+            5. Scale up the operators to replicas = 1 and archieve all crashes.
             6. Verify 'ceph mon dump' command is working.
             7. Check for the any crash has generated.
 
@@ -101,6 +100,11 @@ class TestMonCrashRecoveryScenario:
             assert modify_deployment_replica_count(
                 dep, 1
             ), f"Failed to scale deployment {dep} to replicas : 1"
+
+        # Archive all crashes
+        log.info("Archiving the ceph crash warnings")
+        tool_pod = get_ceph_tools_pod()
+        tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
 
         # Step 7: Verify 'ceph mon dump' output has the recovered mon information.
         log.info(
