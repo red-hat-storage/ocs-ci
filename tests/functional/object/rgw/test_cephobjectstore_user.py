@@ -7,11 +7,19 @@ from ocs_ci.ocs.constants import CEPHOBJECTSTORE_USER_YAML
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.resources.ocs import OCS
 
-from ocs_ci.framework.pytest_customization.marks import tier3, bugzilla, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    polarion_id,
+    red_squad,
+    rgw,
+    tier3,
+)
 
 logger = logging.getLogger(__name__)
 
 
+@red_squad
+@rgw
 class TestObjectStoreUserCaps:
     @pytest.fixture()
     def create_test_cosu(self, request):
