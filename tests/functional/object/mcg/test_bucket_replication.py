@@ -276,32 +276,41 @@ class TestReplication(MCGTest):
         """
 
         first_bucket_name = bucket_factory(bucketclass=first_bucketclass)[0].name
-        replication_policy = ("basic-replication-rule", first_bucket_name, None)
-        second_bucket_name = bucket_factory(
-            1, bucketclass=second_bucketclass, replication_policy=replication_policy
-        )[0].name
+        second_bucket_name = bucket_factory(bucketclass=second_bucketclass)[0].name
+        prefix_site1 = "site1"
+        prefix_site2 = "site2"
 
         patch_replication_policy_to_bucket(
-            first_bucket_name, "basic-replication-rule-2", second_bucket_name
+            second_bucket_name,
+            "basic-replication-rule-1",
+            first_bucket_name,
+            prefix_site2 + "/",
         )
 
-        standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
-            f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
-        ).split(" ")
+        patch_replication_policy_to_bucket(
+            first_bucket_name,
+            "basic-replication-rule-2",
+            second_bucket_name,
+            prefix_site1 + "/",
+        )
 
         # Write all downloaded objects to the bucket
-        sync_object_directory(
+        written_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
-            AWSCLI_TEST_OBJ_DIR,
-            f"s3://{first_bucket_name}",
-            mcg_obj_session,
+            first_bucket_name,
+            test_directory_setup.origin_dir,
+            amount=10,
+            prefix=prefix_site1,
+            mcg_obj=mcg_obj_session,
         )
-        first_bucket_set = set(standard_test_obj_list)
-        assert first_bucket_set == {
+        written_objects_with_prefix = [
+            f"{prefix_site1}/{obj}" for obj in written_objects
+        ]
+        standard_test_obj_list = set(written_objects_with_prefix)
+        assert standard_test_obj_list == {
             obj.key
             for obj in mcg_obj_session.s3_list_all_objects_in_bucket(first_bucket_name)
         }, "Needed uploaded objects could not be found"
-
         assert compare_bucket_object_list(
             mcg_obj_session, first_bucket_name, second_bucket_name, timeout=self.TIMEOUT
         ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
@@ -310,10 +319,14 @@ class TestReplication(MCGTest):
             awscli_pod_session,
             second_bucket_name,
             test_directory_setup.origin_dir,
-            amount=5,
+            amount=10,
+            prefix=prefix_site2,
             mcg_obj=mcg_obj_session,
         )
-        second_bucket_set = set(written_objects)
+        written_objects_with_prefix = [
+            f"{prefix_site2}/{obj}" for obj in written_objects
+        ]
+        second_bucket_set = set(written_objects_with_prefix)
         second_bucket_set.update(standard_test_obj_list)
         assert second_bucket_set == {
             obj.key
