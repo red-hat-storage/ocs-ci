@@ -312,19 +312,20 @@ def cluster_cleanup():
         p.join()
 
 
-def delete_buckets(bucket_prefix, days):
+def delete_buckets(bucket_prefix, hours):
     """
     Delete the S3 buckets with given prefix
 
     Args:
         bucket_prefix (str): Bucket prefix to delete.
-        days (int): Days older than this will be considered to delete
+        hours (int): hours older than this will be considered to delete
 
     """
     aws = AWS()
-    buckets_to_delete = aws.get_buckets_with_prefix_(bucket_prefix, days)
+    buckets_to_delete = aws.get_buckets_to_delete(bucket_prefix, hours)
     logger.info(f"buckets to delete: {buckets_to_delete}")
     for bucket in buckets_to_delete:
+        logger.info(f"Delete bucket {bucket}")
         aws.delete_bucket(bucket)
 
 
@@ -341,7 +342,10 @@ def aws_cleanup():
         help="""
             Maximum running time of the cluster (in hours).
             Clusters older than this will be deleted.
-            The minimum is 10 hours
+            The minimum is 10 hours.
+            If sweep-buckets flag enabled:
+            Running time for the buckets in hours.
+            Buckets older than to this will be deleted.
             """,
     )
     parser.add_argument(
@@ -385,29 +389,15 @@ def aws_cleanup():
     bucket_group.add_argument(
         "--sweep-buckets", action="store_true", help="Deleting S3 buckets."
     )
-    bucket_group.add_argument(
-        "--bucket-prefix",
-        help="Prefix for S3 buckets. Only buckets with this prefix will be considered to delete.",
-    )
-    bucket_group.add_argument(
-        "--days",
-        type=int,
-        default=5,
-        help="""
-                Maximum running time for the buckets in days.
-                Buckets older than to this will be deleted.
-                The minimum is 5 days
-                """,
-    )
-
     args = parser.parse_args()
 
     if args.sweep_buckets:
-        if not args.bucket_prefix:
-            parser.error(
-                "--bucket-prefix is required when --sweep-buckets is specified."
-            )
-        delete_buckets(args.bucket_prefix, args.days)
+        bucket_hours = (
+            args.hours
+            if args.hours is not None
+            else defaults.DEFAULT_BUCKET_RUNNING_TIME
+        )
+        delete_buckets(defaults.BUCKET_PREFIXES_SPECIAL_RULES, bucket_hours)
         return
 
     if not args.force:
