@@ -5,6 +5,7 @@ import time
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
+    post_upgrade,
     ignore_leftovers,
     skipif_less_than_five_workers,
 )
@@ -23,9 +24,10 @@ log = logging.getLogger(__name__)
 @brown_squad
 @ignore_leftovers
 @skipif_less_than_five_workers
+@post_ocs_upgrade
 @skipif_ocs_version("<4.15")
 class TestFiveMonInCluster(ManageTest):
-    def test_five_mon_pod_in_cluster(self, threading_lock):
+    def test_scale_mons_in_cluster_to_five(self, threading_lock):
         """
 
         A Testcase to add five mon pods to the cluster when the failure domain value is greater than five
