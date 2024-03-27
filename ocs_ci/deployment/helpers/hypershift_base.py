@@ -152,6 +152,10 @@ class HyperShiftBase:
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
+        if name in get_hosted_cluster_names():
+            logger.info(f"HyperShift hosted cluster {name} already exists")
+            return name
+
         if config.default_cluster_ctx.ENV_DATA.get("cpu_cores_per_hosted_cluster"):
             cpu_cores = config.default_cluster_ctx.ENV_DATA.get(
                 "cpu_cores_per_hosted_cluster"
