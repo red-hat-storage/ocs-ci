@@ -2367,7 +2367,7 @@ class RBDDRDeployOps(object):
             index = +1
 
         # Check for RBD mirroring pods
-        @retry(PodNotCreated, tries=1000, delay=5)
+        @retry(PodNotCreated, tries=9, delay=5)
         def _get_mirror_pod_count():
             mirror_pod = get_pod_count(label="app=rook-ceph-rbd-mirror")
             if not mirror_pod:
@@ -2526,8 +2526,8 @@ class MultiClusterDROperatorsDeploy(object):
 
         retry(
             (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
-            tries=50,
-            delay=20,
+            tries=11,
+            delay=2,
         )(package_manifest.get_current_csv)(
             self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
         )
@@ -2998,7 +2998,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Validation
         self.validate_dpa()
 
-    @retry((CommandFailed, MDRDeploymentException), tries=10, delay=10)
+    @retry((CommandFailed, MDRDeploymentException), tries=8, delay=10)
     def validate_dpa(self):
         """
         Validate
@@ -3143,7 +3143,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         mch_resource.wait_for_phase("Running")
         self.backup_pod_status_check()
 
-    @retry((TimeoutExpiredError, MDRDeploymentException), tries=20, delay=10)
+    @retry((TimeoutExpiredError, MDRDeploymentException), tries=8, delay=10)
     def backup_pod_status_check(self):
         pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
         if len(pods_list) != 3:
