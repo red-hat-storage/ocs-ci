@@ -428,7 +428,11 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
 
 
 def add_new_node_and_label_upi(
-    node_type, num_nodes, mark_for_ocs_label=True, node_conf=None
+    node_type,
+    num_nodes,
+    mark_for_ocs_label=True,
+    node_conf=None,
+    zone=None,
 ):
     """
     Add a new node for aws/vmware upi platform and label it
@@ -438,6 +442,7 @@ def add_new_node_and_label_upi(
         num_nodes (int): number of nodes to add
         mark_for_ocs_label (bool): True if label the new node
         node_conf (dict): The node configurations.
+        zone (str): Zone of the node in a stretch cluster config
 
     Returns:
         list: new spun node names
@@ -474,6 +479,12 @@ def add_new_node_and_label_upi(
                 resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
             )
             log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+    if zone:
+        node_obj = ocp.OCP(kind="node")
+        for new_spun_node in new_spun_nodes:
+            node_obj.add_label(
+                resource_name=new_spun_node, label=f"{constants.ZONE_LABEL}={zone}"
+            )
     return new_spun_nodes
 
 
@@ -1026,6 +1037,13 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
     node_util = plt.get_nodes_platform()
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
+    # For a stretch cluster config, we need to add the zone label too
+    if config.DEPLOYMENT.get("arbiter_deployment") is True:
+        zone = get_node_topology_zone_label(osd_node)
+    else:
+        zone = None
+
+    # remove nodes
     remove_nodes([osd_node])
 
     log.info(f"Waiting for node {osd_node_name} to be deleted")
@@ -1043,7 +1061,8 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
 
     if not use_existing_node:
         log.info("Preparing to create a new node...")
-        new_node_names = add_new_node_and_label_upi(node_type, 1)
+
+        new_node_names = add_new_node_and_label_upi(node_type, 1, zone=zone)
         new_node_name = new_node_names[0]
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
@@ -1618,6 +1637,21 @@ def get_node_hostname_label(node_obj):
 
     """
     return node_obj.get().get("metadata").get("labels").get(constants.HOSTNAME_LABEL)
+
+
+def get_node_topology_zone_label(node_obj):
+    """
+    Get the topology.kubernetes.io/zone label for a node
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: the node's topology zone label
+
+    """
+
+    return node_obj.get().get("metadata").get("labels").get(constants.ZONE_LABEL)
 
 
 def wait_for_new_osd_node(old_osd_node_names, timeout=600):
