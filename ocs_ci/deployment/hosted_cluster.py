@@ -345,6 +345,7 @@ class HostedODF(HypershiftHostedOCP):
         HypershiftHostedOCP.__init__(self, name)
         self.namespace_client = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
         self.timeout_check_resources_exist = 6
+        self.timeput_wait_csvs_min = 10
 
     @kubeconfig_exists_decorator
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
@@ -450,6 +451,12 @@ class HostedODF(HypershiftHostedOCP):
 
         logger.info("Creating ODF client namespace")
         self.create_ns()
+
+        if self.odf_csv_installed():
+            logger.info(
+                "ODF CSV exists at namespace, assuming ODF client is already installed, skipping further steps"
+            )
+            return
 
         logger.info("Creating ODF client operator group")
         self.create_operator_group()
@@ -1025,3 +1032,37 @@ class HostedODF(HypershiftHostedOCP):
             resource_name=sc_name,
             should_exist=True,
         )
+
+    def csi_pods_exist(self):
+        """
+        Check if the CSI pods exist
+
+        Returns:
+            bool: True if the CSI pods exist, False otherwise
+        """
+        ocp = OCP(
+            kind=constants.POD,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp.check_resource_existence(
+            timeout=self.timeout_check_resources_exist,
+            selector="app=csi-cephfsplugin",
+            should_exist=True,
+        )
+
+    def odf_csv_installed(self):
+        """
+        Check if ODF CSV is installed at client's namespace
+
+        Returns:
+            bool: True if ODF CSV is installed, False otherwise
+        """
+        sample = TimeoutSampler(
+            timeout=self.timeput_wait_csvs_min * 60,
+            sleep=15,
+            func=check_all_csvs_are_succeeded,
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return sample.wait_for_func_value(value=True)

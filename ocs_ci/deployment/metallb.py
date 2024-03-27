@@ -42,6 +42,7 @@ class MetalLBInstaller:
         self.catalog_source_name = None
         self.hostnames = []
         self.timeout_check_resources_existence = 6
+        self.timeput_wait_csvs_min = 5
 
     def create_metallb_namespace(self):
         """
@@ -482,6 +483,8 @@ class MetalLBInstaller:
             logger.info("MetalLB operator group created successfully")
         if self.create_metallb_subscription():
             logger.info("MetalLB subscription created successfully")
+        if self.wait_csv_installed():
+            logger.info("MetalLB CSV installed successfully")
         if self.create_metallb_instance():
             logger.info("MetalLB instance created successfully")
         if self.create_ip_address_pool():
@@ -621,3 +624,18 @@ class MetalLBInstaller:
             timeout=120,
             should_exist=False,
         )
+
+    def wait_csv_installed(self):
+        """
+        Verify if MetalLB CSV is installed
+
+        Returns:
+            bool: True if MetalLB CSV is installed, False otherwise
+        """
+        sample = TimeoutSampler(
+            timeout=self.timeput_wait_csvs_min * 60,
+            sleep=15,
+            func=check_all_csvs_are_succeeded,
+            namespace=self.namespace_lb,
+        )
+        return sample.wait_for_func_value(value=True)
