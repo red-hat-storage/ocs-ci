@@ -1,0 +1,2 @@
+ENV_DATA:
+  enable_non_resilient_pools: true
