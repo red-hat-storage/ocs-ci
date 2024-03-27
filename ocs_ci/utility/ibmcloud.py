@@ -599,8 +599,9 @@ class IBMCloudIPI(object):
                     sleep=10,
                     func=self.check_node_status,
                     node_name=node.name,
+                    node_status=constants.STATUS_RUNNING.lower(),
                 )
-                sample.wait_for_func_status(result=constants.STATUS_RUNNING.lower())
+                sample.wait_for_func_status(result=True)
 
     def start_nodes(self, nodes):
         """
@@ -635,8 +636,9 @@ class IBMCloudIPI(object):
                     sleep=10,
                     func=self.check_node_status,
                     node_name=node.name,
+                    node_status=constants.STATUS_STOPPED,
                 )
-                sample.wait_for_func_status(result=constants.STATUS_STOPPED)
+                sample.wait_for_func_status(result=True)
 
     def restart_nodes_by_stop_and_start(
         self, nodes, wait=True, force=True, timeout=300
@@ -658,8 +660,9 @@ class IBMCloudIPI(object):
                     sleep=10,
                     func=self.check_node_status,
                     node_name=node.name,
+                    node_status=constants.STATUS_STOPPED,
                 )
-                sample.wait_for_func_status(result=constants.STATUS_STOPPED)
+                sample.wait_for_func_status(result=True)
         logger.info(f"Starting instances {list(nodes)}")
 
         self.start_nodes(nodes=nodes)
@@ -670,14 +673,17 @@ class IBMCloudIPI(object):
                     sleep=10,
                     func=self.check_node_status,
                     node_name=node.name,
+                    node_status=constants.STATUS_RUNNING.lower(),
                 )
-                sample.wait_for_func_status(result=constants.STATUS_RUNNING.lower())
+                sample.wait_for_func_status(result=True)
 
-    def check_node_status(self, node_name):
+    def check_node_status(self, node_name, node_status):
         """
         Check the node status in IBM cloud
+
         Args:
             node_name (str): Node name
+
         Returns:
             str: Status of node
         """
@@ -686,7 +692,11 @@ class IBMCloudIPI(object):
 
             out = run_ibmcloud_cmd(cmd)
             out = json.loads(out)
-            return out["status"]
+            # return out["status"]
+            if out["status"] == node_status:
+                return True
+            else:
+                return False
         except CommandFailed as cf:
             if "Instance not found" in str(cf):
                 return True
@@ -698,7 +708,6 @@ class IBMCloudIPI(object):
         """
         resource_name = None
         stop_node_list = []
-        stopping_node_list = []
         cmd = "ibmcloud is ins --all-resource-groups --output json"
         out = run_ibmcloud_cmd(cmd)
         all_resource_grp = json.loads(out)
@@ -719,7 +728,6 @@ class IBMCloudIPI(object):
             if instance_name["status"] == constants.STATUS_STOPPED:
                 node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
                 node_obj_ocs = OCS(**node_obj)
-                stopping_node_list.append(node_obj_ocs)
                 stop_node_list.append(node_obj_ocs)
         logger.info("Force stopping node which are in stopping state")
         self.stop_nodes(nodes=stop_node_list, force=True, wait=True)
@@ -755,7 +763,7 @@ class IBMCloudIPI(object):
         Detach volume from node on IBM Cloud.
         Args:
             volume (str): volume id.
-            node (OCS): worker node id to detach.
+            node (OCS): worker node object to detach.
         """
 
         logger.info(f"volume is : {volume}")
@@ -785,10 +793,10 @@ class IBMCloudIPI(object):
         Attach volume to node on IBM Cloud.
         Args:
             volume (str): volume id.
-            node (OCS): worker node id to attach.
+            node (OCS): worker node object to attach.
         """
         logger.info(
-            f"attach_volumes:{node[0].get()['metadata']['labels']['failure-domain.beta.kubernetes.io/zone']}"
+            f"attach_volumes:{node.get()['metadata']['labels']['failure-domain.beta.kubernetes.io/zone']}"
         )
 
         logger.info(f"volume is : {volume}")
@@ -800,7 +808,7 @@ class IBMCloudIPI(object):
         if len(out["volume_attachments"]) == 0:
 
             logger.info(f"attachment command output: {out}")
-            cmd = f"ibmcloud is instance-volume-attachment-add data-vol-name {node[0].name} {volume} --output json"
+            cmd = f"ibmcloud is instance-volume-attachment-add data-vol-name {node.name} {volume} --output json"
             out = run_ibmcloud_cmd(cmd)
             out = json.loads(out)
             logger.info(f"attachment command output: {out}")
@@ -810,8 +818,10 @@ class IBMCloudIPI(object):
     def is_volume_attached(self, volume):
         """
         Check if volume is attached to node or not.
+
         Args:
             volume (str): The volume to check for to attached
+
         Returns:
             bool: 'True' if volume is attached otherwise 'False'
         """
@@ -819,7 +829,7 @@ class IBMCloudIPI(object):
         cmd = f"ibmcloud is volume {volume} --output json"
         out = run_ibmcloud_cmd(cmd)
         out = json.loads(out)
-        return out["volume_attachments"]
+        return True if len(out["volume_attachments"]) > 0 else False
 
     def wait_for_volume_attach(self, volume):
         """
@@ -833,6 +843,8 @@ class IBMCloudIPI(object):
             for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
                 if sample:
                     return True
+                else:
+                    return False
         except TimeoutExpiredError:
             logger.info("Volume is not attached to node")
             return False
