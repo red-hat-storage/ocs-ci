@@ -3240,7 +3240,7 @@ def client_cluster_health_check():
         kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
     )
     sc_obj.wait_for_resource(
-        resource_name=constants.DEFAULT_STORAGE_CLIENT,
+        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
         column="PHASE",
         condition="Connected",
         timeout=180,

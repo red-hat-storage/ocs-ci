@@ -141,6 +141,7 @@ REPORTING:
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   storage_cluster_name: 'ocs-storagecluster'
+  storage_client_name: "storage-client"
   storage_device_sets_name: "storageDeviceSets"
   sno: false
   cluster_namespace: 'openshift-storage'
