@@ -121,16 +121,6 @@ class AcmAddClusters(AcmPageNavigator):
         log.info(f"Submitting import of {cluster_name}")
         self.do_click(self.page_nav["Submit_import"], timeout=600)
 
-    def dettach_cluster_ui(
-        self,
-        cluster_name,
-    ):
-        """
-
-        Args:
-            cluster_name (str): cluster name to dettach
-        """
-
     def import_cluster(self, cluster_name, kubeconfig_location):
         """
         Import cluster using UI

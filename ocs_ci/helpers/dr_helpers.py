@@ -34,7 +34,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
 )
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
-from ocs_ci.deployment.deployment import Deployment, MultiClusterDROperatorsDeploy
 
 
 logger = logging.getLogger(__name__)
@@ -1371,9 +1370,8 @@ def disable_dr_from_app(secondary_cluster_name):
             params = f"""[{{"op": "remove", "path": "{path}"}}]"""
             placement_obj.patch(resource_name=name, params=params, format_type="json")
 
-    return placement_obj
-
     config.switch_ctx(old_ctx)
+    return placement_obj
 
 
 def replace_cluster(primary_cluster_name, secondary_cluster_name):
@@ -1403,10 +1401,12 @@ def replace_cluster(primary_cluster_name, secondary_cluster_name):
     # Detach old primary
     run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
 
-    # To Do Import Recovery cluster
+    # Import Recovery cluster
     import_recovery_clusters_with_acm()
 
     # Install MCO and gitops operator on active hub again
+    from ocs_ci.deployment.deployment import Deployment, MultiClusterDROperatorsDeploy
+
     dep_obj = Deployment()
     dep_obj.deploy_gitops_operator(switch_ctx=get_active_acm_index())
     dep_mco = MultiClusterDROperatorsDeploy()
@@ -1423,7 +1423,6 @@ def replace_cluster(primary_cluster_name, secondary_cluster_name):
     To Do apply dr policy on all app on secondary cluster
     1.Create DRPC with placement Ref(name and kind of placement),
     DRPolicy Ref(name of the policy), pvc Selector and prefered cluster
-    2.Update placement annotation cluster.open-cluster-management.io/experimental-scheduling-disable: true
     """
     placement_obj.annotate(
         annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
