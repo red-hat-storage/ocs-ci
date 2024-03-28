@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openshift-storage-egress
+  namespace: {}
+spec:
+  podSelector:
+    matchLabels:
+      kubevirt.io: virt-launcher
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-storage
+  policyTypes:
+  - Egress

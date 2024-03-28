@@ -2,6 +2,7 @@
 # This config is suppose to work on DC-CP, DC-ECO, DC-PS
 DEPLOYMENT:
   allow_lower_instance_requirements: false
+  cnv_deployment: True
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'ai'
@@ -14,4 +15,3 @@ ENV_DATA:
   extra_disks: 2
   control_plane_extra_disks: 2
   fio_storageutilization_min_mbps: 10.0
-  cnv_deployment: True

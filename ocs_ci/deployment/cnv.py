@@ -77,7 +77,6 @@ class CNVInstaller(object):
 
         Raises:
             CommandFailed: If the 'oc create' command fails.
-
         """
         try:
             logger.info(f"Creating namespace {self.namespace} for CNV resources")
@@ -164,7 +163,6 @@ class CNVInstaller(object):
             kind (str): The type of the resource to wait for.
             namespace (str): The namespace in which to wait for the resource.
             resource_name (str): The name of the resource to wait for.
-
         """
         logger.info(f"Waiting for resource {kind} to be discovered")
         for sample in TimeoutSampler(300, 10, ocp.OCP, kind=kind, namespace=namespace):
@@ -182,7 +180,6 @@ class CNVInstaller(object):
 
         Raises:
             TimeoutExpiredError: If the HyperConverged resource does not become available within the specified time.
-
         """
         logger.info("Deploying the HyperConverged CR")
         hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
@@ -233,47 +230,136 @@ class CNVInstaller(object):
             )
             logger.info("successfully enabled software emulation on the cluster")
 
-    def post_install_verification(self):
+    def cnv_hyperconverged_installed(self):
         """
-        Performs CNV post-installation verification.
+        Check if CNV HyperConverged is already installed.
+        Returns:
+             bool: True if CNV HyperConverged is installed, False otherwise
+        """
+        ocp = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        return ocp.check_resource_existence(
+            timeout=12, should_exist=True, resource_name=constants.CNV_OPERATORNAME
+        )
 
+    def post_install_verification(self, raise_exception=False):
+        """
+        Performs CNV post-installation verification, with raise_exception = False may be used safely to run on
+        clusters with CNV installed or not installed.
+
+        Args:
+            raise_exception: If True, allow function to fail the job and raise an exception. If false, return False
+        instead of raising an exception.
+
+        Returns:
+            bool: True if the verification conditions are met, False otherwise
         Raises:
-            TimeoutExpiredError: If the verification conditions are not met within the timeout.
-            HyperConvergedHealthException: If the HyperConverged cluster health is not healthy.
-
+            TimeoutExpiredError: If the verification conditions are not met within the timeout
+            and raise_exception is True.
+            HyperConvergedHealthException: If the HyperConverged cluster health is not health
+            and raise_exception is True.
+            ResourceNotFoundError if the namespace does not exist and raise_exception is True.
+            ResourceWrongStatusException if the nodes are not ready, verification fails and raise_exception
+            is True.
         """
         # Validate that all the nodes are ready and CNV pods are running
         logger.info("Validate that all the nodes are ready and CNV pods are running")
-        wait_for_nodes_status()
-        wait_for_pods_to_be_running(namespace=self.namespace)
+
+        if not OCP(kind="namespace").get(self.namespace):
+            if raise_exception:
+                raise exceptions.ResourceNotFoundError(
+                    f"Namespace {self.namespace} does not exist"
+                )
+            else:
+                logger.warning(f"Namespace {self.namespace} does not exist")
+                return False
+
+        try:
+            wait_for_nodes_status()
+            logger.info("All the nodes are in 'Ready' state")
+        except exceptions.ResourceWrongStatusException:
+            if raise_exception:
+                raise
+            else:
+                logger.warning("Not all nodes are in 'Ready' state")
+                return False
+
+        if wait_for_pods_to_be_running(namespace=self.namespace):
+            logger.info("All CNV pods are running")
+        else:
+            if raise_exception:
+                raise exceptions.ResourceWrongStatusException(
+                    "Not all CNV pods are running"
+                )
+            else:
+                logger.warning("Not all CNV pods are running")
+                return False
 
         # Verify that all the deployments in the openshift-cnv namespace to be in the 'Available' condition
         logger.info(f"Verify all the deployments status in {self.namespace}")
         ocp = OCP(kind="deployments", namespace=self.namespace)
-        result = ocp.wait(
-            condition="Available", timeout=600, selector=constants.CNV_SELECTOR
-        )
-        if not result:
-            err_str = "Timeout occurred, or one or more deployments did not meet condition: Available."
-            raise exceptions.TimeoutExpiredError(err_str)
+
+        try:
+            ocp.wait(
+                condition="Available", timeout=600, selector=constants.CNV_SELECTOR
+            )
+        except exceptions.TimeoutExpiredError:
+            if raise_exception:
+                raise exceptions.TimeoutExpiredError(
+                    "Timeout occurred, one or more deployments did not meet condition: Available"
+                )
+            else:
+                logger.warning(
+                    "Timeout occurred, or one or more deployments did not meet condition: Available"
+                )
+                return False
+
         logger.info(
             f"All the deployments in the {self.namespace} namespace met condition: Available"
         )
 
         # validate that HyperConverged systemHealthStatus is healthy
+        return self.check_hyperconverged_healthy(raise_exception=raise_exception)
+
+    def check_hyperconverged_healthy(self, raise_exception=True):
+        """
+        Validate that HyperConverged systemHealthStatus is healthy.
+        Method throws an exception if the status is not healthy.
+
+        Args:
+            raise_exception: If True, allow the verification to fail the job and raise an exception if the
+            verification fails, otherwise return False.
+        Returns:
+            bool: True if the status is healthy, False otherwise.
+        """
         logger.info("Validate that HyperConverged systemHealthStatus is healthy")
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
-        health = (
-            ocp.get(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
-            .get("status")
-            .get("systemHealthStatus")
-        )
-        if health == "healthy":
-            logger.info("HyperConverged cluster health is healthy.")
-        else:
-            raise exceptions.HyperConvergedHealthException(
-                f"HyperConverged cluster is not healthy. Health: {health}"
+
+        try:
+            health = (
+                ocp.get(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
+                .get("status")
+                .get("systemHealthStatus")
             )
+            if health == "healthy":
+                logger.info("HyperConverged cluster health is healthy.")
+                return True
+            elif health != "healthy" and raise_exception:
+                raise exceptions.HyperConvergedHealthException(
+                    f"HyperConverged cluster is not healthy. Health: {health}"
+                )
+            else:
+                logger.warning(
+                    f"HyperConverged cluster is not healthy. Health: {health}"
+                )
+                return False
+        except Exception as ef:
+            if raise_exception:
+                raise exceptions.HyperConvergedHealthException(
+                    f"Failed to get the HyperConverged systemHealthStatus. Error: {ef}"
+                )
+            else:
+                logger.warning("Failed to get the HyperConverged systemHealthStatus")
+                return False
 
     def get_virtctl_console_spec_links(self):
         """
@@ -492,11 +578,25 @@ class CNVInstaller(object):
         archive_file_binary_object.extractall(path=bin_dir)
         logger.info(f"virtctl binary extracted successfully to path:{bin_dir}")
 
-    def deploy_cnv(self):
+    def deploy_cnv(self, check_cnv_deployed=False, check_cnv_ready=False):
         """
         Installs CNV enabling software emulation.
 
+        Args:
+            check_cnv_deployed (bool): If True, check if CNV is already deployed. If so, skip the deployment.
+            check_cnv_ready (bool): If True, check if CNV is ready. If so, skip the deployment.
         """
+        if check_cnv_deployed and self.cnv_hyperconverged_installed():
+            logger.info("CNV operator is already deployed, skipping the deployment")
+            return
+
+        if self.cnv_hyperconverged_installed():
+            if check_cnv_ready and self.post_install_verification(
+                raise_exception=False
+            ):
+                logger.info("CNV operator ready, skipping the deployment")
+                return
+
         logger.info("Installing CNV")
         # Create CNV catalog source
         self.create_cnv_catalog_source()
