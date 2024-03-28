@@ -192,7 +192,7 @@ class S3Client(CloudClient):
         self,
         auth_dict,
         verify=True,
-        endpoint="https://s3.amazonaws.com",
+        endpoint=None,
         *args,
         **kwargs,
     ):
@@ -219,7 +219,7 @@ class S3Client(CloudClient):
         self.nss_creds = {
             "access_key_id": self.access_key,
             "access_key": self.secret_key,
-            "endpoint": endpoint,
+            "endpoint": endpoint or "https://s3.amazonaws.com",
             "region": self.region,
         }
 
