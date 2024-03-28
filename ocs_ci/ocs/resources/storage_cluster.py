@@ -1648,26 +1648,7 @@ def get_osd_size():
         int: osd size
 
     """
-    sc = get_storage_cluster()
-    size = (
-        sc.get()
-        .get("items")[0]
-        .get("spec")
-        .get("storageDeviceSets")[0]
-        .get("dataPVCTemplate")
-        .get("spec")
-        .get("resources")
-        .get("requests")
-        .get("storage")
-    )
-    if size.isdigit or config.DEPLOYMENT.get("local_storage"):
-        # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
-        # is set to 1, so we can not take OSD size from there. For LSO we will return
-        # the size from PVC.
-        pvc = get_deviceset_pvcs()[0]
-        return int(pvc.get()["status"]["capacity"]["storage"][:-2])
-    else:
-        return int(size[:-2])
+    return get_storage_size()[:-2]
 
 
 def get_deviceset_count():
@@ -2669,3 +2650,56 @@ def validate_serviceexport():
     assert mon_count == len(
         get_mon_pods()
     ), f"Mon serviceexport count mismatch {mon_count} != {len(get_mon_pods())}"
+
+
+def get_storage_size():
+    """
+    Get the storagecluster storage size
+
+    Returns:
+        str: The storagecluster storage size
+
+    """
+    sc = get_storage_cluster()
+    storage = (
+        sc.get()
+        .get("items")[0]
+        .get("spec")
+        .get("storageDeviceSets")[0]
+        .get("dataPVCTemplate")
+        .get("spec")
+        .get("resources")
+        .get("requests")
+        .get("storage")
+    )
+    if storage.isdigit or config.DEPLOYMENT.get("local_storage"):
+        # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
+        # is set to 1, so we can not take OSD size from there. For LSO we will return
+        # the size from PVC.
+        pvc = get_deviceset_pvcs()[0]
+        return pvc.get()["status"]["capacity"]["storage"]
+    else:
+        return storage
+
+
+def resize_osd(new_osd_size):
+    """
+    Resize the OSD(e.g., from 512 to 1024, 1024 to 2048, etc.)
+
+    Args:
+        new_osd_size (str): The new osd size(e.g, 512Gi, 1024Gi, 1Ti, 2Ti, etc.)
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    sc = get_storage_cluster()
+    # Patch the OSD storage size
+    path = "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources/requests/storage"
+    params = f"""[{{ "op": "replace", "path": "{path}", "value": {new_osd_size}}}]"""
+    res = sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
+    return res

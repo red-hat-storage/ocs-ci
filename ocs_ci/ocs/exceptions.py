@@ -694,3 +694,7 @@ class UsernameNotFoundException(Exception):
 
 class MultiStorageClusterExternalCephHealth(Exception):
     pass
+
+
+class StorageSizeNotReflectedException(Exception):
+    pass
