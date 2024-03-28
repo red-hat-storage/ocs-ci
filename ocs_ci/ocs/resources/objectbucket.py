@@ -226,7 +226,7 @@ class ObjectBucket(ABC):
             logger.warning(f"{self.name} deletion timed out. Verifying deletion.")
             verify = True
         if verify:
-            # Increae the timeout to 15 minutes if the test is tier4
+            # Increase the timeout to 15 minutes if the test is tier4
             timeout = 60
             if any("tier4" in mark for mark in get_current_test_marks()):
                 timeout *= 15
