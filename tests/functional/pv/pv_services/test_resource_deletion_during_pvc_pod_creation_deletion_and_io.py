@@ -25,6 +25,9 @@ from ocs_ci.ocs.resources.pod import (
     get_cephfsplugin_provisioner_pods,
     get_rbdfsplugin_provisioner_pods,
     get_operator_pods,
+    get_client_operator_console_pods,
+    get_client_operator_controller_manager_pods,
+    get_csi_addons_controller_manager_pods,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
@@ -259,6 +262,16 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 "mds",
             ]
 
+            # TODO: Update this check when new platform name is added in the config
+            if "hci" in config.ENV_DATA.get("platform"):
+                ceph_csi_pods_to_delete.extend(
+                    [
+                        "client_operator_console",
+                        "client_operator_controller_manager",
+                        "csi_addons_controller_manager",
+                    ]
+                )
+
         (
             pvc_objs,
             pod_objs,
@@ -358,6 +371,13 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 "cephfsplugin_provisioner": partial(get_cephfsplugin_provisioner_pods),
                 "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
                 "operator": partial(get_operator_pods),
+                "client_operator_console": partial(get_client_operator_console_pods),
+                "client_operator_controller_manager": partial(
+                    get_client_operator_controller_manager_pods
+                ),
+                "csi_addons_controller_manager": partial(
+                    get_csi_addons_controller_manager_pods
+                ),
             }
 
         # Disruption object for each pod type
