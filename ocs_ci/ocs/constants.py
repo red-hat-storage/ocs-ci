@@ -415,6 +415,8 @@ CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )
 CSI_ADDONS_CONTROLLER_MANAGER_LABEL = "app.kubernetes.io/name=csi-addons"
+CLIENT_OPERATOR_CONTROLLER_MANAGER_LABEL = "control-plane=controller-manager"
+CLIENT_OPERATOR_CONSOLE_LABEL = "app.kubernetes.io/name=ocs-client-operator-console"
 
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
