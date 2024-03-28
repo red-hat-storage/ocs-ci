@@ -48,9 +48,9 @@ class TestProfileDefaultValuesCheck(ManageTest):
         )
         performance_profile = storage_cluster.data["spec"]["resourceProfile"]
         if performance_profile == constants.PERFORMANCE_PROFILE_LEAN:
-            expected_cpu_request_values = constants.LEAN_PROFILE_CPU_REQUEST_VALUES
+            expected_cpu_request_values = constants.LEAN_PROFILE_REQUEST_CPU_VALUES
             expected_memory_request_values = (
-                constants.LEAN_PROFILE_MEMORY_REQUEST_VALUES
+                constants.LEAN_PROFILE_REQUEST_MEMORY_VALUES
             )
             expected_cpu_limit_values = constants.LEAN_PROFILE_CPU_LIMIT_VALUES
             expected_memory_limit_values = constants.LEAN_PROFILE_MEMORY_LIMIT_VALUES
