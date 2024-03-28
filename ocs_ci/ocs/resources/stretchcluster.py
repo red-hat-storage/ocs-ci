@@ -143,8 +143,8 @@ class StretchCluster(OCS):
             )
         elif workload_label == constants.LOGWRITER_RBD_LABEL:
             pvc_names = list()
-            for pod in self.workload_map[workload_label]:
-                pvc_names.append(f"logwriter-rbd-{pod.name}")
+            for pod_obj in self.workload_map[workload_label]:
+                pvc_names.append(f"logwriter-rbd-{pod_obj.name}")
             pvcs = get_pvc_objs(
                 pvc_names=pvc_names, namespace=constants.STRETCH_CLUSTER_NAMESPACE
             )
