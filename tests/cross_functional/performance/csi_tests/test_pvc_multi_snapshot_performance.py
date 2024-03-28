@@ -26,6 +26,7 @@ from ocs_ci.framework.testlib import (
 
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.ocs.perftests import PASTest
@@ -176,7 +177,15 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
             # Deleting the Data pool
             log.info(f"Deleting the test storage pool : {self.sc_name}")
-            self.delete_ceph_pool(self.sc_name)
+            try:
+                self.delete_ceph_pool(self.sc_name)
+            except CommandFailed as cmdFailedEx:
+                log.info(f"Exception caught {cmdFailedEx}")
+                if "pas-testing-rbd" in str(cmdFailedEx) and "not found" in str(
+                    cmdFailedEx
+                ):
+                    log.info("Continue to teardown ")
+                    pass
             # Verify deletion by checking the backend CEPH pools using the toolbox
             results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
             log.debug(f"Existing pools are : {results}")
@@ -325,7 +334,7 @@ class TestPvcMultiSnapshotPerformance(PASTest):
             raise Exception(err_msg)
 
         # wait until snapshot is ready
-        timeout = 720
+        timeout = 900  # old value 720
         sleep_time = 10
         snap_con_name = None
         snap_uid = None

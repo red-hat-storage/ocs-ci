@@ -431,6 +431,8 @@ def extruct_timestamp_from_log(line):
     return results
 
 
+# Sometimes, the logs are not available due to the connection issues, retry added
+@retry(Exception, tries=6, delay=5, backoff=2)
 def measure_total_snapshot_creation_time(snap_name, start_time):
     """
     Measure Snapshot creation time based on logs
@@ -544,6 +546,8 @@ def get_snapshot_time(snap_name, status, start_time):
         return None
 
 
+# Sometimes, the logs are not available due to the connection issues, retry added
+@retry(Exception, tries=6, delay=5, backoff=2)
 def measure_csi_snapshot_creation_time(interface, snapshot_id, start_time):
     """
 
@@ -576,12 +580,12 @@ def measure_csi_snapshot_creation_time(interface, snapshot_id, start_time):
                 et = line.split(" ")[1]
                 et = datetime.strptime(et, time_format)
     if st is None:
-        logger.error(f"Cannot find start time of snapshot {snapshot_id}")
-        raise Exception(f"Cannot find start time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find csi start time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find csi start time of snapshot {snapshot_id}")
 
     if et is None:
-        logger.error(f"Cannot find end time of snapshot {snapshot_id}")
-        raise Exception(f"Cannot find end time of snapshot {snapshot_id}")
+        logger.error(f"Cannot find csi end time of snapshot {snapshot_id}")
+        raise Exception(f"Cannot find csi end time of snapshot {snapshot_id}")
 
     total_time = (et - st).total_seconds()
     if total_time < 0:
@@ -1041,5 +1045,5 @@ def wait_for_cronjobs(namespace, cronjobs_num, msg, timeout=60):
                 return sample
     except TimeoutExpiredError:
         raise Exception(
-            f"{msg} \n Only {len(sample) -1} cronjobs found.\n This is the full list: \n {sample}"
+            f"{msg} \n Only {len(sample) - 1} cronjobs found.\n This is the full list: \n {sample}"
         )
