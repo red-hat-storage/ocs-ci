@@ -1352,4 +1352,4 @@ def validate_policy_compliance_status(
     if compliance_status["status"]["compliant"] == compliance_state:
         logger.info("Compliance status Matches ")
     else:
-        raise ResourceWrongStatusException("Compliance status does not matches")
+        raise ResourceWrongStatusException("Compliance status does not match")
