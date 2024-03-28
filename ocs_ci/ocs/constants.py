@@ -695,6 +695,8 @@ CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacecronjob.yaml"
 )
 
+PRIORITY_CLASS_YAML = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "priorityclass.yaml")
+
 OC_MIRROR_IMAGESET_CONFIG = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config.yaml"
 )
