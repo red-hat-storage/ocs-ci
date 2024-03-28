@@ -262,17 +262,19 @@ def verify_storageclient(
         if storageclient_name
         else storageclient_obj.get()["items"][0]
     )
-    storageclient_name = storageclient["metadata"]["name"]
-    provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
-    endpoint_actual = get_storage_provider_endpoint(provider_name)
-    assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
-        f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
-        f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
-        f"Value in the provider cluster {provider_name} is {endpoint_actual}"
-    )
-    log.info(
-        f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
-    )
+    if config.ENV_DATA.get("platform") not in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+        storageclient_name = storageclient["metadata"]["name"]
+        provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
+        endpoint_actual = get_storage_provider_endpoint(provider_name)
+        assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
+            "The value of storageProviderEndpoint is not correct "
+            f"in the storageclient {storageclient['metadata']['name']}."
+            f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
+            f"Value in the provider cluster {provider_name} is {endpoint_actual}"
+        )
+        log.info(
+            f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
+        )
 
     # Verify storageclient status
     assert storageclient["status"]["phase"] == "Connected"
@@ -348,6 +350,21 @@ def verify_storageclient_storageclass_claims(storageclient):
         # Verify that the Storageclass is present
         sc_obj.get()
         log.info(f"Verified Storageclassclaim and Storageclass {sc_claim.name}")
+
+
+def verify_storageconsumers():
+    """
+    Verify that all storage consumers are in Ready state
+    """
+    sconsumer_ocp = OCP(
+        kind=constants.STORAGECONSUMER, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    sconsumers = sconsumer_ocp.get()["items"]
+    for sconsumer in sconsumers:
+        log.info(f"Verifying state of storageconsumer {sconsumer['metadata']['name']}")
+        assert (
+            sconsumer["status"]["state"] == constants.STATUS_READY
+        ), f"State is {sconsumer['status']['state']}. It should be Ready"
 
 
 def verify_pods_in_managed_fusion_namespace():
