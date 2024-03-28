@@ -78,9 +78,15 @@ class TestFiveMonInCluster(ManageTest):
             )
 
         if test_pass:
+            params_neg = '{"spec":{"managedResources":{"cephCluster":{"monCount": 4}}}}'
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
-            storagecluster_obj.patch(
+            assert storagecluster_obj.patch(
                 params=params,
+                format_type="merge",
+            ), log.error("Mon count should not be updated value other than 3 and 5")
+
+            storagecluster_obj.patch(
+                params=params_neg,
                 format_type="merge",
             )
 
