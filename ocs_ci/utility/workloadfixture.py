@@ -52,7 +52,8 @@ def measure_operation(
         operation (function): Function to be performed
         result_file (str): File name that should contain measurement results
             including logs in json format. If this file exists then it is
-            used for test.
+            used for test. Existing file is ignored when
+            config.RUN["ignore_next_measurement_file"] is set.
         minimal_time (int): Minimal number of seconds to monitor a system.
             If provided then monitoring of system continues even when
             operation is finshed. If not specified then measurement is finished
@@ -65,7 +66,8 @@ def measure_operation(
             and utilized data are measured after the utilization is completed
         pagerduty_service_ids (list): Service IDs from PagerDuty system used
             incidents query
-        threading_lock (threading.RLock): Lock used for synchronization of the threads in Prometheus calls
+        threading_lock (threading.RLock): Lock used for synchronization of the
+            threads in Prometheus calls
 
     Returns:
         dict: contains information about `start` and `stop` time of given
@@ -82,9 +84,16 @@ def measure_operation(
 
     """
 
+    if config.RUN.get("ignore_next_measurement_file"):
+        ignore_existing_measurement = True
+        config.RUN["ignore_next_measurement_file"] = False
+    else:
+        ignore_existing_measurement = False
+
     # check if file with results for this operation already exists
+    # and ignore_existing_measurement is not set
     # if it exists then use it
-    if is_measurement_done(result_file):
+    if is_measurement_done(result_file) and not ignore_existing_measurement:
         with open(result_file) as open_file:
             results = json.load(open_file)
             # indicate that we are not going to execute the workload, but
@@ -176,3 +185,13 @@ def measure_operation(
                 logger.info(f"Dumping results of measurement into {result_file}")
                 json.dump(results, outfile)
     return results
+
+
+def ignore_next_measurement_file():
+    """
+    Sets config.RUN["ignore_next_measurement_file"] to True. This is supposed
+    to be used in monitoring tests that are marked as @flaky to make sure that
+    the measurement is done again.
+    """
+    config.RUN["ignore_next_measurement_file"] = True
+    return True
