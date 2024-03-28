@@ -184,18 +184,29 @@ class PVC(OCS):
         ), f"Patch command to modify size of PVC {self.name} has failed."
 
         if verify:
-            for pvc_data in TimeoutSampler(240, 2, self.get):
-                capacity = pvc_data.get("status").get("capacity").get("storage")
-                if capacity == f"{new_size}Gi":
-                    break
-                log.info(
-                    f"Capacity of PVC {self.name} is not {new_size}Gi as "
-                    f"expected, but {capacity}. Retrying."
-                )
+            self.verify_pvc_size(new_size)
+        return True
+
+    def verify_pvc_size(self, size):
+        """
+        Verify the size of PVC
+
+        Args:
+            size (int): Size of PVC in Gi
+
+        Returns:
+            bool: True if operation succeeded, False otherwise
+
+        """
+        for pvc_data in TimeoutSampler(240, 2, self.get):
+            capacity = pvc_data.get("status").get("capacity").get("storage")
+            if capacity == f"{size}Gi":
+                break
             log.info(
-                f"Verified that the capacity of PVC {self.name} is changed to "
-                f"{new_size}Gi."
+                f"Capacity of PVC {self.name} is not {size}Gi as "
+                f"expected, but {capacity}. Retrying."
             )
+        log.info(f"Verified that the capacity of PVC {self.name} is {size}Gi.")
         return True
 
     def get_attached_pods(self):
