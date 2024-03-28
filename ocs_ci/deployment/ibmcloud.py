@@ -7,7 +7,9 @@ on IBM Cloud Platform.
 import json
 import logging
 import os
+import sys
 
+from datetime import datetime, timezone
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
@@ -305,64 +307,64 @@ class IBMCloudIPI(CloudDeploymentBase):
             LeftoversExistError: In case the leftovers after attempt to clean them out.
 
         """
+        #
+        # def _get_resources(resource_group):
+        #     """
+        #     Return a list leftover resources for the specified Resource Group
+        #     """
+        #     cmd = f"ibmcloud resource service-instances --type all -g {resource_group} --output json"
+        #     proc = exec_cmd(cmd)
+        #
+        #     return json.loads(proc.stdout)
+        #
+        # def _get_reclamations(resource_group):
+        #     """
+        #     Get reclamations for resource group.
+        #
+        #     Args:
+        #         rsource_group (str): Resource group name
+        #
+        #     Returns:
+        #         list: Reclamations for resource group if found.
+        #     """
+        #     rg_id = self.get_resource_group(return_id=True)
+        #     cmd = "ibmcloud resource reclamations --output json"
+        #     proc = exec_cmd(cmd)
+        #     reclamations = json.loads(proc.stdout)
+        #     rg_reclamations = []
+        #     for reclamation in reclamations:
+        #         if reclamation["resource_group_id"] == rg_id:
+        #             rg_reclamations.append(reclamation)
+        #     return rg_reclamations
+        #
+        # def _delete_reclamations(reclamations):
+        #     """
+        #     Delete reclamations
+        #
+        #     Args:
+        #         reclamations (list): Reclamations to delete
+        #
+        #     """
+        #     for reclamation in reclamations:
+        #         logger.info(f"Deleting reclamation: {reclamation}")
+        #         cmd = (
+        #             f"ibmcloud resource reclamation-delete {reclamation['id']} "
+        #             "--comment 'Force deleting leftovers' -f"
+        #         )
+        #         exec_cmd(cmd)
 
-        def _get_resources(resource_group):
-            """
-            Return a list leftover resources for the specified Resource Group
-            """
-            cmd = f"ibmcloud resource service-instances --type all -g {resource_group} --output json"
+        def _get_vpc_ids(resource_group_id):
+            cmd = f"ibmcloud is vpcs --resource-group-id {resource_group_id} --output json"
             proc = exec_cmd(cmd)
+            vpc_objs = json.loads(proc.stdout)
+            vpc_ids = []
+            for vpc_obj in vpc_objs:
+                vpc_ids.append(vpc_obj["id"])
+            return vpc_ids
 
-            return json.loads(proc.stdout)
-
-        def _get_reclamations(resource_group):
-            """
-            Get reclamations for resource group.
-
-            Args:
-                rsource_group (str): Resource group name
-
-            Returns:
-                list: Reclamations for resource group if found.
-            """
-            rg_id = self.get_resource_group(return_id=True)
-            cmd = "ibmcloud resource reclamations --output json"
-            proc = exec_cmd(cmd)
-            reclamations = json.loads(proc.stdout)
-            rg_reclamations = []
-            for reclamation in reclamations:
-                if reclamation["resource_group_id"] == rg_id:
-                    rg_reclamations.append(reclamation)
-            return rg_reclamations
-
-        def _delete_reclamations(reclamations):
-            """
-            Delete reclamations
-
-            Args:
-                reclamations (list): Reclamations to delete
-
-            """
-            for reclamation in reclamations:
-                logger.info(f"Deleting reclamation: {reclamation}")
-                cmd = (
-                    f"ibmcloud resource reclamation-delete {reclamation['id']} "
-                    "--comment 'Force deleting leftovers' -f"
-                )
-                exec_cmd(cmd)
-
-        def _delete_resources(resources, ignore_errors=False):
-            """
-            Deleting leftover resources.
-
-            Args:
-                resources (list): Resource leftover names.
-                ignore_errors (bool): If True, it will be ignoring errors from ibmcloud cmd.
-
-            """
+        def _delete_resources(resources, resource_type, ignore_errors=False):
             for resource in resources:
-                logger.info(f"Deleting leftover {resource}")
-                delete_cmd = f"ibmcloud resource service-instance-delete -g {resource_group} -f --recursive {resource}"
+                delete_cmd = f"ibmcloud is {resource_type} {resource}"
                 if ignore_errors:
                     try:
                         exec_cmd(delete_cmd)
@@ -373,25 +375,110 @@ class IBMCloudIPI(CloudDeploymentBase):
                 else:
                     exec_cmd(delete_cmd)
 
+        def _get_instances_id(resource_group_id):
+            cmd = f"ibmcloud is instances --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            instance_objs = json.loads(proc.stdout)
+            instance_ids = []
+            for instance_obj in instance_objs:
+                instance_ids.append(instance_obj["id"])
+            return instance_ids
+
+        def _get_load_balancer_ids(resource_group_id):
+            cmd = f"ibmcloud is load-balancers --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            lb_objs = json.loads(proc.stdout)
+            lb_ids = []
+            for lb_obj in lb_objs:
+                lb_ids.append(lb_obj["id"])
+            return lb_ids
+
+        def _get_subnet_ids(resource_group_id):
+            cmd = f"ibmcloud is subnets --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            subnet_objs = json.loads(proc.stdout)
+            subnet_ids = []
+            for subnet_obj in subnet_objs:
+                subnet_ids.append(subnet_obj["id"])
+            return subnet_ids
+
+        def _get_vpn_ids(resource_group_id):
+            cmd = f"ibmcloud is vpn-gateways --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            vpn_objs = json.loads(proc.stdout)
+            vpn_ids = []
+            for vpn_obj in vpn_objs:
+                vpn_ids.append(vpn_obj["id"])
+            return vpn_ids
+
+        def _get_pgw_ids(resource_group_id):
+            cmd = f"ibmcloud is public-gateways --resource-group-id {resource_group_id} --output json"
+            proc = exec_cmd(cmd)
+            pgw_objs = json.loads(proc.stdout)
+            pgw_ids = []
+            for pgw_obj in pgw_objs:
+                pgw_ids.append(pgw_obj["id"])
+            return pgw_ids
+
         if resource_group:
-            leftovers = _get_resources(resource_group)
-            if not leftovers:
-                logger.info("No leftovers found")
-            else:
-                resource_names = set([r["name"] for r in leftovers])
-                logger.info(f"Deleting leftovers {resource_names}")
-                _delete_resources(resource_names, ignore_errors=True)
-            reclamations = _get_reclamations(resource_group)
-            if reclamations:
-                _delete_reclamations(reclamations)
-            # Additional check if all resources got really deleted:
-            if leftovers:
-                leftovers = _get_resources(resource_group)
-                if leftovers:
-                    raise LeftoversExistError(
-                        "Leftovers detected, you can use the details below to report support case in IBM Cloud:\n"
-                        f"{leftovers}"
-                    )
+            resource_group_id = self.get_resource_id(resource_group)
+
+            logger.info("Get vpc ids in resource group")
+            vpc_id_leftovers = _get_vpc_ids(resource_group_id)
+
+            logger.info("Get vpc ids in resource group")
+            subnet_id_leftovers = _get_subnet_ids(resource_group_id)
+
+            logger.info("Delete all VPN gateways in the subnet, if any")
+            vpn_id_leftovers = _get_vpn_ids(resource_group_id)
+            _delete_resources(
+                resources=vpn_id_leftovers,
+                resource_type="vpn-gateway-delete",
+                ignore_errors=True,
+            )
+
+            logger.info("Delete all load balancers in the subnet, if any")
+            load_balancer_leftovers = _get_load_balancer_ids(resource_group_id)
+            _delete_resources(
+                resources=load_balancer_leftovers,
+                resource_type="load-balancer-delete",
+                ignore_errors=True,
+            )
+
+            logger.info("Stop and delete instances")
+            instances_leftovers = _get_instances_id(resource_group_id)
+            _delete_resources(
+                resources=instances_leftovers,
+                resource_type="instance-stop",
+                ignore_errors=True,
+            )
+            _delete_resources(
+                resources=instances_leftovers,
+                resource_type="instance-delete",
+                ignore_errors=True,
+            )
+
+            logger.info("Delete the subnet")
+            _delete_resources(
+                resources=subnet_id_leftovers,
+                resource_type="subnet-delete",
+                ignore_errors=True,
+            )
+
+            logger.info("Delete all public gateways in the VPC, if any")
+            pgw_leftovers = _get_pgw_ids(resource_group_id)
+            _delete_resources(
+                resources=pgw_leftovers,
+                resource_type="public-gateway-delete",
+                ignore_errors=True,
+            )
+
+            logger.info("Delete the VPC")
+            _delete_resources(
+                resources=vpc_id_leftovers,
+                resource_type="public-gateway-delete",
+                ignore_errors=True,
+            )
 
     def delete_resource_group(self, resource_group):
         """
@@ -436,6 +523,53 @@ class IBMCloudIPI(CloudDeploymentBase):
             and cluster["name"].startswith(cluster_name_prefix)
         ]
         return bool(cluster_matches)
+
+    def get_resource_id(self, resource_group):
+        cmd = "ibmcloud resource groups --output json"
+        proc = exec_cmd(cmd)
+        logger.info("Retrieving cluster resource group")
+        resource_data = json.loads(proc.stdout)
+        for group in resource_data:
+            if group["name"] == resource_group:
+                return group["id"]
+        return False
+
+    def get_created_time(self, resource_group):
+        """
+        Get
+
+        Args:
+            resource_group (str): Resource group in IBM Cloud that contains the cluster resources.
+
+
+        Returns:
+            int:
+
+        """
+        cmd = f"ibmcloud resource service-instances -g {resource_group} --output json"
+        proc = exec_cmd(cmd)
+        if len(json.loads(proc.stdout)) == 0:
+            return sys.maxsize
+        created_time_str = json.loads(proc.stdout)[0]["created_at"]
+        time_now = datetime.now(timezone.utc)
+        created_time = datetime.fromisoformat(f"{created_time_str.split('.')[0]}+00:00")
+        time_difference = time_now - created_time
+        return int(time_difference.total_seconds() / 3600)
+
+    def get_resource_groups(self):
+        """
+
+        Returns:
+
+        """
+        cmd = "ibmcloud resource groups --output json"
+        proc = exec_cmd(cmd)
+        logger.info("Retrieving cluster resource group")
+        resource_groups = json.loads(proc.stdout)
+        resource_group_names = list()
+        for resource_group in resource_groups:
+            resource_group_names.append(resource_group["name"])
+        return resource_group_names
 
     @staticmethod
     def export_api_key():
