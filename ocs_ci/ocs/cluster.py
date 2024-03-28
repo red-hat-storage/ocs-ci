@@ -3188,3 +3188,33 @@ def get_mon_quorum_ranks():
     for rank in list(out["quorum"]):
         mon_quorum_ranks[list(out["quorum_names"])[rank]] = rank
     return mon_quorum_ranks
+
+
+def ceph_verification_steps_post_resize_osd(
+    old_osd_pods, old_osd_pvcs, old_osd_pvs, new_osd_size
+):
+    old_osd_pod_names = [p.name for p in old_osd_pods]
+    pod.wait_for_pods_to_be_in_statuses(
+        expected_statuses=[constants.STATUS_TERMINATING],
+        pod_names=old_osd_pod_names,
+        timeout=300,
+        sleep=20,
+    )
+
+    ocp_pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.OSD_APP_LABEL,
+        resource_count=len(old_osd_pods),
+        timeout=300,
+        sleep=20,
+    )
+
+    ocp_pvc = OCP(kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"])
+    ocp_pvc.wait_for_resource(
+        timeout=180,
+        sleep=10,
+        condition=constants.STATUS_BOUND,
+        selector=constants.OSD_PVC_GENERIC_LABEL,
+        resource_count=len(old_osd_pvcs),
+    )

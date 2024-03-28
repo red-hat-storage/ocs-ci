@@ -2669,3 +2669,29 @@ def validate_serviceexport():
     assert mon_count == len(
         get_mon_pods()
     ), f"Mon serviceexport count mismatch {mon_count} != {len(get_mon_pods())}"
+
+
+def resize_osd(new_osd_size):
+    """
+    Resize the OSD(e.g., from 512 to 1024, 1024 to 2048, etc.)
+
+    Args:
+        new_osd_size (int): The new osd size in Gi
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    new_osd_size_in_gi = f"{new_osd_size}Gi"
+    sc = get_storage_cluster()
+    # Patch the OSD storage size
+    path = "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources/requests/storage"
+    params = (
+        f"""[{{ "op": "replace", "path": "{path}", "value": {new_osd_size_in_gi}}}]"""
+    )
+    res = sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
+    return res
