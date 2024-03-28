@@ -66,7 +66,9 @@ class DeploymentUI(PageNavigator):
         elif self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["click_odf_operator"], enable_screenshot=True)
         logger.info(f"Click Install {self.operator_name}")
-        self.do_click(self.dep_loc["click_install_ocs"], enable_screenshot=True)
+        self.do_click(
+            self.dep_loc["click_install_ocs"], enable_screenshot=True, timeout=60
+        )
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
