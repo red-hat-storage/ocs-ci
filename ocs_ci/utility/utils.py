@@ -4624,6 +4624,25 @@ def get_oadp_version():
             return csv["spec"]["version"]
 
 
+def get_acm_version():
+    """
+    Get ACM version from CSV
+
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "advanced-cluster-management", namespace=constants.ACM_HUB_NAMESPACE
+    )
+    for csv in csv_list:
+        if "advanced-cluster-management" in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
+
+
 def is_cluster_y_version_upgraded():
     """
     Checks whether cluster is upgraded or not
