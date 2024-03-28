@@ -683,16 +683,16 @@ class IBMCloudIPI(object):
 
         Args:
             node_name (str): Node name
+            node_status (str): Status of Node Running or Stopped
 
         Returns:
-            str: Status of node
+            bool: True if status matches else False
         """
         try:
             cmd = f"ibmcloud is instance {node_name} --output json"
 
             out = run_ibmcloud_cmd(cmd)
             out = json.loads(out)
-            # return out["status"]
             if out["status"] == node_status:
                 return True
             else:
