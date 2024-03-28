@@ -40,6 +40,9 @@ DEVICE_SIZE = 100
 
 OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
+ROOK_CEPH_OPERATOR = "rook-ceph-operator"
+ODF_PROMETHEUS_OPERATOR = "odf-prometheus-operator"
+ODF_CLIENT_OPERATOR = "ocs-client-operator"
 HCI_CLIENT_ODF_OPERATOR_NAME = "ocs-client-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"

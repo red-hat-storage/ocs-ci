@@ -26,6 +26,7 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
@@ -1044,30 +1045,7 @@ class Deployment(object):
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_9:
-            ocs_operator_names = [
-                defaults.ODF_OPERATOR_NAME,
-                defaults.OCS_OPERATOR_NAME,
-                defaults.MCG_OPERATOR,
-            ]
-            # workaround for https://bugzilla.redhat.com/show_bug.cgi?id=2075422
-            ocp_version = version.get_semantic_ocp_version_from_config()
-            if live_deployment and (
-                (
-                    ocp_version == version.VERSION_4_10
-                    and ocs_version == version.VERSION_4_9
-                )
-                or (
-                    ocp_version == version.VERSION_4_11
-                    and ocs_version == version.VERSION_4_10
-                )
-            ):
-                ocs_operator_names.remove(defaults.MCG_OPERATOR)
-        else:
-            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
-
-        if ocs_version >= version.VERSION_4_10:
-            ocs_operator_names.append(defaults.ODF_CSI_ADDONS_OPERATOR)
+        ocs_operator_names = get_required_csvs()
 
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         is_ibm_sa_linked = False
@@ -1540,14 +1518,7 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_9:
-            ocs_operator_names = [
-                defaults.ODF_OPERATOR_NAME,
-                defaults.OCS_OPERATOR_NAME,
-            ]
-        else:
-            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
+        ocs_operator_names = get_required_csvs()
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         for ocs_operator_name in ocs_operator_names:
             package_manifest = PackageManifest(
