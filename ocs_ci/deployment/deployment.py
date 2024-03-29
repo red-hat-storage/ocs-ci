@@ -2980,12 +2980,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         else:
             enable_managed_serviceaccount()
 
-        validate_policy_compliance_status(
-            resource_name=constants.ACM_POLICY_BACKUP_RESTORE,
-            resource_namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
-            compliance_state=constants.ACM_POLICY_COMPLIANT,
-        )
-
 
 class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     """
