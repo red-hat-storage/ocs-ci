@@ -3,14 +3,14 @@ import logging
 from ocs_ci.framework.testlib import bugzilla, tier1
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad
 
 log = logging.getLogger(__name__)
 
 
 @tier1
 @bugzilla("2239208")
-@blue_squad
+@green_squad
 @pytest.mark.polarion_id("OCS-5476")
 class TestPvcCreationInMegabytes:
     """
