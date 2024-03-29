@@ -130,7 +130,8 @@ class NoobaaAccount(object):
 
 
 def gen_bucket_policy(
-    user_list, actions_list, resources_list, effect="Allow", sid="statement"
+    user_list, actions_list, resources_list, effect=None, sid="statement",
+    principal=None,
 ):
     """
     Function prepares bucket policy parameters in syntax and format provided by AWS bucket policy
@@ -152,8 +153,14 @@ def gen_bucket_policy(
     )
     ver = datetime.date.today().strftime("%Y-%m-%d")
 
+    effects ="Allow"
+    principal_list="Principal"
+    principal = principal if principal else principal_list
+    effect = effect if effect else effects
+
+
     logger.info(f"version: {ver}")
-    logger.info(f"principal_list: {principals}")
+    logger.info(f"principal_list: {principal}")
     logger.info(f"actions_list: {actions_list}")
     logger.info(f"resource: {resources_list}")
     logger.info(f"effect: {effect}")
@@ -163,7 +170,7 @@ def gen_bucket_policy(
         "Statement": [
             {
                 "Action": actions,
-                "Principal": {"AWS": principals},
+                principal: {"AWS": principals},
                 "Resource": resources,
                 "Effect": effect,
                 "Sid": sid,
