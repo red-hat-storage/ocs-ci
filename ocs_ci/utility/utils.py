@@ -549,9 +549,7 @@ def run_cmd_multicluster(
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
     # this need's to be done to skip none value as skip_index accepts type none
-    if isinstance(skip_index, list):
-        pass
-    else:
+    if not isinstance(skip_index, list):
         skip_index = [skip_index]
     for cluster in config.clusters:
         if cluster.MULTICLUSTER["multicluster_index"] in skip_index:
