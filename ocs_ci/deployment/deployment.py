@@ -2350,7 +2350,7 @@ class RBDDRDeployOps(object):
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=config.get_active_acm_index()
+            query_mirroring, skip_index=get_all_acm_indexes()
         )
         index = 0
         for out in out_list:

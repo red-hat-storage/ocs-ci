@@ -548,8 +548,13 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
+    # this need's to be done to skip none value as skip_index accepts type none
+    if isinstance(skip_index, list):
+        pass
+    else:
+        skip_index = [skip_index]
     for cluster in config.clusters:
-        if cluster.MULTICLUSTER["multicluster_index"] == skip_index:
+        if cluster.MULTICLUSTER["multicluster_index"] in skip_index:
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
