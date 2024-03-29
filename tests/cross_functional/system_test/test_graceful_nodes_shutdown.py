@@ -437,19 +437,21 @@ class TestGracefulNodesShutdown(E2ETest):
         logger.info("Gracefully Shutting down worker & master nodes")
         for worker_node in worker_nodes:
             shutdown_cmd = (
-                f"oc debug node/{worker_node}" f"-- chroot /host sudo shutdown -h now"
+                f"oc debug node/{worker_node}  -- chroot /host sudo shutdown -h now"
             )
             run_cmd(shutdown_cmd)
         for master_node in master_nodes:
             shutdown_cmd = (
-                f"oc debug node/{master_node}" f"-- chroot /host sudo shutdown -h now"
+                f"oc debug node/{master_node}  -- chroot /host sudo shutdown -h now"
             )
+            run_cmd(shutdown_cmd)
+
+        worker_nodes = get_nodes(node_type="worker")
+        master_nodes = get_nodes(node_type="master")
         nodes.wait_for_nodes_to_stop(nodes=worker_nodes)
+        nodes.wait_for_nodes_to_stop(nodes=master_nodes)
         time.sleep(300)
         logger.info("Starting worker & master nodes")
-        worker_nodes = get_nodes(node_type="worker")
-        logger.info(f"worker nodes: {worker_nodes}")
-        master_nodes = get_nodes(node_type="master")
         nodes.start_nodes(nodes=master_nodes)
         nodes.start_nodes(nodes=worker_nodes)
 
