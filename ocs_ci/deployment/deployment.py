@@ -279,15 +279,13 @@ class Deployment(object):
         Returns:
 
         """
-        if not config.ENV_DATA.get("deploy_gitops_operator"):
-            return
 
         # Multicluster operations
         if config.multicluster:
-            config.switch_acm_ctx()
-
-            self.deploy_gitops_operator()
-
+            acm_indexes = get_all_acm_indexes()
+            for acm_ctx in acm_indexes:
+                self.deploy_gitops_operator(switch_ctx=acm_ctx)
+            config.switch_ctx(get_active_acm_index())
             logger.info("Creating GitOps CLuster Resource")
             run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")
 
