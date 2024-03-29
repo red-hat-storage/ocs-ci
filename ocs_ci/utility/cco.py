@@ -7,9 +7,9 @@ import shutil
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.utils import (
-    delete_file,
-    download_file,
     exec_cmd,
 )
 
@@ -26,17 +26,10 @@ def configure_cloud_credential_operator():
     bin_dir = config.RUN["bin_dir"]
     ccoctl_path = os.path.join(bin_dir, "ccoctl")
     if not os.path.isfile(ccoctl_path):
-        # retrieve ccoctl binary from https://mirror.openshift.com
-        version = config.DEPLOYMENT.get("ccoctl_version")
-        source = f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/ccoctl-linux.tar.gz"
-        bin_dir = config.RUN["bin_dir"]
-        tarball = os.path.join(bin_dir, "ccoctl-linux.tar.gz")
-        logger.info("Downloading ccoctl tarball from %s", source)
-        download_file(source, tarball)
-        cmd = f"tar -xzC {bin_dir} -f {tarball} ccoctl"
-        logger.info("Extracting ccoctl binary from %s", tarball)
-        exec_cmd(cmd)
-        delete_file(tarball)
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        release_image = get_ocp_release_image_from_installer()
+        cco_image = get_cco_container_image(release_image, pull_secret_path)
+        extract_ccoctl_binary(cco_image, pull_secret_path)
 
 
 def create_manifests(openshift_installer, output_dir):
