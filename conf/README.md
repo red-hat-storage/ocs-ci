@@ -144,6 +144,7 @@ anywhere else.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
 * `sts_enabled` - Enable STS deployment functionality.
+* `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
 
 #### REPORTING
@@ -300,6 +301,14 @@ higher priority).
             * `private_gw` - GW for the private interface
             * `root_disk_id` - ID of the root disk
             * `root_disk_sn` - Serial number of the root disk
+* `clusters` - section for hosted clusters
+  * `<cluster name>` - name of the cluster
+    * `<cluster path>` - path to the cluster directory to store credentials files, such as kubeconfig
+* `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
+* `memory_per_hosted_cluster` - amount of memory per hosted cluster
+* `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+* `hcp_version` - version of HCP client to be deployed on machine running the tests
+* `metallb_version` - MetalLB operator version to install
 
 #### UPGRADE
 

@@ -49,15 +49,9 @@ class HostedClients(HyperShiftBase):
 
     def __init__(self):
         HyperShiftBase.__init__(self)
-        if not ("cluster_names" in config.default_cluster_ctx.ENV_DATA):
-            raise ValueError("No 'cluster_names' set to ENV_DATA")
-        if not ("cluster_paths" in config.default_cluster_ctx.ENV_DATA):
-            raise ValueError("No 'cluster_paths' set to ENV_DATA")
-        if not len(config.default_cluster_ctx.ENV_DATA.get("cluster_names")) != len(
-            "cluster_paths"
-        ):
+        if not config.ENV_DATA.get("clusters"):
             raise ValueError(
-                "The number of 'ENV_DATA.cluster_names' and 'ENV_DATA.cluster_paths' should be the same"
+                "No 'clusters': '{<cluster names>: <cluster paths>}' set to ENV_DATA"
             )
 
     def do_deploy(self):
@@ -116,9 +110,15 @@ class HostedClients(HyperShiftBase):
             client_setup.append(hosted_odf.setup_storage_client())
 
         # stage 7 verify all hosted clusters are ready and print kubeconfig paths
-        logger.info("kubeconfig files for all hosted OCP clusters:\n")
-        for kubeconfig_path in kubeconfig_paths:
-            logger.info(f"kubeconfig path: {kubeconfig_path}\n")
+        logger.info(
+            "kubeconfig files for all hosted OCP clusters:\n"
+            + "\n".join(
+                [
+                    f"kubeconfig path: {kubeconfig_path}"
+                    for kubeconfig_path in kubeconfig_paths
+                ]
+            )
+        )
 
         assert verification_passed, "Some of the hosted OCP clusters are not ready"
         assert all(
@@ -213,18 +213,10 @@ class HostedClients(HyperShiftBase):
         if not self.hcp_binary_exists():
             self.download_hcp_binary()
 
-        cluster_names = get_hosted_cluster_names()
-        cluster_paths = config.default_cluster_ctx.ENV_DATA.get("cluster_paths")
-
-        name_to_path = {
-            name: path
-            for name in cluster_names
-            for path in cluster_paths
-            if name in path
-        }
+        cluster_names_to_paths = config.ENV_DATA["clusters"]
 
         kubeconfig_paths = []
-        for name, path in name_to_path.items():
+        for name, path in cluster_names_to_paths.items():
             kubeconfig_paths.append(self.download_hosted_cluster_kubeconfig(name, path))
 
         return kubeconfig_paths
@@ -255,19 +247,16 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         MetalLBInstaller.__init__(self)
         CNVInstaller.__init__(self)
         self.name = name
-        if "cluster_paths" in config.ENV_DATA:
-            cluster_paths = config.ENV_DATA["cluster_paths"]
-            for path in cluster_paths:
-                if self.name in path:
-                    self.cluster_kubeconfig = os.path.expanduser(
-                        os.path.join(path, "kubeconfig")
-                    )
-                    break
+        if config.ENV_DATA["clusters"].get(self.name):
+            cluster_path = config.ENV_DATA["clusters"].get(self.name)
+            self.cluster_kubeconfig = os.path.expanduser(
+                os.path.join(cluster_path, "kubeconfig")
+            )
         else:
             # avoid throwing an exception if the cluster path is not found for some reason
             # this way we can continue with the next cluster
             logger.error(
-                f"Cluster path for desired cluster with name '{self.name}' was not found in ENV_DATA.cluster_paths"
+                f"Cluster path for desired cluster with name '{self.name}' was not found in ENV_DATA.clusters"
             )
 
     def kubeconfig_exists(self):
@@ -336,7 +325,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         if deploy_metallb:
             self.deploy_lb()
         if download_hcp_binary:
-            self.download_hcp_binary()
+            self.update_hcp_binary()
 
 
 class HostedODF(HypershiftHostedOCP):

@@ -1,12 +1,18 @@
+# This yaml file contains the configuration for the deployment of the ACM hub cluster on IBM Cloud Bare Metal
+# with Hosted client clusters. The configuration is used by the HyperShiftBase.download_hcp_binary(),
+# HostedClients.deploy_hosted_ocp_clusters(), HypershiftHostedOCP.deploy_ocp(), HostedODF.do_deploy(),
+# MetallbOperator.deploy_metallb() and similar methods during the Hosted clusters deployment.
+# The configuration is for observation purposes only and is not intended to be executed. In order to execute
+# the configuration, the user must provide the desired values for the variables in the configuration.
+
 ---
 DEPLOYMENT:
   cnv_deployment: true
   metallb_operator: true
 ENV_DATA:
   platform: "hci_baremetal"
-  cluster_type: "provider"
+  cluster_type: "provider" # it is necessary to run the Hosted clusters deployment on the Provider cluster
   deploy_acm_hub_cluster: true
-  skip_ocs_deployment: true
   acm_version: "2.9" # this is an example, please provide the desired version
   acm_hub_channel: "release-2.9" # this is an example, please provide the desired version
   hcp_version: "4.14" # this is an example, please provide the desired version
@@ -14,7 +20,6 @@ ENV_DATA:
   metallb_version: "4.14" # this is an example, please provide the desired version
   cpu_cores_per_hosted_cluster: 6 # minimal, tested value for the kubevirt cluster is 6
   memory_per_hosted_cluster: "12Gi" # minimal, tested value for the kubevirt cluster is 12Gi
-  cluster_names:
-    - "hcp414-bm2-h" # this is an example, please provide the desired cluster_names
-  cluster_paths:
-    - "~/clusters/hcp414-bm2-h/openshift-cluster-dir/auth" # this is an example, provide the desired cluster_paths
+  clusters:
+    # this is an example, provide the desired name:path pairs
+    hcp414-bm2-h: "~/clusters/hcp414-bm2-h/openshift-cluster-dir/auth"

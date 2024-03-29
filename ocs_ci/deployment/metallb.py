@@ -318,7 +318,13 @@ class MetalLBInstaller:
             )
             return True
 
-        if config.ENV_DATA["platform"] == constants.HCI_VSPHERE:
+        # if IP addresses are specified, create IPAddressPool with the list of IPs
+        if config.ENV_DATA.get("ip_address_pool"):
+            ipaddresspool_data.get("spec").update(
+                {"addresses": config.ENV_DATA["ip_address_pool"]}
+            )
+        # if IP addresses are not specified, follow the logic specified for each platform
+        elif config.ENV_DATA["platform"] == constants.HCI_VSPHERE:
             reserved_ips_num = config.ENV_DATA.get("ips_to_reserve")
             if not reserved_ips_num:
                 raise ValueError(
@@ -339,19 +345,6 @@ class MetalLBInstaller:
             ip_addresses_with_mask = [ip + "/32" for ip in self.addresses_reserved]
             ipaddresspool_data.get("spec").update({"addresses": ip_addresses_with_mask})
 
-        elif config.ENV_DATA["platform"] == constants.HCI_BAREMETAL:
-            if "ip_address_pool" not in config.ENV_DATA:
-                raise ValueError("IP address pool is not specified in the config file")
-
-            ipaddresspool_data.get("spec").update(
-                {"addresses": config.ENV_DATA["ip_address_pool"]}
-            )
-        else:
-            raise NotImplementedError(
-                f"Platform {config.ENV_DATA['platform']} is not supported yet"
-            )
-
-        # create IP address pool file
         ipaddresspool_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="ipaddresspool_file", delete=False
         )

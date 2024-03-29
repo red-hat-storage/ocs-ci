@@ -360,7 +360,7 @@ class HyperShiftBase:
         Download HyperShift hosted cluster kubeconfig
         Args:
             name (str): name of the cluster
-            auth_path (str): path to download kubeconfig, usually it's "~/clusters/<cluster>/openshift-cluster-dir/auth"
+            auth_path (str): path to download kubeconfig
         Returns:
             str: path to the downloaded kubeconfig, None if failed
         """
