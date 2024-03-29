@@ -529,19 +529,6 @@ class VSPHERE(object):
                         logger.info("All VMs reached poweredOff off status")
                         break
 
-    def wait_for_nodes_to_stop(self, vms):
-        def get_vms_power_status(vms):
-            return [self.get_vm_power_status(vm) for vm in vms]
-
-        for statuses in TimeoutSampler(1800, 5, get_vms_power_status, vms):
-            logger.info(
-                f"Waiting for VMs {[vm.name for vm in vms]} to power off. "
-                f"Current VMs statuses: {statuses}"
-            )
-            if all(status == VM_POWERED_OFF for status in statuses):
-                logger.info("All VMs reached poweredOff off status")
-                break
-
     def start_vms(self, vms, wait=True):
         """
         Start VMs

@@ -9,12 +9,12 @@ import time
 
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
 from ocs_ci.ocs import constants, defaults, registry
+from ocs_ci.ocs.platform_nodes import AWSNodes
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
     UnexpectedBehaviour,
 )
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.longevity import start_ocp_workload
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import E2ETest
@@ -22,6 +22,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods,
 )
+from ocs_ci.framework import config
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
@@ -32,7 +33,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.node import get_nodes, get_node_names
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.fips import check_fips_enabled
 
 logger = logging.getLogger(__name__)
@@ -431,29 +432,26 @@ class TestGracefulNodesShutdown(E2ETest):
         )
 
         # check OSD status after graceful node shutdown
-        worker_nodes = get_node_names()
-        logger.info(f"worker nodes: {worker_nodes}")
-        master_nodes = get_node_names(node_type=constants.MASTER_MACHINE)
-        logger.info("Gracefully Shutting down worker & master nodes")
-        for worker_node in worker_nodes:
-            shutdown_cmd = (
-                f"oc debug node/{worker_node}  -- chroot /host sudo shutdown -h now"
-            )
-            run_cmd(shutdown_cmd)
-        for master_node in master_nodes:
-            shutdown_cmd = (
-                f"oc debug node/{master_node}  -- chroot /host sudo shutdown -h now"
-            )
-            run_cmd(shutdown_cmd)
-
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
-        nodes.wait_for_nodes_to_stop(nodes=worker_nodes)
-        nodes.wait_for_nodes_to_stop(nodes=master_nodes)
+
+        logger.info("Gracefully Shutting down worker & master nodes")
+        nodes.stop_nodes(nodes=worker_nodes, force=False)
+        nodes.stop_nodes(nodes=master_nodes, force=False)
+
         time.sleep(300)
+
         logger.info("Starting worker & master nodes")
-        nodes.start_nodes(nodes=master_nodes)
-        nodes.start_nodes(nodes=worker_nodes)
+
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            master_instances = AWSNodes.get_ec2_instances(nodes=master_nodes)
+            worker_instances = AWSNodes.get_ec2_instances(nodes=worker_nodes)
+
+            nodes.start_nodes(instances=master_instances, nodes=master_nodes)
+            nodes.start_nodes(instances=worker_instances, nodes=worker_nodes)
+        else:
+            nodes.start_nodes(nodes=master_nodes)
+            nodes.start_nodes(nodes=worker_nodes)
 
         wait_for_cluster_connectivity(tries=400)
         Sanity().health_check(tries=60)

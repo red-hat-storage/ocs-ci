@@ -310,22 +310,6 @@ class VMWareNodes(NodesBase):
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         self.vsphere.stop_vms(vms, force=force, wait=wait)
 
-    def wait_for_nodes_to_stop(self, nodes):
-        """
-        Wait for the nodes to reach status stopped or terminated
-
-        Args:
-            nodes (list): The OCS objects of the nodes
-
-        Raises:
-            ResourceWrongStatusException: In case of the nodes didn't reach the expected
-                status stopped or terminated.
-
-        """
-        vms = self.get_vms(nodes)
-        assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.wait_for_nodes_to_stop(vms=vms)
-
     def start_nodes(self, nodes, wait=True):
         """
         Start vSphere VMs
