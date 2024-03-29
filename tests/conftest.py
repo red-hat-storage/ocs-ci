@@ -21,6 +21,7 @@ from collections import namedtuple
 
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config as ocsci_config
+import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
     ignore_leftovers,
@@ -1262,9 +1263,11 @@ def pod_factory_fixture(request, pvc_factory):
         if deployment_config or deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
-                kind=constants.DEPLOYMENTCONFIG
-                if deployment_config
-                else constants.DEPLOYMENT,
+                kind=(
+                    constants.DEPLOYMENTCONFIG
+                    if deployment_config
+                    else constants.DEPLOYMENT
+                ),
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
             d_obj = OCS(**d_ocp_dict)
@@ -7317,7 +7320,6 @@ def scale_noobaa_resources_fixture():
 
 
 def scale_noobaa_resources():
-
     """
     Scale the noobaa pod resources and scale endpoint count
 
@@ -7513,3 +7515,17 @@ def aws_log_based_replication_setup(
         return mockup_logger, source_bucket, target_bucket
 
     return factory
+
+
+@pytest.fixture(autouse=True, scope="function")
+def update_current_active_test_marks_global(request):
+    """
+    This fixture updates ocs_ci.framework.pytest_customization.marks::get_current_test_marks
+    with the marks of the current test
+
+    Returns:
+        list: The marks of the current test
+
+    """
+    marks = [mark.name for mark in request.node.iter_markers()]
+    ocs_ci.framework.pytest_customization.marks.current_test_marks = marks
