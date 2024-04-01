@@ -121,8 +121,12 @@ class HyperShiftBase:
         Update hcp binary
         """
         if os.path.isfile(self.hcp_binary_path):
-            logger.info(f"Updating hcp binary {self.hcp_binary_path}")
+            logger.info(
+                f"Updating hcp binary {self.hcp_binary_path} and wait for 5 seconds before downloading new one"
+            )
+            exec_cmd("podman rm hcp")
             exec_cmd(f"rm -f {self.hcp_binary_path}")
+            time.sleep(5)
         self.download_hcp_binary()
 
     def create_kubevirt_ocp_cluster(
