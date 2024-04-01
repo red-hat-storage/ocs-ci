@@ -435,6 +435,10 @@ class TestGracefulNodesShutdown(E2ETest):
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
 
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            master_instances = AWSNodes.get_ec2_instances(nodes=master_nodes)
+            worker_instances = AWSNodes.get_ec2_instances(nodes=worker_nodes)
+
         logger.info("Gracefully Shutting down worker & master nodes")
         nodes.stop_nodes(nodes=worker_nodes, force=False)
         nodes.stop_nodes(nodes=master_nodes, force=False)
@@ -444,9 +448,6 @@ class TestGracefulNodesShutdown(E2ETest):
         logger.info("Starting worker & master nodes")
 
         if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            master_instances = AWSNodes.get_ec2_instances(nodes=master_nodes)
-            worker_instances = AWSNodes.get_ec2_instances(nodes=worker_nodes)
-
             nodes.start_nodes(instances=master_instances, nodes=master_nodes)
             nodes.start_nodes(instances=worker_instances, nodes=worker_nodes)
         else:
