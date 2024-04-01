@@ -205,7 +205,6 @@ class MetalLBInstaller:
         Returns:
             bool: True if subscription is created, and metallb pods are Ready, False otherwise
         """
-        timeout_wait_csvs_min = 8
 
         logger.info("Creating MetalLB subscription")
         subscription_data = templating.load_yaml(METALLB_SUBSCRIPTION_YAML)
@@ -228,13 +227,7 @@ class MetalLBInstaller:
         exec_cmd(f"oc apply -f {metallb_subscription_file.name}", timeout=2400)
 
         try:
-            sample = TimeoutSampler(
-                timeout=timeout_wait_csvs_min * 60,
-                sleep=15,
-                func=check_all_csvs_are_succeeded,
-                namespace=self.namespace_lb,
-            )
-            sample.wait_for_func_value(value=True)
+            self.wait_csv_installed()
 
         except Exception as e:
             logger.error(f"Error during MetalLb installation: {e}")
@@ -476,8 +469,6 @@ class MetalLBInstaller:
             logger.info("MetalLB operator group created successfully")
         if self.create_metallb_subscription():
             logger.info("MetalLB subscription created successfully")
-        if self.wait_csv_installed():
-            logger.info("MetalLB CSV installed successfully")
         if self.create_metallb_instance():
             logger.info("MetalLB instance created successfully")
         if self.create_ip_address_pool():
@@ -625,10 +616,13 @@ class MetalLBInstaller:
         Returns:
             bool: True if MetalLB CSV is installed, False otherwise
         """
-        sample = TimeoutSampler(
+        for sample in TimeoutSampler(
             timeout=self.timeput_wait_csvs_min * 60,
             sleep=15,
             func=check_all_csvs_are_succeeded,
             namespace=self.namespace_lb,
-        )
-        return sample.wait_for_func_value(value=True)
+        ):
+            if sample.wait_for_func_status(result=True):
+                logger.info("MetalLB CSV installed successfully")
+                break
+        return True
