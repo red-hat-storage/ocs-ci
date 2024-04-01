@@ -74,7 +74,7 @@ class HostedClients(HyperShiftBase):
         # if all desired clusters were already deployed and step 1 returns None instead of the list,
         # we proceed to ODF installation and storage client setup
         if not cluster_names:
-            cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
+            cluster_names = list(config.ENV_DATA["clusters"].keys())
 
         # stage 4 deploy ODF on all hosted clusters if not already deployed
         for cluster_name in cluster_names:
@@ -138,15 +138,13 @@ class HostedClients(HyperShiftBase):
             list: the list of cluster names for all hosted OCP clusters deployed by the func successfully
         """
 
-        cluster_names_desired = config.ENV_DATA["cluster_names"]
-        number_of_clusters_to_deploy = len(config.ENV_DATA["cluster_names"])
+        cluster_names_desired = list(config.ENV_DATA["clusters"].keys())
+        number_of_clusters_to_deploy = len(cluster_names_desired)
         logger.info(f"Deploying '{number_of_clusters_to_deploy}' number of clusters")
 
         cluster_names = []
 
-        for index, cluster_name in enumerate(
-            config.default_cluster_ctx.ENV_DATA["cluster_names"]
-        ):
+        for index, cluster_name in enumerate(config.ENV_DATA["clusters"].keys()):
             logger.info(f"Creating hosted OCP cluster: {cluster_name}")
             hosted_ocp_cluster = HypershiftHostedOCP(cluster_name)
             # we need to ensure that all dependencies are installed so for the first cluster we will install all,
@@ -183,7 +181,7 @@ class HostedClients(HyperShiftBase):
         Returns:
             bool: True if all hosted clusters passed verification, False otherwise
         """
-        cluster_names = config.ENV_DATA.get("cluster_names")
+        cluster_names = list(config.ENV_DATA.get("clusters").keys())
         if not cluster_names:
             cluster_names = get_hosted_cluster_names()
         futures = []

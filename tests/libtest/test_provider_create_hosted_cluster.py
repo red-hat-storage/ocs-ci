@@ -34,7 +34,7 @@ class TestProviderHosted(object):
         """
 
         logger.info("Test deploy hosted OCP on provider platform")
-        cluster_name = config.ENV_DATA["cluster_names"][-1]
+        cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
 
         HypershiftHostedOCP(cluster_name).deploy_ocp()
 
@@ -46,7 +46,7 @@ class TestProviderHosted(object):
         logger.info(
             "Test deploy hosted OCP on provider platform with metallb and cnv ready"
         )
-        cluster_name = config.ENV_DATA["cluster_names"][-1]
+        cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
 
         HypershiftHostedOCP(cluster_name).deploy_ocp(
             deploy_cnv=False, deploy_metallb=False, download_hcp_binary=True
@@ -58,7 +58,7 @@ class TestProviderHosted(object):
         Test deploy hosted OCP on provider platform with cnv ready beforehand
         """
         logger.info("Test deploy hosted OCP on provider platform with cnv ready")
-        cluster_name = config.ENV_DATA["cluster_names"][-1]
+        cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
 
         HypershiftHostedOCP(cluster_name).deploy_ocp(deploy_cnv=False)
 
@@ -104,9 +104,9 @@ class TestProviderHosted(object):
         logger.info("Test create onboarding key")
         HostedClients().download_hosted_clusters_kubeconfig_files()
 
-        cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
+        cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
         assert len(
-            HostedODF(cluster_names[-1]).get_onboarding_key()
+            HostedODF(cluster_name).get_onboarding_key()
         ), "Failed to get onboarding key"
 
     @runs_on_provider
@@ -118,5 +118,5 @@ class TestProviderHosted(object):
         logger.info("Test storage client connected")
         HostedClients().download_hosted_clusters_kubeconfig_files()
 
-        cluster_names = config.default_cluster_ctx.ENV_DATA["cluster_names"]
+        cluster_names = list(config.ENV_DATA["clusters"].keys())
         assert HostedODF(cluster_names[-1]).get_storage_client_status() == "Connected"
