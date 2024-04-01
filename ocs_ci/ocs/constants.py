@@ -383,6 +383,7 @@ KUBEVIRT_HCO_PREFIX = "kubevirt-hyperconverged-operator"
 KUBEVIRT_HYPERCONVERGED = "kubevirt-hyperconverged"
 CNV_OPERATORNAME = "kubevirt-hyperconverged.openshift-cnv"
 CNV_SELECTOR = f"operators.coreos.com/{CNV_OPERATORNAME}"
+HCP_REGISTRY = "quay.io/hypershift/hypershift-operator"
 
 # CNV VM constants
 VIRTUAL_MACHINE = "VirtualMachine"

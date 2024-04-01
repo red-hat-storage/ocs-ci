@@ -98,7 +98,7 @@ class HyperShiftBase:
 
         exec_cmd(
             f"podman create --authfile {os.path.join(constants.DATA_DIR, 'pull-secret')} --name hcp "
-            f"quay.io/hypershift/hypershift-operator:{hcp_version}",
+            f"{constants.HCP_REGISTRY}:{hcp_version}",
         )
         logger.info("wait for 20 seconds to download the hcp binary file")
         # I was unable to wait until the file is downloaded in subprocess and decided not to invest in
@@ -120,11 +120,20 @@ class HyperShiftBase:
         """
         Update hcp binary
         """
+        if not config.ENV_DATA.get("hcp_version"):
+            logger.error("hcp_version is not set in config.ENV_DATA")
+            return
+
         if os.path.isfile(self.hcp_binary_path):
             logger.info(
                 f"Updating hcp binary {self.hcp_binary_path} and wait for 5 seconds before downloading new one"
             )
-            exec_cmd("podman rm hcp")
+            cmd = "podman ps -a --format '{{.ID}} {{.Names}}' | awk '$2 == \"hcp\" {print $1}'"
+            container_id = exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+            exec_cmd(f"podman rm {container_id}")
+            exec_cmd(
+                f"podman rmi {constants.HCP_REGISTRY}:{config.ENV_DATA['hcp_version']}"
+            )
             exec_cmd(f"rm -f {self.hcp_binary_path}")
             time.sleep(5)
         self.download_hcp_binary()
