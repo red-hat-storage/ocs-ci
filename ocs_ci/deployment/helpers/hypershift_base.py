@@ -124,19 +124,31 @@ class HyperShiftBase:
             logger.error("hcp_version is not set in config.ENV_DATA")
             return
 
-        if os.path.isfile(self.hcp_binary_path):
-            logger.info(
-                f"Updating hcp binary {self.hcp_binary_path} and wait for 5 seconds before downloading new one"
-            )
-            cmd = "podman ps -a --format '{{.ID}} {{.Names}}' | awk '$2 == \"hcp\" {print $1}'"
-            container_id = exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
-            exec_cmd(f"podman rm {container_id}")
-            exec_cmd(
-                f"podman rmi {constants.HCP_REGISTRY}:{config.ENV_DATA['hcp_version']}"
-            )
+        try:
+            self.download_hcp_binary()
+        except CommandFailed as e:
+            logger.error(f"Failed to update hcp binary: {e}")
+            self.delete_hcp()
+            self.download_hcp_binary()
+
+    def delete_hcp(self):
+        """
+        Delete hcp binary
+        """
+        logger.info(
+            f"Updating hcp binary {self.hcp_binary_path} and wait for 5 seconds before downloading new one"
+        )
+        cmd = "podman ps -a --format '{{.ID}} {{.Names}}' | awk '$2 == \"hcp\" {print $1}'"
+        container_id = exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+        exec_cmd(f"podman rm {container_id}")
+        exec_cmd(
+            f"podman rmi {constants.HCP_REGISTRY}:{config.ENV_DATA['hcp_version']}"
+        )
+        try:
             exec_cmd(f"rm -f {self.hcp_binary_path}")
-            time.sleep(5)
-        self.download_hcp_binary()
+        except CommandFailed:
+            pass
+        time.sleep(5)
 
     def create_kubevirt_ocp_cluster(
         self,

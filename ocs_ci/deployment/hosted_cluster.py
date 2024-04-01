@@ -227,7 +227,7 @@ class HostedClients(HyperShiftBase):
         Returns:
             list: the list of kubeconfig paths for all hosted OCP clusters
         """
-        kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+        kubeconfig_paths = self.update_hcp_binary()
 
         hosted_cluster_names = get_hosted_cluster_names()
 
