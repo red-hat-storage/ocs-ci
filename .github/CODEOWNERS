@@ -35,8 +35,8 @@
 /tests/manage/pv_services/ @red-hat-storage/green-squad
 /tests/manage/storageclass/ @red-hat-storage/green-squad
 /tests/manage/monitoring/ @red-hat-storage/blue-squad
-/tests/manage/mcg/ @red-hat-storage/red-squad
-/tests/manage/rgw/ @red-hat-storage/red-squad
+/tests/functional/object/mcg/  @red-hat-storage/red-squad
+/tests/functional/object/rgw/  @red-hat-storage/red-squad
 /tests/ecosystem/upgrade/ @red-hat-storage/purple-squad
 /tests/e2e/flowtest/ @red-hat-storage/magenta-squad
 /tests/e2e/lifecycle/ @red-hat-storage/magenta-squad
