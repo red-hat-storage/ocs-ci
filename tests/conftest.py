@@ -5720,9 +5720,9 @@ def nsfs_bucket_factory_fixture(
         )
 
         # Apply the necessary permissions on the filesystem
-        retry(CommandFailed, tries=3, delay=15)(
-            nsfs_obj.interface_pod.exec_cmd_on_pod
-        )("chmod -R 777 /nsfs")
+        retry(CommandFailed, tries=3, delay=15)(nsfs_obj.interface_pod.exec_cmd_on_pod)(
+            "chmod -R 777 /nsfs"
+        )
 
         # Create a new MCG account and get its credentials
         nsfs_obj.s3_creds = mcg_account_factory(
