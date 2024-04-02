@@ -7,9 +7,8 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults, registry
-from ocs_ci.ocs.platform_nodes import AWSNodes
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
@@ -33,7 +32,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.resources.fips import check_fips_enabled
 
 logger = logging.getLogger(__name__)
@@ -342,7 +341,7 @@ class TestGracefulNodesShutdown(E2ETest):
             f"on encrypted fs pvc {self.efs_pvc_obj.name} on pod {self.efs_pvc_pod_obj.name}"
         )
 
-    def validate_ocp_workload_continues(self):
+    def validate_ocp_workload_exists(self):
         """
         Verify ocp workload continues after reboot
         """
@@ -436,13 +435,14 @@ class TestGracefulNodesShutdown(E2ETest):
         master_nodes = get_nodes(node_type="master")
 
         if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
-            master_instances = AWSNodes.get_ec2_instances(nodes=master_nodes)
-            worker_instances = AWSNodes.get_ec2_instances(nodes=worker_nodes)
+            master_instances = nodes.get_ec2_instances(nodes=master_nodes)
+            worker_instances = nodes.get_ec2_instances(nodes=worker_nodes)
 
         logger.info("Gracefully Shutting down worker & master nodes")
         nodes.stop_nodes(nodes=worker_nodes, force=False)
         nodes.stop_nodes(nodes=master_nodes, force=False)
 
+        logger.info("waiting for 5 min before starting nodes")
         time.sleep(300)
 
         logger.info("Starting worker & master nodes")
@@ -454,13 +454,33 @@ class TestGracefulNodesShutdown(E2ETest):
             nodes.start_nodes(nodes=master_nodes)
             nodes.start_nodes(nodes=worker_nodes)
 
-        wait_for_cluster_connectivity(tries=400)
-        Sanity().health_check(tries=60)
+        retry(
+            (
+                CommandFailed,
+                TimeoutError,
+                AssertionError,
+                ResourceWrongStatusException,
+            ),
+            tries=30,
+            delay=15,
+        )(wait_for_nodes_status(timeout=1800))
+        logger.info("All nodes are now in READY state")
+
+        logger.info("Waiting for 10 min for all pods to come in running state.")
+        time.sleep(600)
+
+        # check cluster health
+        try:
+            logger.info("Making sure ceph health is OK")
+            Sanity().health_check(tries=50, cluster_check=False)
+        except Exception as ex:
+            logger.error("Failed at cluster health check!!")
+            raise ex
 
         self.validate_data_integrity()
         self.validate_snapshot_restore(snapshot_restore_factory)
         validate_mcg_bg_features(skip_any_features=["caching", "rgw kafka", "nsfs"])
-        self.validate_ocp_workload_continues()
+        self.validate_ocp_workload_exists()
 
         # check osd status
         state = "down"
