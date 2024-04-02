@@ -268,7 +268,11 @@ generic_locators = {
     "check_first_row_checkbox": ('input[name="checkrow0"]', By.CSS_SELECTOR),
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
-    "text_input_popup_rules": ("//*[@class='pf-c-helper-text__item-text']", By.XPATH),
+    "text_input_popup_rules": (
+        "//*[@class='pf-c-helper-text__item-text'] | "
+        "//*[@class='pf-v5-c-helper-text__item-text']",
+        By.XPATH,
+    ),
     "ocp-overview-status-storage-popup-btn": (
         "//button[@type='button'][normalize-space()='Storage']",
         By.XPATH,
@@ -1255,7 +1259,7 @@ validation = {
     "backingstore_name": ("input[placeholder='my-backingstore']", By.CSS_SELECTOR),
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
     "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
-    "input_value_validator_icon": (".pf-c-icon", By.CSS_SELECTOR),
+    "input_value_validator_icon": (".pf-c-icon, .pf-v5-c-icon", By.CSS_SELECTOR),
     "text_input_field_error_improvements": (
         "input[data-ouia-component-id='OUIA-Generated-TextInputBase-1']",
         By.CSS_SELECTOR,
@@ -1557,10 +1561,6 @@ validation_4_14 = {
     ),
 }
 
-validation_4_16 = {
-    "input_value_validator_icon": (".pf-v5-c-icon", By.CSS_SELECTOR),
-}
-
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[@class='pf-topology__node__label']", By.XPATH),
@@ -1786,7 +1786,6 @@ locators = {
             **validation_4_12,
             **validation_4_13,
             **validation_4_14,
-            **validation_4_16,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
