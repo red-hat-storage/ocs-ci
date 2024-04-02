@@ -31,7 +31,7 @@
 #/build/logs/ @doctocat
 /tests/functional/disaster-recovery/regional-dr/ @red-hat-storage/turquoise-squad
 /tests/lvmo/ @red-hat-storage/aqua-squad
-/tests/manage/z_cluster/ @red-hat-storage/brown-squad
+/tests/functional/z_cluster/ @red-hat-storage/brown-squad
 /tests/manage/pv_services/ @red-hat-storage/green-squad
 /tests/manage/storageclass/ @red-hat-storage/green-squad
 /tests/manage/monitoring/ @red-hat-storage/blue-squad
