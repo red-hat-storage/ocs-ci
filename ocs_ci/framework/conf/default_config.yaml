@@ -112,8 +112,6 @@ DEPLOYMENT:
   api_ssl_key: "data/api-cert.key"
   api_ssl_ca_cert: "data/ca.crt"
   install_lvmo: False
-  # Cloud Credential Operator Utility
-  ccoctl_version: "4.16.0"
   # AWS profile ( profile must exist in ~/.aws/credentials )
   aws_profile: "ocs_ci"
   aws_cred_path: "~/.aws/credentials"
