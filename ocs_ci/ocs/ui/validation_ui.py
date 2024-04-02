@@ -276,6 +276,7 @@ class ValidationUI(PageNavigator):
         3. Verify if Overview tab is active
         4. Verify if Storage System popup works
         5. Ensure that Block and File status, on Storage System popup is Ready
+        5.5 Ensure used raw capacity string in System Capacity card
         6. Navigate to Storage System details via Storage System popup
         7. Verify only one Block Pool present on Storage System details page - optional. No BlockPools in External mode
         8. Navigate Storage System via breadcrumb
@@ -318,6 +319,9 @@ class ValidationUI(PageNavigator):
 
         log_step("Ensure that Block and File status, on Storage System popup is Ready")
         is_block_and_file_healthy = odf_overview_tab.validate_block_and_file_ready()
+
+        log_step("Ensure used raw capacity string in System Capacity card")
+        self.check_element_text("Used Raw Capacity")
 
         if not is_block_and_file_healthy:
             logger.critical("Block and File service is unhealthy, not a test failure")
