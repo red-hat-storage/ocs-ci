@@ -1557,6 +1557,9 @@ validation_4_14 = {
     ),
 }
 
+validation_4_16 = {
+    "input_value_validator_icon": (".pf-v5-c-icon", By.CSS_SELECTOR),
+}
 
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
@@ -1783,6 +1786,7 @@ locators = {
             **validation_4_12,
             **validation_4_13,
             **validation_4_14,
+            **validation_4_16,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
