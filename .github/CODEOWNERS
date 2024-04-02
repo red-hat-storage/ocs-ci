@@ -38,7 +38,7 @@
 /tests/functional/monitoring/ @red-hat-storage/blue-squad
 /tests/functional/object/mcg/  @red-hat-storage/red-squad
 /tests/functional/object/rgw/  @red-hat-storage/red-squad
-/tests/ecosystem/upgrade/ @red-hat-storage/purple-squad
+/tests/functional/upgrade/ @red-hat-storage/purple-squad
 /tests/e2e/flowtest/ @red-hat-storage/magenta-squad
 /tests/e2e/lifecycle/ @red-hat-storage/magenta-squad
 /tests/e2e/workloads/ @red-hat-storage/magenta-squad
