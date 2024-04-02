@@ -100,7 +100,7 @@ class HyperShiftBase:
 
         exec_cmd(
             f"git clone --single-branch --branch release-{hcp_version} "
-            f"--depth 1 {temp_dir} {constants.HCP_REPOSITORY}"
+            f"--depth 1 {constants.HCP_REPOSITORY} {temp_dir}"
         )
         project_path_local = os.path.join(temp_dir, "hypershift")
 
