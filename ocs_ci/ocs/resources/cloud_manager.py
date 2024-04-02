@@ -20,6 +20,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     ResourceWrongStatusException,
+    ClusterNotInSTSModeException,
 )
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
@@ -103,11 +104,14 @@ class CloudManager(ABC):
             setattr(self, "rgw_client", None)
 
         # set the client for STS enabled cluster
-        role_arn = get_role_arn_from_sub()
-        cred_dict["AWS"]["ROLE_ARN"] = role_arn
-        setattr(
-            self, "aws_sts_client", cloud_map["AWS_STS"](auth_dict=cred_dict["AWS"])
-        )
+        try:
+            role_arn = get_role_arn_from_sub()
+            cred_dict["AWS"]["ROLE_ARN"] = role_arn
+            setattr(
+                self, "aws_sts_client", cloud_map["AWS_STS"](auth_dict=cred_dict["AWS"])
+            )
+        except ClusterNotInSTSModeException:
+            setattr(self, "aws_sts_client", None)
 
 
 class CloudClient(ABC):

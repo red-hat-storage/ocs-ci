@@ -52,8 +52,8 @@ def cloud_uls_factory(request, cld_mgr):
 
     try:
         ulsMap["aws-sts"] = cld_mgr.aws_sts_client
-    except Exception:
-        log.info("Cluster is not deployed STS mode")
+    except AttributeError:
+        log.warning("Cluster is not deployed STS mode")
 
     def _create_uls(uls_dict):
         """

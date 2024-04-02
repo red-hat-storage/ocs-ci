@@ -4745,6 +4745,13 @@ def get_role_arn_from_sub():
     """
     Get the RoleARN from the OCS subscription
 
+    Returns:
+        role_arn (str): Role ARN used for ODF deployment
+
+    Raises:
+        ClusterNotInSTSModeException (Exception) if cluster
+        not in STS mode
+
     """
     from ocs_ci.ocs.ocp import OCP
 
