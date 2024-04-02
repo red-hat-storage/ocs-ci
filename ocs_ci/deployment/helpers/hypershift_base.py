@@ -102,9 +102,8 @@ class HyperShiftBase:
             f"git clone --single-branch --branch release-{hcp_version} "
             f"--depth 1 {constants.HCP_REPOSITORY} {temp_dir}"
         )
-        project_path_local = os.path.join(temp_dir, "hypershift")
 
-        exec_cmd(f"cd {project_path_local}")
+        exec_cmd(f"cd {temp_dir}")
         exec_cmd("make hypershift product-cli")
         exec_cmd(f"mv bin/hypershift {self.hypershift_binary_path}")
         exec_cmd(f"mv bin/hcp {self.hcp_binary_path}")
