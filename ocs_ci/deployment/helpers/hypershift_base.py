@@ -175,7 +175,6 @@ class HyperShiftBase:
             return
 
         self.delete_hcp_and_hypershift()
-        time.sleep(5)
         self.install_hcp_and_hypershift_from_git()
 
     def delete_hcp_and_hypershift(self):
