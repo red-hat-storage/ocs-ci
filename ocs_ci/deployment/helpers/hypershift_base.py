@@ -216,7 +216,7 @@ class HyperShiftBase:
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
             f"--pull-secret {pull_secret_path} "
-            f"--image-content-sources {self.icsp_mirrors_path}"
+            f"--image-content-sources {self.icsp_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true'"
         )
 
