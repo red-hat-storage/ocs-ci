@@ -275,6 +275,9 @@ class PVC(OCS):
         """
         Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
 
+        Args:
+            global_timeout(bool): True, if global config map is going to be used, None otherwise
+
         Returns:
             ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
 

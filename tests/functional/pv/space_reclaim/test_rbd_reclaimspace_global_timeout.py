@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@skipif_ocs_version("<4.10")
+@skipif_ocs_version("<4.15")
 class TestRbdSpaceReclaim(ManageTest):
     """
     Tests to verify RBD space reclamation
