@@ -29,6 +29,7 @@
 # directory at the root of the repository and any of its
 # subdirectories.
 #/build/logs/ @doctocat
+/tests/functional/disaster-recovery/metro-dr/ @red-hat-storage/turquoise-squad
 /tests/functional/disaster-recovery/regional-dr/ @red-hat-storage/turquoise-squad
 /tests/lvmo/ @red-hat-storage/aqua-squad
 /tests/functional/z_cluster/ @red-hat-storage/brown-squad
