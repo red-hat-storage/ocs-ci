@@ -91,7 +91,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 resource_dict = OCP(
                     namespace=config.ENV_DATA["cluster_namespace"], kind="pod"
                 ).get(resource_name=podd.name)["spec"]["containers"][0]["resources"]
-                log.info(resource_dict)
+
                 assert (
                     resource_dict["limits"]["cpu"] == expected_cpu_limit_values[label]
                     and resource_dict["limits"]["memory"]
@@ -106,9 +106,9 @@ class TestProfileDefaultValuesCheck(ManageTest):
     @pytest.mark.parametrize(
         argnames=["perf_profile"],
         argvalues=[
-            pytest.param(*["performance"], marks=pytest.mark.polarion_id("OCS-2319")),
-            pytest.param(*["lean"], marks=pytest.mark.polarion_id("OCS-2319")),
-            pytest.param(*["balanced"], marks=pytest.mark.polarion_id("OCS-2320")),
+            pytest.param(*["performance"], marks=pytest.mark.polarion_id("OCS-XXXX")),
+            pytest.param(*["lean"], marks=pytest.mark.polarion_id("OCS-XXXX")),
+            pytest.param(*["balanced"], marks=pytest.mark.polarion_id("OCS-XXXX")),
         ],
     )
     def test_change_cluster_resource_profile(self, perf_profile):
