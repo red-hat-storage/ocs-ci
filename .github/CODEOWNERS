@@ -43,7 +43,8 @@
 /tests/functional/workloads/ @red-hat-storage/magenta-squad
 /tests/cross_functional/performance/ @red-hat-storage/grey-squad
 /tests/cross_functional/scale/ @red-hat-storage/orange-squad
-/tests/ui/ @red-hat-storage/black-squad
+/tests/functional/ui/ @red-hat-storage/black-squad
+/tests/cross_functional/ui/ @red-hat-storage/black-squad
 /ocs_ci/ocs/ui/ @red-hat-storage/black-squad
 
 # The `docs/*` pattern will match files like
