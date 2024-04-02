@@ -104,7 +104,10 @@ class HyperShiftBase:
         )
 
         exec_cmd(f"cd {temp_dir}")
-        exec_cmd("make hypershift product-cli")
+        retry((CommandFailed, TimeoutError), tries=3, delay=15, backoff=1)(exec_cmd)(
+            "make hypershift product-cli"
+        )
+
         exec_cmd(f"mv bin/hypershift {self.hypershift_binary_path}")
         exec_cmd(f"mv bin/hcp {self.hcp_binary_path}")
         shutil.rmtree(temp_dir)
