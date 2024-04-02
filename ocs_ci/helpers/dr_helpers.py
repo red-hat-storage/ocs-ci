@@ -1374,10 +1374,16 @@ def disable_dr_from_app(secondary_cluster_name):
     return placement_obj
 
 
-def replace_cluster(primary_cluster_name, secondary_cluster_name):
+def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
     """
     Function to do core replace cluster task
+
+    Args:
+    workload(List): List of workload objects
+    primary_cluster_name (str): Name of the primary DRcluster
+    secondary_cluster_name(str): Name of the secondary DRcluster
+
     """
 
     # Delete dr cluster
@@ -1404,11 +1410,9 @@ def replace_cluster(primary_cluster_name, secondary_cluster_name):
     # Import Recovery cluster
     import_recovery_clusters_with_acm()
 
-    # Install MCO and gitops operator on active hub again
-    from ocs_ci.deployment.deployment import Deployment, MultiClusterDROperatorsDeploy
+    # Install MCO on active hub again
+    from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
 
-    dep_obj = Deployment()
-    dep_obj.deploy_gitops_operator(switch_ctx=get_active_acm_index())
     dep_mco = MultiClusterDROperatorsDeploy()
     dep_mco.deploy_dr_multicluster_orchestrator()
 
@@ -1419,11 +1423,15 @@ def replace_cluster(primary_cluster_name, secondary_cluster_name):
     # Validate drpolicy
     verify_drpolicy_cli(switch_ctx=get_active_acm_index())
 
-    """
-    To Do apply dr policy on all app on secondary cluster
-    1.Create DRPC with placement Ref(name and kind of placement),
-    DRPolicy Ref(name of the policy), pvc Selector and prefered cluster
-    """
+    # Apply dr policy on all app on secondary cluster
+    for wl in workload:
+        drpc_yaml_data = templating.load_yaml(wl.drpc_yaml_file)
+        drpc_yaml_data["spec"]["preferredCluster"] = secondary_cluster_name
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drpc_yaml_file)
+
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -k {wl.drpc_yaml_file}")
+
     placement_obj.annotate(
         annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
     )

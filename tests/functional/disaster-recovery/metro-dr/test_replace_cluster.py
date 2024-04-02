@@ -147,7 +147,7 @@ class TestReplaceCluster:
         enable_unfence(self.primary_cluster_name)
 
         # Replace cluster configuration
-        replace_cluster(self.primary_cluster_name, secondary_cluster_name)
+        replace_cluster(workload, self.primary_cluster_name, secondary_cluster_name)
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(self.namespace)
