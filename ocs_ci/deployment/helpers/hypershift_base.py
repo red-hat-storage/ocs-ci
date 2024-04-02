@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import tempfile
 import time
 from datetime import datetime
@@ -66,6 +67,7 @@ class HyperShiftBase:
         bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
         self.bin_dir = os.path.abspath(bin_dir_rel_path)
         self.hcp_binary_path = os.path.join(self.bin_dir, "hcp")
+        self.hypershift_binary_path = os.path.join(self.bin_dir, "hypershift")
         # ocp instance for running oc commands
         self.ocp = OCP()
         self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
@@ -80,7 +82,55 @@ class HyperShiftBase:
         """
         return os.path.isfile(self.hcp_binary_path)
 
-    def download_hcp_binary(self):
+    def install_hcp_and_hypershift_from_git(self):
+        """
+        Install hcp binary from git
+        """
+        if self.hcp_binary_exists():
+            logger.info(
+                f"hcp binary already exists {self.hcp_binary_path}, skipping download."
+            )
+            return
+
+        hcp_version = config.ENV_DATA["hcp_version"]
+
+        logger.info("Downloading hcp binary from git")
+
+        temp_dir = tempfile.mkdtemp()
+
+        exec_cmd(
+            f"git clone --single-branch --branch release-{hcp_version} "
+            f"--depth 1 {temp_dir} {constants.HCP_REPOSITORY}"
+        )
+        project_path_local = os.path.join(temp_dir, "hypershift")
+
+        exec_cmd(f"cd {project_path_local}")
+        exec_cmd("make hypershift product-cli")
+        exec_cmd(f"mv bin/hypershift {self.hypershift_binary_path}")
+        exec_cmd(f"mv bin/hcp {self.hcp_binary_path}")
+        shutil.rmtree(temp_dir)
+
+        # check hcp binary is downloaded
+        if os.path.isfile(self.hcp_binary_path):
+            logger.info(
+                f"hcp binary downloaded successfully to path:{self.hcp_binary_path}"
+            )
+            os.chmod(self.hcp_binary_path, 0o755)
+        else:
+            raise CommandFailed(
+                f"hcp binary download failed to path:{self.hcp_binary_path}"
+            )
+        if os.path.isfile(self.hypershift_binary_path):
+            logger.info(
+                f"hypershift binary downloaded successfully to path:{self.hypershift_binary_path}"
+            )
+            os.chmod(self.hypershift_binary_path, 0o755)
+        else:
+            raise CommandFailed(
+                f"hypershift binary download failed to path:{self.hypershift_binary_path}"
+            )
+
+    def download_hcp_binary_with_podman(self):
         """
         Download hcp binary to bin_dir
         """
@@ -124,31 +174,33 @@ class HyperShiftBase:
             logger.error("hcp_version is not set in config.ENV_DATA")
             return
 
-        try:
-            self.download_hcp_binary()
-        except CommandFailed as e:
-            logger.error(f"Failed to update hcp binary: {e}")
-            self.delete_hcp()
-            self.download_hcp_binary()
+        self.delete_hcp_and_hypershift()
+        time.sleep(5)
+        self.install_hcp_and_hypershift_from_git()
 
-    def delete_hcp(self):
+    def delete_hcp_and_hypershift(self):
         """
         Delete hcp binary
         """
-        logger.info(
-            f"Updating hcp binary {self.hcp_binary_path} and wait for 5 seconds before downloading new one"
-        )
+        logger.info(f"deleting hcp binary {self.hcp_binary_path}")
+        exec_cmd(f"rm -f {self.hcp_binary_path}")
+        logger.info(f"deleting hypershift binary {self.hypershift_binary_path}")
+        exec_cmd(f"rm -f {self.hypershift_binary_path}")
+        # if hcp downloaded with podman download_hcp_binary_with_podman() method - delete the container and image
+        self.delete_hcp_podman_container()
+
+    def delete_hcp_podman_container(self):
+        """
+        Delete hcp podman container.
+        This method will not fail if the container does not exist.
+        """
         cmd = "podman ps -a --format '{{.ID}} {{.Names}}' | awk '$2 == \"hcp\" {print $1}'"
         container_id = exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
-        exec_cmd(f"podman rm {container_id}")
-        exec_cmd(
-            f"podman rmi {constants.HCP_REGISTRY}:{config.ENV_DATA['hcp_version']}"
-        )
-        try:
-            exec_cmd(f"rm -f {self.hcp_binary_path}")
-        except CommandFailed:
-            pass
-        time.sleep(5)
+        if container_id:
+            exec_cmd(f"podman rm {container_id}")
+            exec_cmd(
+                f"podman rmi {constants.HCP_REGISTRY}:{config.ENV_DATA['hcp_version']}"
+            )
 
     def create_kubevirt_ocp_cluster(
         self,

@@ -209,7 +209,7 @@ class HostedClients(HyperShiftBase):
         """
 
         if not self.hcp_binary_exists():
-            self.download_hcp_binary()
+            self.download_hcp_binary_with_podman()
 
         cluster_names_to_paths = config.ENV_DATA["clusters"]
 
