@@ -737,7 +737,7 @@ class PrometheusAPI(object):
         actual_alerts = list()
         for alert in alerts_response.json().get("data").get("alerts"):
             actual_alerts.append(alert.get("labels").get("alertname"))
-            logger.info("Actual Alerts:", actual_alerts)
+            logger.info(f"Actual Alerts: {actual_alerts}")
         for expected_alert in expected_alerts:
             if expected_alert not in actual_alerts:
                 logger.error(

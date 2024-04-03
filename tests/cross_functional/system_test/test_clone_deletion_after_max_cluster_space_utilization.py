@@ -4,13 +4,19 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.cluster import change_ceph_full_ratio, CephCluster
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, StorageNotSufficientException
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     magenta_squad,
+)
+from ocs_ci.ocs.cluster import (
+    change_ceph_full_ratio,
+    get_percent_used_capacity,
+    get_osd_utilization,
+    get_ceph_df_detail,
+    CephCluster,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,7 +26,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
-        # pytest.param(constants.CEPHBLOCKPOOL),
+        pytest.param(constants.CEPHBLOCKPOOL),
         pytest.param(constants.CEPHFILESYSTEM),
     ],
 )
@@ -50,6 +56,9 @@ class TestCloneDeletion(E2ETest):
         request.addfinalizer(teardown)
 
         logger.info("Starting the test setup")
+
+        self.num_of_clones = 30
+
         # Getting the total Storage capacity
         self.ceph_cluster = CephCluster()
         self.ceph_capacity = int(self.ceph_cluster.get_ceph_capacity())
@@ -60,16 +69,33 @@ class TestCloneDeletion(E2ETest):
         logger.info(f"ceph_free_capacity: {self.ceph_free_capacity}")
 
         # Change ceph full ratio
-        change_ceph_full_ratio(30)
+        # change_ceph_full_ratio(30)
 
-        # Use 30% of the free storage capacity in the test
-        self.capacity_to_use = int(self.ceph_free_capacity * 0.30)
+        # Available free storage capacity in the test
+        self.capacity_to_use = self.ceph_free_capacity
         logger.info(f"capacity_to_use: {self.capacity_to_use}")
 
-        self.num_of_clones = 20
+        self.need_capacity = int((self.num_of_clones * 1.15))
+
+        if self.capacity_to_use < self.need_capacity:
+            err_msg = (
+                f"The system has only {self.ceph_capacity} GiB, "
+                f"Of which {self.ceph_free_capacity} GiB is free, "
+                f"we want to use  {self.capacity_to_use} GiB, "
+                f"and we need {self.need_capacity} GiB to run the test"
+            )
+            logger.error(err_msg)
+            raise StorageNotSufficientException(err_msg)
+
         # Calculating the PVC size in GiB
-        self.pvc_size = int(self.capacity_to_use / (self.num_of_clones + 1))
+        self.pvc_size = int(self.capacity_to_use / (self.num_of_clones))
         logger.info(f"pvc size: {self.pvc_size}")
+
+        logger.info(
+            f"Total capacity size is : {self.ceph_capacity} GiB, "
+            f"Free capacity size is : {self.ceph_free_capacity} GiB, "
+            f"With {self.num_of_clones} clones to {self.pvc_size} GiB PVC. "
+        )
 
         self.pvc_obj = pvc_factory(
             interface=interface_type, size=self.pvc_size, status=constants.STATUS_BOUND
@@ -78,8 +104,9 @@ class TestCloneDeletion(E2ETest):
             interface=interface_type, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-        # Calculating the file size as 95% of the PVC size - in MB
-        self.filesize = f"{int(self.pvc_size * 1024 * 0.95)}M"
+        # Calculating the file size as 86% of the PVC size - in MB
+        self.filesize = f"{int(self.pvc_size * 1024 * 0.86)}M"
+        logger.info(f"filesize: {self.filesize}")
 
         self.pod_obj.run_io(
             size=self.filesize,
@@ -89,6 +116,29 @@ class TestCloneDeletion(E2ETest):
 
         self.pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {self.pod_obj.name}")
+
+    def verify_osd_used_capacity_greater_than_expected(self, expected_used_capacity):
+        """
+        Verify OSD percent used capacity greate than ceph_full_ratio
+
+        Args:
+            expected_used_capacity (float): expected used capacity
+
+        Returns:
+                bool: True if used_capacity greater than expected_used_capacity, False otherwise
+
+        """
+        used_capacity = get_percent_used_capacity()
+        logger.info(f"Used Capacity is {used_capacity}%")
+        ceph_df_detail = get_ceph_df_detail()
+        logger.info(f"ceph df detail: {ceph_df_detail}")
+        osds_utilization = get_osd_utilization()
+        logger.info(f"osd utilization: {osds_utilization}")
+        for osd_id, osd_utilization in osds_utilization.items():
+            if osd_utilization > expected_used_capacity:
+                logger.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
+                return True
+        return False
 
     @skipif_external_mode
     @magenta_squad
@@ -110,12 +160,12 @@ class TestCloneDeletion(E2ETest):
             f"Start creating {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} GB."
         )
         clones_list = []
-        for clone_num in range(self.num_of_clones):
-            logger.info(f"Start creation of clone number {clone_num+1}.")
+
+        for clone_num in range(self.num_of_clones + 1):
+            logger.info(f"Start creation of clone number {clone_num}.")
 
             cloned_pvc_obj = pvc_clone_factory(
-                self.pvc_obj,
-                storageclass=self.pvc_obj.backed_sc,
+                self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=360
             )
 
             cloned_pvc_obj.reload()
@@ -123,6 +173,17 @@ class TestCloneDeletion(E2ETest):
             logger.info(
                 f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
             )
+
+        logger.info("Verify used capacity bigger than 85%")
+        sample = TimeoutSampler(
+            timeout=2500,
+            sleep=40,
+            func=self.verify_osd_used_capacity_greater_than_expected,
+            expected_used_capacity=85.0,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error("The after 1800 seconds the used capacity smaller than 85%")
+            raise TimeoutExpiredError
 
         logger.info(
             "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
@@ -134,7 +195,7 @@ class TestCloneDeletion(E2ETest):
             timeout=600,
             sleep=10,
             func=prometheus.verify_alerts_via_prometheus,
-            expected_alerts=[expected_alerts],
+            expected_alerts=expected_alerts,
             threading_lock=threading_lock,
         )
         if not sample.wait_for_func_status(result=True):
@@ -142,9 +203,9 @@ class TestCloneDeletion(E2ETest):
             raise TimeoutExpiredError
 
         # Make the cluster out of full by increasing the full ratio.
-        logger.info("Change Ceph full_ratio from from 30% to 50%")
+        logger.info("Change Ceph full_ratio from from 85% to 95%")
 
-        change_ceph_full_ratio(50)
+        change_ceph_full_ratio(95)
         # After the cluster is out of full state and IOs started , Try to delete clones.
         # Delete the clones one by one and wait for deletion
         logger.info(
