@@ -66,7 +66,11 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier2, sts_deployment_required],
+                marks=[
+                    tier2,
+                    sts_deployment_required,
+                    pytest.mark.polarion_id("OCS-5494"),
+                ],
             ),
             pytest.param(
                 {
@@ -272,7 +276,11 @@ class TestReplication(MCGTest):
                     "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                marks=[tier2, sts_deployment_required],
+                marks=[
+                    tier2,
+                    sts_deployment_required,
+                    pytest.mark.polarion_id("OCS-5495"),
+                ],
             ),
         ],
         ids=["AWStoAZURE-BS-OC", "AWS-STStoAZURE-BS-Hybrid"],

@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     sts_deployment_required,
     red_squad,
     mcg,
+    polarion_id,
 )
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @sts_deployment_required
 class TestSTSBucket:
+    @polarion_id("OCS-5479")
     @pytest.mark.parametrize(
         argnames=["bucketclass"],
         argvalues=[
@@ -80,7 +82,7 @@ class TestSTSBucket:
             s3_obj=mcg_obj_session,
         )
         logger.info(
-            f"Objects are donwloaded to the dir {test_directory_setup.result_dir}"
+            f"Objects are downloaded to the dir {test_directory_setup.result_dir}"
         )
 
         compare_directory(
