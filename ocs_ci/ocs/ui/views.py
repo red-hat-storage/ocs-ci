@@ -270,7 +270,7 @@ generic_locators = {
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
     "text_input_popup_rules": (
         "//*[@class='pf-c-helper-text__item-text'] | "
-        "//div[data-test='field-requirements-popover']",
+        "//div[@data-test='field-requirements-popover']//*[@class='pf-v5-c-helper-text__item-text']",
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-btn": (
