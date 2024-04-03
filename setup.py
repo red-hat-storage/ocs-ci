@@ -86,7 +86,7 @@ setup(
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
         "protobuf==4.21.7",
-        "ping3>=4.0.3",
+        "ping3==4.0.3",
         "psutil==5.9.0",
         "azure-identity==1.12.0",
         "azure-mgmt-storage==21.0.0",
