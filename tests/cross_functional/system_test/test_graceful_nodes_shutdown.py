@@ -275,14 +275,17 @@ class TestGracefulNodesShutdown(E2ETest):
         ne_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.snap_obj,
             volume_mode=self.snap_obj.parent_volume_mode,
+            timeout=180,
         )
         eb_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.eb_snap_obj,
             volume_mode=self.snap_obj.parent_volume_mode,
+            timeout=180,
         )
         efs_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.efs_snap_obj,
             volume_mode=self.snap_obj.parent_volume_mode,
+            timeout=180,
         )
 
         self.validate_pvc_expansion(
