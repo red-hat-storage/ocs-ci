@@ -835,6 +835,13 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
                 ceph_volume_mount_path
             )
             toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
+            if ocs_version >= version.VERSION_4_16:
+                toolbox["spec"]["template"]["spec"][
+                    "serviceAccount"
+                ] = "rook-ceph-default"
+                toolbox["spec"]["template"]["spec"][
+                    "serviceAccountName"
+                ] = "rook-ceph-default"
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
             return
