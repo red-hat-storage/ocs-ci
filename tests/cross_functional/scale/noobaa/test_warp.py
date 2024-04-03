@@ -40,7 +40,6 @@ class TestWarp(E2ETest):
     to ensure that noobaa pods are still in a running state
     """
 
-    GCP_ACCOUNT_SKIP = "GCP Account Credentials Issue"
 
     @bugzilla("2089630")
     @pytest.mark.polarion_id("OCS-4001")
@@ -84,9 +83,6 @@ class TestWarp(E2ETest):
                     1,
                     "OC",
                     {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                ],
-                marks=[
-                    pytest.mark.skip(GCP_ACCOUNT_SKIP),
                 ],
             ),
             pytest.param(
