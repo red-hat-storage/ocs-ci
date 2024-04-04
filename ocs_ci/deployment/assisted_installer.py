@@ -325,13 +325,15 @@ class AssistedInstallerCluster(object):
         Prepare mapping between host ID and mac addresses
 
         Return:
-            dict: host id to mac mapping
+            list of lists: host id to mac mapping ([[host1_id, mac1], [host1_id, mac2], [host2_id, mac3],...])
         """
         hosts = self.api.get_infra_env_hosts(self.infra_id)
-        return {
-            h["id"]: json.loads(h["inventory"])["interfaces"][0]["mac_address"]
-            for h in hosts
-        }
+        mapping = []
+        for host in hosts:
+            for interface in json.loads(host["inventory"])["interfaces"]:
+                if interface["ipv4_addresses"]:
+                    mapping.append((host["id"], interface["mac_address"]))
+        return mapping
 
     def update_hosts_config(self, mac_name_mapping, mac_role_mapping):
         """
@@ -342,13 +344,18 @@ class AssistedInstallerCluster(object):
             mac_role_mapping (dict): host mac address to host role mapping
         """
         host_id_mac_mapping = self.get_host_id_mac_mapping()
-        for host_id in host_id_mac_mapping:
-            update_data = {
-                "host_name": mac_name_mapping[host_id_mac_mapping[host_id]],
-                "host_role": mac_role_mapping[host_id_mac_mapping[host_id]],
-            }
-            self.api.update_infra_env_host(self.infra_id, host_id, update_data)
-            logger.info(f"Updated host {host_id} configuration: {update_data}")
+        for host_id, mac in host_id_mac_mapping:
+            try:
+                update_data = {
+                    "host_name": mac_name_mapping[mac],
+                    "host_role": mac_role_mapping[mac],
+                }
+                self.api.update_infra_env_host(self.infra_id, host_id, update_data)
+                logger.info(f"Updated host {host_id} configuration: {update_data}")
+            except KeyError:
+                # ignoring KeyError failure, because we have more than one mac address for each host and only one of
+                # them is used to the name and role mapping
+                pass
 
     def install_cluster(self):
         """
