@@ -22,10 +22,9 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
-    get_ocp_version,
 )
 from ocs_ci.utility import templating, version
-from ocs_ci.deployment.deployment import Deployment
+from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_cluster,
@@ -34,11 +33,11 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
+from ocs_ci.helpers.helpers import get_all_storageclass_names
+from ocs_ci.ocs.exceptions import CommandFailed
 
 
 log = logging.getLogger(__name__)
-# Error message to look in a command output
-ERRMSG = "Error in command"
 
 
 class StorageClientDeployment(object):
@@ -49,14 +48,16 @@ class StorageClientDeployment(object):
 
         print("Intialization")
         self.validation_ui_obj = ValidationUI()
-        self.ingress_operator_namespace = "openshift-ingress-operator"
-        self.ocp_obj_ns = ocp.OCP(kind=constants.NAMESPACES)
-        self.ocp_obj_ns.new_project(
+        self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
+        self.ns_obj.new_project(
             project_name=constants.BM_DEBUG_NODE_NS, policy=constants.PSA_PRIVILEGED
         )
         self.ocp_obj = ocp.OCP()
         self.storage_cluster_obj = ocp.OCP(
             kind="Storagecluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        self.storage_profile_obj = ocp.OCP(
+            kind="Storageprofile", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         self.config_map_obj = ocp.OCP(
             kind="Configmap", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -64,16 +65,12 @@ class StorageClientDeployment(object):
         self.pod_obj = ocp.OCP(
             kind="Pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
-        self.service_obj = ocp.OCP(
-            kind="Service", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        self.pvc_obj = ocp.OCP(
-            kind=constants.PVC, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        self.ns_obj = ocp.OCP(
+        self.scheduler_obj = ocp.OCP(
             kind=constants.SCHEDULERS_CONFIG,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
+        self.sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
+        self.storageclass = "localblock"
 
         # Register a function to be called upon the destruction of the instance
         atexit.register(self.cleanup_function)
@@ -103,12 +100,13 @@ class StorageClientDeployment(object):
         8. Create storage profile
         """
 
-        ocp_version = get_ocp_version()
-        log.info(f"ocp version is: {ocp_version}")
+        self.ocp_version = version.get_semantic_ocp_version_from_config()
+        self.ocs_version = version.get_semantic_ocs_version_from_config()
+
         # set control nodes as scheduleable
         path = "/spec/mastersSchedulable"
         params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-        self.ns_obj.patch(params=params, format_type="json"), (
+        self.scheduler_obj.patch(params=params, format_type="json"), (
             "Failed to run patch command to update control nodes as scheduleable"
         )
 
@@ -135,29 +133,24 @@ class StorageClientDeployment(object):
         log.info("All the nodes are upgraded")
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-        for node in nodes:
-            cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
-            out = run_cmd(cmd)
-            log.info(out)
-            log.info(f"Mount data cleared from node, {node}")
-        for node_obj in node_objs:
-            clean_disk(node_obj)
-        log.info("All nodes are wiped")
-        setup_local_storage(storageclass="localblock")
-
-        # Create ODF subscription for provider
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.PROVIDER_SUBSCRIPTION_YAML}")
-
-        # Wait until odf is installed
-        odf_operator = defaults.ODF_OPERATOR_NAME
-        Deployment().wait_for_subscription(
-            odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+        is_local_storage_available = self.sc_obj.is_exist(
+            resource_name=self.storageclass,
         )
-        Deployment().wait_for_csv(odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE)
-        log.info(f"Sleeping for 30 seconds after {odf_operator} created")
-        time.sleep(30)
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        log.info(f"Installed odf version: {ocs_version}")
+        if not is_local_storage_available:
+            for node in nodes:
+                cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
+                out = run_cmd(cmd)
+                log.info(out)
+                log.info(f"Mount data cleared from node, {node}")
+            for node_obj in node_objs:
+                clean_disk(node_obj)
+            log.info("All nodes are wiped")
+            setup_local_storage(storageclass=self.storageclass)
+        else:
+            log.info("local storage is already installed")
+
+        # odf subscription for provider
+        self.odf_subscription_on_provider()
 
         # Check for rook ceph pods
         assert self.pod_obj.wait_for_resource(
@@ -166,10 +159,6 @@ class StorageClientDeployment(object):
             resource_count=1,
             timeout=600,
         )
-
-        # Enable odf-console:
-        enable_console_plugin()
-        self.validation_ui_obj.refresh_web_console()
 
         # Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
         disable_CEPHFS_RBD_CSI = (
@@ -180,11 +169,33 @@ class StorageClientDeployment(object):
             params=disable_CEPHFS_RBD_CSI,
         ), "configmap/rook-ceph-operator-config not patched"
 
-        # Create storage profiles
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_PROFILE_YAML}")
+        if (
+            self.ocs_version < version.VERSION_4_16
+            and self.ocs_version >= version.VERSION_4_14
+        ):
+            # Create storage profiles if not available
+            is_storageprofile_available = self.storage_profile_obj.is_exist(
+                resource_name="ssd-storageprofile"
+            )
+            if not is_storageprofile_available:
+                self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_PROFILE_YAML}")
 
-        # Create storage cluster
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_STORAGE_CLUSTER_YAML}")
+        # Create storage cluster if already not present
+        is_storagecluster = self.storage_cluster_obj.is_exist(
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER
+        )
+        if not is_storagecluster:
+            if (
+                self.ocs_version < version.VERSION_4_16
+                and self.ocs_version >= version.VERSION_4_14
+            ):
+                self.ocp_obj.exec_oc_cmd(
+                    f"apply -f {constants.OCS_STORAGE_CLUSTER_YAML}"
+                )
+            else:
+                self.ocp_obj.exec_oc_cmd(
+                    f"apply -f {constants.OCS_STORAGE_CLUSTER_UPDATED_YAML}"
+                )
 
         # Creating toolbox pod
         setup_ceph_toolbox()
@@ -197,8 +208,12 @@ class StorageClientDeployment(object):
             timeout=180,
         )
 
-        # Create ODF subscription for storage-client
-        self.odf_installation_on_client()
+        if (
+            self.ocs_version < version.VERSION_4_16
+            and self.ocs_version >= version.VERSION_4_14
+        ):
+            # Create ODF subscription for storage-client
+            self.odf_installation_on_client()
 
         # Fetch storage provider endpoint details
         storage_provider_endpoint = self.ocp_obj.exec_oc_cmd(
@@ -210,14 +225,18 @@ class StorageClientDeployment(object):
         )
         log.info(f"storage provider endpoint is: {storage_provider_endpoint}")
 
-        self.create_network_policy(
-            namespace_to_create_storage_client=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
-        )
-        onboarding_token = self.onboarding_token_generation_from_ui()
-        self.create_storage_client(
-            storage_provider_endpoint=storage_provider_endpoint,
-            onboarding_token=onboarding_token,
-        )
+        if (
+            self.ocs_version < version.VERSION_4_16
+            and self.ocs_version >= version.VERSION_4_14
+        ):
+            self.create_network_policy(
+                namespace_to_create_storage_client=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+            )
+            onboarding_token = self.onboarding_token_generation_from_ui()
+            self.create_storage_client(
+                storage_provider_endpoint=storage_provider_endpoint,
+                onboarding_token=onboarding_token,
+            )
 
         # Check nooba db pod is up and running
         self.pod_obj.wait_for_resource(
@@ -267,6 +286,43 @@ class StorageClientDeployment(object):
         log.info(f"backingstore value: {backingstore_type}")
         assert backingstore_type == constants.BACKINGSTORE_TYPE_S3_COMP
 
+    def odf_subscription_on_provider(self):
+        """
+        This method creates odf subscription for the provider
+        """
+        # Check if odf is available already on the provider
+        ceph_cluster = ocp.OCP(
+            kind="CephCluster", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        try:
+            ceph_cluster.get().get("items")[0]
+            log.info("OCS cluster already exists")
+            return
+        except (IndexError, CommandFailed):
+            log.info("Running ODF subscription for the provider")
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        if not live_deployment:
+            create_catalog_source()
+        # Create ODF subscription for provider
+        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.PROVIDER_SUBSCRIPTION_YAML}")
+
+        # Wait until odf is installed
+        odf_operator = defaults.ODF_OPERATOR_NAME
+        Deployment().wait_for_subscription(
+            odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        Deployment().wait_for_csv(odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE)
+        log.info(f"Sleeping for 30 seconds after {odf_operator} created")
+        time.sleep(30)
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        log.info(f"Installed odf version: {ocs_version}")
+        self.validation_ui_obj.refresh_web_console()
+
+        # Enable odf-console:
+        enable_console_plugin()
+        time.sleep(30)
+        self.validation_ui_obj.refresh_web_console()
+
     def odf_installation_on_client(
         self,
         catalog_yaml=False,
@@ -286,35 +342,39 @@ class StorageClientDeployment(object):
         default value, constants.STORAGE_CLIENT_SUBSCRIPTION_YAML
 
         """
-        if catalog_yaml:
-            self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_CATALOGSOURCE_YAML}")
+        # Check namespace for storage-client is available or not
+        is_available = self.ns_obj.is_exist(
+            resource_name=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
+        )
+        if not is_available:
+            if catalog_yaml:
+                self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_CATALOGSOURCE_YAML}")
 
-            catalog_source = CatalogSource(
-                resource_name=constants.OCS_CATALOG_SOURCE_NAME,
-                namespace=constants.MARKETPLACE_NAMESPACE,
+                catalog_source = CatalogSource(
+                    resource_name=constants.OCS_CATALOG_SOURCE_NAME,
+                    namespace=constants.MARKETPLACE_NAMESPACE,
+                )
+                # Wait for catalog source is ready
+                catalog_source.wait_for_state("READY")
+
+            # Create ODF subscription for storage-client
+            self.ocp_obj.exec_oc_cmd(f"apply -f {subscription_yaml}")
+            ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
+            Deployment().wait_for_subscription(
+                ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
             )
-            # Wait for catalog source is ready
-            catalog_source.wait_for_state("READY")
+            Deployment().wait_for_csv(
+                ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+            )
+            log.info(f"Sleeping for 30 seconds after {ocs_client_operator} created")
+            time.sleep(30)
 
-        # Create ODF subscription for storage-client
-        self.ocp_obj.exec_oc_cmd(f"apply -f {subscription_yaml}")
-        ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
-        Deployment().wait_for_subscription(
-            ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
-        )
-        Deployment().wait_for_csv(
-            ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
-        )
-        log.info(f"Sleeping for 30 seconds after {ocs_client_operator} created")
-        time.sleep(30)
-
-        if enable_console:
-            enable_console_plugin(value="[odf-client-console]")
-            self.validation_ui_obj.refresh_web_console()
+            if enable_console:
+                enable_console_plugin(value="[odf-client-console]")
+                self.validation_ui_obj.refresh_web_console()
 
     def create_network_policy(
-        self,
-        namespace_to_create_storage_client=None,
+        self, namespace_to_create_storage_client=None, resource_name=None
     ):
         """
         This method creates network policy for the namespace where storage-client will be created
@@ -327,24 +387,51 @@ class StorageClientDeployment(object):
         log.info("Pulling NetworkPolicy CR data from yaml")
         network_policy_data = templating.load_yaml(constants.NETWORK_POLICY_YAML)
 
-        # Set storage provider endpoint
-        log.info(
-            "Updating namespace where to create storage client: %s",
-            namespace_to_create_storage_client,
-        )
-        network_policy_data["metadata"][
-            "namespace"
-        ] = namespace_to_create_storage_client
+        resource_name = network_policy_data["metadata"]["name"]
 
-        # Create network policy
-        network_policy_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="network_policy", delete=False
+        # Check network policy for the namespace_to_create_storage_client is available or not
+        network_policy_obj = ocp.OCP(
+            kind="NetworkPolicy", namespace=namespace_to_create_storage_client
         )
-        templating.dump_data_to_temp_yaml(
-            network_policy_data, network_policy_data_yaml.name
+
+        is_available = network_policy_obj.is_exist(
+            resource_name=resource_name,
         )
-        log.info("Creating NetworkPolicy CR")
-        self.ocp_obj.exec_oc_cmd(f"apply -f {network_policy_data_yaml.name}")
+
+        if not is_available:
+            # Set namespace value to the namespace where storageclient will be created
+            log.info(
+                "Updating namespace where to create storage client: %s",
+                namespace_to_create_storage_client,
+            )
+            network_policy_data["metadata"][
+                "namespace"
+            ] = namespace_to_create_storage_client
+
+            # Create network policy
+            network_policy_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="network_policy", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                network_policy_data, network_policy_data_yaml.name
+            )
+            log.info("Creating NetworkPolicy CR")
+            out = self.ocp_obj.exec_oc_cmd(f"apply -f {network_policy_data_yaml.name}")
+            log.info(f"output: {out}")
+            log.info(
+                f"Sleeping for 30 seconds after {network_policy_data_yaml.name} created"
+            )
+
+            assert network_policy_obj.check_resource_existence(
+                should_exist=True, timeout=300, resource_name=resource_name
+            ), log.error(
+                f"Networkpolicy does not exist for {namespace_to_create_storage_client} namespace"
+            )
+
+        else:
+            log.info(
+                f"Networkpolicy already exists for {namespace_to_create_storage_client} namespace"
+            )
 
     def onboarding_token_generation_from_ui(
         self,
@@ -368,7 +455,7 @@ class StorageClientDeployment(object):
             constants.MANAGED_ONBOARDING_SECRET,
         }:
             assert secret_ocp_obj.is_exist(
-                resource_name=secret_name
+                resource_name=secret_name,
             ), f"{secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
 
         # verify storage-client page is available
@@ -393,38 +480,60 @@ class StorageClientDeployment(object):
         expected_storageclient_status (str): expected storaeclient phase default value is 'Connected'
 
         """
+        storage_class_claims = [constants.CEPHBLOCKPOOL_SC, constants.CEPHFILESYSTEM_SC]
         # Pull storage-client yaml data
         log.info("Pulling storageclient CR data from yaml")
         storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
+        resource_name = storage_client_data["metadata"]["name"]
+        print(f"the resource name: {resource_name}")
 
-        # Set storage provider endpoint
-        log.info(
-            "Updating storage provider endpoint details: %s", storage_provider_endpoint
-        )
-        storage_client_data["spec"][
-            "storageProviderEndpoint"
-        ] = storage_provider_endpoint
-
-        # Set onboarding token
-        log.info("Updating storage provider endpoint details: %s", onboarding_token)
-        storage_client_data["spec"]["onboardingTicket"] = onboarding_token
-        storage_client_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="storage_client", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            storage_client_data, storage_client_data_yaml.name
+        # Check storageclient is available or not
+        storage_client_obj = ocp.OCP(kind="storageclient")
+        is_available = storage_client_obj.is_exist(
+            resource_name=resource_name,
         )
 
-        # Create storageclient CR
-        log.info("Creating storageclient CR")
-        self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
+        if not is_available:
+            # Set storage provider endpoint
+            log.info(
+                "Updating storage provider endpoint details: %s",
+                storage_provider_endpoint,
+            )
+            storage_client_data["spec"][
+                "storageProviderEndpoint"
+            ] = storage_provider_endpoint
 
-        # Check storage client is in 'Connected' status
-        storage_client_status = check_storage_client_status()
-        assert (
-            storage_client_status == expected_storageclient_status
-        ), "storage client phase is not as expected"
+            # Set onboarding token
+            log.info("Updating storage provider endpoint details: %s", onboarding_token)
+            storage_client_data["spec"]["onboardingTicket"] = onboarding_token
+            storage_client_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="storage_client", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                storage_client_data, storage_client_data_yaml.name
+            )
 
-        # Create storage classclaim
-        if storage_client_status == "Connected":
-            self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}")
+            # Create storageclient CR
+            log.info("Creating storageclient CR")
+            self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
+
+            # Check storage client is in 'Connected' status
+            storage_client_status = check_storage_client_status()
+            assert (
+                storage_client_status == expected_storageclient_status
+            ), "storage client phase is not as expected"
+
+            # Create storage classclaim
+            if storage_client_status == "Connected":
+                self.ocp_obj.exec_oc_cmd(
+                    f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}"
+                )
+                time.sleep(30)
+                storage_class_classes = get_all_storageclass_names()
+                for storage_class in storage_class_claims:
+                    assert (
+                        storage_class in storage_class_classes
+                    ), "Storage classes ae not created as expected"
+
+            else:
+                log.error("storageclassclaims are not created")

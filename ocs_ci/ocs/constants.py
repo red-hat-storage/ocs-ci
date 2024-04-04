@@ -909,6 +909,9 @@ MACHINE_CONFIG_YAML = os.path.join(
 OCS_STORAGE_CLUSTER_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "ocs_storagecluster.yaml"
 )
+OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "ocs_storagecluster_updated.yaml"
+)
 STORAGE_PROFILE_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_profiles.yaml"
 )
