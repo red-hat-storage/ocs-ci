@@ -116,7 +116,7 @@ class CreateResourceForm(PageNavigator):
         """
         self.do_click(self.validation_loc["input_value_validator_icon"])
         rules_elements = self.get_elements(input_loc)
-        rules_texts_statuses = [rule.text for rule in rules_elements]
+        rules_texts_statuses = [rule.text for rule in rules_elements if rule.text != ""]
         rules_texts = [rule.split("\n: ")[0] for rule in rules_texts_statuses]
         if sorted(rules_texts) != sorted(self.rules.keys()):
             self._report_failed(
