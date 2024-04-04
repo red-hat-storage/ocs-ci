@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, StorageNotSufficientException
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
@@ -57,7 +57,7 @@ class TestCloneDeletion(E2ETest):
 
         logger.info("Starting the test setup")
 
-        self.num_of_clones = 30
+        self.num_of_clones = 25
 
         # Getting the total Storage capacity
         self.ceph_cluster = CephCluster()
@@ -68,27 +68,24 @@ class TestCloneDeletion(E2ETest):
         self.ceph_free_capacity = int(self.ceph_cluster.get_ceph_free_capacity())
         logger.info(f"ceph_free_capacity: {self.ceph_free_capacity}")
 
-        # Change ceph full ratio
-        # change_ceph_full_ratio(30)
+        self.osd_full_size = int(self.ceph_capacity * 0.85)
+        logger.info(f"osd_full_size: {self.osd_full_size}")
+
+        self.currently_used_capacity = int(self.ceph_capacity - self.ceph_free_capacity)
+        logger.info(f"currently_used_capacity: {self.currently_used_capacity}")
 
         # Available free storage capacity in the test
-        self.capacity_to_use = self.ceph_free_capacity
-        logger.info(f"capacity_to_use: {self.capacity_to_use}")
+        self.capacity_to_write = int(self.osd_full_size - self.currently_used_capacity)
+        logger.info(f"capacity_to_wrie: {self.capacity_to_write}")
 
-        self.need_capacity = int((self.num_of_clones * 1.15))
-
-        if self.capacity_to_use < self.need_capacity:
-            err_msg = (
-                f"The system has only {self.ceph_capacity} GiB, "
-                f"Of which {self.ceph_free_capacity} GiB is free, "
-                f"we want to use  {self.capacity_to_use} GiB, "
-                f"and we need {self.need_capacity} GiB to run the test"
-            )
-            logger.error(err_msg)
-            raise StorageNotSufficientException(err_msg)
+        # Calculating the file size
+        self.filesize = (
+            f"{int((self.capacity_to_write / (self.num_of_clones + 1)))*1024}"
+        )
+        logger.info(f"filesize: {self.filesize}")
 
         # Calculating the PVC size in GiB
-        self.pvc_size = int(self.capacity_to_use / (self.num_of_clones))
+        self.pvc_size = int(int(self.filesize / 1024) * 1.2)
         logger.info(f"pvc size: {self.pvc_size}")
 
         logger.info(
@@ -104,14 +101,8 @@ class TestCloneDeletion(E2ETest):
             interface=interface_type, pvc=self.pvc_obj, status=constants.STATUS_RUNNING
         )
 
-        # Calculating the file size as 86% of the PVC size - in MB
-        self.filesize = f"{int(self.pvc_size * 1024 * 0.86)}M"
-        logger.info(f"filesize: {self.filesize}")
-
         self.pod_obj.run_io(
-            size=self.filesize,
-            io_direction="write",
-            storage_type="fs",
+            size=self.filesize, io_direction="write", storage_type="fs", end_fsync=1
         )
 
         self.pod_obj.get_fio_results()
