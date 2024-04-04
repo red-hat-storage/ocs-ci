@@ -107,6 +107,9 @@ class HyperShiftBase:
 
         exec_cmd(f"mv {temp_dir}/bin/hypershift {self.hypershift_binary_path}")
         exec_cmd(f"mv {temp_dir}/bin/hcp {self.hcp_binary_path}")
+        hcp_version = exec_cmd("hcp --version").stdout.decode("utf-8").strip()
+        logger.info(f"hcp binary version: {hcp_version}")
+
         shutil.rmtree(temp_dir)
 
         # check hcp binary is downloaded

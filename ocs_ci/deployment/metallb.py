@@ -1,6 +1,7 @@
 import json
 import logging
 import tempfile
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -230,7 +231,9 @@ class MetalLBInstaller:
             self.wait_csv_installed()
 
         except Exception as e:
-            logger.error(f"Error during MetalLb installation: {e}")
+            logger.error(f"Error during MetalLb installation: {e}, sleep 30 sec")
+            # trying to wait for MetalLB csvs ready in case of exception
+            time.sleep(30)
             return False
 
         metallb_pods = get_pod_name_by_pattern(
@@ -622,7 +625,7 @@ class MetalLBInstaller:
             func=check_all_csvs_are_succeeded,
             namespace=self.namespace_lb,
         ):
-            if sample.wait_for_func_status(result=True):
+            if sample:
                 logger.info("MetalLB CSV installed successfully")
                 break
         return True
