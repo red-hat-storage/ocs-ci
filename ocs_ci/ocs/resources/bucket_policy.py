@@ -131,7 +131,7 @@ class NoobaaAccount(object):
 
 def gen_bucket_policy(
     user_list, actions_list, resources_list, effect=None, sid="statement",
-    principal=None,
+    principal=None, action=None, resource=None,
 ):
     """
     Function prepares bucket policy parameters in syntax and format provided by AWS bucket policy
@@ -142,6 +142,9 @@ def gen_bucket_policy(
         resources_list (list): List of resources. Eg: Bucket name, specific object in a bucket etc
         effect (str): Permission given to the bucket policy ie: Allow(default) or Deny
         sid (str): Statement name. Can be any string. Default: "Statement"
+        principal (str): Element to specify the principal to allow/deny access to a resource.
+        action (str): Element describes the specific action(s) that will be allowed or denied.
+        resource (str):  Element specifies the object(s) that the statement covers
 
     Returns:
         dict: Bucket policy in json format
@@ -153,15 +156,17 @@ def gen_bucket_policy(
     )
     ver = datetime.date.today().strftime("%Y-%m-%d")
 
-    effects ="Allow"
-    principal_list="Principal"
-    principal = principal if principal else principal_list
-    effect = effect if effect else effects
-
+    principal = principal if principal else "Principal"
+    effect = effect if effect else "Allow"
+    action = action if action else "Action"
+    resource = resource if resource else "Resource"
 
     logger.info(f"version: {ver}")
-    logger.info(f"principal_list: {principal}")
+    logger.info(f"Principal: {principal}")
+    logger.info(f"principal_list: {principals}")
+    logger.info(f"Action: {action}")
     logger.info(f"actions_list: {actions_list}")
+    logger.info(f"Resource: {resource}")
     logger.info(f"resource: {resources_list}")
     logger.info(f"effect: {effect}")
     logger.info(f"sid: {sid}")
@@ -169,9 +174,9 @@ def gen_bucket_policy(
         "Version": ver,
         "Statement": [
             {
-                "Action": actions,
+                action: actions,
                 principal: {"AWS": principals},
-                "Resource": resources,
+                resource: resources,
                 "Effect": effect,
                 "Sid": sid,
             }
