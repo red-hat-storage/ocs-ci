@@ -125,6 +125,7 @@ class CreateResourceForm(PageNavigator):
                 f"Actual: {rules_texts}"
             )
             return False
+        logger.info(f"All rules found as expected: {rules_texts}")
         return True
 
     def _check_rule_case(self, rule: str, input_text: str, status_exp: str) -> bool:
