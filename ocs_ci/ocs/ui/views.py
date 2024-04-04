@@ -270,7 +270,6 @@ generic_locators = {
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
     "text_input_popup_rules": (
         "//*[@class='pf-c-helper-text__item-text'] | "
-        "//div[@data-test='field-requirements-popover']"
         "//*[@class='pf-v5-c-helper-text__item-text']",
         By.XPATH,
     ),
@@ -412,7 +411,7 @@ obc = {
     "storageclass_text_field": ("//input[@id='search-bar']", By.XPATH),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
     "bucketclass_text_field": (
-        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"]',
+        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"], input[id="search-bar"]',
         By.CSS_SELECTOR,
     ),
     "resource_name": (
