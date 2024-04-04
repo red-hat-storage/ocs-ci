@@ -79,14 +79,16 @@ class TestCloneDeletion(E2ETest):
         logger.info(f"capacity_to_wrie: {self.capacity_to_write}")
 
         # Calculating the file size
-        self.filesize = (
-            f"{int((self.capacity_to_write / (self.num_of_clones + 1)))*1024}"
-        )
+        self.filesize = int(self.capacity_to_write / (self.num_of_clones + 1))
+
         logger.info(f"filesize: {self.filesize}")
 
         # Calculating the PVC size in GiB
-        self.pvc_size = int(int(self.filesize / 1024) * 1.2)
+        self.pvc_size = int(self.filesize * 1.2)
         logger.info(f"pvc size: {self.pvc_size}")
+
+        # Making filesize to MB
+        self.filesize = f"{int(self.filesize) * constants.GB2MB}M"
 
         logger.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "
@@ -151,7 +153,6 @@ class TestCloneDeletion(E2ETest):
             f"Start creating {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} GB."
         )
         clones_list = []
-
         for clone_num in range(self.num_of_clones + 1):
             logger.info(f"Start creation of clone number {clone_num}.")
 
