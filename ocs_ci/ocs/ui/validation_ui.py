@@ -650,6 +650,10 @@ class ValidationUI(PageNavigator):
         """
         self.refresh_web_console()
         self.navigate_to_storageclients_page()
+        strings_storage_clients_tab = ["Storage clients"]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_storage_clients_tab, page_name="storage clients"
+        )
         self.do_click(
             self.validation_loc["generate_client_onboarding_token_button"],
             enable_screenshot=True,
@@ -672,7 +676,6 @@ class ValidationUI(PageNavigator):
 
         """
         self.verify_storage_clients_page()
-        # onboarding_token = self.do_click(self.validation_loc["copy to clipboard"],enable_screenshot=True).text
         onboarding_token = self.find_an_element_by_xpath(
             "//*[@class='odf-onboarding-modal__text-area']"
         ).text

@@ -439,11 +439,11 @@ class PageNavigator(BaseUI):
         """
         logger.info("Navigate to Storage Client Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.page_has_loaded(retries=120, sleep_time=10)
+        self.page_has_loaded(retries=120, sleep_time=30)
         self.do_click(
             locator=self.page_nav["storageclients_page"], enable_screenshot=False
         )
-        strings_storage_clients_tab = ["Storage clients"]
-        self.verify_page_contain_strings(
-            strings_on_page=strings_storage_clients_tab, page_name="storage clients"
-        )
+        # strings_storage_clients_tab = ["Storage clients"]
+        # self.verify_page_contain_strings(
+        #     strings_on_page=strings_storage_clients_tab, page_name="storage clients"
+        # )

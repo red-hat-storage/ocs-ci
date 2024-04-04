@@ -1282,8 +1282,6 @@ def clean_disk(worker, namespace=constants.BM_DEBUG_NODE_NS):
             selected_disks_to_ignore_cleanup.append(
                 str(disk_to_ignore_cleanup["kname"])
             )
-            break
-
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
         cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
@@ -1294,7 +1292,7 @@ def clean_disk(worker, namespace=constants.BM_DEBUG_NODE_NS):
 
     for lsblk_device in lsblk_devices:
         if lsblk_device["name"] in selected_disks_to_ignore_cleanup:
-            print(f'the disk cleanup ignored for, {lsblk_device["name"]}')
+            print(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
             pass
         else:
             logger.info(f"Cleaning up {lsblk_device['name']}")
