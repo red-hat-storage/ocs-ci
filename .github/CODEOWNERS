@@ -42,6 +42,8 @@
 /tests/functional/upgrade/ @red-hat-storage/purple-squad
 /tests/cross_functional/flowtest/ @red-hat-storage/magenta-squad
 /tests/functional/workloads/ @red-hat-storage/magenta-squad
+/tests/cross_functional/system_test/ @red-hat-storage/magenta-squad
+/tests/cross_functional/kcs/ @red-hat-storage/magenta-squad
 /tests/cross_functional/performance/ @red-hat-storage/grey-squad
 /tests/cross_functional/scale/ @red-hat-storage/orange-squad
 /tests/functional/ui/ @red-hat-storage/black-squad
