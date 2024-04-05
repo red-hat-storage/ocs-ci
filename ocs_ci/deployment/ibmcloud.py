@@ -12,6 +12,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.defaults import IBM_CLOUD_LOAD_BALANCER_QUOTA
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnsupportedPlatformVersionError,
@@ -157,11 +158,22 @@ class IBMCloudIPI(CloudDeploymentBase):
             raise UnsupportedPlatformVersionError(
                 "IBM Cloud IPI deployments are only supported on OCP versions >= 4.10"
             )
+        # By default, IBM cloud has load balancer limit of 50 per region.
+        # switch to us-south, if current load balancers are more than 45.
+        # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas
+        ibmcloud.login()
+        if config.ENV_DATA.get("enable_region_dynamic_switching"):
+            lb_count = self.get_load_balancers_count()
+            if lb_count > (IBM_CLOUD_LOAD_BALANCER_QUOTA - 5):
+                logger.info(
+                    "Switching region to us-south due to lack of load balancers"
+                )
+                config.ENV_DATA["region"] = "us-south"
+                ibmcloud.login()
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 
         # IBM Cloud specific prereqs
-        ibmcloud.login()
         cco.configure_cloud_credential_operator()
         self.export_api_key()
         self.manually_create_iam_for_vpc()
@@ -445,3 +457,32 @@ class IBMCloudIPI(CloudDeploymentBase):
         logger.info("Exporting IC_API_KEY environment variable")
         api_key = config.AUTH["ibmcloud"]["api_key"]
         os.environ["IC_API_KEY"] = api_key
+
+    def get_load_balancers(self):
+        """
+        Gets the load balancers
+
+        Returns:
+            json: load balancers in json format
+
+        """
+        cmd = "ibmcloud is lbs --output json"
+        out = exec_cmd(cmd)
+        load_balancers = json.loads(out.stdout)
+        logger.debug(f"load balancers: {load_balancers}")
+        return load_balancers
+
+    def get_load_balancers_count(self):
+        """
+        Gets the number of load balancers
+
+        Return:
+            int: number of load balancers
+
+        """
+        load_balancers_count = len(self.get_load_balancers())
+        region = config.ENV_DATA.get("region")
+        logger.info(
+            f"Current load balancers count in region {region} is {load_balancers_count}"
+        )
+        return load_balancers_count
