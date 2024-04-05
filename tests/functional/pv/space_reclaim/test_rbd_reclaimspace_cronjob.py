@@ -268,6 +268,7 @@ class TestRbdSpaceReclaim(ManageTest):
 
     @tier1
     @bugzilla("2183444")
+    @polarion_id("OCS-5500")
     @skipif_hci_provider_and_client
     @skipif_external_mode
     def test_modify_scedule_reclaim_spacejob(
@@ -280,10 +281,10 @@ class TestRbdSpaceReclaim(ManageTest):
 
         Steps:
         1. Create a pvc.
-        2. Enabling reclaim space operation using Annotating PVC
-        3. Wait for more than 100 * 1 minutes = ~ 2 hours
-        4. Modify the schedule to run ReclaimSpaceJob job every minute
-        5. Grep for updated error message "delete and recreate reclaimspacecronjob" in csi-addons-controller pod logs.
+        2. Enable reclaim space operation using Annotating PVC.
+        3. Wait for more than 100 * 1 minutes = ~ 2 hours.
+        4. Modify the schedule to run ReclaimSpaceJob job every minute.
+        5. Grep for error message "delete and recreate reclaimspacecronjob" in csi-addons-controller pod logs.
         """
 
         # get random size for pvc
@@ -330,7 +331,7 @@ class TestRbdSpaceReclaim(ManageTest):
         ), "Reclaim space cron job does not exist, or schedule is not correct"
 
         OCP(kind=constants.PVC, namespace=pvc_obj.project.namespace).annotate(
-            "reclaimspace.csiaddons.openshift.io/schedule=*/1****", pvc_obj.name
+            "reclaimspace.csiaddons.openshift.io/schedule=*/1 * * * *", pvc_obj.name
         )
         expected_log = "delete and recreate reclaimspacecronjob"
         pod_name = get_pod_name_by_pattern(
