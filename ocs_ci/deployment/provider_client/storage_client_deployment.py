@@ -24,7 +24,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility import templating, version
-from ocs_ci.deployment.deployment import Deployment, create_catalog_source
+from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_cluster,
@@ -216,6 +216,31 @@ class StorageClientDeployment(object):
             resource_count=1,
             timeout=180,
         )
+        if self.ocs_version >= version.VERSION_4_16:
+            # Validate native client is created in openshift-storage namespace
+            Deployment().wait_for_csv(
+                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            log.info(
+                f"Sleeping for 30 seconds after {self.ocs_client_operator} created"
+            )
+            # Validate storageclaims created
+
+            # Validate cephblockpool created
+            assert verify_block_pool_exists(
+                constants.DEFAULT_BLOCKPOOL
+            ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+            verify_cephblockpool_status(constants.DEFAULT_BLOCKPOOL)
+
+            # Validate radosnamespace created and in 'Ready' status
+            check_phase_of_rados_namespace()
+
+            # Validate storageclassrequests created
+            storage_class_classes = get_all_storageclass_names()
+            for storage_class in self.storage_class_claims:
+                assert (
+                    storage_class in storage_class_classes
+                ), "Storage classes ae not created as expected"
 
         if (
             self.ocs_version < version.VERSION_4_16
@@ -309,11 +334,10 @@ class StorageClientDeployment(object):
             return
         except (IndexError, CommandFailed):
             log.info("Running ODF subscription for the provider")
-        live_deployment = config.DEPLOYMENT.get("live_deployment")
-        if not live_deployment:
-            create_catalog_source()
-        # Create ODF subscription for provider
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.PROVIDER_SUBSCRIPTION_YAML}")
+
+        log.info("Creating namespace and operator group.")
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        Deployment().subscribe_ocs()
 
         # Wait until odf is installed
         odf_operator = defaults.ODF_OPERATOR_NAME
@@ -331,31 +355,6 @@ class StorageClientDeployment(object):
         enable_console_plugin()
         time.sleep(30)
         self.validation_ui_obj.refresh_web_console()
-        if self.ocs_version >= version.VERSION_4_16:
-            # Validate native client is created in openshift-storage namespace
-            Deployment().wait_for_csv(
-                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
-            )
-            log.info(
-                f"Sleeping for 30 seconds after {self.ocs_client_operator} created"
-            )
-            # Validate storageclaims created
-
-            # Validate cephblockpool created
-            assert verify_block_pool_exists(
-                constants.DEFAULT_BLOCKPOOL
-            ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
-            verify_cephblockpool_status(constants.DEFAULT_BLOCKPOOL)
-
-            # Validate radosnamespace created and in 'Ready' status
-            check_phase_of_rados_namespace()
-
-            # Validate storageclassrequests created
-            storage_class_classes = get_all_storageclass_names()
-            for storage_class in self.storage_class_claims:
-                assert (
-                    storage_class in storage_class_classes
-                ), "Storage classes ae not created as expected"
 
     def odf_installation_on_client(
         self,
