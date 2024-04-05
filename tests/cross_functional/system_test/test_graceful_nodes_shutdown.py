@@ -241,7 +241,7 @@ class TestGracefulNodesShutdown(E2ETest):
         pvc_obj = pvc_factory(
             interface=interface,
             storageclass=self.sc_obj,
-            size=3,
+            size=5,
             status=constants.STATUS_BOUND,
             project=self.proj_obj,
         )
@@ -266,36 +266,45 @@ class TestGracefulNodesShutdown(E2ETest):
 
         return pvc_obj, pod_obj, file_name, origin_md5sum, encrypt_snap_obj
 
-    def validate_snapshot_restore(self, snapshot_restore_factory):
+    def validate_snapshot_restore(self, snapshot_restore_factory, pod_factory):
         """
         Verifies the snapshot restore works fine as well as PVC expansion
         is possible on the restored snapshot
         """
-
+        self.restore_pvc_objs = list()
         logger.info("Creating snapshot restore for non-encrypted pvcs after reboot")
-        self.ne_restored_pvc = snapshot_restore_factory(
+        ne_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.snap_obj,
             storageclass=self.ne_pvc_obj.storageclass.name,
             volume_mode=self.snap_obj.parent_volume_mode,
             timeout=180,
         )
+        self.restore_pvc_objs.append(ne_restored_pvc)
 
         logger.info("Creating snapshot restore for encrypted rbd pvcs after reboot")
-        self.eb_restored_pvc = snapshot_restore_factory(
+        eb_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.eb_snap_obj,
             storageclass=self.eb_pvc_obj.storageclass.name,
             volume_mode=self.eb_snap_obj.parent_volume_mode,
             timeout=180,
         )
+        self.restore_pvc_objs.append(eb_restored_pvc)
         logger.info("Creating snapshot restore for encrypted fs pvcs after reboot")
-        self.efs_restored_pvc = snapshot_restore_factory(
+        efs_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.efs_snap_obj,
             storageclass=self.efs_pvc_obj.storageclass.name,
             volume_mode=self.efs_snap_obj.parent_volume_mode,
             timeout=180,
         )
+        self.restore_pvc_objs.append(efs_restored_pvc)
 
-        self.validate_pvc_expansion(pvc_size_new=25)
+        for pvc_obj in self.restore_pvc_objs:
+            pod_obj = pod_factory(
+                interface=pvc_obj.interface,
+                pvc=pvc_obj,
+                status=constants.STATUS_RUNNING,
+            )
+            logger.info(f"Attaching the PVC {pvc_obj.name} to pod " f"{pod_obj.name}")
 
     def validate_pvc_expansion(self, pvc_size_new):
         """
@@ -304,12 +313,7 @@ class TestGracefulNodesShutdown(E2ETest):
         Args:
             pvc_size_new (int): Size of PVC(in Gb) to expand
         """
-
-        for pvc_obj in [
-            self.ne_restored_pvc,
-            self.eb_restored_pvc,
-            self.efs_restored_pvc,
-        ]:
+        for pvc_obj in self.restore_pvc_objs:
             logger.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
             pvc_obj.resize_pvc(pvc_size_new, True)
 
@@ -402,6 +406,7 @@ class TestGracefulNodesShutdown(E2ETest):
         setup_mcg_bg_features,
         validate_mcg_bg_features,
         snapshot_restore_factory,
+        pod_factory,
     ):
         """
         Steps:
@@ -488,7 +493,10 @@ class TestGracefulNodesShutdown(E2ETest):
             raise ex
 
         self.validate_data_integrity()
-        self.validate_snapshot_restore(snapshot_restore_factory)
+        self.validate_snapshot_restore(
+            snapshot_restore_factory, pod_factory=pod_factory
+        )
+        self.validate_pvc_expansion(pvc_size_new=10)
         validate_mcg_bg_features(
             skip_any_features=["caching", "rgw kafka", "nsfs", "replication"]
         )
