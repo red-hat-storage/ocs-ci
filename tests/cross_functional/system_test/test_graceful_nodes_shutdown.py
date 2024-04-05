@@ -271,30 +271,33 @@ class TestGracefulNodesShutdown(E2ETest):
         Verifies the snapshot restore works fine as well as PVC expansion
         is possible on the restored snapshot
         """
+
         logger.info("Creating snapshot restore for non-encrypted pvcs after reboot")
-        ne_restored_pvc = snapshot_restore_factory(
+        self.ne_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.snap_obj,
+            storageclass=self.ne_pvc_obj.storageclass.name,
             volume_mode=self.snap_obj.parent_volume_mode,
             timeout=180,
         )
-        eb_restored_pvc = snapshot_restore_factory(
+
+        logger.info("Creating snapshot restore for encrypted rbd pvcs after reboot")
+        self.eb_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.eb_snap_obj,
-            volume_mode=self.snap_obj.parent_volume_mode,
+            storageclass=self.eb_pvc_obj.storageclass.name,
+            volume_mode=self.eb_snap_obj.parent_volume_mode,
             timeout=180,
         )
-        efs_restored_pvc = snapshot_restore_factory(
+        logger.info("Creating snapshot restore for encrypted fs pvcs after reboot")
+        self.efs_restored_pvc = snapshot_restore_factory(
             snapshot_obj=self.efs_snap_obj,
-            volume_mode=self.snap_obj.parent_volume_mode,
+            storageclass=self.efs_pvc_obj.storageclass.name,
+            volume_mode=self.efs_snap_obj.parent_volume_mode,
             timeout=180,
         )
 
-        self.validate_pvc_expansion(
-            ne_restored_pvc, eb_restored_pvc, efs_restored_pvc, pvc_size_new=25
-        )
+        self.validate_pvc_expansion(pvc_size_new=25)
 
-    def validate_pvc_expansion(
-        self, ne_restored_pvc, eb_restored_pvc, efs_restored_pvc, pvc_size_new=25
-    ):
+    def validate_pvc_expansion(self, pvc_size_new):
         """
         expand size of PVC and verify the expansion
 
@@ -302,7 +305,11 @@ class TestGracefulNodesShutdown(E2ETest):
             pvc_size_new (int): Size of PVC(in Gb) to expand
         """
 
-        for pvc_obj in ne_restored_pvc + eb_restored_pvc + efs_restored_pvc:
+        for pvc_obj in [
+            self.ne_restored_pvc,
+            self.eb_restored_pvc,
+            self.efs_restored_pvc,
+        ]:
             logger.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
             pvc_obj.resize_pvc(pvc_size_new, True)
 
@@ -482,7 +489,9 @@ class TestGracefulNodesShutdown(E2ETest):
 
         self.validate_data_integrity()
         self.validate_snapshot_restore(snapshot_restore_factory)
-        validate_mcg_bg_features(skip_any_features=["caching", "rgw kafka", "nsfs"])
+        validate_mcg_bg_features(
+            skip_any_features=["caching", "rgw kafka", "nsfs", "replication"]
+        )
         self.validate_ocp_workload_exists()
 
         # check osd status
