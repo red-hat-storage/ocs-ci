@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     skipif_ocs_version,
     ignore_leftovers,
+    skipif_no_lso,
 )
 from ocs_ci.helpers.helpers import mon_pods_running_on_same_node
 from ocs_ci.ocs.constants import (
@@ -44,6 +45,7 @@ POD_OBJ = OCP(kind=POD, namespace=config.ENV_DATA["cluster_namespace"])
 @skipif_ocs_version("<4.8")
 @pytest.mark.polarion_id("OCS-2593")
 @pytest.mark.bugzilla("1974204")
+@skipif_no_lso
 class TestMultipleMonPodsStaysOnSameNode(ManageTest):
     """
     Verify multiple mon pods stays on same node
