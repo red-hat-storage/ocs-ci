@@ -1284,7 +1284,9 @@ validation = {
         By.XPATH,
     ),
     "req_capacity_dropdown_selected": (
-        "//div[@id='breakdown-card-title']/following-sibling::*//*[@class = 'pf-c-select__toggle-text']",
+        "//div[@id='breakdown-card-title']/following-sibling::*//*[@class = 'pf-c-select__toggle-text'] | "
+        "//div[@class='pf-v5-c-select ceph-capacity-breakdown-card-header__dropdown"
+        "//*[@class = 'pf-v5-c-select__toggle-text']']",
         By.XPATH,
     ),
     "req_capacity_dropdown_btn_one": (
