@@ -677,7 +677,7 @@ class ValidationUI(PageNavigator):
         """
         self.verify_storage_clients_page()
         onboarding_token = self.find_an_element_by_xpath(
-            "//*[@class='odf-onboarding-modal__text-area']"
+            "//div[@class='odf-onboarding-modal__text-area']"
         ).text
         logger.info(f"Onboarding token generated successfully: {onboarding_token}")
 
