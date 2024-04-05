@@ -22,7 +22,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility import templating, version
-from ocs_ci.deployment.deployment import Deployment, create_catalog_source
+from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.resources.storage_client import StorageClient
