@@ -420,8 +420,8 @@ class PageNavigator(BaseUI):
         """
         logger.info("Select the OCP administrator user role from the dropdown")
         if self.get_elements(self.generic_locators["developer_selected"]):
-            self.do_click(self.sc_loc["Developer_dropdown"])
-            self.do_click(self.sc_loc["select_administrator"], timeout=5)
+            self.do_click(self.validation_loc["Developer_dropdown"])
+            self.do_click(self.validation_loc["select_administrator"], timeout=5)
             logger.info("Administrator user is selected")
         elif self.get_elements(self.generic_locators["administrator_selected"]):
             logger.info("Administrator user was already selected")
