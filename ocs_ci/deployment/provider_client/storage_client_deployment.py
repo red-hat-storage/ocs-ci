@@ -527,6 +527,10 @@ class StorageClientDeployment(object):
             resource_name=resource_name,
         )
 
+        # Check storageclaims available or not
+        cmd = "oc get storageclassclaim"
+        storage_claims = run_cmd(cmd=cmd)
+
         if not is_available:
             # Set storage provider endpoint
             log.info(
@@ -558,7 +562,7 @@ class StorageClientDeployment(object):
             ), "storage client phase is not as expected"
 
             # Create storage classclaim
-            if storage_client_status == "Connected":
+            if storage_client_status == "Connected" and not storage_claims:
                 self.ocp_obj.exec_oc_cmd(
                     f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}"
                 )
