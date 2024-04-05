@@ -28,7 +28,7 @@ class TestClone(ManageTest):
     Tests to verify PVC to PVC clone feature
     """
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture()
     def setup(self, interface_type, pvc_factory, pod_factory, pod_dict_path, access):
         """
         create resources for the test
@@ -70,7 +70,7 @@ class TestClone(ManageTest):
             ),
         ],
     )
-    def test_pvc_to_pvc_clone(self, interface_type, teardown_factory):
+    def test_pvc_to_pvc_clone(self, interface_type, setup, teardown_factory):
         """
         Create a clone from an existing pvc,
         verify data is preserved in the cloning.
@@ -154,22 +154,40 @@ class TestClone(ManageTest):
 
     @pytest.mark.polarion_id("OCS-5162")
     @pytest.mark.parametrize(
-        argnames=["interface_type", "pod_dict_path", "access"],
+        argnames=["interface_type", "access"],
         argvalues=[
             pytest.param(
                 constants.CEPHFILESYSTEM,
-                constants.CSI_CEPHFS_ROX_POD_YAML,
                 constants.ACCESS_MODE_RWX,
             ),
         ],
     )
     def test_pvc_to_pvc_rox_clone(
-        self, snapshot_factory, snapshot_restore_factory, teardown_factory
+        self,
+        interface_type,
+        access,
+        pvc_factory,
+        pod_factory,
+        snapshot_factory,
+        snapshot_restore_factory,
+        teardown_factory,
     ):
         """
         Create a rox clone from an existing pvc,
         verify data is preserved in the cloning.
         """
+        self.pvc_obj = pvc_factory(
+            interface=interface_type,
+            size=1,
+            status=constants.STATUS_BOUND,
+            access_mode=access,
+        )
+        self.pod_obj = pod_factory(
+            interface=interface_type,
+            pvc=self.pvc_obj,
+            status=constants.STATUS_RUNNING,
+            pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
+        )
         logger.info(f"Running IO on pod {self.pod_obj.name}")
         file_name = f"{self.pod_obj.name}.txt"
         self.pod_obj.exec_cmd_on_pod(
@@ -232,17 +250,23 @@ class TestClone(ManageTest):
     @pytest.mark.polarion_id("OCS-5444")
     @pytest.mark.polarion_id("OCS-5446")
     @pytest.mark.parametrize(
-        argnames=["interface_type", "pod_dict_path", "access"],
+        argnames=["interface_type", "access"],
         argvalues=[
             pytest.param(
                 constants.CEPHFILESYSTEM,
-                constants.CSI_CEPHFS_ROX_POD_YAML,
                 constants.ACCESS_MODE_RWX,
             ),
         ],
     )
     def test_pvc_to_pvc_rox_shallow_vol_clone(
-        self, snapshot_factory, snapshot_restore_factory, teardown_factory
+        self,
+        interface_type,
+        access,
+        pvc_factory,
+        pod_factory,
+        snapshot_factory,
+        snapshot_restore_factory,
+        teardown_factory,
     ):
         """
         1. Create a PVC with rwx mode
@@ -257,6 +281,18 @@ class TestClone(ManageTest):
         9. Checks if data matches
         10. Check if no new subvolumes are created.
         """
+        self.pvc_obj = pvc_factory(
+            interface=interface_type,
+            size=1,
+            status=constants.STATUS_BOUND,
+            access_mode=access,
+        )
+        self.pod_obj = pod_factory(
+            interface=interface_type,
+            pvc=self.pvc_obj,
+            status=constants.STATUS_RUNNING,
+            pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
+        )
         logger.info(f"Running IO on pod {self.pod_obj.name}")
         file_name = f"{self.pod_obj.name}.txt"
         self.pod_obj.exec_cmd_on_pod(
@@ -338,17 +374,20 @@ class TestClone(ManageTest):
     @pytest.mark.polarion_id("OCS-5445")
     @pytest.mark.polarion_id("OCS-5447")
     @pytest.mark.parametrize(
-        argnames=["interface_type", "pod_dict_path", "access"],
+        argnames=["interface_type", "access"],
         argvalues=[
             pytest.param(
                 constants.CEPHFILESYSTEM,
-                constants.CSI_CEPHFS_ROX_POD_YAML,
                 constants.ACCESS_MODE_RWX,
             ),
         ],
     )
     def test_pvc_to_pvc_rox_shallow_vol_post_clone(
         self,
+        interface_type,
+        access,
+        pvc_factory,
+        pod_factory,
         snapshot_factory,
         snapshot_restore_factory,
         pvc_clone_factory,
@@ -373,6 +412,18 @@ class TestClone(ManageTest):
         16. Delete the parent snapshot and pvc(rox pvc)
         17. Check if data matches in rwx (already cloned pvc) pvc
         """
+        self.pvc_obj = pvc_factory(
+            interface=interface_type,
+            size=1,
+            status=constants.STATUS_BOUND,
+            access_mode=access,
+        )
+        self.pod_obj = pod_factory(
+            interface=interface_type,
+            pvc=self.pvc_obj,
+            status=constants.STATUS_RUNNING,
+            pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
+        )
         logger.info(f"Running IO on pod {self.pod_obj.name}")
         file_name = f"{self.pod_obj.name}.txt"
         self.pod_obj.exec_cmd_on_pod(
