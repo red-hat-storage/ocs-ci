@@ -89,6 +89,7 @@ class PlatformNodesFactory:
             "gcp": GCPNodes,
             "vsphere_lso": VMWareLSONodes,
             "powervs": IBMPowerNodes,
+            "ibmz": IBMZNodes,
             "rhv": RHVNodes,
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
@@ -2249,6 +2250,121 @@ class IBMPowerNodes(NodesBase):
                 self.powernodes.start_powernodes_machines(stopped_powernodes)
             else:
                 self.powernodes.start_powernodes_machines_powervs(stopped_powernodes)
+
+
+class IBMZNodes(NodesBase):
+    """
+    IBM Z Nodes class
+    """
+
+    def __init__(self):
+        super(IBMZNodes, self).__init__()
+        from ocs_ci.utility import znodes
+
+        self.znodes = znodes.ZNodes()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        if self.znodes.iskvm():
+            self.znodes.stop_znodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.znodes.stop_znodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def start_nodes(self, nodes, force=True):
+        """
+        Start PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        if self.znodes.iskvm():
+            self.znodes.start_znodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.znodes.start_znodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
+        """
+        Restart PowerNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
+                and 'ready' state.
+            wait (bool): True if need to wait till the restarted node reaches timeout
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        if self.znodes.iskvm():
+            self.znodes.restart_znodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.znodes.restart_znodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart ZNodes with stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force node stop, False otherwise
+
+        """
+        if self.znodes.iskvm():
+            self.znodes.restart_znodes_machines(
+                nodes, timeout=900, wait=True, force=force
+            )
+        else:
+            self.znodes.restart_znodes_machines_powervs(
+                nodes, timeout=900, wait=True
+            )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Make sure all ZNodes are up by the end of the test
+        """
+        self.cluster_nodes = get_node_objs()
+        if self.znodes.iskvm():
+            stopped_znodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if self.znodes.verify_machine_is_down(powernode) is True
+            ]
+        else:
+            stopped_znodes = [
+                powernode
+                for powernode in self.cluster_nodes
+                if powernode.ocp.get_resource_status(powernode.name)
+                == constants.NODE_NOT_READY
+            ]
+
+        if stopped_znodes:
+            logger.info(
+                f"The following ZNodes are powered off: {stopped_znodes}"
+            )
+            if self.znodes.iskvm():
+                self.znodes.start_znodes_machines(stopped_znodes)
+            else:
+                self.znodes.start_znodes_machines_powervs(stopped_znodes)
 
 
 class AZURENodes(NodesBase):
