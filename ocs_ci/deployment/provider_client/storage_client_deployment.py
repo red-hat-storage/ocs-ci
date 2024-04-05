@@ -159,7 +159,7 @@ class StorageClientDeployment(object):
             log.info("local storage is already installed")
 
         # odf subscription for provider
-        self.odf_subscription_on_provider()
+        # self.odf_subscription_on_provider()
 
         # Check for rook ceph pods
         assert self.pod_obj.wait_for_resource(
