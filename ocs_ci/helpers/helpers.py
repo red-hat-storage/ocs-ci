@@ -4753,5 +4753,5 @@ def check_phase_of_rados_namespace(required_phase=constants.STATUS_READY):
     rados_namespace = verify_rados_namespace_exists()
     if rados_namespace:
         check_radosns_phase_cmd = "oc get -o=jsonpath='{.status.phase}'"
-        phase = run_cmd(command=check_radosns_phase_cmd)
+        phase = run_cmd(cmd=check_radosns_phase_cmd)
         return True if phase == required_phase else False
