@@ -34,9 +34,11 @@ class TestRecoveryProfileInCeph:
         # Setting up and verifying the recovery profile value with the odf CLI tool
 
         assert odf_cli_set_recover_profile(recovery_profile)
-        log.info("Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool.")
+        log.info(
+            "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
+        )
         a = get_ceph_recovery_profile()
-        log.info (f"Applied recovery profile on ceph cluster is {a}")
+        log.info(f"Applied recovery profile on ceph cluster is {a}")
         assert (
             recovery_profile == get_ceph_recovery_profile()
         ), f"Recovery profile set by ODF CLI ({recovery_profile}) does not match with the value reported by Ceph"

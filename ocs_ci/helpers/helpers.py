@@ -4813,7 +4813,7 @@ def get_ceph_recovery_profile():
 
     """
 
-    #Fetchhing recovery profile from ceph config
+    # Fetchhing recovery profile from ceph config
     toolbox = pod.get_ceph_tools_pod()
     ceph_cmd = "ceph config get osd osd_mclock_profile"
 
