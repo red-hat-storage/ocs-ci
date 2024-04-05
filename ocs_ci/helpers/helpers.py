@@ -4698,3 +4698,60 @@ def flatten_multilevel_dict(d):
         else:
             leaves_list.append(value)
     return leaves_list
+
+
+def verify_cephblockpool_status(pool_name):
+    """
+    Verify the phase of cephblockpool
+
+    Args:
+        pool_name (str): The name of the Ceph block pool
+
+    Returns:
+        status: True if the Ceph block pool is in Ready status, False otherwise
+    """
+    pool_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    result = pool_obj.get()
+    sample = result["items"]
+    pool_list = [item.get("metadata").get("name") for item in sample]
+    if pool_name in pool_list:
+        pool_phase = [item.get("status").get("phase") for item in sample]
+        assert pool_phase == "Ready", "The cephblockpool is not in 'Ready' status"
+    return pool_phase
+
+
+def verify_rados_namespace_exists(namespace=None):
+    """
+    Verify if rados namespace exists
+
+    Returns:
+        bool: True if the radosnamespace exists, False otherwise
+    """
+    logger.info("Verifying if radosnamespace exists")
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    pool_obj = ocp.OCP(kind=constants.CEPHBLOCKPOOL, namespace=namespace)
+    cmd = f"get cephblockpoolradosnamespaces.ceph.rook.io -n {namespace}"
+    rados_namespace = pool_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+    logger.info(f"output is: {rados_namespace}")
+    if rados_namespace:
+        return True
+    else:
+        return False
+
+
+def check_phase_of_rados_namespace(required_phase=constants.STATUS_READY):
+    """
+    Verify if rados namespace exists
+
+    Returns:
+        bool: True if the radosnamespace exists, False otherwise
+    """
+    logger.info("Verifying if radosnamespace is in desired phase")
+    rados_namespace = verify_rados_namespace_exists()
+    if rados_namespace:
+        check_radosns_phase_cmd = "oc get -o=jsonpath='{.status.phase}'"
+        phase = run_cmd(command=check_radosns_phase_cmd)
+        return True if phase == required_phase else False

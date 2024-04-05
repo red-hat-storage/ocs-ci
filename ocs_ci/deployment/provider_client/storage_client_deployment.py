@@ -33,7 +33,12 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.helpers import get_all_storageclass_names
+from ocs_ci.helpers.helpers import (
+    get_all_storageclass_names,
+    verify_block_pool_exists,
+    verify_cephblockpool_status,
+    check_phase_of_rados_namespace,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 
 
@@ -71,6 +76,13 @@ class StorageClientDeployment(object):
         )
         self.sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
         self.storageclass = "localblock"
+        self.ocp_version = version.get_semantic_ocp_version_from_config()
+        self.ocs_version = version.get_semantic_ocs_version_from_config()
+        self.storage_class_claims = [
+            constants.CEPHBLOCKPOOL_SC,
+            constants.CEPHFILESYSTEM_SC,
+        ]
+        self.ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
 
         # Register a function to be called upon the destruction of the instance
         atexit.register(self.cleanup_function)
@@ -99,9 +111,6 @@ class StorageClientDeployment(object):
         7. Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
         8. Create storage profile
         """
-
-        self.ocp_version = version.get_semantic_ocp_version_from_config()
-        self.ocs_version = version.get_semantic_ocs_version_from_config()
 
         # set control nodes as scheduleable
         path = "/spec/mastersSchedulable"
@@ -322,6 +331,31 @@ class StorageClientDeployment(object):
         enable_console_plugin()
         time.sleep(30)
         self.validation_ui_obj.refresh_web_console()
+        if self.ocs_version >= version.VERSION_4_16:
+            # Validate native client is created in openshift-storage namespace
+            Deployment().wait_for_csv(
+                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            log.info(
+                f"Sleeping for 30 seconds after {self.ocs_client_operator} created"
+            )
+            # Validate storageclaims created
+
+            # Validate cephblockpool created
+            assert verify_block_pool_exists(
+                constants.DEFAULT_BLOCKPOOL
+            ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+            verify_cephblockpool_status(constants.DEFAULT_BLOCKPOOL)
+
+            # Validate radosnamespace created and in 'Ready' status
+            check_phase_of_rados_namespace()
+
+            # Validate storageclassrequests created
+            storage_class_classes = get_all_storageclass_names()
+            for storage_class in self.storage_class_claims:
+                assert (
+                    storage_class in storage_class_classes
+                ), "Storage classes ae not created as expected"
 
     def odf_installation_on_client(
         self,
@@ -359,14 +393,15 @@ class StorageClientDeployment(object):
 
             # Create ODF subscription for storage-client
             self.ocp_obj.exec_oc_cmd(f"apply -f {subscription_yaml}")
-            ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
             Deployment().wait_for_subscription(
-                ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
             )
             Deployment().wait_for_csv(
-                ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
             )
-            log.info(f"Sleeping for 30 seconds after {ocs_client_operator} created")
+            log.info(
+                f"Sleeping for 30 seconds after {self.ocs_client_operator} created"
+            )
             time.sleep(30)
 
             if enable_console:
@@ -480,7 +515,6 @@ class StorageClientDeployment(object):
         expected_storageclient_status (str): expected storaeclient phase default value is 'Connected'
 
         """
-        storage_class_claims = [constants.CEPHBLOCKPOOL_SC, constants.CEPHFILESYSTEM_SC]
         # Pull storage-client yaml data
         log.info("Pulling storageclient CR data from yaml")
         storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
@@ -530,7 +564,7 @@ class StorageClientDeployment(object):
                 )
                 time.sleep(30)
                 storage_class_classes = get_all_storageclass_names()
-                for storage_class in storage_class_claims:
+                for storage_class in self.storage_class_claims:
                     assert (
                         storage_class in storage_class_classes
                     ), "Storage classes ae not created as expected"
