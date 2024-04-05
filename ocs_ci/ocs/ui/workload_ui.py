@@ -365,7 +365,7 @@ class PvcCapacityDeploymentList(list, metaclass=SingletonMeta):
                         f"PVC deletion did not delete PV {pv_obj.name} on cluster. PV status {pv_status}"
                     )
                     pv_obj.delete(wait=False, force=True)
-                    wait_for_pv_delete([pv_obj])
+                    wait_for_pv_delete([pv_obj], timeout=240)
                 else:
                     logger.info(f"PV {pv_obj.name} is already deleted")
 
