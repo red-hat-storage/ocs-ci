@@ -1,0 +1,33 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'ipi'
+  region: 'us-east-2'
+  worker_availability_zones:
+    - 'us-east-2a'
+    - 'us-east-2b'
+    - 'us-east-2c'
+  master_availability_zones:
+    - 'us-east-2a'
+    - 'us-east-2b'
+    - 'us-east-2c'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_instance_type: 'm7g.4xlarge'
+  master_instance_type: 'm7g.xlarge'
+  worker_instance_arch: 'arm64'
+  master_instance_arch: 'arm64'
+  # Following two values need to be set as a W/A to overwrite the release image
+  # with aarch64 (arm64) architecture image. Don't forget create the custom
+  # config with RELEASE_IMG value under ENV_DATA to latest version of image.
+  # TODO: Remove early_testing and find some dynamic way to get the latest
+  # image dynamically.
+  early_testing: true
+  # RELEASE_IMG: 'quay.io/openshift-release-dev/ocp-release@sha256:0c13de057d9f75c40999778bb924f654be1d0def980acbe8a00096e6bf18cc2a'
+#REPORTING:
+  #polarion:
+    # TODO: add polarion ID for this graviton deployment
+    # https://issues.redhat.com/browse/RHSTOR-2044
+    # deployment_id: 'OCS-XXXX'
