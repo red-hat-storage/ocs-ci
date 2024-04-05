@@ -2265,7 +2265,7 @@ class IBMZNodes(NodesBase):
 
     def stop_nodes(self, nodes, force=True):
         """
-        Stop PowerNode
+        Stop ZNode
 
         Args:
             nodes (list): The OCS objects of the nodes
@@ -2273,17 +2273,17 @@ class IBMZNodes(NodesBase):
 
         """
         if self.znodes.iskvm():
-            self.znodes.stop_znodes_machines(
+            self.znodes.stop_znodes_machines_kvm(
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            self.znodes.stop_znodes_machines_powervs(
+            self.znodes.restart_znodes_machines(
                 nodes, timeout=900, wait=True
             )
 
     def start_nodes(self, nodes, force=True):
         """
-        Start PowerNode
+        Start ZNode
 
         Args:
             nodes (list): The OCS objects of the nodes
@@ -2291,17 +2291,17 @@ class IBMZNodes(NodesBase):
 
         """
         if self.znodes.iskvm():
-            self.znodes.start_znodes_machines(
+            self.znodes.start_znodes_machines_kvm(
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            self.znodes.start_znodes_machines_powervs(
+            self.znodes.start_znodes_machines(
                 nodes, timeout=900, wait=True
             )
 
     def restart_nodes(self, nodes, timeout=540, wait=True, force=True):
         """
-        Restart PowerNode
+        Restart ZNode
 
         Args:
             nodes (list): The OCS objects of the nodes
@@ -2312,11 +2312,11 @@ class IBMZNodes(NodesBase):
 
         """
         if self.znodes.iskvm():
-            self.znodes.restart_znodes_machines(
+            self.znodes.restart_znodes_machines_kvm(
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            self.znodes.restart_znodes_machines_powervs(
+            self.znodes.restart_znodes_machines(
                 nodes, timeout=900, wait=True
             )
 
@@ -2330,11 +2330,11 @@ class IBMZNodes(NodesBase):
 
         """
         if self.znodes.iskvm():
-            self.znodes.restart_znodes_machines(
+            self.znodes.restart_znodes_machines_kvm(
                 nodes, timeout=900, wait=True, force=force
             )
         else:
-            self.znodes.restart_znodes_machines_powervs(
+            self.znodes.restart_znodes_machines(
                 nodes, timeout=900, wait=True
             )
 
@@ -2362,9 +2362,9 @@ class IBMZNodes(NodesBase):
                 f"The following ZNodes are powered off: {stopped_znodes}"
             )
             if self.znodes.iskvm():
-                self.znodes.start_znodes_machines(stopped_znodes)
+                self.znodes.start_znodes_machines_kvm(stopped_znodes)
             else:
-                self.znodes.start_znodes_machines_powervs(stopped_znodes)
+                self.znodes.start_znodes_machines(stopped_znodes)
 
 
 class AZURENodes(NodesBase):

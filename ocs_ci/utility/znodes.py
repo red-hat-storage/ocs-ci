@@ -53,7 +53,7 @@ class ZNodes(object):
 
     def verify_machine_is_down(self, node):
         """
-        Verify if PowerNode is completely powered off
+        Verify if ZNode is completely powered off
 
         Args:
             node (object): Node objects
@@ -70,47 +70,26 @@ class ZNodes(object):
         else:
             return True
 
-    def stop_znodes_machines_powervs(
-        self, powernode_machines, timeout=900, wait=True
-    ):
-        """
-        Stop PowerNode Machines - PowerVS
-
-        Args:
-            powernode_machines (list): ZNodes objects
-            timeout (int): time in seconds to wait for node to reach 'not ready' state
-            wait (bool): True if need to wait till the restarted node reaches timeout
-                - for future use
-
-        """
-        for pnode in powernode_machines:
-            self.service.stop(pnode, timeout)
-
-        # Wait for an additional 300+60 seconds (for pods to drain)
-        waiting_time = 360
-        logger.info(f"Waiting for {waiting_time} seconds")
-        time.sleep(waiting_time)
-
     def stop_znodes_machines(
-        self, powernode_machines, timeout=900, wait=True, force=True
+        self, znode_machines, timeout=900, wait=True, force=True
     ):
         """
-        Stop PowerNode Machines
+        Stop ZNode Machines
 
         Args:
-            powernode_machines (list): PowerNode objects
+            znode_machines (list): ZNode objects
             timeout (int): time in seconds to wait for node to reach 'not ready' state
             wait (bool): True if need to wait till the restarted node reaches timeout
                 - for future use
-            force (bool): True for PowerNode ungraceful power off, False for
-                graceful PowerNode shutdown - for future use
+            force (bool): True for ZNode ungraceful power off, False for
+                graceful ZNode shutdown - for future use
 
         Raises:
-            UnexpectedBehaviour: If PowerNode machine is still up
+            UnexpectedBehaviour: If ZNode machine is still up
 
         """
         # ocpversion = get_ocp_version("-")
-        # for node in powernode_machines:
+        # for node in znode_machines:
         #     cmd = f"sudo virsh shutdown test-ocp{ocpversion}-{node.name}"
         #     result = exec_cmd(cmd)
         #     logger.info(f"Result of shutdown {result}")
@@ -127,39 +106,75 @@ class ZNodes(object):
 
         self.nodesStarted = False
 
-    def start_znodes_machines_powervs(
-        self, powernode_machines, timeout=900, wait=True
+    def stop_znodes_machines_kvm(
+        self, znode_machines, timeout=900, wait=True, force=True
+    ):
+        """
+        Stop ZNode Machines
+
+        Args:
+            znode_machines (list): ZNode objects
+            timeout (int): time in seconds to wait for node to reach 'not ready' state
+            wait (bool): True if need to wait till the restarted node reaches timeout
+                - for future use
+            force (bool): True for ZNode ungraceful power off, False for
+                graceful ZNode shutdown - for future use
+
+        Raises:
+            UnexpectedBehaviour: If ZNode machine is still up
+
+        """
+        # ocpversion = get_ocp_version("-")
+        # for node in znode_machines:
+        #     cmd = f"sudo virsh shutdown test-ocp{ocpversion}-{node.name}"
+        #     result = exec_cmd(cmd)
+        #     logger.info(f"Result of shutdown {result}")
+        #     logger.info("Verifying node is down")
+        #     ret = TimeoutSampler(
+        #         timeout=timeout,
+        #         sleep=3,
+        #         func=self.verify_machine_is_down,
+        #         node=node,
+        #     )
+        #     logger.info(ret)
+        #     if not ret.wait_for_func_status(result=True):
+        #         raise UnexpectedBehaviour("Node {node.name} is still Running")
+
+        self.nodesStarted = False
+
+    def start_znodes_machines(
+        self, znode_machines, timeout=900, wait=True
     ):
         # """
-        # Start PowerNode Machines
+        # Start ZNode Machines
 
         # Args:
-        #     powernode_machines (list): List of PowerNode machines
+        #     znode_machines (list): List of ZNode machines
         #     timeout (int): time in seconds to wait for node to reach 'not ready' state,
         #         and 'ready' state.
         #     wait (bool): Wait for ZNodes to start - for future use
         # """
-        # for pnode in powernode_machines:
+        # for pnode in znode_machines:
         #     self.service.start(pnode, timeout)
 
         self.nodesStarted = True
 
-    def start_znodes_machines(
-        self, powernode_machines, timeout=900, wait=True, force=True
+    def start_znodes_machines_kvm(
+        self, znode_machines, timeout=900, wait=True, force=True
     ):
         """
-        Start PowerNode Machines
+        Start ZNode Machines
 
         Args:
-            powernode_machines (list): List of PowerNode machines
+            znode_machines (list): List of ZNode machines
             timeout (int): time in seconds to wait for node to reach 'not ready' state,
                 and 'ready' state.
             wait (bool): Wait for ZNodes to start - for future use
-            force (bool): True for PowerNode ungraceful power off, False for
-                graceful PowerNode shutdown - for future use
+            force (bool): True for ZNode ungraceful power off, False for
+                graceful ZNode shutdown - for future use
         """
         # ocpversion = get_ocp_version("-")
-        # for node in powernode_machines:
+        # for node in znode_machines:
         #     result = exec_cmd(f"sudo virsh start test-ocp{ocpversion}-{node.name}")
         #     logger.info(f"Result of shutdown {result}")
 
@@ -173,36 +188,36 @@ class ZNodes(object):
 
         self.nodesStarted = True
 
-    def restart_znodes_machines_powervs(self, powernode_machines, timeout, wait):
+    def restart_znodes_machines(self, znode_machines, timeout, wait):
         """
-        Restart PowerNode Machines
+        Restart ZNode Machines
 
         Args:
-            powernode_machines (list): PowerNode objects
+            znode_machines (list): ZNode objects
             timeout (int): time in seconds to wait for node to reach 'not ready' state,
                 and 'ready' state.
             wait (bool): True if need to wait till the restarted node reaches timeout
         """
-        # self.stop_znodes_machines_powervs(powernode_machines, timeout, wait)
-        # self.start_znodes_machines_powervs(powernode_machines, timeout, wait)
+        self.restart_znodes_machines(znode_machines, timeout, wait)
+        self.start_znodes_machines(znode_machines, timeout, wait)
 
         self.nodesStarted = True
 
-    def restart_znodes_machines(
-        self, powernode_machines, timeout, wait, force=True
+    def restart_znodes_machines_kvm(
+        self, znode_machines, timeout, wait, force=True
     ):
         """
-        Restart PowerNode Machines
+        Restart ZNode Machines
 
         Args:
-            powernode_machines (list): PowerNode objects
+            znode_machines (list): ZNode objects
             timeout (int): time in seconds to wait for node to reach 'not ready' state,
                 and 'ready' state.
             wait (bool): True if need to wait till the restarted node reaches timeout
-            force (bool): True for PowerNode ungraceful power off, False for
-                graceful PowerNode shutdown - for future use
+            force (bool): True for ZNode ungraceful power off, False for
+                graceful ZNode shutdown - for future use
         """
-        # self.stop_znodes_machines(powernode_machines, timeout, wait, force=force)
-        # self.start_znodes_machines(powernode_machines, timeout, wait, force=force)
+        self.stop_znodes_machines_kvm(znode_machines, timeout, wait, force=force)
+        self.start_znodes_machines_kvm(znode_machines, timeout, wait, force=force)
 
         self.nodesStarted = True
