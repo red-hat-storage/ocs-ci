@@ -40,6 +40,11 @@ from ocs_ci.ocs.cluster import (
     get_lvm_full_version,
     check_cephcluster_status,
 )
+from ocs_ci.ocs.constants import (
+    MULTICLUSTEROBSERVABILITY_PATH,
+    OBSERVABILITYMETRICSCONFIGMAP_PATH,
+    THANOS_PATH,
+)
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ChannelNotFound,
@@ -53,6 +58,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
     MDRDeploymentException,
+    ACMObservabilityNotEnabled,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -3055,6 +3061,80 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.configure_mirror_peer()
             rbddops.deploy()
         self.deploy_dr_policy()
+
+    def build_bucket_name(self, acm_indexes: list):
+        """
+        Create a bucket to be used in the thanos.yaml for ACM observability
+        Args:
+            acm_indexes (list): List of acm indexes
+        """
+        self.bucket_name = ""
+        for index in acm_indexes:
+            self.bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
+        return self.bucket_name
+
+    @retry(ACMObservabilityNotEnabled, tries=10, delay=5, backoff=5)
+    def thanos_secret(self):
+        """
+        Create thanos secret yaml by using Noobaa or AWS bucket (AWS bucket is used in this function)
+
+        """
+        secret_dict = load_auth_config().get("AUTH", {})
+        access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
+        secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+        thanos_secret_data = templating.load_yaml(self.thanos_yaml_file)
+        thanos_secret_data["stringData"]["thanos.yaml"][
+            "bucket"
+        ] = self.build_bucket_name()
+        thanos_secret_data["stringData"]["thanos.yaml"][
+            "endpoint"
+        ] = "https://s3.amazonaws.com"
+        thanos_secret_data["stringData"]["thanos.yaml"]["access_key"] = access_key
+        thanos_secret_data["stringData"]["thanos.yaml"]["secret_key"] = secret_key
+        thanos_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="thanos", delete=False
+        )
+        templating.dump_data_to_temp_yaml(thanos_secret_data, thanos_data_yaml.name)
+
+        logger.info(
+            "Creating thanos.yaml needed for ACM observability after passing required params"
+        )
+        run_cmd(f"oc create -f {THANOS_PATH}")
+
+        logger.info("Allow some time for ACM Observability to be enabled")
+        time.sleep(120)
+
+        check_observability_status = run_cmd(
+            "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
+        )
+        if check_observability_status:
+            logger.info("ACM observability is successfully enabled")
+        else:
+            raise ACMObservabilityNotEnabled(
+                "ACM Observability is not enabled, status is False"
+            )
+
+    def enable_acm_observability(self):
+        """
+        Function to enable ACM observability for enabling DR monitoring dashboard for Regional DR on the RHACM console.
+
+        """
+
+        logger.info("Enable ACM MultiClusterObservability")
+        run_cmd(f"oc create -f {MULTICLUSTEROBSERVABILITY_PATH}")
+
+        logger.info("Whitelist RBD metrics and create configmap")
+        run_cmd(f"oc create -f {OBSERVABILITYMETRICSCONFIGMAP_PATH}")
+
+        logger.info("Enable thanos secret yaml")
+        self.thanos_secret()
+
+        logger.info(
+            "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert"
+        )
+        run_cmd(
+            "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
+        )
 
 
 class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):

@@ -1,10 +1,10 @@
 """
 Helper functions specific for DR
 """
+
 import json
 import logging
 import tempfile
-import boto3
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -23,7 +23,6 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
-from botocore.exceptions import BotoCoreError
 
 logger = logging.getLogger(__name__)
 
@@ -1085,29 +1084,3 @@ def verify_drpolicy_cli(switch_ctx=None):
         raise UnexpectedBehaviour(
             f"DRPolicy is not in succeeded or validated state: {status}"
         )
-
-
-def create_s3_bucket(access_key, secret_key, bucket_name):
-    """
-    Create s3 bucket
-    Args:
-        access_key (str): S3 access key
-        secret_key (str): S3 secret key
-        acm_indexes (list): List of acm indexes
-    """
-    client = boto3.resource(
-        "s3",
-        verify=True,
-        endpoint_url="https://s3.amazonaws.com",
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-    )
-    try:
-        client.create_bucket(
-            Bucket=bucket_name,
-            CreateBucketConfiguration={"LocationConstraint": constants.AWS_REGION},
-        )
-        logger.info(f"Successfully created backup bucket: {bucket_name}")
-    except BotoCoreError as e:
-        logger.error(f"Failed to create s3 bucket {e}")
-        raise
