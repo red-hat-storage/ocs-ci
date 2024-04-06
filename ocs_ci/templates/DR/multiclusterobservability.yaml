@@ -1,4 +1,5 @@
 # This config file is used to enable ACM observability
+
 ---
 apiVersion: observability.open-cluster-management.io/v1beta2
 kind: MultiClusterObservability
