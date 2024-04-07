@@ -159,7 +159,7 @@ class StorageClientDeployment(object):
             log.info("local storage is already installed")
 
         # odf subscription for provider
-        # self.odf_subscription_on_provider()
+        self.odf_subscription_on_provider()
 
         # Check for rook ceph pods
         assert self.pod_obj.wait_for_resource(
@@ -230,10 +230,14 @@ class StorageClientDeployment(object):
             assert verify_block_pool_exists(
                 constants.DEFAULT_BLOCKPOOL
             ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
-            verify_cephblockpool_status(constants.DEFAULT_BLOCKPOOL)
+            assert (
+                verify_cephblockpool_status()
+            ), "the cephblockpool is not in Ready phase"
 
             # Validate radosnamespace created and in 'Ready' status
-            check_phase_of_rados_namespace()
+            assert (
+                check_phase_of_rados_namespace()
+            ), "The radosnamespace is not in Ready phase"
 
             # Validate storageclassrequests created
             storage_class_classes = get_all_storageclass_names()

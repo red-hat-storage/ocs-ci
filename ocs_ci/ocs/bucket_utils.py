@@ -1015,7 +1015,7 @@ def check_pv_backingstore_status(
 
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
-        "-o=jsonpath=`{.status.mode.modeCode}`"
+        "-o=jsonpath='{.status.mode.modeCode}'"
     )
     res = run_cmd(cmd=cmd)
     return True if res in desired_status else False
