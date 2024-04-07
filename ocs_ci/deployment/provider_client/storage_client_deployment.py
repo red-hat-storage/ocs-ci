@@ -24,7 +24,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility import templating, version
-from ocs_ci.deployment.deployment import Deployment
+from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_cluster,
@@ -338,6 +338,10 @@ class StorageClientDeployment(object):
             return
         except (IndexError, CommandFailed):
             log.info("Running ODF subscription for the provider")
+
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        if not live_deployment:
+            create_catalog_source()
 
         log.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")

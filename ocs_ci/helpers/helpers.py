@@ -4720,8 +4720,18 @@ def verify_cephblockpool_status(
         f"oc get {constants.CEPHBLOCKPOOL} {pool_name} -n {namespace} "
         "-o=jsonpath='{.status.phase}'"
     )
-    phase = run_cmd(cmd=cmd)
-    return True if phase == required_phase else False
+    # phase = run_cmd(cmd=cmd)
+
+    phase = retry((CommandFailed), tries=20, delay=10,)(
+        run_cmd
+    )(cmd=cmd)
+
+    logger.info(f"{pool_name} is in {phase} phase")
+    logger.info(f"Required phase is {required_phase}")
+    if phase == required_phase:
+        return True
+    else:
+        return False
 
 
 def fetch_rados_namespaces(namespace=None):
