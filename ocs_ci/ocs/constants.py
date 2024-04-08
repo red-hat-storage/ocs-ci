@@ -25,6 +25,7 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_DEPLOYMENT_DIR_OCP = os.path.join(TEMPLATE_DIR, "ocp-deployment")
 TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER = os.path.join(TEMPLATE_DIR, "cert-manager")
 TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
@@ -854,9 +855,6 @@ METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
 METALLB_WEBHOOK_PREFIX = "metallb-operator-webhook-server"
 METALLB_DEFAULT_NAMESPACE = "metallb-system"
-METALLB_CATALOG_SOURCE_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR_METALLB, "metallb-source.yaml"
-)
 METALLB_OPERATOR_GROUP_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_METALLB, "operator-group.yaml"
 )
@@ -873,6 +871,10 @@ METALLB_L2_ADVERTISEMENT_PATH = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_METALLB, "l2advertisement.yaml"
 )
 
+# optional operators
+QE_APP_REGISTRY_SOURCE = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_OCP, "qe-app-registry-catalog-source.yaml"
+)
 
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")

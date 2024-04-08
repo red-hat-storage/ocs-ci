@@ -6,7 +6,7 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import (
-    METALLB_CATALOG_SOURCE_YAML,
+    QE_APP_REGISTRY_SOURCE,
     MARKETPLACE_NAMESPACE,
     METALLB_DEFAULT_NAMESPACE,
     METALLB_OPERATOR_GROUP_YAML,
@@ -96,7 +96,7 @@ class MetalLBInstaller:
         """
         logger.info("Creating catalog source for MetalLB")
         # replace latest version with specific version
-        catalog_source_data = templating.load_yaml(METALLB_CATALOG_SOURCE_YAML)
+        catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
 
         metallb_version = config.default_cluster_ctx.ENV_DATA.get("metallb_version")
         if not metallb_version:

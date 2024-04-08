@@ -1,8 +1,8 @@
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
-  generation: 1
   name: metallb-operator
   namespace: metallb-system
 spec:
-  upgradeStrategy: Default
+  targetNamespaces:
+  - metallb-system
