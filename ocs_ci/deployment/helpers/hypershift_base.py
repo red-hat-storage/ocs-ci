@@ -247,7 +247,11 @@ class HyperShiftBase:
 
         # If ocp_version is not provided, get the version from Hosting Platform
         if not ocp_version:
-            index_image = f"{constants.QUAY_REGISTRY_SVC}:{get_ocp_version()}-x86_64"
+            provider_version = get_ocp_version()
+            if "nightly" in provider_version:
+                index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+            else:
+                index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
         else:
             index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
