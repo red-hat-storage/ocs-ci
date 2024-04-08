@@ -226,6 +226,10 @@ deployment_4_15 = {
     ),
 }
 
+deployment_4_16 = {
+    "osd_size_dropdown": ("//*[@class='pf-c-select dropdown--full-width']", By.XPATH),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
@@ -1761,6 +1765,7 @@ locators = {
             **deployment_4_11,
             **deployment_4_12,
             **deployment_4_15,
+            **deployment_4_16,
         },
         "obc": obc,
         "pvc": {
