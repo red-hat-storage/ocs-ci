@@ -217,7 +217,8 @@ class HyperShiftBase:
 
         Args:
             name (str): Name of the cluster
-            nodepool_replicas (int): Number of nodes in the cluster
+            nodepool_replicas (int): Number of nodes in the cluster; if ENV_DATA['nodepool_replicas'] is set,
+            it will be used as a primary value
             memory (str): Memory size of the cluster, minimum 12Gi; will use from ENV_DATA if
             ENV_DATA['memory_per_hosted_cluster'] is set
             cpu_cores (str): CPU cores of the cluster, minimum 6; will use from ENV_DATA if
@@ -229,6 +230,10 @@ class HyperShiftBase:
             str: Name of the hosted cluster
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
+
+        nodepool_replicas_config = config.ENV_DATA.get("nodepool_replicas")
+        if nodepool_replicas_config:
+            nodepool_replicas = nodepool_replicas_config
 
         if name in get_hosted_cluster_names():
             logger.info(f"HyperShift hosted cluster {name} already exists")
