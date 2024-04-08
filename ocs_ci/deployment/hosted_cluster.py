@@ -36,6 +36,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.version import get_semantic_version
 
 logger = logging.getLogger(__name__)
 
@@ -285,10 +286,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         Returns:
             str: Name of the hosted cluster
         """
-        if (
-            not config.default_cluster_ctx.ENV_DATA["platform"].lower()
-            in HCI_PROVIDER_CLIENT_PLATFORMS
-        ):
+        if not config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
             raise ProviderModeNotFoundException()
 
         self.deploy_dependencies(
@@ -433,8 +431,11 @@ class HostedODF(HypershiftHostedOCP):
         """
         logger.info(f"Deploying ODF client on hosted OCP cluster '{self.name}'")
 
-        logger.info("Applying network policy")
-        self.apply_network_policy()
+        if get_semantic_version(
+            config.ENV_DATA.get("hosted_odf_version"), True
+        ) < get_semantic_version("4.16"):
+            logger.info("Applying network policy")
+            self.apply_network_policy()
 
         logger.info("Creating ODF client namespace")
         self.create_ns()
@@ -902,11 +903,21 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
             bool: True if storage class claim for CephFS exists, False otherwise
         """
-        ocp = OCP(
-            kind=constants.STORAGECLASSCLAIM,
-            namespace=self.namespace_client,
-            cluster_kubeconfig=self.cluster_kubeconfig,
-        )
+        if get_semantic_version(
+            config.ENV_DATA.get("hosted_odf_version"), True
+        ) < get_semantic_version("4.16"):
+            ocp = OCP(
+                kind=constants.STORAGECLASSCLAIM,
+                namespace=self.namespace_client,
+                cluster_kubeconfig=self.cluster_kubeconfig,
+            )
+        else:
+            ocp = OCP(
+                kind=constants.STORAGECLAIM,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                cluster_kubeconfig=self.cluster_kubeconfig,
+            )
+
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_exist,
             resource_name="ocs-storagecluster-cephfs",
@@ -953,11 +964,20 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
              bool: True if storage class claim for RBD exists, False otherwise
         """
-        ocp = OCP(
-            kind=constants.STORAGECLASSCLAIM,
-            namespace=self.namespace_client,
-            cluster_kubeconfig=self.cluster_kubeconfig,
-        )
+        if get_semantic_version(
+            config.ENV_DATA.get("hosted_odf_version"), True
+        ) < get_semantic_version("4.16"):
+            ocp = OCP(
+                kind=constants.STORAGECLASSCLAIM,
+                namespace=self.namespace_client,
+                cluster_kubeconfig=self.cluster_kubeconfig,
+            )
+        else:
+            ocp = OCP(
+                kind=constants.STORAGECLAIM,
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                cluster_kubeconfig=self.cluster_kubeconfig,
+            )
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_exist,
             resource_name="ocs-storagecluster-ceph-rbd",
