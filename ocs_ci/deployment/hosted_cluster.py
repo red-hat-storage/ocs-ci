@@ -65,7 +65,7 @@ class HostedClients(HyperShiftBase):
         # solution: disable MCE and install upstream Hypershift on the cluster
         if get_semantic_version(self.get_mce_version()) < get_semantic_version(
             "2.6"
-        ) and get_semantic_version(get_ocp_version()) >= get_semantic_version("4.16"):
+        ) and get_semantic_version(get_ocp_version()) > get_semantic_version("4.15"):
             self.disable_multicluster_engine()
             try:
                 self.install_hypershift_upstream_on_cluster()
