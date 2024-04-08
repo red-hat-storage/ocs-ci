@@ -67,7 +67,11 @@ class HostedClients(HyperShiftBase):
             "2.6"
         ) and get_semantic_version(get_ocp_version()) >= get_semantic_version("4.16"):
             self.disable_multicluster_engine()
-            self.install_hypershift_on_cluster()
+            try:
+                self.install_hypershift_upstream_on_cluster()
+            except CommandFailed as e:
+                logger.error(f"Failed to install Hypershift on the cluster: {e}")
+                return
 
         # stage 1 deploy multiple hosted OCP clusters
         cluster_names = self.deploy_hosted_ocp_clusters()

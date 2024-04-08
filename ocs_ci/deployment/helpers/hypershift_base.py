@@ -612,7 +612,7 @@ class HyperShiftBase:
             return
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
 
-    def install_hypershift_on_cluster(self):
+    def install_hypershift_upstream_on_cluster(self):
         """
         Install hypershift on the cluster
         Returns:
