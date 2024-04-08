@@ -557,3 +557,75 @@ class HyperShiftBase:
         ):
             if sample == "":
                 return True
+
+    def get_hypershift_csv_version(self):
+        """
+        Get hypershift operator version
+        Returns:
+            str: hypershift operator version
+        """
+        cmd = "oc get csv -n openshift-cnv -o jsonpath='{.items[0].spec.version}'"
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to get hypershift operator version\n{cmd_res.stderr}")
+            return
+
+        logger.info(f"Hypershift operator version: {cmd_res.stdout.decode('utf-8')}")
+        return cmd_res.stdout.decode("utf-8")
+
+    def get_mce_version(self):
+        """
+        Get multicluster engine version
+        Returns:
+            str: multicluster engine version
+        """
+        cmd = "oc get mce multiclusterengine -o jsonpath='{.status.currentVersion}'"
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to get multicluster engine version\n{cmd_res.stderr}")
+            return
+
+        logger.info(f"Multicluster engine version: {cmd_res.stdout.decode('utf-8')}")
+        return cmd_res.stdout.decode("utf-8")
+
+    def disable_multicluster_engine(self):
+        """
+        Disable multicluster engine on cluster
+        """
+        logger.info("Disabling multicluster engine")
+        cmd = (
+            "oc patch mce multiclusterengine "
+            '-p \'{"spec":{"overrides":{"components":['
+            '{"enabled":false, "name":"hypershift"},'
+            '{"enabled":false, "name":"hypershift-local-hosting"}, '
+            '{"enabled":false, "name":"local-cluster"}'
+            "]}}}' --type=merge"
+        )
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
+            return
+        logger.info(cmd_res.stdout.decode("utf-8").splitlines())
+
+    def install_hypershift_on_cluster(self):
+        """
+        Install hypershift on the cluster
+        Returns:
+            bool: True if hypershift is installed, False otherwise
+        """
+        logger.info("Installing hypershift on the cluster")
+        hypershift_image = f"{constants.HCP_REGISTRY}:{config.ENV_DATA['hcp_version']}"
+        cmd_res = exec_cmd(
+            f"{self.hypershift_binary_path} install "
+            f"--hypershift-image {hypershift_image} "
+            "--platform-monitoring=All "
+            "--enable-ci-debug-output "
+            "--wait-until-available"
+        )
+        if cmd_res.returncode != 0:
+            logger.error(
+                f"Failed to install hypershift on the cluster\n{cmd_res.stderr}"
+            )
+            return False
+        logger.info(cmd_res.stdout.decode("utf-8").splitlines())
+        return True

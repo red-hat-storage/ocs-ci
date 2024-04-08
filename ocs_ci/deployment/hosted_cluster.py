@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
+from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
@@ -56,6 +57,17 @@ class HostedClients(HyperShiftBase):
             )
 
     def do_deploy(self):
+
+        # if CNV, OCP version is unreleased we can not use it with released upstream MCE which is
+        # a component of Openshift Virtualization operator
+        # we will need to add more similar conditions with future releases
+        # in case when MCE does not support the CNV, OCP version
+        # solution: disable MCE and install upstream Hypershift on the cluster
+        if get_semantic_version(self.get_mce_version()) < get_semantic_version(
+            "2.6"
+        ) and get_semantic_version(get_ocp_version()) >= get_semantic_version("4.16"):
+            self.disable_multicluster_engine()
+            self.install_hypershift_on_cluster()
 
         # stage 1 deploy multiple hosted OCP clusters
         cluster_names = self.deploy_hosted_ocp_clusters()
