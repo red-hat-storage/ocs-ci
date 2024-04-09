@@ -37,7 +37,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
-from ocs_ci.utility.version import get_semantic_version
+from ocs_ci.utility.version import get_semantic_version, get_latest_release_version
 
 logger = logging.getLogger(__name__)
 
@@ -57,21 +57,48 @@ class HostedClients(HyperShiftBase):
             )
 
     def do_deploy(self):
+        """
+        Deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them
+        Perform the 7 stages of deployment:
+        1. Deploy multiple hosted OCP clusters
+        2. Verify OCP clusters are ready
+        3. Download kubeconfig files
+        4. Deploy ODF on all hosted clusters
+        5. Verify ODF client is installed on all hosted clusters
+        6. Setup storage client on all hosted clusters
+        7. Verify all hosted clusters are ready and print kubeconfig paths
 
-        # if CNV, OCP version is unreleased we can not use it with released upstream MCE which is
-        # a component of Openshift Virtualization operator
-        # we will need to add more similar conditions with future releases
-        # in case when MCE does not support the CNV, OCP version
-        # solution: disable MCE and install upstream Hypershift on the cluster
-        if get_semantic_version(self.get_mce_version()) < get_semantic_version(
-            "2.6"
-        ) and get_semantic_version(get_ocp_version()) > get_semantic_version("4.15"):
-            self.disable_multicluster_engine()
+        If the CNV, OCP versions are unreleased we can not use that with released upstream MCE which is
+        a component of Openshift Virtualization operator, MCE will be always behind failing the cluster creation.
+        solution: disable MCE and install upstream Hypershift on the cluster
+
+        ! Important !
+        due to n-1 logic we are assuming that desired CNV version <= OCP version
+        """
+
+        provider_ocp_version = str(
+            get_semantic_version(get_ocp_version(), only_major_minor=True)
+        )
+        latest_released_ocp_version = str(
+            get_semantic_version(get_latest_release_version(), only_major_minor=True)
+        )
+
+        # this block should be adjusted with version 4.17 and later;
+        # an MCE upstream release dates are not known
+        # update and rename variable 'mce_version_supports_ocp_4_16'
+        mce_version_supports_ocp_4_16 = "2.6"
+        if (
+            get_semantic_version(self.get_mce_version())
+            < get_semantic_version(mce_version_supports_ocp_4_16)
+            and provider_ocp_version > latest_released_ocp_version
+        ):
             try:
+                self.disable_multicluster_engine()
                 self.install_hypershift_upstream_on_cluster()
             except CommandFailed as e:
-                logger.error(f"Failed to install Hypershift on the cluster: {e}")
-                return
+                raise AssertionError(
+                    f"Failed to install Hypershift on the cluster: {e}"
+                )
 
         # stage 1 deploy multiple hosted OCP clusters
         cluster_names = self.deploy_hosted_ocp_clusters()
@@ -446,10 +473,17 @@ class HostedODF(HypershiftHostedOCP):
         Deploy ODF client on hosted OCP cluster
         """
         logger.info(f"Deploying ODF client on hosted OCP cluster '{self.name}'")
+        hosted_odf_version = str(
+            get_semantic_version(
+                config.ENV_DATA.get("hosted_odf_version"), only_major_minor=True
+            )
+        )
+        no_network_policy_version = str(
+            get_semantic_version("4.16", only_major_minor=True)
+        )
 
-        if get_semantic_version(
-            config.ENV_DATA.get("hosted_odf_version"), True
-        ) < get_semantic_version("4.16"):
+        # compare strings but not Version objects, 4.16.0-69 is always less than 4.16, even with 'only_major_minor=True'
+        if hosted_odf_version < no_network_policy_version:
             logger.info("Applying network policy")
             self.apply_network_policy()
 
