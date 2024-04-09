@@ -306,6 +306,7 @@ higher priority).
     * `<cluster path>` - path to the cluster directory to store credentials files, such as kubeconfig
 * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
 * `memory_per_hosted_cluster` - amount of memory per hosted cluster
+* `nodepool_replicas` - number of replicas of nodepool for each cluster
 * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
