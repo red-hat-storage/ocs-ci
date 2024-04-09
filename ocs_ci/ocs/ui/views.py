@@ -1372,7 +1372,10 @@ validation_4_9 = {
         "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
         By.CSS_SELECTOR,
     ),
-    "storagesystems": (".pf-c-breadcrumb__link", By.CSS_SELECTOR),
+    "storagesystems": (
+        ".pf-c-breadcrumb__link, .pf-v5-c-breadcrumb__link",
+        By.CSS_SELECTOR,
+    ),
     "console_plugin_option": (
         ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin'], "
         "button[data-test='edit-console-plugin']",
