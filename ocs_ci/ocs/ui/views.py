@@ -1374,7 +1374,8 @@ validation_4_9 = {
     ),
     "storagesystems": (".pf-c-breadcrumb__link", By.CSS_SELECTOR),
     "console_plugin_option": (
-        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin']",
+        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin'], "
+        "button[data-test='edit-console-plugin']",
         By.CSS_SELECTOR,
     ),
     "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
