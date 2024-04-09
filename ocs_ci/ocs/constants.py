@@ -2223,6 +2223,7 @@ SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
 )
 SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
+SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
 
 # Multicluster related
 

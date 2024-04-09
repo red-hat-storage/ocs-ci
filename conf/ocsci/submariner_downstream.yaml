@@ -1,2 +1,3 @@
 ENV_DATA:
   submariner_source: "downstream"
+  subctl_version: "subctl-rhel8:v0.16"

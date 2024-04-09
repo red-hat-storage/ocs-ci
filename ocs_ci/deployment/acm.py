@@ -157,6 +157,27 @@ class Submariner(object):
                 os.path.expanduser("~/.local/bin/subctl"),
                 os.path.join(config.RUN["bin_dir"], "subctl"),
             )
+        elif self.source == "downstream":
+            self.download_downstream_binary
+
+    def download_downstream_binary(self):
+        subctl_ver = config.ENV_DATA["subctl_version"]
+        cmd = (
+            f"oc image {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+            f'--path="/dist/{subctl_ver}*-linux-amd64.tar.xz":/tmp --confirm'
+        )
+        run_cmd(cmd)
+        decompress = f"tar -C /tmp/ -xf /tmp/{subctl_ver}*--linux-amd64.tar.xz"
+        run_cmd(decompress)
+        target_dir = os.path.expanduser("~/.local/bin/subctl")
+        install_cmd = (
+            f"install -m744 /tmp/{subctl_ver}*/{subctl_ver}*-linux-amd64 {target_dir} "
+        )
+        run_cmd(install_cmd)
+        shutil.copyfile(
+            os.path.expanduser(f"{target_dir}"),
+            os.path.join(config.RUN["bin_dir"], "subctl"),
+        )
 
     def submariner_configure_upstream(self):
         """
