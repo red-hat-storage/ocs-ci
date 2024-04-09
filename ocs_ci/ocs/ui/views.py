@@ -1410,7 +1410,8 @@ validation_4_9 = {
     "system-capacity": ("//h2[normalize-space()='System Capacity']", By.XPATH),
     "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
     "storagesystem-status-card": (
-        ".pf-c-button.pf-m-link.pf-m-inline.co-dashboard-card__button-link.co-status-card__popup",
+        ".pf-c-button.pf-m-link.pf-m-inline.co-dashboard-card__button-link.co-status-card__popup, "
+        "button[data-test='health-popover-link']",
         By.CSS_SELECTOR,
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
@@ -1431,7 +1432,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "storagecluster-blockpool-details-compress-status": (
-        "article[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
+        "[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
         By.CSS_SELECTOR,
     ),
     "performance-card": (
@@ -1482,7 +1483,7 @@ validation_4_10 = {
     ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
     "storagesystem-status-card": (
-        ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup",
+        ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup, button[data-test='health-popover-link']",
         By.CSS_SELECTOR,
     ),
     "storage-system-health-card-hyperlink": (
