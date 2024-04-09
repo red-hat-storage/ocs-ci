@@ -295,7 +295,7 @@ class HyperShiftBase:
         Returns:
             bool: True if hosted OCP cluster is verified, False otherwise
         """
-        timeout_pods_wait_min = 10
+        timeout_pods_wait_min = 20
         timeout_hosted_cluster_completed_min = 20
         timeout_worker_nodes_ready_min = 20
 

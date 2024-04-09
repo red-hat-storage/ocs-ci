@@ -283,7 +283,7 @@ class CNVInstaller(object):
                 logger.warning("Not all nodes are in 'Ready' state")
                 return False
 
-        if wait_for_pods_to_be_running(namespace=self.namespace):
+        if wait_for_pods_to_be_running(namespace=self.namespace, timeout=600):
             logger.info("All CNV pods are running")
         else:
             if raise_exception:

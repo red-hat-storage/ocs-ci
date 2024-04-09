@@ -27,7 +27,6 @@ from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
-    get_selector_for_ocs_operator,
 )
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
@@ -916,8 +915,8 @@ class HostedODF(HypershiftHostedOCP):
 
         default_channel = PackageManifest(
             resource_name=constants.OCS_CLIENT_OPERATOR,
-            selector=get_selector_for_ocs_operator(),
             cluster_kubeconfig=self.cluster_kubeconfig,
+            namespace=constants.MARKETPLACE_NAMESPACE,
         ).get_default_channel()
 
         subscription_data["spec"]["channel"] = default_channel
