@@ -75,6 +75,7 @@ TEMPLATE_CNV_VM_STANDALONE_PVC_DIR = os.path.join(
     TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm-standalone-pvc"
 )
 DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
+BIN_DIR = os.path.join(TOP_DIR, "bin")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
     ROOK_REPO_DIR, "cluster", "examples", "kubernetes", "ceph"
@@ -1635,7 +1636,7 @@ RGW_ROUTE_EXTERNAL_MODE = "ocs-external-storagecluster-cephobjectstore"
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
-CLI_TOOL_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
+CLI_TOOL_LOCAL_PATH = os.path.join(BIN_DIR, "odf-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
