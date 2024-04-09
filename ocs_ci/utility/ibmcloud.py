@@ -49,6 +49,33 @@ def login():
     config.RUN["ibmcloud_last_login"] = time.time()
 
 
+def set_region():
+    """
+    Sets the cluster region to ENV_DATA
+    """
+    region = get_region(config.ENV_DATA["cluster_path"])
+    logger.info(f"cluster region is {region}")
+    logger.info(f"updating region {region} to ENV_DATA ")
+    config.ENV_DATA["region"] = region
+
+
+def get_region(cluster_path):
+    """
+    Get region from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: region where cluster is deployed
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["ibmcloud"]["region"]
+
+
 def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
     Wrapper function for `run_cmd` which if needed will perform IBM Cloud login
