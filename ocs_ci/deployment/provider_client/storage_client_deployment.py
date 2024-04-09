@@ -40,6 +40,10 @@ from ocs_ci.helpers.helpers import (
     check_phase_of_rados_namespace,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.helpers.managed_services import (
+    verify_storageclient,
+    verify_storageclient_storageclass_claims,
+)
 
 
 log = logging.getLogger(__name__)
@@ -224,7 +228,9 @@ class StorageClientDeployment(object):
             log.info(
                 f"Sleeping for 30 seconds after {self.ocs_client_operator} created"
             )
-            # Validate storageclaims created
+
+            # Validate storageclaims are Ready and associated storageclasses are created
+            verify_storageclient()
 
             # Validate cephblockpool created
             assert verify_block_pool_exists(
@@ -574,11 +580,4 @@ class StorageClientDeployment(object):
                     f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}"
                 )
                 time.sleep(30)
-                storage_class_classes = get_all_storageclass_names()
-                for storage_class in self.storage_class_claims:
-                    assert (
-                        storage_class in storage_class_classes
-                    ), "Storage classes ae not created as expected"
-
-            else:
-                log.error("storageclassclaims are not created")
+                verify_storageclient_storageclass_claims(resource_name)

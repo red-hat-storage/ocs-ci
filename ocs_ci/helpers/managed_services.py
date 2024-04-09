@@ -28,6 +28,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.utility.utils import convert_device_size, TimeoutSampler
 from ocs_ci.utility.aws import AWS
 import ocs_ci.ocs.cluster
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -253,6 +254,7 @@ def verify_storageclient(
         verify_sc (bool): True to verify the storageclassclaims and storageclasses associated with the storageclient.
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     storageclient_obj = OCP(
         kind=constants.STORAGECLIENT,
         namespace=namespace or config.ENV_DATA["cluster_namespace"],
@@ -263,13 +265,20 @@ def verify_storageclient(
         else storageclient_obj.get()["items"][0]
     )
     storageclient_name = storageclient["metadata"]["name"]
-    provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
-    endpoint_actual = get_storage_provider_endpoint(provider_name)
-    assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
-        f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
-        f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
-        f"Value in the provider cluster {provider_name} is {endpoint_actual}"
-    )
+
+    if ocs_version >= version.VERSION_4_16:
+        assert (
+            storageclient["spec"]["storageProviderEndpoint"]
+            == "ocs-provider-server:50051"
+        )
+    else:
+        provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
+        endpoint_actual = get_storage_provider_endpoint(provider_name)
+        assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
+            f"The value of storageProviderEndpoint is not correct in storageclient {storageclient['metadata']['name']}."
+            f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
+            f"Value in the provider cluster {provider_name} is {endpoint_actual}"
+        )
     log.info(
         f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
     )
@@ -313,9 +322,16 @@ def get_all_storageclassclaims():
          List: OCS objects of kind Storageclassclaim
 
     """
-    sc_claim_obj = OCP(
-        kind=constants.STORAGECLASSCLAIM, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_16:
+        sc_claim_obj = OCP(
+            kind=constants.STORAGECLAIM, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+    else:
+        sc_claim_obj = OCP(
+            kind=constants.STORAGECLASSCLAIM,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
     sc_claims_data = sc_claim_obj.get()["items"]
     return [OCS(**claim_data) for claim_data in sc_claims_data]
 
