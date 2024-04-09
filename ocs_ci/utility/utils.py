@@ -4871,3 +4871,21 @@ def get_architecture_host():
 
     """
     return os.uname().machine
+
+
+def get_latest_release_version():
+    """
+    Get the latest release version from the release page
+
+    Returns:
+        str: The latest release version
+
+    """
+    cmd = (
+        "curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/release.txt | "
+        "awk '/^Name:/ {print $2}'"
+    )
+    try:
+        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+    except CommandFailed:
+        return

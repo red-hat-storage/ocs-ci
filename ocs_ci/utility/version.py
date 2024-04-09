@@ -8,8 +8,7 @@ from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.exceptions import WrongVersionExpression, CommandFailed
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.exceptions import WrongVersionExpression
 
 
 def get_semantic_version(
@@ -153,21 +152,3 @@ def compare_versions(expression):
         )
     v1, op, v2 = m.groups()
     return eval(f"get_semantic_version(v1, True){op}get_semantic_version(v2, True)")
-
-
-def get_latest_release_version():
-    """
-    Get the latest release version from the release page
-
-    Returns:
-        str: The latest release version
-
-    """
-    cmd = (
-        "curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/release.txt | "
-        "awk '/^Name:/ {print $2}'"
-    )
-    try:
-        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
-    except CommandFailed:
-        return

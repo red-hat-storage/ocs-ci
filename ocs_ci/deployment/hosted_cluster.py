@@ -36,8 +36,8 @@ from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
-from ocs_ci.utility.version import get_semantic_version, get_latest_release_version
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_latest_release_version
+from ocs_ci.utility.version import get_semantic_version
 
 logger = logging.getLogger(__name__)
 
