@@ -156,6 +156,11 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
+
+        if self.check_element_text("An error"):
+            logger.info("Refresh storage system page")
+            self.refresh_page()
+
         if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
         elif config.DEPLOYMENT.get("local_storage"):
