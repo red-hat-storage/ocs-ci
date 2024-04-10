@@ -30,6 +30,7 @@ from ocs_ci.ocs.exceptions import (
     ThinPoolUtilityWrong,
     TimeoutExpiredError,
     ResourceWrongStatusException,
+    CephHealthException,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -2385,20 +2386,23 @@ class CephClusterExternal(CephCluster):
     """
 
     def __init__(self):
-        self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
-        self.CEPHCLUSTER = ocp.OCP(
-            kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
-        )
+        if config.DEPLOYMENT.get("multi_storagecluster"):
+            namespace = constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
+        else:
+            namespace = config.ENV_DATA["cluster_namespace"]
+        self.POD = ocp.OCP(kind="Pod", namespace=namespace)
+        self.CEPHCLUSTER = ocp.OCP(kind="CephCluster", namespace=namespace)
 
         self.wait_for_cluster_cr()
         self._cluster_name = self.cluster_resource.get("metadata").get("name")
         self._namespace = self.cluster_resource.get("metadata").get("namespace")
         self.cluster = ocs.OCS(**self.cluster_resource)
-        # Decrease chance that we will hit issue:
-        # https://github.com/red-hat-storage/ocs-ci/issues/5186
-        logger.info("Sleep for 60 seconds before verifying MCG")
-        time.sleep(60)
-        self.wait_for_nooba_cr()
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            # Decrease chance that we will hit issue:
+            # https://github.com/red-hat-storage/ocs-ci/issues/5186
+            logger.info("Sleep for 60 seconds before verifying MCG")
+            time.sleep(60)
+            self.wait_for_nooba_cr()
 
     @property
     def cluster_name(self):
@@ -2431,9 +2435,9 @@ class CephClusterExternal(CephCluster):
         sample = TimeoutSampler(timeout=timeout, sleep=3, func=self.is_health_ok)
         if not sample.wait_for_func_status(result=True):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
-
-        self.wait_for_noobaa_health_ok()
-        self.validate_pvc()
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            self.wait_for_noobaa_health_ok()
+            self.validate_pvc()
 
     def validate_pvc(self):
         """
@@ -3268,3 +3272,45 @@ def client_clusters_health_check():
         client_cluster_health_check()
 
     logger.info("The client clusters health check passed successfully")
+
+
+def check_cephcluster_status(
+    desired_phase="Connected",
+    desired_health="HEALTH_OK",
+    name=constants.EXTERNAL_CEPHCLUSTER_NAME,
+    namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
+):
+    """
+    Check cephcluster health and phase.
+
+    Args:
+        desired_phase (string): The cephcluster desired phase.
+        desired_health (string): The cephcluster desired health.
+        name (string): name of the cephcluster.
+        namespace (string): namespace of the cephcluster.
+
+    Returns:
+        bool: True incase cluster is healthy and connected.
+
+    Raises:
+        CephHealthException incase phase or health are not as expected.
+
+    """
+    cephcluster = OCP(
+        kind=constants.CEPH_CLUSTER, resource_name=name, namespace=namespace
+    )
+    cc_resource = cephcluster.get()
+    if (
+        cc_resource["status"]["phase"] == desired_phase
+        and cc_resource["status"]["ceph"]["health"] == desired_health
+    ):
+        logger.info(
+            f"Cephcluster health is {desired_health} and phase is {desired_phase}"
+        )
+        return True
+    else:
+        logger.warning(
+            f'Cephcluster not healthy - phase is {cc_resource["status"]["phase"]} and health is'
+            f' {cc_resource["status"]["ceph"]["health"]}'
+        )
+        raise CephHealthException()

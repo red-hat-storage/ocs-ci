@@ -144,6 +144,7 @@ anywhere else.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
 * `sts_enabled` - Enable STS deployment functionality.
+* `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
 
 #### REPORTING
 
@@ -177,8 +178,10 @@ higher priority).
 
 * `cluster_name` - Defaults to null, is set by the --cluster-name CLI argument
 * `storage_cluster_name` - OCS storage cluster name
+* `external_storage_cluster_name` - External storagecluster name
 * `storage_device_sets_name` - OCS storage device sets name
 * `cluster_namespace` - Namespace where OCS pods are created
+* `external_storage_cluster_namespace` - Namespace for external storageSystem incase multi-storagecluster
 * `local_storage_namespace` - Namespace where local storage operator pods are created
 * `monitoring_enabled` - For testing OCS monitoring based on Prometheus (Default: false)
 * `persistent-monitoring` - Change monitoring backend to OCS (Default: true)

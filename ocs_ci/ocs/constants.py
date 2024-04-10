@@ -190,6 +190,7 @@ MACHINEHEALTHCHECK = "machinehealthcheck"
 STORAGECLIENT = "StorageClient"
 MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
+EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
@@ -225,6 +226,7 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
+OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
 MANAGED_FUSION_NAMESPACE = "managed-fusion"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_API_CLUSTER_OPERATOR = "kube-apiserver"
@@ -740,6 +742,14 @@ STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.ya
 
 STORAGE_SYSTEM_ODF_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf.yaml"
+)
+STORAGE_SYSTEM_ODF_EXTERNAL = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf_external.yaml"
+)
+
+
+MULTI_STORAGECLUSTER_EXTERNAL_NAMESPACE = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multi-storagecluster-external-namespace.yaml"
 )
 
 EXTERNAL_STORAGE_CLUSTER_YAML = os.path.join(

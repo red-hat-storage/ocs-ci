@@ -1,0 +1,9 @@
+# config file enable multi-storagecluster deployment which install internal and external cluster in the same cluster
+DEPLOYMENT:
+  multi_storagecluster: True
+
+ENV_DATA:
+  storage_cluster_name: 'ocs-storagecluster'
+  external_storage_cluster_name: 'ocs-external-storagecluster'
+  external_storage_cluster_namespace: 'openshift-storage-extended'
+
