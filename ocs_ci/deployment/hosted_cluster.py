@@ -353,13 +353,20 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         )
 
         if provider_ocp_version > latest_released_ocp_version:
-            try:
-                self.disable_multicluster_engine()
-                self.install_hypershift_upstream_on_cluster()
-            except CommandFailed as e:
-                raise AssertionError(
-                    f"Failed to install Hypershift on the cluster: {e}"
-                )
+            if not self.hypershift_upstream_installed():
+                try:
+                    self.disable_multicluster_engine()
+                    # avoid timelapse error "
+                    # Error: [serviceaccounts "operator" is forbidden: unable to create new content"
+                    logger.info(
+                        "Sleeping for 5 minutes after disable_multicluster_engine()"
+                    )
+                    time.sleep(5 * 60)
+                    self.install_hypershift_upstream_on_cluster()
+                except CommandFailed as e:
+                    raise AssertionError(
+                        f"Failed to install Hypershift on the cluster: {e}"
+                    )
 
 
 class HostedODF(HypershiftHostedOCP):

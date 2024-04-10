@@ -593,6 +593,20 @@ class HyperShiftBase:
         logger.info(f"Multicluster engine version: {cmd_res.stdout.decode('utf-8')}")
         return cmd_res.stdout.decode("utf-8")
 
+    def hypershift_upstream_installed(self):
+        """
+        Check if hypershift is installed on the cluster
+        Returns:
+            bool: True if hypershift is installed, False otherwise
+        """
+        cmd = "oc get deployments -n hypershift | awk 'NR>1 {print \"true\"; exit}' "
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to get hypershift operator version\n{cmd_res.stderr}")
+            return False
+
+        return cmd_res.stdout.decode("utf-8").strip() == "true"
+
     def install_hypershift_upstream_on_cluster(self):
         """
         Install hypershift on the cluster
