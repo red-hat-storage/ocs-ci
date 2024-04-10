@@ -29,22 +29,51 @@
 # directory at the root of the repository and any of its
 # subdirectories.
 #/build/logs/ @doctocat
-/tests/disaster-recovery/regional-dr/ @red-hat-storage/turquoise-squad
+
+# Turquoise-squad
+/tests/functional/disaster-recovery/ @red-hat-storage/turquoise-squad
+
+# Aqua-squad
 /tests/lvmo/ @red-hat-storage/aqua-squad
-/tests/manage/z_cluster/ @red-hat-storage/brown-squad
-/tests/manage/pv_services/ @red-hat-storage/green-squad
-/tests/manage/storageclass/ @red-hat-storage/green-squad
-/tests/manage/monitoring/ @red-hat-storage/blue-squad
-/tests/manage/mcg/ @red-hat-storage/red-squad
-/tests/manage/rgw/ @red-hat-storage/red-squad
-/tests/ecosystem/upgrade/ @red-hat-storage/purple-squad
-/tests/e2e/flowtest/ @red-hat-storage/magenta-squad
-/tests/e2e/lifecycle/ @red-hat-storage/magenta-squad
-/tests/e2e/workloads/ @red-hat-storage/magenta-squad
-/tests/e2e/performance/ @red-hat-storage/grey-squad
-/tests/e2e/scale/ @red-hat-storage/orange-squad
-/tests/encryption @red-hat-storage/green-squad
-/tests/ui/ @red-hat-storage/black-squad
+
+# Brown-squad
+/tests/cross_functional/resilience/ @red-hat-storage/brown-squad
+/tests/functional/nfs_feature/ @red-hat-storage/brown-squad
+/tests/functional/odf-cli/ @red-hat-storage/brown-squad
+/tests/functional/pod_and_daemons/ @red-hat-storage/brown-squad
+/tests/functional/z_cluster/ @red-hat-storage/brown-squad
+
+# Green-squad
+/tests/functional/pv/pv_services/ @red-hat-storage/green-squad
+/tests/functional/storageclass/ @red-hat-storage/green-squad
+/tests/functional/encryption/ @red-hat-storage/green-squad
+
+# Blue-squad
+/tests/functional/monitoring/ @red-hat-storage/blue-squad
+
+# Red-squad
+/tests/functional/object/mcg/  @red-hat-storage/red-squad
+/tests/functional/object/rgw/  @red-hat-storage/red-squad
+
+# Purple-squad
+/tests/functional/upgrade/ @red-hat-storage/purple-squad
+
+# Magenta-squad
+/tests/functional/workloads/ @red-hat-storage/magenta-squad
+/tests/cross_functional/flowtest/ @red-hat-storage/magenta-squad
+/tests/cross_functional/kcs/ @red-hat-storage/magenta-squad
+/tests/cross_functional/longevity/ @red-hat-storage/magenta-squad
+/tests/cross_functional/system_test/ @red-hat-storage/magenta-squad
+
+# Grey-squad
+/tests/cross_functional/performance/ @red-hat-storage/grey-squad
+
+# Orange-squad
+/tests/cross_functional/scale/ @red-hat-storage/orange-squad
+
+# Black-squad
+/tests/functional/ui/ @red-hat-storage/black-squad
+/tests/cross_functional/ui/ @red-hat-storage/black-squad
 /ocs_ci/ocs/ui/ @red-hat-storage/black-squad
 
 # The `docs/*` pattern will match files like
