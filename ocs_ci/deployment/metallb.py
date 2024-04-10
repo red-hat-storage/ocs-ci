@@ -265,6 +265,24 @@ class MetalLBInstaller:
             resource_name="metallb",
         )
 
+    def metallb_kind_available(self):
+        """
+        Check if MetalLB Kind is available
+        This method is a hack to avoid 'Error is error: the server doesn't have a resource type "MetalLB"' or time.sleep
+
+        Returns:
+            bool: True if MetalLB Kind is available, False otherwise
+        """
+        return bool(
+            len(
+                (
+                    exec_cmd("oc api-resources | grep MetalLB", shell=True)
+                    .stdout.decode("utf-8")
+                    .strip()
+                )
+            )
+        )
+
     def create_metallb_instance(self):
         """
         Create MetalLB instance
@@ -275,6 +293,17 @@ class MetalLBInstaller:
         if self.metallb_instance_created():
             logger.info("MetalLB instance already exists")
             return
+
+        # hack to avoid Error is error: the server doesn't have a resource type "MetalLB"
+        # that appears even after csv is installed and operator pods are running
+        for sample in TimeoutSampler(
+            timeout=10 * 60,
+            sleep=15,
+            func=self.metallb_kind_available,
+        ):
+            if sample:
+                logger.info("MetalLB api is available")
+                break
 
         logger.info("Creating MetalLB instance")
         metallb_inst_data = templating.load_yaml(constants.METALLB_INSTANCE_YAML)
