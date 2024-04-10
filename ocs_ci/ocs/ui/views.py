@@ -1305,6 +1305,15 @@ validation = {
     ),
     "req_capacity_dropdown_namespace_input": ("search-bar", By.ID),
     "req_capacity_dropdown_namespace_input_select": ("//li[@id='{}-link']", By.XPATH),
+    "developer_dropdown": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_administrator": (
+        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator'] | "
+        "//a[@class='pf-m-icon pf-v5-c-dropdown__menu-item']//h2[normalize-space()='Administrator']",
+        By.XPATH,
+    ),
 }
 
 validation_4_7 = {
@@ -1463,14 +1472,6 @@ validation_4_9 = {
     ),
     "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
-    "developer_dropdown": (
-        'button[data-test-id="perspective-switcher-toggle"]',
-        By.CSS_SELECTOR,
-    ),
-    "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
-        By.XPATH,
-    ),
 }
 
 validation_4_10 = {
@@ -1490,14 +1491,6 @@ validation_4_10 = {
     ),
     "storage-system-health-card-hyperlink": (
         "//div[@class='odf-storageSystemPopup__item--margin']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
-        By.XPATH,
-    ),
-    "developer_dropdown": (
-        'button[data-test-id="perspective-switcher-toggle"]',
-        By.CSS_SELECTOR,
-    ),
-    "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
         By.XPATH,
     ),
 }
@@ -1520,14 +1513,6 @@ validation_4_11 = {
     "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
     "bucketclass-breadcrumb-odf-4-10": (
         "//a[normalize-space()='noobaa.io~v1alpha1~BucketClass']",
-        By.XPATH,
-    ),
-    "developer_dropdown": (
-        'button[data-test-id="perspective-switcher-toggle"]',
-        By.CSS_SELECTOR,
-    ),
-    "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
         By.XPATH,
     ),
 }
