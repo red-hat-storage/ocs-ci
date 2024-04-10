@@ -31,11 +31,15 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
-from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility import templating
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_latest_release_version
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+    get_ocp_version,
+    get_latest_release_version,
+)
 from ocs_ci.utility.version import get_semantic_version
 
 logger = logging.getLogger(__name__)
@@ -74,22 +78,6 @@ class HostedClients(HyperShiftBase):
         ! Important !
         due to n-1 logic we are assuming that desired CNV version <= OCP version
         """
-
-        provider_ocp_version = str(
-            get_semantic_version(get_ocp_version(), only_major_minor=True)
-        )
-        latest_released_ocp_version = str(
-            get_semantic_version(get_latest_release_version(), only_major_minor=True)
-        )
-
-        if provider_ocp_version > latest_released_ocp_version:
-            try:
-                self.disable_multicluster_engine()
-                self.install_hypershift_upstream_on_cluster()
-            except CommandFailed as e:
-                raise AssertionError(
-                    f"Failed to install Hypershift on the cluster: {e}"
-                )
 
         # stage 1 deploy multiple hosted OCP clusters
         cluster_names = self.deploy_hosted_ocp_clusters()
@@ -356,6 +344,22 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             self.deploy_lb()
         if download_hcp_binary:
             self.update_hcp_binary()
+
+        provider_ocp_version = str(
+            get_semantic_version(get_ocp_version(), only_major_minor=True)
+        )
+        latest_released_ocp_version = str(
+            get_semantic_version(get_latest_release_version(), only_major_minor=True)
+        )
+
+        if provider_ocp_version > latest_released_ocp_version:
+            try:
+                self.disable_multicluster_engine()
+                self.install_hypershift_upstream_on_cluster()
+            except CommandFailed as e:
+                raise AssertionError(
+                    f"Failed to install Hypershift on the cluster: {e}"
+                )
 
 
 class HostedODF(HypershiftHostedOCP):

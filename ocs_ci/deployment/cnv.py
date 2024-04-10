@@ -23,7 +23,10 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import (
+    run_cmd,
+    exec_cmd,
+)
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -612,3 +615,22 @@ class CNVInstaller(object):
         self.enable_software_emulation()
         # Download and extract the virtctl binary to bin_dir
         self.download_and_extract_virtctl_binary()
+
+    def disable_multicluster_engine(self):
+        """
+        Disable multicluster engine on cluster
+        """
+        logger.info("Disabling multicluster engine")
+        cmd = (
+            "oc patch mce multiclusterengine "
+            '-p \'{"spec":{"overrides":{"components":['
+            '{"enabled":false, "name":"hypershift"},'
+            '{"enabled":false, "name":"hypershift-local-hosting"}, '
+            '{"enabled":false, "name":"local-cluster"}'
+            "]}}}' --type=merge"
+        )
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
+            return
+        logger.info(cmd_res.stdout.decode("utf-8").splitlines())
