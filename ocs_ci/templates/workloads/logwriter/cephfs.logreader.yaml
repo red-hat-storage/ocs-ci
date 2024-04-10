@@ -31,7 +31,7 @@ spec:
         node-role.kubernetes.io/worker: ""
       containers:
       - name: logreader
-        image: quay.io/mbukatov/logwriter:ocs-ci
+        image: eu.artifactory.swg-devops.com/sys-ocs-on-z-team-docker-local/logwriter:latest
         command:
         - /bin/bash
         - "-c"

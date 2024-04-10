@@ -6,7 +6,7 @@ metadata:
 spec:
   containers:
     - name: scale-cli
-      image: quay.io/ocsci/scale-cli:latest
+      image: quay.io/tuan_hoang1/scale-cli:latest
       # Override the default `aws` entrypoint in order to
       # allow the pod to run continuously and act as a relay
       command: ['/bin/sh']

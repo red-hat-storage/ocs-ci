@@ -26,7 +26,7 @@ spec:
             - sh
             - -c
             - echo Running simple app && sleep 18000
-          image: quay.io/ocsci/scale-cli:latest
+          image: quay.io/tuan_hoang1/scale-cli:latest
           imagePullPolicy: Always
           name: simple-app-container
           resources: { }

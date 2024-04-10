@@ -20,7 +20,7 @@ spec:
           claimName: tet-2
       containers:
       - name: fedora
-        image: quay.io/ocsci/fedora:fio
+        image: eu.artifactory.swg-devops.com/sys-ocs-on-z-team-docker-local/fedora:latest
         resources:
           limits:
             memory: "2048Mi"
