@@ -267,9 +267,9 @@ class TestSelinuxrelabel(E2ETest):
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
         # Leave pod for some time to run since file creation time is longer
-        waiting_time = 120
+        waiting_time = 240
         log.info(f"Waiting for {waiting_time} seconds")
-        time.sleep(120)
+        time.sleep(waiting_time)
 
         # Get the md5sum of some random files
         random_files = self.get_random_files(self.pod_obj)
@@ -302,6 +302,7 @@ class TestSelinuxrelabel(E2ETest):
         # Delete pod so that fix will be applied for new pod
         self.pod_obj = self.get_app_pod_obj()
         self.pod_obj.delete(wait=True)
+        time.sleep(waiting_time)
         self.pod_obj = self.get_app_pod_obj()
         assert wait_for_pods_to_be_running(
             pod_names=[self.pod_obj.name], timeout=600, sleep=15
