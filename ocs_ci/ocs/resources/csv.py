@@ -47,6 +47,26 @@ def get_csvs_start_with_prefix(csv_prefix, namespace):
     return [csv for csv in csv_list if csv_prefix in csv["metadata"]["name"]]
 
 
+def get_csv_name_start_with_prefix(csv_prefix, namespace):
+    """
+    Get CSV name start with prefix
+
+    Args:
+        csv_prefix (str): prefix from name
+        namespace (str): namespace of CSV
+
+    Returns:
+        str: CSV name
+
+    """
+    csvs = CSV(namespace=namespace)
+    csv_list = csvs.get()["items"]
+    for csv in csv_list:
+        csv_name = csv["metadata"]["name"]
+        if csv_prefix in csv_name:
+            return csv_name
+
+
 def check_all_csvs_are_succeeded(namespace, timeout=600):
     """
     Check if all CSVs in namespace are in succeeded phase

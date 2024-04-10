@@ -20,11 +20,11 @@ from ocs_ci.ocs.exceptions import (
     ExternalClusterNodeRoleNotFound,
 )
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
 from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
     get_selector_for_ocs_operator,
 )
-from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.utility import version, ssl_certs
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.utils import (
@@ -439,20 +439,31 @@ def generate_exporter_script():
     """
     logger.info("generating external exporter script")
     # generate exporter script through packagemanifest
-    ocs_operator_name = defaults.OCS_OPERATOR_NAME
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    operator_name = defaults.ROOK_CEPH_OPERATOR
+
+    if ocs_version <= version.VERSION_4_15:
+        operator_name = defaults.OCS_OPERATOR_NAME
     operator_selector = get_selector_for_ocs_operator()
     package_manifest = PackageManifest(
-        resource_name=ocs_operator_name,
+        resource_name=operator_name,
         selector=operator_selector,
     )
     ocs_operator_data = package_manifest.get()
-    csv = get_ocs_csv()
+    csv_name = get_csv_name_start_with_prefix(
+        csv_prefix=operator_name, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     for each_csv in ocs_operator_data["status"]["channels"]:
-        if each_csv["currentCSV"] == csv.resource_name:
+        if each_csv["currentCSV"] == csv_name:
             logger.info(f"exporter script for csv: {each_csv['currentCSV']}")
-            encoded_script = each_csv["currentCSVDesc"]["annotations"][
-                "external.features.ocs.openshift.io/export-script"
-            ]
+            if ocs_version >= version.VERSION_4_16:
+                encoded_script = each_csv["currentCSVDesc"]["annotations"][
+                    "externalClusterScript"
+                ]
+            else:
+                encoded_script = each_csv["currentCSVDesc"]["annotations"][
+                    "external.features.ocs.openshift.io/export-script"
+                ]
             break
 
     # decode the exporter script and write to file
