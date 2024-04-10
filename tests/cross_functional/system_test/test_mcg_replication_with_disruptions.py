@@ -296,7 +296,7 @@ class TestLogBasedReplicationWithDisruptions:
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
-            skip_any_features=["nsfs", "rgw kafka", "caching", "replication"],
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
 
         mockup_logger, source_bucket, target_bucket = aws_log_based_replication_setup()
@@ -371,9 +371,8 @@ class TestLogBasedReplicationWithDisruptions:
 
         # Remove replication policy and upload some objects to the bucket
         # make sure the replication itself doesn't take place
-        disable_replication = source_bucket.replication_policy
-        disable_replication["rules"] = []
-        update_replication_policy(source_bucket.name, dict())
+        source_bucket.replication_policy = ""
+        update_replication_policy(source_bucket.name, None)
 
         logger.info("Uploading test objects and waiting for replication to complete")
         mockup_logger.upload_test_objs_and_log(source_bucket.name)
