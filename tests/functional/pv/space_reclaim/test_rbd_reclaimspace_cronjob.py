@@ -304,9 +304,12 @@ class TestRbdSpaceReclaim(ManageTest):
 
         log.info("add reclaimspace.csiaddons.openshift.io/schedule label to PVC ")
         OCP(kind=constants.PVC, namespace=pvc_obj.project.namespace).annotate(
-            "reclaimspace.csiaddons.openshift.io/schedule=@midnight", pvc_obj.name
+            '"reclaimspace.csiaddons.openshift.io/schedule=@midnight"',
+            pvc_obj.name,
+            overwrite=False,
         )
 
+        log.info("Wait for 2 hrs")
         time.sleep(6000)
         pvc_to_chron_job_dict = self.wait_for_cronjobs(
             True, pvc_obj.project.namespace, 60
@@ -331,7 +334,9 @@ class TestRbdSpaceReclaim(ManageTest):
         ), "Reclaim space cron job does not exist, or schedule is not correct"
 
         OCP(kind=constants.PVC, namespace=pvc_obj.project.namespace).annotate(
-            "reclaimspace.csiaddons.openshift.io/schedule=*/1 * * * *", pvc_obj.name
+            '"reclaimspace.csiaddons.openshift.io/schedule=*/1 * * * *"',
+            pvc_obj.name,
+            overwrite=True,
         )
         expected_log = "delete and recreate reclaimspacecronjob"
         pod_name = get_pod_name_by_pattern(
