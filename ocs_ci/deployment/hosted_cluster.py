@@ -82,15 +82,7 @@ class HostedClients(HyperShiftBase):
             get_semantic_version(get_latest_release_version(), only_major_minor=True)
         )
 
-        # this block should be adjusted with version 4.17 and later;
-        # an MCE upstream release dates are not known
-        # update and rename variable 'mce_version_supports_ocp_4_16'
-        mce_version_supports_ocp_4_16 = "2.6"
-        if (
-            get_semantic_version(self.get_mce_version())
-            < get_semantic_version(mce_version_supports_ocp_4_16)
-            and provider_ocp_version > latest_released_ocp_version
-        ):
+        if provider_ocp_version > latest_released_ocp_version:
             try:
                 self.disable_multicluster_engine()
                 self.install_hypershift_upstream_on_cluster()
