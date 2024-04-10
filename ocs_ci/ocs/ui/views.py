@@ -1382,12 +1382,16 @@ validation_4_9 = {
         By.XPATH,
     ),
     "odf-performanceCardLink": (
-        "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
+        "td[class*='performanceCard--verticalAlign'] a",
         By.CSS_SELECTOR,
     ),
-    "storagesystems": (".pf-c-breadcrumb__link", By.CSS_SELECTOR),
+    "storagesystems": (
+        ".pf-c-breadcrumb__link, .pf-v5-c-breadcrumb__link",
+        By.CSS_SELECTOR,
+    ),
     "console_plugin_option": (
-        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin']",
+        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin'], "
+        "button[data-test='edit-console-plugin']",
         By.CSS_SELECTOR,
     ),
     "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
@@ -1422,7 +1426,8 @@ validation_4_9 = {
     "system-capacity": ("//h2[normalize-space()='System Capacity']", By.XPATH),
     "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
     "storagesystem-status-card": (
-        ".pf-c-button.pf-m-link.pf-m-inline.co-dashboard-card__button-link.co-status-card__popup",
+        ".pf-c-button.pf-m-link.pf-m-inline.co-dashboard-card__button-link.co-status-card__popup, "
+        "button[data-test='health-popover-link']",
         By.CSS_SELECTOR,
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
@@ -1443,7 +1448,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "storagecluster-blockpool-details-compress-status": (
-        "article[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
+        "[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
         By.CSS_SELECTOR,
     ),
     "performance-card": (
@@ -1486,7 +1491,7 @@ validation_4_10 = {
     ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
     "storagesystem-status-card": (
-        ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup",
+        ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup, button[data-test='health-popover-link']",
         By.CSS_SELECTOR,
     ),
     "storage-system-health-card-hyperlink": (
@@ -1538,6 +1543,8 @@ validation_4_13 = {
     ),
     "namespace-store-tab-active": (
         "//button[@class='pf-c-tabs__link' and @aria-selected='true']"
+        "//span[normalize-space()='Namespace Store'] | "
+        "//button[@class='pf-v5-c-tabs__link' and @aria-selected='true']"
         "//span[normalize-space()='Namespace Store']",
         By.XPATH,
     ),
