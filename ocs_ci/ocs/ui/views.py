@@ -1369,7 +1369,8 @@ validation_4_9 = {
         By.XPATH,
     ),
     "odf-performanceCardLink": (
-        "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
+        "td[class='pf-u-w-10 performanceCard--verticalAlign'] a, "
+        "td[class='pf-v5-c-table__td pf-v5-u-w-10 performanceCard--verticalAlign'] a",
         By.CSS_SELECTOR,
     ),
     "storagesystems": (
