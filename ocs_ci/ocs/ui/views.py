@@ -227,7 +227,10 @@ deployment_4_15 = {
 }
 
 deployment_4_16 = {
-    "osd_size_dropdown": ("//*[@class='pf-c-select dropdown--full-width']", By.XPATH),
+    "osd_size_dropdown": (
+        "//*[@class='pf-v5-c-select dropdown--full-width']",
+        By.XPATH,
+    ),
 }
 
 generic_locators = {
