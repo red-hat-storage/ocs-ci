@@ -58,6 +58,7 @@ from ocs_ci.ocs.exceptions import (
     CephToolBoxNotFoundException,
     NoRunningCephToolBoxException,
 )
+
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -2375,6 +2376,7 @@ def run_ceph_health_cmd(namespace):
 
     """
     # Import here to avoid circular loop
+
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
     try:
@@ -2385,6 +2387,54 @@ def run_ceph_health_cmd(namespace):
     return ct_pod.exec_ceph_cmd(
         ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
     )
+
+
+def ceph_health_multi_storagecluster_external_base():
+    """
+    Check ceph health for multi-storagecluster external implementation.
+
+    Returns:
+        bool: True if cluster health is ok.
+
+    Raises:
+        CephHealthException: Incase ceph health is not ok.
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.utility.connection import Connection
+    from ocs_ci.deployment.helpers.external_cluster_helpers import (
+        get_external_cluster_client,
+    )
+
+    host, user, password, ssh_key = get_external_cluster_client()
+    connection_to_cephcluster = Connection(
+        host=host, user=user, password=password, private_key=ssh_key
+    )
+    ceph_health_tuple = connection_to_cephcluster.exec_cmd("ceph health")
+    health = ceph_health_tuple[1]
+    if health.strip() == "HEALTH_OK":
+        log.info("Ceph external multi-storagecluster health is HEALTH_OK.")
+        return True
+    else:
+        raise CephHealthException(
+            f"Ceph cluster health for external multi-storagecluster is not OK. Health: {health}"
+        )
+
+
+def ceph_health_check_multi_storagecluster_external(tries=20, delay=30):
+    """
+    Check ceph health for multi-storagecluster external.
+
+    """
+    return retry(
+        (
+            CephHealthException,
+            CommandFailed,
+        ),
+        tries=tries,
+        delay=delay,
+        backoff=1,
+    )(ceph_health_multi_storagecluster_external_base)()
 
 
 def get_rook_repo(branch="master", to_checkout=None):
