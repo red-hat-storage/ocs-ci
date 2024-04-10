@@ -31,6 +31,10 @@
 #/build/logs/ @doctocat
 /tests/functional/disaster-recovery/ @red-hat-storage/turquoise-squad
 /tests/lvmo/ @red-hat-storage/aqua-squad
+/tests/cross_functional/resilience/ @red-hat-storage/brown-squad
+/tests/functional/nfs_feature/ @red-hat-storage/brown-squad
+/tests/functional/odf-cli/ @red-hat-storage/brown-squad
+/tests/functional/pod_and_daemons/ @red-hat-storage/brown-squad
 /tests/functional/z_cluster/ @red-hat-storage/brown-squad
 /tests/functional/pv/pv_services/ @red-hat-storage/green-squad
 /tests/functional/storageclass/ @red-hat-storage/green-squad
