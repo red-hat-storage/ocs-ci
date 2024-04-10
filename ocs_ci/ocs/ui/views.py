@@ -1027,7 +1027,7 @@ block_pool_4_12 = {
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool']",
+        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
         By.XPATH,
     ),
 }
