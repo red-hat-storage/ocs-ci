@@ -1555,6 +1555,8 @@ validation_4_13 = {
     ),
     "namespace-store-tab-active": (
         "//button[@class='pf-c-tabs__link' and @aria-selected='true']"
+        "//span[normalize-space()='Namespace Store'] | "
+        "//button[@class='pf-v5-c-tabs__link' and @aria-selected='true']"
         "//span[normalize-space()='Namespace Store']",
         By.XPATH,
     ),
