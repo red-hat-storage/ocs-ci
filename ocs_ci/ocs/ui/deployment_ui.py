@@ -158,7 +158,7 @@ class DeploymentUI(PageNavigator):
         )
 
         if self.check_element_text("An error"):
-            logger.info("Refresh storage system page")
+            logger.info("Refresh storage system page if error occurred")
             self.refresh_page()
 
         if config.ENV_DATA.get("mcg_only_deployment", False):
