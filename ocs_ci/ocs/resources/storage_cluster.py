@@ -73,7 +73,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler, convert_device_size
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
@@ -2682,17 +2682,35 @@ def get_storage_size():
         return storage
 
 
-def resize_osd(new_osd_size):
+def resize_osd(new_osd_size, check_size=True):
     """
     Resize the OSD(e.g., from 512 to 1024, 1024 to 2048, etc.)
 
     Args:
         new_osd_size (str): The new osd size(e.g, 512Gi, 1024Gi, 1Ti, 2Ti, etc.)
+        check_size (bool): Check that the given osd size is valid
 
     Returns:
         bool: True in case if changes are applied. False otherwise
 
+    Raises:
+        ValueError: In case the osd size is not valid(start with digits and follow by string)
+            or the new osd size is less than the current osd size
+
     """
+    if check_size:
+        pattern = r"^\d+[a-zA-Z]+$"
+        if not re.match(pattern, new_osd_size):
+            raise ValueError(f"The osd size '{new_osd_size}' is not valid")
+        new_osd_size_in_gb = convert_device_size(new_osd_size, "GB")
+        current_osd_size = get_storage_size()
+        current_osd_size_in_gb = convert_device_size(current_osd_size, "GB")
+        if new_osd_size_in_gb < current_osd_size_in_gb:
+            raise ValueError(
+                f"The new osd size {new_osd_size} is less than the "
+                f"current osd size {current_osd_size}"
+            )
+
     sc = get_storage_cluster()
     # Patch the OSD storage size
     path = "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources/requests/storage"

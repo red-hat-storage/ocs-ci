@@ -82,6 +82,16 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
         if old_osd_pods_count == osd_pods_count:
             break
 
+    logger.info("Verify that the new osd pod names are different than the old ones")
+    osd_pods = get_osd_pods()
+    new_name_set = {p.name for p in osd_pods}
+    old_name_set = {p.name for p in old_osd_pods}
+    if new_name_set.intersection(old_name_set):
+        raise ResourceWrongStatusException(
+            f"There are shared values between the new osd pod names and the old osd pod names. "
+            f"old osd pod names = {old_name_set}, new osd pod names = {new_name_set}"
+        )
+
     logger.info("Check that the PVCs are in a Bound state")
     ocp_pvc = OCP(kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"])
     ocp_pvc.wait_for_resource(
