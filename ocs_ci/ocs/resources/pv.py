@@ -146,19 +146,20 @@ def delete_released_pvs_in_sc(sc_name):
     return num_of_deleted_pvs
 
 
-def get_pv_size(pv_obj):
+def get_pv_size(pv_obj, convert_size=1024):
     """
-    Get the size of a pv object
+    Get the size of a pv object in GB
 
     Args:
         pv_obj (dict): A dictionary that represent the pv object
+        convert_size (int): set convert by 1024 or 1000
 
     Returns:
         int: The size of the pv object
 
     """
     storage_size = pv_obj.get("spec").get("capacity").get("storage")
-    return convert_device_size(storage_size, "GB")
+    return convert_device_size(storage_size, "GB", convert_size)
 
 
 def check_pvs_present_for_ocs_expansion(sc=constants.LOCALSTORAGE_SC):

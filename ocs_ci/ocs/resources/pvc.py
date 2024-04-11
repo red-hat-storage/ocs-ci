@@ -635,3 +635,21 @@ def scale_down_pods_and_remove_pvcs(sc_name):
 
             time.sleep(10)
             delete_pvcs([pvc_obj])
+
+
+def get_pvc_size(pvc_obj, convert_size=1024):
+    """
+    Returns the PVC size in GB
+
+    Args:
+        pvc_obj (ocs_ci.ocs.resources.ocs.OCS): The pvc object
+        convert_size (int): set convert by 1024 or 1000
+
+    Returns:
+        int: PVC size
+
+    """
+    unformatted_size = (
+        pvc_obj.data.get("spec").get("resources").get("requests").get("storage")
+    )
+    return convert_device_size(unformatted_size, "GB", convert_size)

@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_ceph_tools_pod,
 )
-from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs, get_pvc_size
 from ocs_ci.ocs.resources.pv import get_pv_size
 from ocs_ci.ocs.resources.storage_cluster import (
     get_storage_size,
@@ -143,13 +143,15 @@ def check_storage_size_is_reflected(expected_storage_size):
 
     """
     logger.info(f"The expected storage size is {expected_storage_size}")
-
     current_storage_size = get_storage_size()
     logger.info(f"The current storage size is {current_storage_size}")
+
+    expected_storage_size_in_gb = convert_device_size(expected_storage_size, "GB", 1024)
+    current_storage_size_in_gb = convert_device_size(current_storage_size, "GB", 1024)
     logger.info(
         "Check that the current storage size equal to the expected storage size"
     )
-    if get_storage_size() != expected_storage_size:
+    if current_storage_size_in_gb != expected_storage_size_in_gb:
         raise StorageSizeNotReflectedException(
             f"The current storage size {current_storage_size} is not equal "
             f"to the expected size {expected_storage_size}"
@@ -159,8 +161,7 @@ def check_storage_size_is_reflected(expected_storage_size):
         "Check that the PVC and PV sizes are equal to the expected storage size"
     )
     current_osd_pvcs = get_deviceset_pvcs()
-    expected_storage_size_in_gb = convert_device_size(expected_storage_size, "GB")
-    pvc_sizes = [pvc.size for pvc in current_osd_pvcs]
+    pvc_sizes = [get_pvc_size(pvc) for pvc in current_osd_pvcs]
     logger.info(f"PVC sizes = {pvc_sizes}")
     if not all([p_size == expected_storage_size_in_gb for p_size in pvc_sizes]):
         raise StorageSizeNotReflectedException(
