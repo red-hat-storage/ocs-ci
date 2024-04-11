@@ -1286,19 +1286,22 @@ validation = {
     "req_capacity_dropdown_selected": (
         "//div[@id='breakdown-card-title']/following-sibling::*//*[@class = 'pf-c-select__toggle-text'] | "
         "//div[@class='pf-v5-c-select ceph-capacity-breakdown-card-header__dropdown']"
-        "//*[@class = 'pf-v5-c-select__toggle-text']",
+        "//*[@class='pf-v5-c-select__toggle-text']",
         By.XPATH,
     ),
     "req_capacity_dropdown_btn_one": (
-        "//div[@class='pf-c-select ceph-capacity-breakdown-card-header__dropdown']",
+        "//div[@class='pf-c-select ceph-capacity-breakdown-card-header__dropdown'] | "
+        "//div[@class='pf-v5-c-select ceph-capacity-breakdown-card-header__dropdown']",
         By.XPATH,
     ),
     "req_capacity_dropdown_btn_two": (
-        "(//span[@class='pf-c-select__toggle-arrow'])[2]",
+        "(//span[@class='pf-c-select__toggle-arrow'])[2] | "
+        "(//span[@class='pf-v5-c-select__toggle-arrow'])[2]",
         By.XPATH,
     ),
     "req_capacity_dropdown_list_option": (
-        "//*[@class='pf-c-select__menu-item' and contains(text(), '{}')]",
+        "//*[@class='pf-c-select__menu-item' and contains(text(), '{}')] | "
+        "//*[@class='pf-v5-c-select__menu-item' and contains(text(), '{}')]",
         By.XPATH,
     ),
     "req_capacity_dropdown_namespace": (
