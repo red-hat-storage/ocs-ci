@@ -1300,8 +1300,7 @@ validation = {
         By.XPATH,
     ),
     "req_capacity_dropdown_list_option": (
-        "//*[@class='pf-c-select__menu-item' and contains(text(), '{}')] | "
-        "//*[@class='pf-v5-c-select__menu-item' and contains(text(), '{}')]",
+        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{}')]",
         By.XPATH,
     ),
     "req_capacity_dropdown_namespace": (
