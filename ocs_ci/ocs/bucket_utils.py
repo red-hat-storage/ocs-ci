@@ -1207,9 +1207,12 @@ def s3_get_object(s3_obj, bucketname, object_key, versionid=""):
         dict : Get object response
 
     """
-    return s3_obj.s3_client.get_object(
-        Bucket=bucketname, Key=object_key, VersionId=versionid
-    )
+    if versionid:
+        return s3_obj.s3_client.get_object(
+            Bucket=bucketname, Key=object_key, VersionId=versionid
+        )
+    else:
+        return s3_obj.s3_client.get_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_delete_object(s3_obj, bucketname, object_key, versionid=None):
@@ -1491,7 +1494,7 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
         object_key = pattern + "{}".format(i)
         obj_lst.append(object_key)
     command = (
-        f"for i in $(seq 0 {amount-1}); "
+        f"for i in $(seq 0 {amount - 1}); "
         f"do dd if=/dev/urandom of={file_dir}/{pattern}$i bs={bs} count=1 status=none; done"
     )
     io_pod.exec_sh_cmd_on_pod(command=command, sh="sh")
@@ -1952,7 +1955,6 @@ def write_random_test_objects_to_s3_path(
 def patch_replication_policy_to_bucket(
     bucket_name, rule_id, destination_bucket_name, prefix=""
 ):
-
     """
     Patches replication policy to a bucket
 
