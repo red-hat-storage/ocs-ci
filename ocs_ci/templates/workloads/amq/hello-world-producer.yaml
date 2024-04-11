@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: hello-world-producer
-        image: quay.io/ocsci/hello-world-producer:latest
+        image: eu.artifactory.swg-devops.com/sys-ocs-on-z-team-docker-local/strimzi-s390x/java-kafka-producer:latest
         env:
           - name: BOOTSTRAP_SERVERS
             value: my-cluster-kafka-bootstrap:9092

@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - name: my-container
-      image: eu.artifactory.swg-devops.com/sys-ocs-on-z-team-docker-local/nginx:fio
+      image: quay.io/ocsci/nginx:fio
       securityContext:
          capabilities: {}
       volumeDevices:

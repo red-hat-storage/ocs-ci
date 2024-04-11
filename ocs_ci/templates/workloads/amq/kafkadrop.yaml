@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: kafdrop
-          image: docker-eu.artifactory.swg-devops.com/sys-ocs-on-z-team-docker-local/obsidiandynamics-s390x/kafdrop:3.27.0
+          image: eu.artifactory.swg-devops.com/sys-ocs-on-z-team-docker-local/obsidiandynamics-s390x/kafdrop:3.27.0
           ports:
             - containerPort: 9000
           env:
