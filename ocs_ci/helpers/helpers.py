@@ -3170,7 +3170,7 @@ def get_snapshot_content_obj(snap_obj):
     return snapcontent_obj
 
 
-def wait_for_pv_delete(pv_objs):
+def wait_for_pv_delete(pv_objs, timeout=180):
     """
     Wait for PVs to delete. Delete PVs having ReclaimPolicy 'Retain'
 
@@ -3185,7 +3185,7 @@ def wait_for_pv_delete(pv_objs):
         ):
             wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
             pv_obj.delete()
-        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
 
 
 @retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
