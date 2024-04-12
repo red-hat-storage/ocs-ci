@@ -785,8 +785,19 @@ class VSPHERE(object):
 
         vms = dc.vmFolder.childEntity
         for vm in vms:
-            if vm.name == name:
-                _rc = True
+            try:
+                if vm.name == name:
+                    _rc = True
+            except vmodl.fault.ManagedObjectNotFound as ex:
+                logger.exception(
+                    "There was an exception hit while attempting to check if folder exists!"
+                )
+                if (
+                    "has already been deleted or has not been completely create"
+                    not in str(ex)
+                ):
+                    raise
+
         return _rc
 
     def destroy_folder(self, name, cluster, dc):
