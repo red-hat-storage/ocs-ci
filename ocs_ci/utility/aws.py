@@ -2225,8 +2225,7 @@ def get_data_volumes(deviceset_pvs):
     aws = AWS()
 
     volume_ids = [
-        "vol-" + pv.get().get("spec").get("csi").get("volumeHandle")
-        for pv in deviceset_pvs
+        pv.get().get("spec").get("csi").get("volumeHandle") for pv in deviceset_pvs
     ]
     return [aws.ec2_resource.Volume(vol_id) for vol_id in volume_ids]
 
