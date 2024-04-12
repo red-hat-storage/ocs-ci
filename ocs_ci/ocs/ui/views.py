@@ -119,9 +119,14 @@ deployment_4_6 = {
         'button[id="ceph-sc-dropdown"]',
         By.CSS_SELECTOR,
     ),
-    "enable_encryption": ('//span[@class="pf-c-switch__toggle"]', By.XPATH),
+    "enable_encryption": (
+        '//span[@class="pf-v5-c-switch__toggle"] | '
+        '//span[@class="pf-c-switch__toggle"]',
+        By.XPATH,
+    ),
     "click_install_lso_page": ("//button[text()='Install']", By.XPATH),
     "project_dropdown": (
+        'button[class="pf-v5-c-dropdown__toggle pf-m-plain"], '
         'button[class="pf-c-dropdown__toggle pf-m-plain"]',
         By.CSS_SELECTOR,
     ),
@@ -147,10 +152,14 @@ deployment_4_7 = {
 
 deployment_4_9 = {
     "drop_down_projects": (
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
         'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
-    "enable_default_porjects": ('span[class="pf-c-switch__toggle"]', By.CSS_SELECTOR),
+    "enable_default_porjects": (
+        'span[class="pf-v5-c-switch__toggle"], span[class="pf-c-switch__toggle"]',
+        By.CSS_SELECTOR,
+    ),
     "choose_openshift-storage_project": (
         "//span[text()='openshift-storage']",
         By.XPATH,
@@ -174,7 +183,11 @@ deployment_4_9 = {
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
     "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
-    "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "expand_advanced_mode": (
+        'button[class="pf-v5-c-select__toggle"], '
+        'button[class="pf-c-select__toggle"]',
+        By.CSS_SELECTOR,
+    ),
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
     "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
@@ -209,25 +222,33 @@ deployment_4_15 = {
         By.CSS_SELECTOR,
     ),
     "drop_down_performance": (
+        "//*[@class='pf-v5-c-select odf-configure-performance__selector pf-u-mb-md'] | "
         "//*[@class='pf-c-select odf-configure-performance__selector pf-u-mb-md']",
         By.XPATH,
     ),
     "lean_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Lean mode')] |"
         "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Lean mode')]",
         By.XPATH,
     ),
     "balanced_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Balanced mode')] | "
         "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Balanced mode')]",
         By.XPATH,
     ),
     "performance_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Performance mode')] | "
         "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Performance mode')]",
         By.XPATH,
     ),
 }
 
 deployment_4_16 = {
-    "osd_size_dropdown": ("//*[@class='pf-c-select dropdown--full-width']", By.XPATH),
+    "osd_size_dropdown": (
+        "//*[@class='pf-v5-c-select dropdown--full-width | ']"
+        "//*[@class='pf-c-select dropdown--full-width']",
+        By.XPATH,
+    ),
 }
 
 generic_locators = {
@@ -252,6 +273,7 @@ generic_locators = {
         By.XPATH,
     ),
     "actions": (
+        '//span[@class="pf-v5-c-dropdown__toggle-text" and text()="Actions"]/.. | '
         '//span[@class="pf-c-dropdown__toggle-text" and text()="Actions"]/..',
         By.XPATH,
     ),
@@ -283,6 +305,7 @@ generic_locators = {
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-content": (
+        "//div[@class='pf-v5-c-popover__content']//div[contains(.,'Storage')] | "
         "//div[@class='pf-c-popover__content']//div[contains(.,'Storage')]",
         By.XPATH,
     ),
@@ -317,8 +340,7 @@ generic_locators = {
     ),
     # project name in the dropdown list, tested on OCP 4.14 and OCP 4.15
     "test-project-link": (
-        "//li[@class='pf-c-menu__list-item']/descendant::*//*[text()='{}'] | "
-        "//li[@class='pf-v5-c-menu__list-item']/descendant::*//*[text()='{}']",
+        "//li[contains(@class, 'c-menu__list-item')]/descendant::*//*[text()='{}']",
         By.XPATH,
     ),
     "show_default_projects_toggle": (
@@ -355,7 +377,7 @@ mcg_stores = {
         By.XPATH,
     ),
     "store_dropdown_option": (
-        "//ul[@ class='pf-c-dropdown__menu']//a[normalize-space()='{}']",
+        "//ul[contains(@class, 'c-dropdown__menu'])//a[normalize-space()='{}']",
         By.XPATH,
     ),
     "store_secret_option": ("//*[contains(text(), '{}')]", By.XPATH),
@@ -1456,6 +1478,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "performance-card": (
+        "//div[@class='pf-v5-c-card__title' and contains(text(), 'Performance')] | "
         "//div[@class='pf-c-card__title' and contains(text(), 'Performance')]",
         By.XPATH,
     ),
@@ -1466,6 +1489,7 @@ validation_4_9 = {
     ),
     "backingstore-status": ("span[data-test='status-text']", By.CSS_SELECTOR),
     "backingstorage-breadcrumb": (
+        ".pf-v5-c-breadcrumb__link[data-test-id='breadcrumb-link-1'], "
         ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
         By.CSS_SELECTOR,
     ),
@@ -1476,6 +1500,7 @@ validation_4_9 = {
     ),
     "bucketclass-status": ("//span[@data-test='status-text']", By.XPATH),
     "bucketclass-breadcrumb": (
+        ".pf-v5-c-breadcrumb__link[data-test-id='breadcrumb-link-1'], "
         ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
         By.CSS_SELECTOR,
     ),
@@ -1542,6 +1567,7 @@ validation_4_13 = {
         By.XPATH,
     ),
     "status-storage-popup-content": (
+        "//div[@class='pf-v5-c-popover pf-m-top']//*[contains(text(), 'Storage System')] | "
         "//div[@class='pf-c-popover pf-m-top']//*[contains(text(), 'Storage System')]",
         By.XPATH,
     ),
@@ -1733,6 +1759,7 @@ topology = {
     "topology_search_bar_enter_arrow": ("//button[@aria-label='Search']", By.XPATH),
     "topology_search_bar_reset_search": ("//button[@aria-label='Reset']", By.XPATH),
     "node_filter_toggle_icon_from_node_filtering_bar": (
+        "//*[@class='pf-v5-c-options-menu__toggle-icon']/.. | "
         "//*[@class='pf-c-options-menu__toggle-icon']/..",
         By.XPATH,
     ),
@@ -1742,6 +1769,7 @@ topology = {
         By.XPATH,
     ),
     "current_node_from_node_filtering_bar": (
+        "//span[@class='pf-v5-c-options-menu__toggle-text'] | "
         "//span[@class='pf-c-options-menu__toggle-text']",
         By.XPATH,
     ),
