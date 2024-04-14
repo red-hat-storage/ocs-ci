@@ -178,7 +178,6 @@ def check_storage_size_is_reflected(expected_storage_size):
 
     ceph_cluster = CephCluster()
     ceph_capacity = ceph_cluster.get_ceph_capacity()
-    expected_storage_size_in_gb = convert_device_size(expected_storage_size, "GB")
     logger.info(
         f"Check that the Ceph capacity {ceph_capacity} is equal "
         f"to the expected storage size {expected_storage_size_in_gb}"
