@@ -297,8 +297,12 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Alerting Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
         self.do_click(locator=self.page_nav["alerting_page"], enable_screenshot=False)
+
+        from ocs_ci.ocs.ui.page_objects.alerting import Alerts
+
+        return Alerts()
 
     def navigate_metrics_page(self):
         """
@@ -306,7 +310,7 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Metrics Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
         self.do_click(locator=self.page_nav["metrics_page"], enable_screenshot=False)
 
     def navigate_dashboards_page(self):
