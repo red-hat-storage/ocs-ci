@@ -57,8 +57,12 @@ from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
-from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
-from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
+from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
+    AwsLogBasedReplicationPolicy,
+)
+from ocs_ci.ocs.resources.mcg_bucket_replication.mockup_bucket_logger import (
+    MockupBucketLogger,
+)
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,

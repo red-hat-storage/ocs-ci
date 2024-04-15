@@ -21,8 +21,12 @@ from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     update_replication_policy,
 )
-from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
-from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
+from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
+    AwsLogBasedReplicationPolicy,
+)
+from ocs_ci.ocs.resources.mcg_bucket_replication.mockup_bucket_logger import (
+    MockupBucketLogger,
+)
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 

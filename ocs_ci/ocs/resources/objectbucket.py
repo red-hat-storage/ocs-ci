@@ -23,7 +23,9 @@ from ocs_ci.ocs.exceptions import (
     UnhealthyBucket,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
+from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
+    ReplicationPolicy,
+)
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
@@ -178,7 +180,7 @@ class ObjectBucket(ABC):
             return self.name == other.name
 
     def __parse_replication_policy(self, replication_policy):
-        if isinstance(replication_policy, McgReplicationPolicy):
+        if isinstance(replication_policy, ReplicationPolicy):
             replication_policy = replication_policy.to_dict()
 
         elif replication_policy is None:

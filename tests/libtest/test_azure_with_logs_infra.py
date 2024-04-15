@@ -1,6 +1,8 @@
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import libtest
-from ocs_ci.ocs.resources.mcg_replication_policy import AzureLogBasedReplicationPolicy
+from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
+    AzureLogBasedReplicationPolicy,
+)
 from ocs_ci.ocs.bucket_utils import bucket_read_api
 
 
