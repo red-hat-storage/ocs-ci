@@ -153,14 +153,17 @@ class DeploymentUI(PageNavigator):
             if self.check_element_text("404"):
                 logger.info("Refresh storage cluster page")
                 self.refresh_page()
+        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
+        time.sleep(60)
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
-
+        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
+        time.sleep(30)
         if self.check_element_text("An error"):
             logger.info("Refresh storage system page if error occurred")
             self.refresh_page()
-
+            time.sleep(30)
         if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
         elif config.DEPLOYMENT.get("local_storage"):
