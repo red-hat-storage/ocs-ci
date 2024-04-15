@@ -8,6 +8,7 @@ import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -27,7 +28,11 @@ def configure_cloud_credential_operator():
     ccoctl_path = os.path.join(bin_dir, "ccoctl")
     if not os.path.isfile(ccoctl_path):
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        release_image = get_ocp_release_image_from_installer()
+        # W/A of the issue https://github.com/red-hat-storage/ocs-ci/issues/9674
+        if version.get_semantic_ocp_version_from_config() == version.VERSION_4_16:
+            release_image = constants.OCP_4_16_CCOCTL_WA_IMAGE
+        else:
+            release_image = get_ocp_release_image_from_installer()
         cco_image = get_cco_container_image(release_image, pull_secret_path)
         extract_ccoctl_binary(cco_image, pull_secret_path)
 
