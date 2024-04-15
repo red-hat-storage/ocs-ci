@@ -2005,6 +2005,8 @@ def update_replication_policy(bucket_name, replication_policy_dict):
         "spec": {
             "additionalConfig": {
                 "replicationPolicy": json.dumps(replication_policy_dict)
+                if replication_policy_dict
+                else ""
             }
         }
     }
