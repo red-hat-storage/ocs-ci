@@ -19,6 +19,8 @@ from ocs_ci.helpers.helpers import (
     wait_for_ct_pod_recovery,
     clear_crash_warning_and_osd_removal_leftovers,
 )
+from ocs_ci.ocs.cluster import silence_ceph_osd_crash_warning
+from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
@@ -59,20 +61,26 @@ class TestDiskFailures(ManageTest):
         except AWSTimeoutException as e:
             if "Volume state: in-use" in e:
                 logger.info(
-                    f"Volume {data_volume} re-attached successfully to worker"
+                    f"Volume {data_volume} is still attached to worker, detach did not complete"
                     f" node {worker_node}"
                 )
-            else:
                 raise
         else:
             """
             Wait for worker volume to be re-attached automatically
             to the node
             """
-            assert nodes.wait_for_volume_attach(data_volume), (
-                f"Volume {data_volume} failed to be re-attached to worker "
-                f"node {worker_node}"
-            )
+            logger.info(f"Volume {data_volume} is deattached successfully")
+            if config.ENV_DATA.get("platform", "").lower() == constants.AWS_PLATFORM:
+                logger.info(
+                    f"For {constants.AWS_PLATFORM} platform, attaching volume manually"
+                )
+                nodes.attach_volume(volume=data_volume, node=worker_node)
+            else:
+                assert nodes.wait_for_volume_attach(data_volume), (
+                    f"Volume {data_volume} failed to be re-attached to worker "
+                    f"node {worker_node}"
+                )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -147,8 +155,13 @@ class TestDiskFailures(ManageTest):
         """
         # Get a data volume
         data_volume = nodes.get_data_volumes()[0]
+
         # Get the worker node according to the volume attachment
         worker = nodes.get_node_by_attached_volume(data_volume)
+
+        # Fetch the OSD Pod running on worker
+        osd_dict = get_osds_per_node()
+        osd_pod_name = osd_dict[worker]
 
         # Detach volume and wait for the volume to attach
         self.detach_volume_and_wait_for_attach(nodes, data_volume, worker)
@@ -173,6 +186,11 @@ class TestDiskFailures(ManageTest):
         # W/A: For the investigation of BZ 1825675, timeout is increased to see if cluster
         # becomes healthy eventually
         # TODO: Remove 'tries=100'
+
+        logger.info(
+            f"Archive OSD crash due to dettach and attach of volume to {worker}"
+        )
+        silence_ceph_osd_crash_warning(osd_pod_name)
         self.sanity_helpers.health_check(tries=100)
 
     @skipif_managed_service
