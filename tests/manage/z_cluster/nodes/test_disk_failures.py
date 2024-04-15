@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from ocs_ci.ocs import node, constants
@@ -164,6 +166,9 @@ class TestDiskFailures(ManageTest):
         # Fetch the OSD Pod running on worker
         osd_dict = get_osds_per_node()
         osd_pod_name = osd_dict[worker]
+        logger.info(
+            f"OSD Pod name is {osd_pod_name} running on the worker node used for volume detach/attach"
+        )
 
         # Detach volume and wait for the volume to attach
         self.detach_volume_and_wait_for_attach(nodes, data_volume, worker)
@@ -190,8 +195,9 @@ class TestDiskFailures(ManageTest):
         # TODO: Remove 'tries=100'
 
         logger.info(
-            f"Archive OSD crash due to dettach and attach of volume to {worker}"
+            "Wait for 1 min and if found, archive OSD crash occurred due to detach and attach of volume"
         )
+        time.sleep(60)
         silence_ceph_osd_crash_warning(osd_pod_name)
         self.sanity_helpers.health_check(tries=100)
 
