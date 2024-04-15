@@ -850,6 +850,122 @@ class TestS3BucketPolicy(MCGTest):
                     f"{e.response} received invalid error code {response.error['Code']}"
                 )
 
+    @pytest.mark.parametrize(
+        argnames="not_policy",
+        argvalues=[
+            pytest.param(
+                "NotPrincipal",
+            ),
+            pytest.param(
+                "NotAction",
+            ),
+            # pytest.param(
+            #     "NotResource",
+            # ),
+        ],
+    )
+    def test_bucket_policy_with_not_policy(self, mcg_obj, bucket_factory, not_policy):
+        """
+        Test "NotPrincipal", "NotAction" and "NotResource" policy elements in Noobaa for bucket policy
+
+        """
+
+        # create the bucket
+        obc = bucket_factory(interface="OC", amount=1)[0]
+        obc_obj = OBC(obc.name)
+        logger.info(f"Bucket created {obc_obj.obc_name}")
+
+        # apply the appropriate policy based on not_policy param
+        if not_policy == "NotPrincipal":
+            s3_put_object(
+                s3_obj=obc_obj,
+                bucketname=obc_obj.obc_name,
+                object_key="Random-1.txt",
+                data="Random data",
+            )
+            bucket_policy_gen = gen_bucket_policy(
+                user_list="*",
+                actions_list=["PutObject"],
+                resources_list=[f'{obc_obj.obc_name}/{"*"}'],
+            )
+            bucket_policy = json.dumps(bucket_policy_gen)
+            put_bucket_policy(mcg_obj, obc_obj.obc_name, bucket_policy)
+            time.sleep(60)
+            account = "new-user-" + str(uuid.uuid4().hex)
+            user = NoobaaAccount(
+                mcg=mcg_obj,
+                name=account,
+                email=f"{account}@email.com",
+            )
+            s3_put_object(
+                s3_obj=user,
+                bucketname=obc_obj.obc_name,
+                object_key="Random-2.txt",
+                data="some data",
+            )
+
+            bucket_policy_gen = gen_bucket_policy(
+                user_list=obc_obj.obc_account,
+                actions_list=["PutObject"],
+                effect="Deny",
+                resources_list=[f'{obc_obj.obc_name}/{"*"}'],
+            )
+            bucket_policy_gen["Statement"][0].pop("Principal")
+            bucket_policy_gen["Statement"][0]["NotPrincipal"] = {
+                "AWS": obc_obj.obc_account
+            }
+            logger.info(bucket_policy_gen)
+            bucket_policy = json.dumps(bucket_policy_gen)
+            put_bucket_policy(mcg_obj, obc_obj.obc_name, bucket_policy)
+            time.sleep(60)
+            try:
+                s3_put_object(
+                    s3_obj=user,
+                    bucketname=obc_obj.obc_name,
+                    object_key="Random-3.txt",
+                    data="Random data",
+                )
+            except boto3exception.ClientError as e:
+                logger.info(f"Failed as expected, {e.args[0]}")
+                assert "AccessDenied" in e.args[0], f"Failed unexpctedly, {e.args[0]}"
+            else:
+                assert False, "Passed unexpectedly"
+        elif not_policy == "NotAction":
+            s3_put_object(
+                s3_obj=obc_obj,
+                bucketname=obc_obj.obc_name,
+                object_key="Random-1.txt",
+                data="Random data",
+            )
+            bucket_policy_gen = gen_bucket_policy(
+                user_list="*",
+                actions_list=["PutObject", "GetObject"],
+                effect="Deny",
+                resources_list=[f'{obc_obj.obc_name}/{"*"}'],
+            )
+            not_action = bucket_policy_gen["Statement"][0].get("Action")
+            bucket_policy_gen["Statement"][0].pop("Action")
+            bucket_policy_gen["Statement"][0]["NotAction"] = not_action
+            bucket_policy = json.dumps(bucket_policy_gen)
+            put_bucket_policy(mcg_obj, obc_obj.obc_name, bucket_policy)
+            time.sleep(60)
+            response = s3_get_object(
+                s3_obj=obc_obj, bucketname=obc_obj.obc_name, object_key="Random-1.txt"
+            )
+            logger.info(response)
+            try:
+                s3_put_object(
+                    s3_obj=obc_obj,
+                    bucketname=obc_obj.obc_name,
+                    object_key="Random-2.txt",
+                    data="Random data",
+                )
+            except boto3exception.ClientError as e:
+                logger.info(f"Failed as expected, {e.args[0]}")
+                assert "AccessDenied" in e.args[0], f"Failed unexpctedly, {e.args[0]}"
+            else:
+                assert False, "Passed unexpectedly"
+
     @pytest.mark.polarion_id("OCS-2451")
     @pytest.mark.bugzilla("1893163")
     @skipif_ocs_version("<4.6")
