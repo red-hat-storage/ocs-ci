@@ -372,6 +372,23 @@ class BaseUI:
         )
         return len(element_list) > 0
 
+    def check_number_occurrences_text(self, expected_text, number, element="*"):
+        """
+        The number of times the string appears on the web page
+
+        Args:
+            expected_text (string): The expected text.
+            number (int): The number of times the string appears on the web page
+
+        return:
+            bool: True if the text matches the expected text, False otherwise
+
+        """
+        element_list = self.driver.find_elements_by_xpath(
+            f"//{element}[contains(text(), '{expected_text}')]"
+        )
+        return len(element_list) == number
+
     def get_element_text(self, locator):
         """
         Get the inner text of an element in locator.

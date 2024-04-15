@@ -430,12 +430,21 @@ class DeploymentUI(PageNavigator):
         """
         self.search_operator_installed_operators_page(operator=operator)
         time.sleep(5)
-        sample = TimeoutSampler(
-            timeout=timeout_install,
-            sleep=sleep,
-            func=self.check_element_text,
-            expected_text="Succeeded",
-        )
+        if self.ocs_version_semantic > version.VERSION_4_15:
+            sample = TimeoutSampler(
+                timeout=timeout_install,
+                sleep=sleep,
+                func=self.check_number_occurrences_text,
+                expected_text="Succeeded",
+                number=2,
+            )
+        else:
+            sample = TimeoutSampler(
+                timeout=timeout_install,
+                sleep=sleep,
+                func=self.check_element_text,
+                expected_text="Succeeded",
+            )
         if not sample.wait_for_func_status(result=True):
             logger.error(
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
