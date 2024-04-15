@@ -134,6 +134,22 @@ class Disruptions:
         if self.resource == "ocs_provider_server":
             self.resource_obj = [pod.get_ocs_provider_server_pod()]
             self.selector = constants.PROVIDER_SERVER_LABEL
+        if self.resource == "client_operator_console":
+            self.resource_obj = [pod.get_client_operator_console_pods]
+            self.selector = constants.CLIENT_OPERATOR_CONSOLE_LABEL
+            # Setting resource_count because console pod also have the same label.
+            resource_count = len(
+                pod.get_pods_having_label(
+                    constants.CLIENT_OPERATOR_CONSOLE_LABEL,
+                    config.ENV_DATA["cluster_namespace"],
+                )
+            )
+        if self.resource == "client_operator_controller_manager":
+            self.resource_obj = [pod.get_client_operator_controller_manager_pods]
+            self.selector = constants.CLIENT_OPERATOR_CONTROLLER_MANAGER_LABEL
+        if self.resource == "csi_addons_controller_manager":
+            self.resource_obj = [pod.get_csi_addons_controller_manager_pods]
+            self.selector = constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL
 
         self.resource_count = resource_count or len(self.resource_obj)
 

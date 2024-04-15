@@ -3583,3 +3583,62 @@ def wait_for_pods_deletion(
         namespace=namespace,
     )
     sampler.wait_for_func_status(True)
+
+
+def get_csi_addons_controller_manager_pods(namespace=None):
+    """
+    Fetches info about csi-addons-controller-manager pods in the cluster
+
+    Args:
+        namespace (str): Namespace in which pod csi-addons-controller-manager is present
+
+    Returns:
+        list : List of csi-addons-controller-manager pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    csi_addons = get_pods_having_label(
+        constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL, namespace
+    )
+    csi_addons_pods = [Pod(**addons_controller) for addons_controller in csi_addons]
+    return csi_addons_pods
+
+
+def get_client_operator_controller_manager_pods(namespace=None):
+    """
+    Fetches info about ocs-client-operator-controller-manager pods in the cluster
+
+    Args:
+        namespace (str): Namespace in which pod ocs-client-operator-controller-manager is present
+
+    Returns:
+        list : List of ocs-client-operator-controller-manager pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    client_operator = get_pods_having_label(
+        constants.CLIENT_OPERATOR_CONTROLLER_MANAGER_LABEL, namespace
+    )
+    client_operator_pods = [Pod(**operator) for operator in client_operator]
+    return client_operator_pods
+
+
+def get_client_operator_console_pods(namespace=None):
+    """
+    Fetches info about ocs-client-operator-console pods in the cluster
+
+    Args:
+        namespace (str): Namespace in which pod ocs-client-operator-console is present
+
+    Returns:
+        list : List of ocs-client-operator-console pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    client_operator_console = get_pods_having_label(
+        constants.CLIENT_OPERATOR_CONSOLE_LABEL, namespace
+    )
+    client_operator_console_pods = [
+        Pod(**operator) for operator in client_operator_console
+    ]
+    return client_operator_console_pods
