@@ -197,7 +197,7 @@ class TestDiskFailures(ManageTest):
 
         is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
             cmd="ceph health detail",
-            expected_output_lst={"HEALTH_WARN", "1 daemons have recently crashed"},
+            expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
             cephtool_cmd=True,
         )
         if is_daemon_recently_crash_warnings:
@@ -250,7 +250,7 @@ class TestDiskFailures(ManageTest):
 
         is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
             cmd="ceph health detail",
-            expected_output_lst={"HEALTH_WARN", "2 daemons have recently crashed"},
+            expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
             cephtool_cmd=True,
         )
         if is_daemon_recently_crash_warnings:
