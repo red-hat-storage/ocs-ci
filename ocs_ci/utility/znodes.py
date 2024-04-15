@@ -24,19 +24,15 @@ class ZNodes(object):
         Run lsmod command to prepare isKVM variable.
         Also, get a reference for KubeletService object.
         """
-        # cmd = "sudo /usr/sbin/lsmod"
-        # result = exec_cmd(cmd)
-        # if b"kvm" in result.stdout.lower():
-        #     self.isKVM = True
-        # else:
-        #     self.isKVM = False
+        cmd = "sudo /usr/sbin/lsmod"
+        result = exec_cmd(cmd)
+        if b"kvm" in result.stdout.lower():
+            self.isKVM = True
+        else:
+            self.isKVM = False
 
-        # if "bastion_ip" in config.ENV_DATA:
-        #     self.isKVM = False
-
-        self.nodesStarted = False
-
-        self.isKVM = False
+        if "bastion_ip" in config.ENV_DATA:
+            self.isKVM = False
 
         logger.info(f"iskvm check: {self.isKVM}")
 
@@ -88,23 +84,13 @@ class ZNodes(object):
             UnexpectedBehaviour: If ZNode machine is still up
 
         """
-        # ocpversion = get_ocp_version("-")
-        # for node in znode_machines:
-        #     cmd = f"sudo virsh shutdown test-ocp{ocpversion}-{node.name}"
-        #     result = exec_cmd(cmd)
-        #     logger.info(f"Result of shutdown {result}")
-        #     logger.info("Verifying node is down")
-        #     ret = TimeoutSampler(
-        #         timeout=timeout,
-        #         sleep=3,
-        #         func=self.verify_machine_is_down,
-        #         node=node,
-        #     )
-        #     logger.info(ret)
-        #     if not ret.wait_for_func_status(result=True):
-        #         raise UnexpectedBehaviour("Node {node.name} is still Running")
+        for znode in znode_machines:
+            self.service.stop(znode, timeout)
 
-        self.nodesStarted = False
+        # Wait for an additional 300+60 seconds (for pods to drain)
+        waiting_time = 360
+        logger.info(f"Waiting for {waiting_time} seconds")
+        time.sleep(waiting_time)
 
     def stop_znodes_machines_kvm(
         self, znode_machines, timeout=900, wait=True, force=True
@@ -124,23 +110,21 @@ class ZNodes(object):
             UnexpectedBehaviour: If ZNode machine is still up
 
         """
-        # ocpversion = get_ocp_version("-")
-        # for node in znode_machines:
-        #     cmd = f"sudo virsh shutdown test-ocp{ocpversion}-{node.name}"
-        #     result = exec_cmd(cmd)
-        #     logger.info(f"Result of shutdown {result}")
-        #     logger.info("Verifying node is down")
-        #     ret = TimeoutSampler(
-        #         timeout=timeout,
-        #         sleep=3,
-        #         func=self.verify_machine_is_down,
-        #         node=node,
-        #     )
-        #     logger.info(ret)
-        #     if not ret.wait_for_func_status(result=True):
-        #         raise UnexpectedBehaviour("Node {node.name} is still Running")
-
-        self.nodesStarted = False
+        ocpversion = get_ocp_version("-")
+        for node in znode_machines:
+            cmd = f"sudo virsh shutdown test-ocp{ocpversion}-{node.name}"
+            result = exec_cmd(cmd)
+            logger.info(f"Result of shutdown {result}")
+            logger.info("Verifying node is down")
+            ret = TimeoutSampler(
+                timeout=timeout,
+                sleep=3,
+                func=self.verify_machine_is_down,
+                node=node,
+            )
+            logger.info(ret)
+            if not ret.wait_for_func_status(result=True):
+                raise UnexpectedBehaviour("Node {node.name} is still Running")
 
     def start_znodes_machines(
         self, znode_machines, timeout=900, wait=True
@@ -154,10 +138,8 @@ class ZNodes(object):
         #         and 'ready' state.
         #     wait (bool): Wait for ZNodes to start - for future use
         # """
-        # for pnode in znode_machines:
-        #     self.service.start(pnode, timeout)
-
-        self.nodesStarted = True
+        for znode in znode_machines:
+            self.service.start(znode, timeout)
 
     def start_znodes_machines_kvm(
         self, znode_machines, timeout=900, wait=True, force=True
@@ -173,20 +155,18 @@ class ZNodes(object):
             force (bool): True for ZNode ungraceful power off, False for
                 graceful ZNode shutdown - for future use
         """
-        # ocpversion = get_ocp_version("-")
-        # for node in znode_machines:
-        #     result = exec_cmd(f"sudo virsh start test-ocp{ocpversion}-{node.name}")
-        #     logger.info(f"Result of shutdown {result}")
+        ocpversion = get_ocp_version("-")
+        for node in znode_machines:
+            result = exec_cmd(f"sudo virsh start test-ocp{ocpversion}-{node.name}")
+            logger.info(f"Result of shutdown {result}")
 
-        # wait_for_cluster_connectivity(tries=900)
-        # wait_for_nodes_status(
-        #     node_names=get_master_nodes(), status=constants.NODE_READY, timeout=timeout
-        # )
-        # wait_for_nodes_status(
-        #     node_names=get_worker_nodes(), status=constants.NODE_READY, timeout=timeout
-        # )
-
-        self.nodesStarted = True
+        wait_for_cluster_connectivity(tries=900)
+        wait_for_nodes_status(
+            node_names=get_master_nodes(), status=constants.NODE_READY, timeout=timeout
+        )
+        wait_for_nodes_status(
+            node_names=get_worker_nodes(), status=constants.NODE_READY, timeout=timeout
+        )
 
     def restart_znodes_machines(self, znode_machines, timeout, wait):
         """
@@ -200,8 +180,6 @@ class ZNodes(object):
         """
         self.restart_znodes_machines(znode_machines, timeout, wait)
         self.start_znodes_machines(znode_machines, timeout, wait)
-
-        self.nodesStarted = True
 
     def restart_znodes_machines_kvm(
         self, znode_machines, timeout, wait, force=True
@@ -219,5 +197,3 @@ class ZNodes(object):
         """
         self.stop_znodes_machines_kvm(znode_machines, timeout, wait, force=force)
         self.start_znodes_machines_kvm(znode_machines, timeout, wait, force=force)
-
-        self.nodesStarted = True
