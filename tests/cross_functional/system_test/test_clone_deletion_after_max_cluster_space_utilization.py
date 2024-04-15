@@ -153,18 +153,41 @@ class TestCloneDeletion(E2ETest):
             f"Start creating {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} GB."
         )
         clones_list = []
-        for clone_num in range(self.num_of_clones + 1):
-            logger.info(f"Start creation of clone number {clone_num}.")
 
-            cloned_pvc_obj = pvc_clone_factory(
-                self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=360
-            )
+        if interface_type == constants.CEPHBLOCKPOOL:
+            clone_num = 0
+            clones_list.append(self.pvc_obj)
+            for obj in clones_list:
+                if len(clones_list) <= (self.num_of_clones + 3):
+                    logger.info(f"Start creation of clone number {clone_num}.")
+                    cloned_pvc_obj = pvc_clone_factory(
+                        obj,
+                        storageclass=self.pvc_obj.backed_sc,
+                        timeout=360,
+                        clone_name="clone" + "-" + str(clone_num),
+                    )
+                    cloned_pvc_obj.reload()
+                    clones_list.append(cloned_pvc_obj)
+                    logger.info(
+                        f"Clone with name {cloned_pvc_obj.name} of {self.pvc_size}"
+                        f"size from pvc {obj.name} was created."
+                    )
+                    clone_num = clone_num + 1
+                    continue
+                else:
+                    break
 
-            cloned_pvc_obj.reload()
-            clones_list.append(cloned_pvc_obj)
-            logger.info(
-                f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
-            )
+        else:
+            for clone_num in range(self.num_of_clones + 1):
+                logger.info(f"Start creation of clone number {clone_num}.")
+                cloned_pvc_obj = pvc_clone_factory(
+                    self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=600
+                )
+                cloned_pvc_obj.reload()
+                clones_list.append(cloned_pvc_obj)
+                logger.info(
+                    f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
+                )
 
         logger.info("Verify used capacity bigger than 85%")
         sample = TimeoutSampler(
@@ -181,7 +204,7 @@ class TestCloneDeletion(E2ETest):
             "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
         )
 
-        expected_alerts = ["CephOSDCriticallyFull", "CephOSDNearFull"]
+        expected_alerts = ["CephOSDNearFull", "CephOSDCriticallyFull"]
         prometheus = PrometheusAPI(threading_lock=threading_lock)
         sample = TimeoutSampler(
             timeout=600,
