@@ -22,12 +22,12 @@ from ocs_ci.helpers.helpers import (
     clear_crash_warning_and_osd_removal_leftovers,
     run_cmd_verify_cli_output,
 )
-from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
     delete_pods,
     get_pod_objs,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
@@ -162,13 +162,6 @@ class TestDiskFailures(ManageTest):
         # Get the worker node according to the volume attachment
         worker = nodes.get_node_by_attached_volume(data_volume)
 
-        # Fetch the OSD Pod running on worker
-        osd_dict = get_osds_per_node()
-        osd_pod_name = osd_dict[worker]
-        logger.info(
-            f"OSD Pod name is {osd_pod_name} running on the worker node used for volume detach/attach"
-        )
-
         # Detach volume and wait for the volume to attach
         self.detach_volume_and_wait_for_attach(nodes, data_volume, worker)
 
@@ -193,10 +186,12 @@ class TestDiskFailures(ManageTest):
         # becomes healthy eventually
         # TODO: Remove 'tries=100'
 
-        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
-        # time.sleep(60)
-        # silence_ceph_osd_crash_warning(osd_pod_name)
+        logger.info("Wait for all the pods in openshift-storage to be in running state")
+        assert wait_for_pods_to_be_running(
+            timeout=720
+        ), "Not all the pods reached running state"
 
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
         is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
             cmd="ceph health detail",
             expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
@@ -246,10 +241,12 @@ class TestDiskFailures(ManageTest):
             [worker_and_volume["worker"] for worker_and_volume in workers_and_volumes]
         )
 
-        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
-        # time.sleep(60)
-        # silence_ceph_osd_crash_warning(osd_pod_name)
+        logger.info("Wait for all the pods in openshift-storage to be in running state")
+        assert wait_for_pods_to_be_running(
+            timeout=720
+        ), "Not all the pods reached running state"
 
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
         is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
             cmd="ceph health detail",
             expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
