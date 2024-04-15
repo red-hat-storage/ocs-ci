@@ -1,5 +1,4 @@
 import logging
-import time
 
 import pytest
 
@@ -22,8 +21,8 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
     wait_for_ct_pod_recovery,
     clear_crash_warning_and_osd_removal_leftovers,
+    run_cmd_verify_cli_output,
 )
-from ocs_ci.ocs.cluster import silence_ceph_osd_crash_warning
 from ocs_ci.ocs.node import get_osds_per_node
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -196,11 +195,24 @@ class TestDiskFailures(ManageTest):
         # becomes healthy eventually
         # TODO: Remove 'tries=100'
 
-        logger.info(
-            "Wait for 1 min and if found, archive OSD crash occurred due to detach and attach of volume"
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
+        # time.sleep(60)
+        # silence_ceph_osd_crash_warning(osd_pod_name)
+
+        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+            cmd="ceph health detail",
+            expected_output_lst={"HEALTH_WARN", "1 daemons have recently crashed"},
+            cephtool_cmd=True,
         )
-        time.sleep(60)
-        silence_ceph_osd_crash_warning(osd_pod_name)
+        if is_daemon_recently_crash_warnings:
+            logger.info("Clear all ceph crash warnings")
+            # Importing here to avoid shadow by loop variable
+            from ocs_ci.ocs.resources import pod
+
+            ct_pod = pod.get_ceph_tools_pod()
+            ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+        else:
+            logger.info("There are no daemon crash warnings")
         self.sanity_helpers.health_check(tries=100)
 
     @skipif_managed_service
@@ -236,6 +248,25 @@ class TestDiskFailures(ManageTest):
         nodes.restart_nodes(
             [worker_and_volume["worker"] for worker_and_volume in workers_and_volumes]
         )
+
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
+        # time.sleep(60)
+        # silence_ceph_osd_crash_warning(osd_pod_name)
+
+        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+            cmd="ceph health detail",
+            expected_output_lst={"HEALTH_WARN", "2 daemons have recently crashed"},
+            cephtool_cmd=True,
+        )
+        if is_daemon_recently_crash_warnings:
+            logger.info("Clear all ceph crash warnings")
+            # Importing here to avoid shadow by loop variable
+            from ocs_ci.ocs.resources import pod
+
+            ct_pod = pod.get_ceph_tools_pod()
+            ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+        else:
+            logger.info("There are no daemon crash warnings")
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check()
