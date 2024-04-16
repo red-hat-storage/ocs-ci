@@ -994,7 +994,7 @@ acm_configuration_4_12 = {
     "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
     "create-cluster-set": ("//button[@id='createClusterSet']", By.XPATH),
     "review-btn": ("//button[@id='save']", By.XPATH),
-    "next-btn": ("//button[@class='pf-c-button pf-m-primary']", By.XPATH),
+    "next-btn": ("//button[contains(@class, 'c-button pf-m-primary')]", By.XPATH),
     "acm_nav_sidebar": (
         "//*[@data-test-id='acm-perspective-nav'] | //*[@class='pf-v5-c-nav__list oc-perspective-nav']",
         By.XPATH,
@@ -1130,7 +1130,7 @@ block_pool = {
     "edit_labels_of_pool": ("//a[normalize-space()='Edit labels']", By.XPATH),
     "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
     "invalid_label_name_note_edit_label_pool": (
-        "//h4[@class='pf-c-alert__title']",
+        "//h4[contains(@class, 'c-alert__title')]",
         By.XPATH,
     ),
     "edit_labels_of_pool_save": ("//button[normalize-space()='Save']", By.XPATH),
@@ -1198,21 +1198,24 @@ storageclass = {
         By.XPATH,
     ),
     "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
-    "ceph-block-pool": ("//div[@class='pf-c-dropdown__menu-item-main']", By.XPATH),
+    "ceph-block-pool": (
+        "//div[contains(@class, 'c-dropdown__menu-item-main')]",
+        By.XPATH,
+    ),
     "encryption": ("#storage-class-encryption", By.CSS_SELECTOR),
     "connections-details": (
-        ".pf-c-button.pf-m-link[data-test='edit-kms-link']",
+        ".pf-c-button.pf-m-link[data-test='edit-kms-link'], .pf-v5-c-button.pf-m-link[data-test='edit-kms-link']",
         By.CSS_SELECTOR,
     ),
     "service-name": ("#kms-service-name", By.CSS_SELECTOR),
     "kms-address": ("#kms-address", By.CSS_SELECTOR),
     "kms-port": ("#kms-address-port", By.CSS_SELECTOR),
     "save-btn": (
-        ".pf-c-button.pf-m-secondary[data-test='save-action']",
+        ".pf-c-button.pf-m-secondary[data-test='save-action'], .pf-v5-c-button.pf-m-secondary[data-test='save-action']",
         By.CSS_SELECTOR,
     ),
     "advanced-settings": (
-        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
+        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body, .pf-v5-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
         By.CSS_SELECTOR,
     ),
     "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
@@ -1227,7 +1230,7 @@ storageclass = {
     ),
     "save-advanced-settings": ("#confirm-action", By.CSS_SELECTOR),
     "save-service-details": (
-        ".pf-c-button.pf-m-secondary[data-test='save-action']",
+        ".pf-c-button.pf-m-secondary[data-test='save-action'], .pf-v5-c-button.pf-m-secondary[data-test='save-action']",
         By.CSS_SELECTOR,
     ),
     "create": ("#save-changes", By.CSS_SELECTOR),
@@ -1295,7 +1298,7 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "capacity_breakdown_options": (
-        'button[class="pf-c-select__toggle"]',
+        'button[class*="c-select__toggle"]',
         By.CSS_SELECTOR,
     ),
     "capacity_breakdown_projects": ("//button[text()='Projects']", By.XPATH),
@@ -1439,7 +1442,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
-    "warning-alert": ("//div[@class='pf-c-alert pf-m-warning']", By.XPATH),
+    "warning-alert": ("//div[contains(@class, 'c-alert pf-m-warning')]", By.XPATH),
     "refresh-web-console": (
         "//button[normalize-space()='Refresh web console']",
         By.XPATH,
