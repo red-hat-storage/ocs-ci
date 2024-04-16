@@ -912,7 +912,10 @@ class TestS3BucketPolicy(MCGTest):
         # Verify put Object is allowed.
         logger.info(f"Put Object to the bucket: {obc_obj.bucket_name} ")
         assert s3_put_object(
-            obc_obj, obc_obj.bucket_name, object_key, data,
+            obc_obj,
+            obc_obj.bucket_name,
+            object_key,
+            data,
         ), f"Failed to put object to bucket {obc_obj.bucket_name}"
 
         # Delete policy and confirm policy got deleted.
@@ -922,13 +925,9 @@ class TestS3BucketPolicy(MCGTest):
     @pytest.mark.parametrize(
         argnames="effect",
         argvalues=[
-            pytest.param(
-                *["Allow"], marks=[tier1, pytest.mark.polarion_id("OCS-5768")]
-            ),
-            pytest.param(
-                *["Deny"], marks=[tier1, pytest.mark.polarion_id("OCS-5769")]
-            ),
-        ]
+            pytest.param(*["Allow"], marks=[tier1, pytest.mark.polarion_id("OCS-5768")]),
+            pytest.param(*["Deny"], marks=[tier1, pytest.mark.polarion_id("OCS-5769")]),
+        ],
     )
     def test_bucket_policy_elements_NotAction(self, mcg_obj, bucket_factory, effect):
         """
@@ -975,8 +974,7 @@ class TestS3BucketPolicy(MCGTest):
             # Delete bucket get access denied.
             logger.info(f"Deleting bucket {obc_obj.bucket_name}")
             try:
-                s3_delete_bucket_website(
-                    s3_obj=obc_obj, bucketname=obc_obj.bucket_name)
+                s3_delete_bucket_website(s3_obj=obc_obj, bucketname=obc_obj.bucket_name)
                 raise UnexpectedBehaviour(
                     "Failed: Bucket got deleted, expect to get AccessDenied."
                 )
@@ -1046,7 +1044,7 @@ class TestS3BucketPolicy(MCGTest):
             actions_list=["*"],
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
             resource="NotResource",
-            effect="Deny"
+            effect="Deny",
         )
         bucket_policy = json.dumps(bucket_policy_generated)
 
