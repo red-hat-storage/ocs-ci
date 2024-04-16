@@ -231,6 +231,22 @@ deployment_4_16 = {
         "//*[@class='pf-v5-c-select dropdown--full-width']",
         By.XPATH,
     ),
+    "drop_down_performance": (
+        "//*[@class='pf-v5-c-select odf-configure-performance__selector pf-v5-u-mb-md']",
+        By.XPATH,
+    ),
+    "lean_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Lean mode')]",
+        By.XPATH,
+    ),
+    "balanced_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Balanced mode')]",
+        By.XPATH,
+    ),
+    "performance_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Performance mode')]",
+        By.XPATH,
+    ),
 }
 
 generic_locators = {
