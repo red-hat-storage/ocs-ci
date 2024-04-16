@@ -11,8 +11,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import sync_object_directory
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework.testlib import polarion_id
 
 log = logging.getLogger(__name__)
 
