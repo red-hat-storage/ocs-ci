@@ -28,6 +28,7 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
 )
 from ocs_ci.ocs.resources import storage_cluster
+from ocs_ci.utility import version
 from ocs_ci.framework.pytest_customization.marks import bugzilla, brown_squad
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -114,9 +115,12 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             )
         else:
             param = (
-                f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
-                f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
+                f'"all": {tolerations}, "mds": {tolerations}, '
+                f'"noobaa-core": {tolerations}, "rgw": {tolerations}, '
             )
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_15:
+                param += f'"toolbox": {tolerations}'
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
@@ -138,19 +142,22 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             logger.info(f"Successfully added toleration to {sub}")
 
         if not config.ENV_DATA["mcg_only_deployment"]:
-            logger.info("Add tolerations to the ocsinitializations.ocs.openshift.io")
-            param = (
-                '{"spec":  {"tolerations": '
-                '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
-                '"value": "true"}]}}'
-            )
-            ocsini_obj = ocp.OCP(
-                resource_name=constants.OCSINIT,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                kind=constants.OCSINITIALIZATION,
-            )
-            ocsini_obj.patch(params=param, format_type="merge")
-            logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
+            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_15:
+                logger.info(
+                    "Add tolerations to the ocsinitializations.ocs.openshift.io"
+                )
+                param = (
+                    '{"spec":  {"tolerations": '
+                    '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+                    '"value": "true"}]}}'
+                )
+                ocsini_obj = ocp.OCP(
+                    resource_name=constants.OCSINIT,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    kind=constants.OCSINITIALIZATION,
+                )
+                ocsini_obj.patch(params=param, format_type="merge")
+                logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
 
             logger.info("Add tolerations to the configmap rook-ceph-operator-config")
             configmap_obj = ocp.OCP(

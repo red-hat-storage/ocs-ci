@@ -2552,8 +2552,9 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
         selector=[constants.TOOL_APP_LABEL],
         exclude_selector=True,
     )
-    flag = False
+
     for pod_obj in pod_objs:
+        flag = False
         resource_name = pod_obj.name
         tolerations = pod_obj.get().get("spec").get("tolerations")
         for key in tolerations:
