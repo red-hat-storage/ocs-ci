@@ -925,7 +925,9 @@ class TestS3BucketPolicy(MCGTest):
     @pytest.mark.parametrize(
         argnames="effect",
         argvalues=[
-            pytest.param(*["Allow"], marks=[tier1, pytest.mark.polarion_id("OCS-5768")]),
+            pytest.param(
+                *["Allow"], marks=[tier1, pytest.mark.polarion_id("OCS-5768")]
+            ),
             pytest.param(*["Deny"], marks=[tier1, pytest.mark.polarion_id("OCS-5769")]),
         ],
     )
