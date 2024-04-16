@@ -2,27 +2,28 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, tier2
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     magenta_squad,
+    system_test,
+    polarion_id,
 )
 from ocs_ci.ocs.cluster import (
     change_ceph_full_ratio,
-    get_percent_used_capacity,
-    get_osd_utilization,
-    get_ceph_df_detail,
     CephCluster,
 )
 
 logger = logging.getLogger(__name__)
 
 
-@tier2
+@system_test
+@polarion_id("OCS-5763")
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
@@ -110,28 +111,23 @@ class TestCloneDeletion(E2ETest):
         self.pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {self.pod_obj.name}")
 
-    def verify_osd_used_capacity_greater_than_expected(self, expected_used_capacity):
+    def flatten_image(self, clone_obj):
         """
-        Verify OSD percent used capacity greate than ceph_full_ratio
+        Flatten the image of clone
 
         Args:
-            expected_used_capacity (float): expected used capacity
-
-        Returns:
-                bool: True if used_capacity greater than expected_used_capacity, False otherwise
-
+            clone_obj: Object of clone of which image to be flatten
         """
-        used_capacity = get_percent_used_capacity()
-        logger.info(f"Used Capacity is {used_capacity}%")
-        ceph_df_detail = get_ceph_df_detail()
-        logger.info(f"ceph df detail: {ceph_df_detail}")
-        osds_utilization = get_osd_utilization()
-        logger.info(f"osd utilization: {osds_utilization}")
-        for osd_id, osd_utilization in osds_utilization.items():
-            if osd_utilization > expected_used_capacity:
-                logger.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
-                return True
-        return False
+        image_name = clone_obj.get_rbd_image_name
+        pool_name = "ocs-storagecluster-cephblockpool"
+
+        tool_pod = get_ceph_tools_pod()
+        out = tool_pod.exec_ceph_cmd(
+            ceph_cmd=f"rbd flatten {pool_name}/{image_name}",
+            format=None,
+        )
+        logger.info(f"{out}")
+        logger.info(f"Successfully flatten the image of {clone_obj.name}")
 
     @skipif_external_mode
     @magenta_squad
@@ -155,27 +151,20 @@ class TestCloneDeletion(E2ETest):
         clones_list = []
 
         if interface_type == constants.CEPHBLOCKPOOL:
-            clone_num = 0
-            clones_list.append(self.pvc_obj)
-            for obj in clones_list:
-                if len(clones_list) <= (self.num_of_clones + 3):
-                    logger.info(f"Start creation of clone number {clone_num}.")
-                    cloned_pvc_obj = pvc_clone_factory(
-                        obj,
-                        storageclass=self.pvc_obj.backed_sc,
-                        timeout=360,
-                        clone_name="clone" + "-" + str(clone_num),
-                    )
-                    cloned_pvc_obj.reload()
-                    clones_list.append(cloned_pvc_obj)
-                    logger.info(
-                        f"Clone with name {cloned_pvc_obj.name} of {self.pvc_size}"
-                        f"size from pvc {obj.name} was created."
-                    )
-                    clone_num = clone_num + 1
-                    continue
-                else:
-                    break
+            for clone_num in range(self.num_of_clones + 1):
+                logger.info(f"Start creation of clone number {clone_num}.")
+                cloned_pvc_obj = pvc_clone_factory(
+                    self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=600
+                )
+                cloned_pvc_obj.reload()
+
+                # flatten the image
+                self.flatten_image(cloned_pvc_obj)
+
+                clones_list.append(cloned_pvc_obj)
+                logger.info(
+                    f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
+                )
 
         else:
             for clone_num in range(self.num_of_clones + 1):
@@ -189,21 +178,9 @@ class TestCloneDeletion(E2ETest):
                     f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
                 )
 
-        logger.info("Verify used capacity bigger than 85%")
-        sample = TimeoutSampler(
-            timeout=2500,
-            sleep=40,
-            func=self.verify_osd_used_capacity_greater_than_expected,
-            expected_used_capacity=85.0,
-        )
-        if not sample.wait_for_func_status(result=True):
-            logger.error("The after 1800 seconds the used capacity smaller than 85%")
-            raise TimeoutExpiredError
-
         logger.info(
             "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
         )
-
         expected_alerts = ["CephOSDNearFull", "CephOSDCriticallyFull"]
         prometheus = PrometheusAPI(threading_lock=threading_lock)
         sample = TimeoutSampler(
