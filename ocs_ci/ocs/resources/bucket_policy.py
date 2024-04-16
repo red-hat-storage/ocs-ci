@@ -130,8 +130,14 @@ class NoobaaAccount(object):
 
 
 def gen_bucket_policy(
-    user_list, actions_list, resources_list, effect=None, sid="statement",
-    principal=None, action=None, resource=None,
+    user_list,
+    actions_list,
+    resources_list,
+    effect=None,
+    sid="statement",
+    principal=None,
+    action=None,
+    resource=None,
 ):
     """
     Function prepares bucket policy parameters in syntax and format provided by AWS bucket policy
