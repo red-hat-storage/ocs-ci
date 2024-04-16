@@ -5,11 +5,6 @@ metadata:
   namespace: openshift-marketplace
 spec:
   displayName: Production Operators
-  grpcPodConfig:
-    extractContent:
-      cacheDir: /tmp/cache
-      catalogDir: /configs
-    memoryTarget: 30Mi
   publisher: OpenShift QE
   sourceType: grpc
   updateStrategy:
