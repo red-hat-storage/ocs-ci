@@ -138,18 +138,14 @@ class MetalLBInstaller:
         Returns:
             bool: True if operator group is created, False otherwise
         """
-        if not self.operatorgroup_name:
+        # operatorgroup name installed with UI has a dynamic suffix. So, we need to check not using the name of resource
+        cmd = "oc get operatorgroup -n metallb-system | awk 'NR>1 {print \"true\"; exit}' "
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to get operatorgroup crs \n{cmd_res.stderr}")
             return False
 
-        return OCP(
-            kind=constants.OPERATOR_GROUP,
-            namespace=self.namespace_lb,
-            resource_name=self.operatorgroup_name,
-        ).check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
-            should_exist=True,
-            resource_name=self.operatorgroup_name,
-        )
+        return cmd_res.stdout.decode("utf-8").strip() == "true"
 
     @retry(CommandFailed, tries=3, delay=15)
     def create_metallb_operator_group(self):
@@ -166,7 +162,7 @@ class MetalLBInstaller:
 
         # check if OperatorGroup already exists
         if self.metallb_operator_group_created():
-            logger.info(f"OperatorGroup {self.operatorgroup_name} already exists")
+            logger.info("OperatorGroup already exists")
             return
 
         # update namespace and target namespace
