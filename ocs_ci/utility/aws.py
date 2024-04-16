@@ -1904,7 +1904,7 @@ class AWS(object):
 
     def get_buckets_to_delete(self, bucket_prefix, hours):
         """
-        Get the bucket with prefix which are older than given days
+        Get the bucket with prefix which are older than given hours
 
         Args:
             bucket_prefix (str): prefix for the buckets to fetch
@@ -1927,7 +1927,7 @@ class AWS(object):
             # Calculate the age of the bucket
             age_of_bucket = current_date - bucket_creation_date
 
-            # Check if the bucket is older than given days
+            # Check if the bucket is older than given hours
             if (age_of_bucket.days) * 24 >= bucket_delete_time:
                 logger.info(
                     f"{bucket_name} (Created on {bucket_creation_date} and age is {age_of_bucket}) can be deleted"

@@ -317,7 +317,7 @@ def delete_buckets(bucket_prefix, hours):
     Delete the S3 buckets with given prefix
 
     Args:
-        bucket_prefix (str): Bucket prefix to delete.
+        bucket_prefix (dict): Bucket prefix as key and maximum hours to run/exist as value
         hours (int): hours older than this will be considered to delete
 
     """
