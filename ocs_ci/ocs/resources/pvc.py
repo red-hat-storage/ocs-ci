@@ -271,9 +271,12 @@ class PVC(OCS):
         snapshot_obj.parent_volume_mode = self.get()["spec"]["volumeMode"]
         return snapshot_obj
 
-    def create_reclaim_space_job(self):
+    def create_reclaim_space_job(self, global_timeout=None):
         """
         Create ReclaimSpaceJob to invoke reclaim space operation on RBD volume
+
+        Args:
+            global_timeout(bool): True, if global config map is going to be used, None otherwise
 
         Returns:
             ocs_ci.ocs.resources.ocs.OCS: An OCS object representing ReclaimSpaceJob
@@ -282,7 +285,9 @@ class PVC(OCS):
         assert (
             self.provisioner == constants.RBD_PROVISIONER
         ), "Only RBD PVC is supported"
-        reclaim_space_job = helpers.create_reclaim_space_job(self.name)
+        reclaim_space_job = helpers.create_reclaim_space_job(
+            self.name, global_timeout=global_timeout
+        )
         return reclaim_space_job
 
     def create_reclaim_space_cronjob(self, schedule=None):

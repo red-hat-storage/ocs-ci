@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: csi-addons-config
+    namespace: openshift-storage
+data:
+    "reclaim-space-timeout": "10m"
+

@@ -24,6 +24,7 @@ spec:
       # target represents volume target on which the operation will be performed
       target:
         persistentVolumeClaim: data-pvc
+      timeout: 360
   # interval of the recurring operation of reclaim space job
   # schedule could be weekly, hourly, daily(midnight).
   # By default schedule is set to weekly

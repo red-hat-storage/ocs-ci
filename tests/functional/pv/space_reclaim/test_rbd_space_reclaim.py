@@ -280,6 +280,7 @@ class TestRbdSpaceReclaim(ManageTest):
                 timeout=120, sleep=5, func=reclaim_space_job.get
             ):
                 result = reclaim_space_job_yaml.get("status", {}).get("result")
+                timeout = reclaim_space_job_yaml.get("spec", {}).get("timeout")
                 if result == "Succeeded":
                     log.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
                     break
@@ -288,6 +289,8 @@ class TestRbdSpaceReclaim(ManageTest):
                         f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. "
                         f"Present value of result is {result}"
                     )
+                if not timeout:
+                    raise UnexpectedBehaviour("Failed to configure timeout")
         except TimeoutExpiredError:
             raise UnexpectedBehaviour(
                 f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output:{reclaim_space_job.get()}"
