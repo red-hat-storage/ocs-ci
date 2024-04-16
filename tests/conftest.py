@@ -4875,6 +4875,8 @@ def setup_acm_ui(request):
 
 
 def setup_acm_ui_fixture(request):
+    if not ocsci_config.RUN.get("dr_action_via_ui"):
+        return
     restore_ctx_index = ocsci_config.cur_index
     ocsci_config.switch_acm_ctx()
     driver = login_to_acm()
