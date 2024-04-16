@@ -142,6 +142,7 @@ class Alerts(Alerting, SearchBar):
 
         Args:
             search_text (str): Text to search
+
         """
         self.search(search_text)
 
@@ -168,6 +169,7 @@ class AlertingRules(Alerting, SearchBar):
 
         Args:
             alert_name (str): Alert name
+
         Returns:
             AlertDetails: Alert Rule Details page
 
@@ -188,8 +190,10 @@ class AlertingRules(Alerting, SearchBar):
 def convert_github_link_to_raw(link):
     """
     Convert GitHub link to raw link
+
     Args:
         link (str): GitHub link
+
     Returns:
         Raw GitHub link or None if the link is not valid
 
