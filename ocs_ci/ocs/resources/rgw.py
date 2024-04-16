@@ -1,9 +1,15 @@
 import base64
+import logging
+
+import boto3
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import storagecluster_independent_check
+
+
+logger = logging.getLogger(name=__file__)
 
 
 class RGW(object):
@@ -28,10 +34,23 @@ class RGW(object):
             self.storageclass.get().get("parameters").get("endpoint")
         )
         self.region = self.storageclass.get().get("parameters").get("region")
-        # Todo: Implement retrieval in cases where CephObjectStoreUser is available
+        self.s3_endpoint = None
         self.key_id = None
         self.secret_key = None
         self.s3_resource = None
+        if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+            self.s3_endpoint, self.key_id, self.secret_key = self.get_credentials()
+
+            self.aws_s3_resource = boto3.resource(
+                "s3",
+                endpoint_url=self.s3_endpoint,
+                aws_access_key_id=self.key_id,
+                aws_secret_access_key=self.secret_key,
+            )
+        else:
+            logger.warning(
+                f"Platform {config.ENV_DATA['platform']} doesn't support RGW"
+            )
 
     def get_credentials(self, secret_name=constants.NOOBAA_OBJECTSTOREUSER_SECRET):
         """
@@ -76,3 +95,14 @@ class RGW(object):
             creds_secret_obj.get("data").get("SecretKey")
         ).decode("utf-8")
         return endpoint, access_key, secret_key
+
+    def s3_list_all_objects_in_bucket(self, bucketname):
+        """
+        Args:
+            bucketname (str): Name of rgw bucket
+
+        Returns:
+            list: A list of all bucket objects
+
+        """
+        return {obj for obj in self.s3_resource.Bucket(bucketname).objects.all()}
