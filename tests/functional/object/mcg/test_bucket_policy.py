@@ -962,7 +962,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Verify DeleteBucket and putObject operation
         # in both scenarios: Effect=Allow/Deny
-        if effect is "Allow":
+        if effect == "Allow":
             # Put Object is allowed
             logger.info("Writing index data to the bucket")
             assert s3_put_object(
@@ -990,7 +990,7 @@ class TestS3BucketPolicy(MCGTest):
                         f"{e.response} received invalid error code "
                         f"{response.error['Code']}"
                     )
-        if effect is "Deny":
+        if effect == "Deny":
             # Put Object get access denied.
             logger.info("Writing index data to the bucket")
             try:
