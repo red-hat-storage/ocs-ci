@@ -1648,7 +1648,7 @@ def get_osd_size():
         int: osd size
 
     """
-    return get_storage_size()[:-2]
+    return int(get_storage_size()[:-2])
 
 
 def get_deviceset_count():
