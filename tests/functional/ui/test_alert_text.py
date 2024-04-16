@@ -65,6 +65,7 @@ provider_mode_alerts = {
 def alerts_expected():
     """
     Get alerts hash values based on the cluster mode
+
     """
     if is_hci_provider_cluster():
         return {**internal_mode_OCP_ODF_alerts, **provider_mode_alerts}

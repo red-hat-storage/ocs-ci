@@ -57,6 +57,7 @@ class Runbook:
 
         Returns:
             bool: True if the text is valid, False otherwise
+
         """
         if hasattr(self, "text") and not self.text:
             raise ValueError(
@@ -72,7 +73,7 @@ class Runbook:
         # Check additional text arguments if provided
         for arg in args:
             if not re.search(arg, self.text):
-                logger.error(f"arg '{arg}' is missing int the text.")
+                logger.error(f"arg '{arg}' is missing in the text.")
                 return False
 
         return True
@@ -93,6 +94,7 @@ class Alerting(PageNavigator):
 
         Returns:
             Alerts: Alerts page
+
         """
         logger.info("Navigate to Alerts tab")
         self.do_click(self.validation_loc["alerts-tab-link"], enable_screenshot=True)
@@ -104,6 +106,7 @@ class Alerting(PageNavigator):
 
         Returns:
             Silences: Silences page
+
         """
         logger.info("Navigate to Silences tab")
         self.do_click(self.alerting_loc["silences-tab-link"], enable_screenshot=True)
@@ -115,6 +118,7 @@ class Alerting(PageNavigator):
 
         Returns:
             AlertingRules: Alerting Rules page
+
         """
         logger.info("Navigate to Alerting Rules tab")
         self.do_click(
@@ -132,7 +136,7 @@ class Alerts(Alerting, SearchBar):
         Alerting.__init__(self)
         SearchBar.__init__(self)
 
-    def search_alert(self, search_text: str):
+    def search_alert(self, search_text):
         """
         Search for Alerts
 
@@ -158,7 +162,7 @@ class AlertingRules(Alerting, SearchBar):
         Alerting.__init__(self)
         SearchBar.__init__(self)
 
-    def navigate_alerting_rule_details(self, alert_name: str):
+    def navigate_alerting_rule_details(self, alert_name):
         """
         Navigate to Alerting Rule Details
 
@@ -166,6 +170,7 @@ class AlertingRules(Alerting, SearchBar):
             alert_name (str): Alert name
         Returns:
             AlertDetails: Alert Rule Details page
+
         """
         logger.info(f"Navigate to Alerting Rule Details for {alert_name}")
         self.clear_search()
@@ -180,13 +185,14 @@ class AlertingRules(Alerting, SearchBar):
         return AlertDetails()
 
 
-def convert_github_link_to_raw(link: str):
+def convert_github_link_to_raw(link):
     """
     Convert GitHub link to raw link
     Args:
         link (str): GitHub link
     Returns:
         Raw GitHub link or None if the link is not valid
+
     """
     # Define pattern to match the GitHub link
     pattern = r"https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/blob/(?P<branch>[^/]+)/(?P<path>.+)"
@@ -222,6 +228,7 @@ class AlertDetails(PageNavigator):
 
         Returns:
             str: Runbook link
+
         """
         return self.get_element_text(self.alerting_loc["runbook_link"])
 
@@ -231,6 +238,7 @@ class AlertDetails(PageNavigator):
 
         Returns:
             Runbook: Runbook page
+
         """
         runbook_link = self.get_runbook_link()
         raw_github_link = convert_github_link_to_raw(runbook_link)
