@@ -9,6 +9,7 @@ import shutil
 import requests
 
 import semantic_version
+import platform
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -162,17 +163,18 @@ class Submariner(object):
 
     def download_downstream_binary(self):
         subctl_ver = config.ENV_DATA["subctl_version"]
+        processor = platform.processor()
+        if processor == "x86_64":
+            binary_pltfrm = "amd64"
         cmd = (
             f"oc image {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
-            f'--path="/dist/{subctl_ver}*-linux-amd64.tar.xz":/tmp --confirm'
+            f'--path="/dist/{subctl_ver}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
         )
         run_cmd(cmd)
-        decompress = f"tar -C /tmp/ -xf /tmp/{subctl_ver}*--linux-amd64.tar.xz"
+        decompress = f"tar -C /tmp/ -xf /tmp/{subctl_ver}*-linux-{binary_pltfrm}.tar.xz"
         run_cmd(decompress)
         target_dir = os.path.expanduser("~/.local/bin/subctl")
-        install_cmd = (
-            f"install -m744 /tmp/{subctl_ver}*/{subctl_ver}*-linux-amd64 {target_dir} "
-        )
+        install_cmd = f"install -m744 /tmp/{subctl_ver}*/{subctl_ver}*-linux-{binary_pltfrm} {target_dir} "
         run_cmd(install_cmd)
         shutil.copyfile(
             os.path.expanduser(f"{target_dir}"),
