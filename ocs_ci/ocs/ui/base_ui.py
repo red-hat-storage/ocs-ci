@@ -146,6 +146,7 @@ class BaseUI:
             locators, self.ocp_version, "add_capacity"
         )
         self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
+        self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
@@ -371,6 +372,23 @@ class BaseUI:
             f"//{element}[contains(text(), '{expected_text}')]"
         )
         return len(element_list) > 0
+
+    def check_number_occurrences_text(self, expected_text, number, element="*"):
+        """
+        The number of times the string appears on the web page
+
+        Args:
+            expected_text (string): The expected text.
+            number (int): The number of times the string appears on the web page
+
+        return:
+            bool: True if the text matches the expected text, False otherwise
+
+        """
+        element_list = self.driver.find_elements_by_xpath(
+            f"//{element}[contains(text(), '{expected_text}')]"
+        )
+        return len(element_list) == number
 
     def get_element_text(self, locator):
         """

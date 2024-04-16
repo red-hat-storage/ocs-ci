@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     red_squad,
     mcg,
+    sts_deployment_required,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
@@ -58,6 +59,18 @@ class TestReplication(MCGTest):
                 },
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
                 marks=[tier1, pytest.mark.polarion_id("OCS-2678")],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
+                },
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                marks=[
+                    tier2,
+                    sts_deployment_required,
+                    pytest.mark.polarion_id("OCS-5494"),
+                ],
             ),
             pytest.param(
                 {
@@ -120,6 +133,7 @@ class TestReplication(MCGTest):
         ],
         ids=[
             "AWStoAZURE-BS-OC",
+            "AWS-STStoAZURE-BS-Hybrid",
             "GCPtoAWS-BS-OC",
             "AZUREtoCGP-BS-CLI",
             "AWStoAZURE-BS-CLI",
@@ -256,10 +270,20 @@ class TestReplication(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
                 marks=[tier1, pytest.mark.polarion_id("OCS-2683")],
             ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
+                },
+                {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                marks=[
+                    tier2,
+                    sts_deployment_required,
+                    pytest.mark.polarion_id("OCS-5495"),
+                ],
+            ),
         ],
-        ids=[
-            "AWStoAZURE-BS-OC",
-        ],
+        ids=["AWStoAZURE-BS-OC", "AWS-STStoAZURE-BS-Hybrid"],
     )
     def test_bidirectional_bucket_replication(
         self,

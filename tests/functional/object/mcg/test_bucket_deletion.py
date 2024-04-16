@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     red_squad,
     mcg,
+    sts_deployment_required,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -87,6 +88,16 @@ class TestBucketDeletion(MCGTest):
                 ],
                 marks=[tier1],
             ),
+            pytest.param(
+                *[
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
+                    },
+                ],
+                marks=[tier1, sts_deployment_required],
+            ),
         ],
         ids=[
             "S3",
@@ -97,6 +108,7 @@ class TestBucketDeletion(MCGTest):
             "OC-GCP",
             "OC-IBMCOS",
             "CLI-IBMCOS",
+            "CLI-AWS-STS",
         ],
     )
     @flaky

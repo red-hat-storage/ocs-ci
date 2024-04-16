@@ -20,11 +20,16 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     ResourceWrongStatusException,
+    ClusterNotInSTSModeException,
 )
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
-from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    load_auth_config,
+    get_role_arn_from_sub,
+)
 
 logger = logging.getLogger(name=__file__)
 
@@ -37,6 +42,7 @@ class CloudManager(ABC):
 
     def __init__(self):
         cloud_map = {
+            "AWS_STS": AwsSTSClient,
             "AWS": S3Client,
             "GCP": GoogleClient,
             "AZURE": AzureClient,
@@ -96,6 +102,16 @@ class CloudManager(ABC):
             setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"]))
         except CommandFailed:
             setattr(self, "rgw_client", None)
+
+        # set the client for STS enabled cluster
+        try:
+            role_arn = get_role_arn_from_sub()
+            cred_dict["AWS"]["ROLE_ARN"] = role_arn
+            setattr(
+                self, "aws_sts_client", cloud_map["AWS_STS"](auth_dict=cred_dict["AWS"])
+            )
+        except ClusterNotInSTSModeException:
+            setattr(self, "aws_sts_client", None)
 
 
 class CloudClient(ABC):
@@ -630,3 +646,18 @@ class AzureWithLogsClient(AzureClient):
         ).decode("ascii")
 
         return create_resource(**bs_secret_data)
+
+
+class AwsSTSClient(S3Client):
+    def __init__(
+        self,
+        auth_dict,
+        verify=True,
+        endpoint="https://s3.amazonaws.com",
+        *args,
+        **kwargs,
+    ):
+        super().__init__(
+            auth_dict=auth_dict, verify=verify, endpoint=endpoint, *args, **kwargs
+        )
+        self.role_arn = auth_dict["ROLE_ARN"]

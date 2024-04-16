@@ -254,6 +254,7 @@ def create_pod(
     scc=None,
     volumemounts=None,
     pvc_read_only_mode=None,
+    priorityClassName=None,
 ):
     """
     Create a pod
@@ -435,6 +436,9 @@ def create_pod(
             ] = subpath
         else:
             pod_data["spec"]["containers"][0]["volumeMounts"][0]["subPath"] = subpath
+
+    if priorityClassName:
+        pod_data["spec"]["priorityClassName"] = priorityClassName
 
     # overwrite used image (required for disconnected installation)
     update_container_with_mirrored_image(pod_data)
@@ -4100,6 +4104,20 @@ def create_reclaim_space_cronjob(
     if schedule:
         job_data["spec"]["schedule"] = "@" + schedule
     ocs_obj = create_resource(**job_data)
+    return ocs_obj
+
+
+def create_priority_class(priority, value):
+    """
+    Function to create priority class on the cluster
+    Returns:
+        bool: Returns priority class obj
+    """
+    priority_class_data = templating.load_yaml(constants.PRIORITY_CLASS_YAML)
+    priority_class_data["value"] = value
+    priority_class_name = priority_class_data["metadata"]["name"] + "-" + priority
+    priority_class_data["metadata"]["name"] = priority_class_name
+    ocs_obj = create_resource(**priority_class_data)
     return ocs_obj
 
 

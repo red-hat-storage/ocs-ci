@@ -697,6 +697,8 @@ CSI_RBD_RECLAIM_SPACE_CRONJOB_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "reclaimspacecronjob.yaml"
 )
 
+PRIORITY_CLASS_YAML = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "priorityclass.yaml")
+
 OC_MIRROR_IMAGESET_CONFIG = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config.yaml"
 )
@@ -1051,6 +1053,27 @@ ALERT_STORAGECLIENTHEARTBEATMISSED = "StorageClientHeartbeatMissed"
 ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = (
     "StorageClientIncompatibleOperatorVersion"
 )
+ALERT_CEPH_OSD_VERSION_MISMATCH = "CephOSDVersionMismatch"
+ALERT_PERSISTENT_VOLUME_USAGE_CRITICAL = "PersistentVolumeUsageCritical"
+ALERT_CEPH_CLUSTER_READ_ONLY = "CephClusterReadOnly"
+ALERT_CEPH_MON_VERSION_MISMATCH = "CephMonVersionMismatch"
+ALERT_CEPH_POOL_QUOTA_BYTES_CRITICALLY_EXHAUSTED = (
+    "CephPoolQuotaBytesCriticallyExhausted"
+)
+ALERT_CEPH_POOL_QUOTA_BYTES_NEAR_EXHAUSTION = "CephPoolQuotaBytesNearExhaustion"
+ALERT_CEPH_MDS_MISSING_REPLICAS = "CephMdsMissingReplicas"
+ALERT_CEPH_MON_HIGH_NUMBER_OF_LEADER_CHANGES = "CephMonHighNumberOfLeaderChanges"
+ALERT_CEPH_OSD_CRITICALLY_FULL = "CephOSDCriticallyFull"
+ALERT_OBC_QUOTA_OBJECTS_ALERT = "ObcQuotaObjectsAlert"
+ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT = "ObcQuotaBytesExhausedAlert"
+ALERT_ODF_RBD_CLIENT_BLOCKED = "ODFRBDClientBlocked"
+ALERT_ODF_MIRROR_DAEMON_STATUS = "OdfMirrorDaemonStatus"
+ALERT_ODF_MIRRORING_IMAGE_HEALTH = "OdfPoolMirroringImageHealth"
+ALERT_CEPH_OSD_FLAPPING = "CephOSDFlapping"
+ALERT_CEPH_OSD_NEAR_FULL = "CephOSDNearFull"
+ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL = "PersistentVolumeUsageNearFull"
+ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
+ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -1999,7 +2022,7 @@ SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
 # Cloud Manager available platforms
-CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "AZURE_WITH_LOGS", "IBMCOS"]
+CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "AZURE_WITH_LOGS", "IBMCOS", "AWS_STS"]
 
 # Vault related configurations
 VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"

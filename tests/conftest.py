@@ -1203,6 +1203,7 @@ def pod_factory_fixture(request, pvc_factory):
         subpath=None,
         deployment=False,
         pvc_read_only_mode=None,
+        priorityClassName=None,
     ):
         """
         Args:
@@ -1231,6 +1232,7 @@ def pod_factory_fixture(request, pvc_factory):
                 on the pod
             subpath (str): Value of subPath parameter in pod yaml
             deployment (bool): True for Deployment creation, False otherwise
+            priorityClassName (str): Sets priority to the pod
 
         Returns:
             object: helpers.create_pod instance
@@ -1258,6 +1260,7 @@ def pod_factory_fixture(request, pvc_factory):
                 subpath=subpath,
                 deployment=deployment,
                 pvc_read_only_mode=pvc_read_only_mode,
+                priorityClassName=priorityClassName,
             )
             assert pod_obj, "Failed to create pod"
 
