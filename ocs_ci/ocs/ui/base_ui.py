@@ -146,6 +146,7 @@ class BaseUI:
             locators, self.ocp_version, "add_capacity"
         )
         self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
+        self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
