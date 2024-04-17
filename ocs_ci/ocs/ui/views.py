@@ -664,7 +664,7 @@ page_nav = {
         By.XPATH,
     ),
     "object_storage": ("//a[normalize-space()='Object Storage']", By.XPATH),
-    "Monitoring": ("//button[text()='Monitoring']", By.XPATH),
+    "observe": ("//button[text()='Observe']", By.XPATH),
     "alerting_page": ("Alerting", By.LINK_TEXT),
     "metrics_page": ("Metrics", By.LINK_TEXT),
     "dashboards_page": ("Dashboards", By.LINK_TEXT),
@@ -1813,6 +1813,15 @@ topology = {
     ),
 }
 
+alerting = {
+    "alerts-tab-link": ("Alerts", By.LINK_TEXT),
+    "silences-tab-link": ("Silences", By.LINK_TEXT),
+    "alerting-rules-tab-link": ("Alerting rules", By.LINK_TEXT),
+    "runbook_link": ("//a[@class='co-external-link']", By.XPATH),
+    "alerting_rule_details_link": ("//a[normalize-space()='{}']", By.XPATH),
+}
+
+
 locators = {
     "4.16": {
         "login": {**login, **login_4_11, **login_4_14},
@@ -1860,6 +1869,7 @@ locators = {
         "bucketclass": bucketclass,
         "topology": topology,
         "mcg_stores": mcg_stores,
+        "alerting": alerting,
     },
     "4.15": {
         "login": {**login, **login_4_11, **login_4_14},
@@ -1907,6 +1917,7 @@ locators = {
         "bucketclass": bucketclass,
         "topology": topology,
         "mcg_stores": mcg_stores,
+        "alerting": alerting,
     },
     "4.14": {
         "login": {**login, **login_4_11, **login_4_14},
