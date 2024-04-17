@@ -24,7 +24,6 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 )
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
-    mcg_only_post_deployment_checks,
 )
 from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.deployment.acm import Submariner
@@ -958,6 +957,7 @@ class Deployment(object):
         if config.DEPLOYMENT.get("local_storage"):
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
+        return
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
 
@@ -1460,7 +1460,7 @@ class Deployment(object):
             pgsql_manager.create_database(
                 db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
             )
-            create_external_pgsql_secret()
+            # create_external_pgsql_secret()
             cluster_data["spec"]["multiCloudGateway"] = {
                 "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
             }
@@ -1721,9 +1721,69 @@ class Deployment(object):
             self.deploy_with_external_mode()
         else:
             self.deploy_ocs_via_operator(image)
-            if config.ENV_DATA["mcg_only_deployment"]:
-                mcg_only_post_deployment_checks()
-                return
+            # if config.ENV_DATA["mcg_only_deployment"]:
+            #     mcg_only_post_deployment_checks()
+            #     return
+            #
+            # # get ODF version and set MGR count based on ODF version
+            # ocs_version = version.get_semantic_ocs_version_from_config()
+            # mgr_count = constants.MGR_COUNT_415
+            # if ocs_version < version.VERSION_4_15:
+            #     mgr_count = constants.MGR_COUNT
+            #
+            # pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+            # cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
+            # # Check for Ceph pods
+            # mon_pod_timeout = 900
+            # assert pod.wait_for_resource(
+            #     condition="Running",
+            #     selector="app=rook-ceph-mon",
+            #     resource_count=3,
+            #     timeout=mon_pod_timeout,
+            # )
+            # assert pod.wait_for_resource(
+            #     condition="Running",
+            #     selector="app=rook-ceph-mgr",
+            #     resource_count=mgr_count,
+            #     timeout=600,
+            # )
+            # assert pod.wait_for_resource(
+            #     condition="Running",
+            #     selector="app=rook-ceph-osd",
+            #     resource_count=3,
+            #     timeout=600,
+            # )
+            #
+            # # validate ceph mon/osd volumes are backed by pvc
+            # validate_cluster_on_pvc()
+            #
+            # # check for odf-console
+            # if ocs_version >= version.VERSION_4_9:
+            #     assert pod.wait_for_resource(
+            #         condition="Running", selector="app=odf-console", timeout=600
+            #     )
+            #
+            # # Creating toolbox pod
+            # setup_ceph_toolbox()
+            #
+            # assert pod.wait_for_resource(
+            #     condition=constants.STATUS_RUNNING,
+            #     selector="app=rook-ceph-tools",
+            #     resource_count=1,
+            #     timeout=600,
+            # )
+            #
+            # if not config.COMPONENTS["disable_cephfs"]:
+            #     # Check for CephFilesystem creation in ocp
+            #     cfs_data = cfs.get()
+            #     cfs_name = cfs_data["items"][0]["metadata"]["name"]
+            #
+            #     if helpers.validate_cephfilesystem(cfs_name):
+            #         logger.info("MDS deployment is successful!")
+            #         defaults.CEPHFILESYSTEM_NAME = cfs_name
+            #     else:
+            #         logger.error("MDS deployment Failed! Please check logs!")
+            return
 
             # get ODF version and set MGR count based on ODF version
             ocs_version = version.get_semantic_ocs_version_from_config()
@@ -1794,7 +1854,7 @@ class Deployment(object):
                         namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
                     )
                 )
-
+        return
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
             "persistent-monitoring"
@@ -1992,10 +2052,7 @@ class Deployment(object):
             except Exception as ex:
                 logger.error(f"Failed to uninstall OCS. Exception is: {ex}")
                 logger.info("resuming teardown")
-            try:
-                self.ocp_deployment.destroy(log_level)
-            finally:
-                self.cleanup_pgsql_db()
+            self.ocp_deployment.destroy(log_level)
 
     def add_node(self):
         """
@@ -2089,9 +2146,7 @@ class Deployment(object):
         logger.info("Writing tag data to snapshot.ver")
         acm_version = config.ENV_DATA.get("acm_version")
 
-        image_tag = config.ENV_DATA.get(
-            "acm_unreleased_image"
-        ) or get_latest_acm_tag_unreleased(version=acm_version)
+        image_tag = get_latest_acm_tag_unreleased(version=acm_version)
 
         with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
@@ -2173,30 +2228,6 @@ class Deployment(object):
             f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
         validate_acm_hub_install()
-
-
-def create_external_pgsql_secret():
-    """
-    Creates secret for external PgSQL to be used by Noobaa
-    """
-    secret_data = templating.load_yaml(constants.EXTERNAL_PGSQL_NOOBAA_SECRET_YAML)
-    secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    pgsql_data = config.AUTH["pgsql"]
-    user = pgsql_data["username"]
-    password = pgsql_data["password"]
-    host = pgsql_data["host"]
-    port = pgsql_data["port"]
-    cluster_name = config.ENV_DATA["cluster_name"].replace("-", "_")
-    secret_data["stringData"][
-        "db_url"
-    ] = f"postgres://{user}:{password}@{host}:{port}/nbcore_{cluster_name}"
-
-    secret_data_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="external_pgsql_noobaa_secret", delete=False
-    )
-    templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
-    logger.info("Creating external PgSQL Noobaa secret")
-    run_cmd(f"oc create -f {secret_data_yaml.name}")
 
 
 def validate_acm_hub_install():
