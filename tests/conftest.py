@@ -6489,6 +6489,7 @@ def dr_workload(request):
             list: objects of workload class.
 
         """
+        ctx.append(switch_ctx)
         total_pvc_count = 0
         workload_key = "dr_workload_subscription"
         if pvc_interface == constants.CEPHFILESYSTEM:
@@ -6524,7 +6525,6 @@ def dr_workload(request):
                 dr_helpers.wait_for_mirroring_status_ok(
                     replaying_images=total_pvc_count
                 )
-        ctx.append(switch_ctx)
         return instances
 
     def teardown():
