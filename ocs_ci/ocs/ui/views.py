@@ -443,7 +443,8 @@ obc = {
         By.CSS_SELECTOR,
     ),
     "select_administrator": (
-        "//a[contains(@class,'c-dropdown__menu-item')]//h2[contains(@class, 'c-title pf-m-md')][normalize-space()='Administrator'] | "
+        "//a[contains(@class,'c-dropdown__menu-item')]"
+        "//h2[contains(@class, 'c-title pf-m-md')][normalize-space()='Administrator'] | "
         "//h2[.='Administrator']",
         By.XPATH,
     ),
@@ -1232,7 +1233,8 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "advanced-settings": (
-        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body, .pf-v5-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
+        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body, "
+        ".pf-v5-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
         By.CSS_SELECTOR,
     ),
     "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
