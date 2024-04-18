@@ -846,11 +846,15 @@ def check_and_add_enough_worker(worker_count):
                             )
                         )
                 else:
+                    # Getting the machineset configured during deployment of the cluster
+                    existing_ms_in_cluster = machine.get_machinesets()
+                    # Getting default machineset's zone from the cluster
+                    available_zone_in_cluster = existing_ms_in_cluster[0][-1]
                     ms_name.append(
                         machine.create_custom_machineset(
                             instance_type=constants.AWS_PRODUCTION_INSTANCE_TYPE,
                             labels=labels,
-                            zone="a",
+                            zone=available_zone_in_cluster,
                         )
                     )
                 for ms in ms_name:
