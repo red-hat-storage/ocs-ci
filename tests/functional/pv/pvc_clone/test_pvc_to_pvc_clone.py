@@ -230,6 +230,7 @@ class TestClone(ManageTest):
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
     @skipif_hci_provider_and_client
+    @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5444")
     @pytest.mark.polarion_id("OCS-5446")
     @pytest.mark.parametrize(
@@ -336,6 +337,7 @@ class TestClone(ManageTest):
         logger.info(f"File {file_name} exists in {snapshot_restore_pod_obj.name}")
 
     @skipif_hci_provider_and_client
+    @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5445")
     @pytest.mark.polarion_id("OCS-5447")
     @pytest.mark.parametrize(
