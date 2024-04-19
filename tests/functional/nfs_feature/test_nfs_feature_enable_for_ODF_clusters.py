@@ -8,7 +8,7 @@ from ocs_ci.utility import nfs_utils
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
@@ -145,6 +145,8 @@ class TestNfsEnable(ManageTest):
             config.ENV_DATA.get("nfs_client_private_key")
             or config.DEPLOYMENT["ssh_key_private"]
         )
+        self.ocp_version = version.get_semantic_ocp_version_from_config()
+        self.ocs_version = version.get_semantic_ocs_version_from_config()
 
         self.con = None
 
@@ -303,6 +305,8 @@ class TestNfsEnable(ManageTest):
         This test is to validate export where the export is consumed from outside the Openshift cluster
         - Create a LoadBalancer Service pointing to the CephNFS server
         - Direct external NFS clients to the Service endpoint from the step above
+        From odf 4.16 out cluster export can be restricted to the clients ip/hostnames added under
+        nfs storageclass clients section.
 
         Prerequisites:
             On the client host machine openshift-dev pub key in authorized_keys should be available
@@ -334,15 +338,37 @@ class TestNfsEnable(ManageTest):
             private_key=self.nfs_client_private_key,
         )
 
-        # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
-        nfs_pvc_obj = helpers.create_pvc(
-            sc_name=self.nfs_sc,
-            namespace=self.namespace,
-            size="5Gi",
-            do_reload=True,
-            access_mode=constants.ACCESS_MODE_RWX,
-            volume_mode="Filesystem",
-        )
+        if (
+            self.ocs_version >= version.VERSION_4_16
+            and self.ocp_version >= version.VERSION_4_16
+        ):
+
+            interface_type = constants.CEPHNFSFILESYSTEM
+            interface_name = helpers.get_cephfs_data_pool_name()
+            sc_obj = helpers.create_storage_class(
+                interface_type=interface_type,
+                interface_name=interface_name,
+                clients=self.nfs_client_ip,
+            )
+            nfs_pvc_obj = helpers.create_pvc(
+                sc_name=sc_obj.name,
+                namespace=self.namespace,
+                size="5Gi",
+                do_reload=True,
+                access_mode=constants.ACCESS_MODE_RWX,
+                volume_mode="Filesystem",
+            )
+
+        else:
+            # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+            nfs_pvc_obj = helpers.create_pvc(
+                sc_name=self.nfs_sc,
+                namespace=self.namespace,
+                size="5Gi",
+                do_reload=True,
+                access_mode=constants.ACCESS_MODE_RWX,
+                volume_mode="Filesystem",
+            )
 
         # Create nginx pod with nfs pvcs mounted
         pod_obj = pod_factory(
@@ -1344,6 +1370,293 @@ class TestNfsEnable(ManageTest):
             pod_obj, file_path
         ), f"File {file_name} doesn't exist"
         log.info(f"File {file_name} exists in {pod_obj.name}")
+
+        # Deletion of Pods and PVCs
+        log.info("Deleting pod")
+        pod_obj.delete()
+        pod_obj.ocp.wait_for_delete(
+            pod_obj.name, 180
+        ), f"Pod {pod_obj.name} is not deleted"
+
+        pv_obj = nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
+        log.info("Deleting PVC")
+        nfs_pvc_obj.delete()
+        nfs_pvc_obj.ocp.wait_for_delete(
+            resource_name=nfs_pvc_obj.name
+        ), f"PVC {nfs_pvc_obj.name} is not deleted"
+        log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+
+    @skipif_ocs_version("<4.16")
+    @skipif_ocp_version("<4.16")
+    @tier1
+    # @polarion_id("OCS-4272")
+    def test_multiple_nfs_sc_can_be_added(
+        self,
+        pod_factory,
+    ):
+        """
+        This test is to validate multiple nfs storageclasses can be added.
+        NFS export using a PVC mounted on an app pod (in-cluster)
+
+        Steps:
+        1:- Create multiple nfs storageclass
+        2:- Create nfs pvcs with the nfs storageclasses created
+        2:- Create pods with nfs pvcs mounted
+        3:- Run IO
+        4:- Wait for IO completion
+        5:- Verify presence of the file
+        6:- Deletion of Storageclasses, Pods and PVCs
+
+        """
+        nfs_storage_class_objs = []
+        if len(nfs_storage_class_objs) < 2:
+            # Create multiple nfs storageclass
+            interface_type = constants.CEPHNFSFILESYSTEM
+            interface_name = helpers.get_cephfs_data_pool_name()
+            sc_obj = helpers.create_storage_class(
+                interface_type=interface_type,
+                interface_name=interface_name,
+            )
+            nfs_storage_class_objs.append(sc_obj)
+
+        for sc_obj in nfs_storage_class_objs:
+            # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+            nfs_pvc_obj = helpers.create_pvc(
+                sc_name=sc_obj.name,
+                namespace=self.namespace,
+                size="5Gi",
+                do_reload=True,
+                access_mode=constants.ACCESS_MODE_RWO,
+                volume_mode="Filesystem",
+            )
+
+            # Create nginx pod with nfs pvcs mounted
+            pod_obj = pod_factory(
+                interface=constants.CEPHFILESYSTEM,
+                pvc=nfs_pvc_obj,
+                status=constants.STATUS_RUNNING,
+            )
+
+            file_name = pod_obj.name
+            # Run IO
+            pod_obj.run_io(
+                storage_type="fs",
+                size="4G",
+                fio_filename=file_name,
+                runtime=60,
+            )
+            log.info("IO started on all pods")
+
+            # Wait for IO completion
+            fio_result = pod_obj.get_fio_results()
+            log.info("IO completed on all pods")
+            err_count = fio_result.get("jobs")[0].get("error")
+            assert err_count == 0, (
+                f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
+            )
+            # Verify presence of the file
+            file_path = pod.get_file_path(pod_obj, file_name)
+            log.info(f"Actual file path on the pod {file_path}")
+            assert pod.check_file_existence(
+                pod_obj, file_path
+            ), f"File {file_name} doesn't exist"
+            log.info(f"File {file_name} exists in {pod_obj.name}")
+
+            # Deletion of Pods and PVCs
+            log.info("Deleting pod")
+            pod_obj.delete()
+            pod_obj.ocp.wait_for_delete(
+                pod_obj.name, 180
+            ), f"Pod {pod_obj.name} is not deleted"
+
+            pv_obj = nfs_pvc_obj.backed_pv_obj
+            log.info(f"pv object-----{pv_obj}")
+
+            log.info("Deleting PVC")
+            nfs_pvc_obj.delete()
+            nfs_pvc_obj.ocp.wait_for_delete(
+                resource_name=nfs_pvc_obj.name
+            ), f"PVC {nfs_pvc_obj.name} is not deleted"
+            log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+            log.info("Check nfs pv is deleted")
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+
+    @skipif_ocs_version("<4.16")
+    @skipif_ocp_version("<4.16")
+    @tier1
+    @aws_platform_required
+    @polarion_id("OCS-4273")
+    def test_outcluster_nfs_export_is_not_allowed_for_unlisted_clients(
+        self,
+        pod_factory,
+    ):
+        """
+        This test is to validate out cluster export is not supported for the unlisted clients.
+
+        Prerequisites:
+            On the client host machine openshift-dev pub key in authorized_keys should be available
+            and nfs-utils package should be installed.
+
+        Steps:
+        1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+        2:- Create nginx pod with nfs pvcs mounted
+        3:- Fetch sharing details for the nfs pvc
+        4:- Run IO
+        5:- Wait for IO completion
+        6:- Verify presence of the file
+        7:- Create /var/lib/www/html/index.html file
+        8:- Connect the external client using the share path and ingress address
+        9:- Verify able to read exported volume
+        10:- Verify able to write to the exported volume from external client
+        11:- Able to read updated /var/lib/www/html/index.html file from inside the pod
+        12:- unmount
+        13:- Deletion of Pods and PVCs
+
+        """
+        nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
+
+        # ssh to test-nfs-vm
+        log.info("Login to test vm")
+        self.con = Connection(
+            self.nfs_client_ip,
+            self.nfs_client_user,
+            private_key=self.nfs_client_private_key,
+        )
+
+        interface_type = constants.CEPHNFSFILESYSTEM
+        interface_name = helpers.get_cephfs_data_pool_name()
+        sc_obj = helpers.create_storage_class(
+            interface_type=interface_type,
+            interface_name=interface_name,
+            clients="invalid_host",
+        )
+        nfs_pvc_obj = helpers.create_pvc(
+            sc_name=sc_obj.name,
+            namespace=self.namespace,
+            size="5Gi",
+            do_reload=True,
+            access_mode=constants.ACCESS_MODE_RWX,
+            volume_mode="Filesystem",
+        )
+
+        # Create nginx pod with nfs pvcs mounted
+        pod_obj = pod_factory(
+            interface=constants.CEPHFILESYSTEM,
+            pvc=nfs_pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+
+        # Fetch sharing details for the nfs pvc
+        fetch_vol_name_cmd = (
+            "get pvc " + nfs_pvc_obj.name + " --output jsonpath='{.spec.volumeName}'"
+        )
+        vol_name = self.pvc_obj.exec_oc_cmd(fetch_vol_name_cmd)
+        log.info(f"For pvc {nfs_pvc_obj.name} volume name is, {vol_name}")
+        fetch_pv_share_cmd = (
+            "get pv "
+            + vol_name
+            + " --output jsonpath='{.spec.csi.volumeAttributes.share}'"
+        )
+        share_details = self.pv_obj.exec_oc_cmd(fetch_pv_share_cmd)
+        log.info(f"Share details is, {share_details}")
+
+        file_name = pod_obj.name
+        # Run IO
+        pod_obj.run_io(
+            storage_type="fs",
+            size="4Gi",
+            fio_filename=file_name,
+            runtime=60,
+        )
+        log.info("IO started on all pods")
+
+        # Wait for IO completion
+        fio_result = pod_obj.get_fio_results()
+        log.info("IO completed on all pods")
+        err_count = fio_result.get("jobs")[0].get("error")
+        assert err_count == 0, (
+            f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
+        )
+        # Verify presence of the file
+        file_path = pod.get_file_path(pod_obj, file_name)
+        log.info(f"Actual file path on the pod {file_path}")
+        assert pod.check_file_existence(
+            pod_obj, file_path
+        ), f"File {file_name} doesn't exist"
+        log.info(f"File {file_name} exists in {pod_obj.name}")
+
+        # Create /var/lib/www/html/index.html file inside the pod
+        command = (
+            "bash -c "
+            + '"echo '
+            + "'hello world'"
+            + '  > /var/lib/www/html/index.html"'
+        )
+        pod_obj.exec_cmd_on_pod(
+            command=command,
+            out_yaml_format=False,
+        )
+
+        retcode, _, _ = self.con.exec_cmd("mkdir -p " + self.test_folder)
+        assert retcode == 0
+        export_nfs_external_cmd = (
+            "mount -t nfs4 -o proto=tcp "
+            + self.hostname_add
+            + ":"
+            + share_details
+            + " "
+            + self.test_folder
+        )
+
+        retry(
+            (CommandFailed),
+            tries=200,
+            delay=10,
+        )(self.con.exec_cmd(export_nfs_external_cmd))
+
+        # Verify able to read exported volume
+        command = f"cat {self.test_folder}/index.html"
+        retcode, stdout, _ = self.con.exec_cmd(command)
+        stdout = stdout.rstrip()
+        log.info(stdout)
+        assert stdout == "hello world"
+
+        command = f"chmod 666 {self.test_folder}/index.html"
+        retcode, _, _ = self.con.exec_cmd(command)
+        assert retcode == 0
+
+        # Verify able to write to the exported volume
+        command = (
+            "bash -c "
+            + '"echo '
+            + "'test_writing'"
+            + f'  >> {self.test_folder}/index.html"'
+        )
+        retcode, _, stderr = self.con.exec_cmd(command)
+        assert retcode == 0, f"failed with error---{stderr}"
+
+        command = f"cat {self.test_folder}/index.html"
+        retcode, stdout, _ = self.con.exec_cmd(command)
+        assert retcode == 0
+        stdout = stdout.rstrip()
+        assert stdout == "hello world" + """\n""" + "test_writing"
+
+        # Able to read updated /var/lib/www/html/index.html file from inside the pod
+        command = "bash -c " + '"cat ' + ' /var/lib/www/html/index.html"'
+        result = pod_obj.exec_cmd_on_pod(
+            command=command,
+            out_yaml_format=False,
+        )
+        assert result.rstrip() == "hello world" + """\n""" + "test_writing"
+
+        # Unmount
+        nfs_utils.unmount(self.con, self.test_folder)
 
         # Deletion of Pods and PVCs
         log.info("Deleting pod")

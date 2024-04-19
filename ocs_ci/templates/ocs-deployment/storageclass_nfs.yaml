@@ -1,0 +1,21 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+   # name: {{ sc_name | default('ocsci-nfs-storageclass-restricted') }}
+provisioner: openshift-storage.nfs.csi.ceph.com
+allowVolumeExpansion: True
+reclaimPolicy: Delete
+parameters:
+  csi.storage.k8s.io/provisioner-secret-namespace: openshift-storage
+  server: ocs-storagecluster-cephnfs-service
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+#   clients: {{ clients | default('10.0.151.68') }}
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+  clusterID: openshift-storage
+  volumeNamePrefix: nfs-export-
+  fsName: ocs-storagecluster-cephfilesystem
+  csi.storage.k8s.io/controller-expand-secret-namespace: openshift-storage
+  csi.storage.k8s.io/node-stage-secret-namespace: openshift-storage
+  nfsCluster: ocs-storagecluster-cephnfs
