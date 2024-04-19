@@ -20,3 +20,4 @@ external/
 apidoc/*
 _build/*
 bugzilla.cfg
+.venv
