@@ -59,19 +59,23 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
-def delete_bucket_policy_verify(obc_obj, mcg_obj):
+def delete_bucket_policy_verify(s3_obj, bucket_name):
     """
-    Delete bucket policy and confirm it got deleted successfully.
+    Delete bucket policy and confirm it got deleted successfully, if not throwing
+    UnexpectedBehaviour with an invalid error code.
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucket_name (str): Name of the bucket
     """
 
     # Delete bucket policy
-    logger.info(f"Delete bucket policy by admin on bucket: {obc_obj.bucket_name}")
-    delete_policy = delete_bucket_policy(mcg_obj, obc_obj.bucket_name)
+    logger.info(f"Delete bucket policy by admin on bucket: {bucket_name}")
+    delete_policy = delete_bucket_policy(s3_obj, bucket_name)
     logger.info(f"Delete policy response: {delete_policy}")
 
     # Confirming again by calling get_bucket_policy
     try:
-        get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        get_bucket_policy(s3_obj, bucket_name)
     except boto3exception.ClientError as e:
         logger.info(e.response)
         response = HttpResponseParser(e.response)
@@ -875,7 +879,6 @@ class TestS3BucketPolicy(MCGTest):
                 )
 
     @pytest.mark.polarion_id("OCS-5767")
-    @skipif_ocs_version("<4.16")
     @tier1
     def test_bucket_policy_elements_NotPrincipal(self, mcg_obj, bucket_factory):
         """
@@ -892,7 +895,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Set bucket policy for obc_bucket
         bucket_policy_generated = gen_bucket_policy(
-            principal="NotPrincipal",
+            principal_property="NotPrincipal",
             user_list=[obc_obj.obc_account],
             actions_list=["PutObject"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
@@ -912,16 +915,15 @@ class TestS3BucketPolicy(MCGTest):
         # Verify put Object is allowed.
         logger.info(f"Put Object to the bucket: {obc_obj.bucket_name} ")
         assert s3_put_object(
-            obc_obj,
+            mcg_obj,
             obc_obj.bucket_name,
             object_key,
             data,
         ), f"Failed to put object to bucket {obc_obj.bucket_name}"
 
         # Delete policy and confirm policy got deleted.
-        delete_bucket_policy_verify(obc_obj, mcg_obj)
+        delete_bucket_policy_verify(obc_obj, obc_obj.bucket_name)
 
-    @skipif_ocs_version("<4.16")
     @pytest.mark.parametrize(
         argnames="effect",
         argvalues=[
@@ -943,7 +945,7 @@ class TestS3BucketPolicy(MCGTest):
         # Set bucket policy for user
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
-            action="NotAction",
+            action_property="NotAction",
             actions_list=["DeleteBucket"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
             effect=effect,
@@ -1022,10 +1024,9 @@ class TestS3BucketPolicy(MCGTest):
             ), "Failed to delete bucket."
 
         # Delete policy and confirm policy got deleted.
-        delete_bucket_policy_verify(obc_obj, mcg_obj)
+        delete_bucket_policy_verify(obc_obj, obc_obj.bucket_name)
 
     @pytest.mark.polarion_id("OCS-5770")
-    @skipif_ocs_version("<4.16")
     @tier1
     def test_bucket_policy_elements_NotResource(self, mcg_obj, bucket_factory):
         """
@@ -1045,7 +1046,7 @@ class TestS3BucketPolicy(MCGTest):
             user_list=obc_obj.obc_account,
             actions_list=["*"],
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
-            resource="NotResource",
+            resource_property="NotResource",
             effect="Deny",
         )
         bucket_policy = json.dumps(bucket_policy_generated)
@@ -1068,7 +1069,7 @@ class TestS3BucketPolicy(MCGTest):
         ), "Failed to put Object"
 
         # Delete policy and confirm policy got deleted.
-        delete_bucket_policy_verify(obc_obj, mcg_obj)
+        delete_bucket_policy_verify(obc_obj, obc_obj.bucket_name)
 
     @pytest.mark.polarion_id("OCS-2451")
     @pytest.mark.bugzilla("1893163")

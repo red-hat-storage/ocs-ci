@@ -135,9 +135,9 @@ def gen_bucket_policy(
     resources_list,
     effect=None,
     sid="statement",
-    principal=None,
-    action=None,
-    resource=None,
+    principal_property=None,
+    action_property=None,
+    resource_property=None,
 ):
     """
     Function prepares bucket policy parameters in syntax and format provided by AWS bucket policy
@@ -148,9 +148,9 @@ def gen_bucket_policy(
         resources_list (list): List of resources. Eg: Bucket name, specific object in a bucket etc
         effect (str): Permission given to the bucket policy ie: Allow(default) or Deny
         sid (str): Statement name. Can be any string. Default: "Statement"
-        principal (str): Element to specify the principal to allow/deny access to a resource.
-        action (str): Element describes the specific action(s) that will be allowed or denied.
-        resource (str):  Element specifies the object(s) that the statement covers
+        principal_property (str): Element to specify the principal to allow/deny access to a resource.
+        action_property (str): Element describes the specific action(s) that will be allowed or denied.
+        resource_property (str):  Element specifies the object(s) that the statement covers
 
     Returns:
         dict: Bucket policy in json format
@@ -162,10 +162,10 @@ def gen_bucket_policy(
     )
     ver = datetime.date.today().strftime("%Y-%m-%d")
 
-    principal = principal if principal else "Principal"
+    principal = principal_property if principal_property else "Principal"
     effect = effect if effect else "Allow"
-    action = action if action else "Action"
-    resource = resource if resource else "Resource"
+    action = action_property if action_property else "Action"
+    resource = resource_property if resource_property else "Resource"
 
     logger.info(f"version: {ver}")
     logger.info(f"Principal: {principal}")
