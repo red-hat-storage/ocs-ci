@@ -114,7 +114,7 @@ def osd_device_replacement(nodes, cli_tool=False):
     if cli_tool:
         retrieve_cli_binary(cli_type="odf")
         run_cmd_interactive(
-            cmd="odf-cli purge-osd 1",
+            cmd=f"odf-cli purge-osd {osd_id}",
             prompts_answers={"yes-force-destroy-osd": "yes-force-destroy-osd"},
             string_answer=True,
             raise_exception=False,
