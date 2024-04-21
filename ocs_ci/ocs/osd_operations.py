@@ -113,7 +113,12 @@ def osd_device_replacement(nodes, cli_tool=False):
 
     if cli_tool:
         retrieve_cli_binary(cli_type="odf")
-        run_cmd_interactive(f"odf-cli purge-osd {osd_id}", {"no": "no"})
+        run_cmd_interactive(
+            cmd="odf-cli purge-osd 1",
+            prompts_answers={"yes-force-destroy-osd": "yes-force-destroy-osd"},
+            string_answer=True,
+            raise_exception=False,
+        )
     else:
         # Scale down OSD deployment
         logger.info(f"Scaling down OSD deployment {osd_deployment_name} to 0")
