@@ -42,4 +42,4 @@ class SearchBar(BaseUI):
 
         """
         logger.info("Clear search input")
-        self.do_clear(self.generic_locators["searchbar_input"])
+        self.clear_input_gradually(self.generic_locators["searchbar_input"])
