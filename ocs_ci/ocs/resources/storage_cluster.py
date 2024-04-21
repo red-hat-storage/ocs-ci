@@ -2672,7 +2672,7 @@ def get_storage_size():
         .get("requests")
         .get("storage")
     )
-    if storage.isdigit or config.DEPLOYMENT.get("local_storage"):
+    if storage.isdigit() or config.DEPLOYMENT.get("local_storage"):
         # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
         # is set to 1, so we can not take OSD size from there. For LSO we will return
         # the size from PVC.

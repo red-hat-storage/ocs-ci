@@ -18,6 +18,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_device_class,
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
+    get_deviceset_count,
 )
 from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, convert_device_size
@@ -182,10 +183,11 @@ def check_storage_size_is_reflected(expected_storage_size):
         f"Check that the Ceph capacity {ceph_capacity} is equal "
         f"to the expected storage size {expected_storage_size_in_gb}"
     )
-    if not int(ceph_capacity) == expected_storage_size_in_gb:
+    expected_ceph_capacity = expected_storage_size_in_gb * get_deviceset_count()
+    if not int(ceph_capacity) == expected_ceph_capacity:
         raise StorageSizeNotReflectedException(
             f"The Ceph capacity {ceph_capacity} is not equal to the "
-            f"expected storage size {expected_storage_size_in_gb}"
+            f"expected size {expected_ceph_capacity}"
         )
 
 
