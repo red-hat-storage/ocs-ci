@@ -601,15 +601,33 @@ class AzureAroUtil(AZURE):
             )
         self.get_kubeconfig(cluster_name, resource_group)
         self.write_kubeadmin_password(cluster_name, resource_group)
+        self.check_cluster_response_ok(insecure=True)
         configure_ingress_and_api_certificates(skip_tls_verify=True)
+        self.check_cluster_response_ok()
+
+    def check_cluster_response_ok(
+        self, maximum_attempts=150, successful_connections_in_row=20, insecure=False
+    ):
+        """
+        Check if cluster response OK several times based on parameters of the
+        function.
+
+        Args:
+            maximum_attempts (int): maximum attempts to check cluster is OK
+            successful_connections_in_row (int): how many times the cluster should
+                response OK
+            insecure (bool): if True, it will add --insecure-skip-tls-verify
+
+        """
         attempts = 0
-        maximum_attempts = 150
         successful_connections = 0
-        successful_connections_in_row = 20
+        insecure_cmd = ""
+        if insecure:
+            insecure_cmd = "--insecure-skip-tls-verify"
         while successful_connections != successful_connections_in_row:
             attempts += 1
             try:
-                exec_cmd("oc cluster-info")
+                exec_cmd(f"oc cluster-info {insecure_cmd}")
                 successful_connections += 1
                 logger.info(
                     f"{successful_connections}. successful connection to the cluster in row"
@@ -622,10 +640,16 @@ class AzureAroUtil(AZURE):
                     break
             except CommandFailed:
                 logger.exception("Failed to connect to the cluster!")
-                logger.warning(
-                    "Waiting till TLS certificates will get propagated for ARO cluster!"
-                    f"Attempt: {attempts} out of {maximum_attempts}."
-                )
+                if insecure:
+                    logger.warning(
+                        "Waiting till ARO cluster responding OK!"
+                        f"Attempt: {attempts} out of {maximum_attempts}."
+                    )
+                else:
+                    logger.warning(
+                        "Waiting till TLS certificates will get propagated for ARO cluster!"
+                        f"Attempt: {attempts} out of {maximum_attempts}."
+                    )
                 time.sleep(5)
                 successful_connections = 0
                 if attempts >= maximum_attempts:
