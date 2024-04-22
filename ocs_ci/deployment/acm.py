@@ -16,6 +16,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
+    UnsupportedPlatformError,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
@@ -162,12 +163,26 @@ class Submariner(object):
             self.download_downstream_binary
 
     def download_downstream_binary(self):
+        """
+        Download downstream subctl binary
+
+        Raises:
+            UnsupportedPlatformError : If current platform has no supported subctl binary
+        """
+
         subctl_ver = config.ENV_DATA["subctl_version"]
         processor = platform.processor()
-        if processor == "x86_64":
+        arch = platform.machine()
+        if arch == "x86_64" and processor == "x86_64":
             binary_pltfrm = "amd64"
+        elif arch == "arm64" and processor == "arm":
+            binary_pltfrm = "arm64"
+        else:
+            raise UnsupportedPlatformError(
+                "Not a supported architecture for subctl binary"
+            )
         cmd = (
-            f"oc image {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+            f"oc image extract {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
             f'--path="/dist/{subctl_ver}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
         )
         run_cmd(cmd)
