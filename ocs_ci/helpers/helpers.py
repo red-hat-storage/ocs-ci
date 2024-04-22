@@ -113,7 +113,7 @@ def wait_for_resource_state(resource, state, timeout=60):
             reached the desired state
 
     """
-    if check_cluster_is_compact():
+    if check_cluster_is_compact() or storagecluster_independent_check():
         timeout = 180
     if (
         resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
