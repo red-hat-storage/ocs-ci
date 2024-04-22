@@ -1346,7 +1346,9 @@ def node_replacement_verification_steps_ceph_side(
     if new_osd_node_name:
         wait_for_nodes_status([new_osd_node_name])
         log.info(f"New osd node name is: {new_osd_node_name}")
-        if new_osd_node_name not in ceph_osd_status:
+        node_names = [osd["host name"] for osd in ceph_osd_status["OSDs"]]
+        log.info(f"Node names from ceph osd status: {node_names}")
+        if new_osd_node_name not in node_names:
             log.warning("new osd node name not found in 'ceph osd status' output")
             return False
         if new_osd_node_name not in osd_node_names:
