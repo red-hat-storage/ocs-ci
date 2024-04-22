@@ -3,9 +3,11 @@ from time import sleep
 
 import pytest
 
+from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1, turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.cnv_helpers import run_dd_io, cal_md5sum_vm
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -42,10 +44,17 @@ class TestCnvApplicationRDR:
         node_restart_teardown,
     ):
         """
-        Tests to verify CNV workloads (Subscription and ApplicationSet based applications using RBD PVC) deployment and
+        Tests to verify CNV workload deployment using RBD PVC (Both Subscription and ApplicationSet based) and
         failover/relocate between managed clusters.
 
         """
+        md5sum_original = []
+        md5sum_failover = []
+        vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
+
+        # Download and extract the virtctl binary to bin_dir. Skips if already present.
+        CNVInstaller().download_and_extract_virtctl_binary()
+
         # Create CNV applications (Subscription and ApplicationSet)
         cnv_workloads = cnv_dr_workload(num_of_vm_subscription=1, num_of_vm_appset=1)
         wl_namespace = cnv_workloads[0].workload_namespace
@@ -55,24 +64,33 @@ class TestCnvApplicationRDR:
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
         primary_cluster_index = config.cur_index
-        primary_cluster_nodes = get_node_objs()
-        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            wl_namespace, cnv_workloads[0].workload_type
-        )
+
+        # Creating a file (file1) on VM and calculating its MD5sum
+        for cnv_wl in cnv_workloads:
+            md5sum_original.append(
+                run_dd_io(
+                    vm_obj=cnv_wl.vm_obj,
+                    file_path=vm_filepaths[0],
+                    username=cnv_wl.vm_username,
+                    verify=True,
+                )
+            )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             wl_namespace, cnv_workloads[0].workload_type
         )
-        wait_time = 2 * scheduling_interval  # Time in minutes
-        logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        logger.info(f"Waiting for {scheduling_interval} minutes for sync to complete")
+        sleep(scheduling_interval * 60)
 
         # Shutting down primary managed cluster nodes
+        primary_cluster_nodes = get_node_objs()
         if primary_cluster_down:
             logger.info(f"Stopping nodes of primary cluster: {primary_cluster_name}")
             nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
 
-        # TODO: Write a file or any IO inside VM
+        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
+            wl_namespace, cnv_workloads[0].workload_type
+        )
 
         # Failover the applications to secondary managed cluster
         for cnv_wl in cnv_workloads:
@@ -99,14 +117,38 @@ class TestCnvApplicationRDR:
                 phase=constants.STATUS_RUNNING,
             )
 
+        # Validating data integrity (file1) after failing-over VMs to secondary managed cluster
+        for count, cnv_wl in enumerate(cnv_workloads):
+            md5sum_file1 = cal_md5sum_vm(
+                cnv_wl.vm_obj, file_path=vm_filepaths[0], username=cnv_wl.vm_username
+            )
+            logger.info(
+                f"Validating MD5sum of file {vm_filepaths[0]} on VM: {cnv_wl.workload_name} after Failover"
+            )
+            assert (
+                md5sum_original[count] == md5sum_file1
+            ), f"Failed: MD5 comparison of {vm_filepaths[0]} after Failover"
+
+        # Creating a file (file2) post failover
+        for cnv_wl in cnv_workloads:
+            md5sum_failover.append(
+                run_dd_io(
+                    vm_obj=cnv_wl.vm_obj,
+                    file_path=vm_filepaths[1],
+                    username=cnv_wl.vm_username,
+                    verify=True,
+                )
+            )
+
         # Verify resources are deleted from primary managed cluster
         config.switch_to_cluster_by_name(primary_cluster_name)
         # Start nodes if cluster is down
         if primary_cluster_down:
             logger.info(
-                f"Waiting for {wait_time} minutes before starting nodes of primary cluster: {primary_cluster_name}"
+                f"Waiting for {scheduling_interval} minutes before starting nodes of primary cluster: "
+                f"{primary_cluster_name}"
             )
-            sleep(wait_time * 60)
+            sleep(scheduling_interval * 60)
             nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
             wait_for_nodes_status([node.name for node in primary_cluster_nodes])
             logger.info("Wait for 180 seconds for pods to stabilize")
@@ -129,10 +171,8 @@ class TestCnvApplicationRDR:
             )
         )
 
-        # TODO: Validate Data integrity
-
-        logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        logger.info(f"Waiting for {scheduling_interval} minutes for sync to complete")
+        sleep(scheduling_interval * 60)
 
         # Relocate the applications back to primary managed cluster
         for cnv_wl in cnv_workloads:
@@ -170,4 +210,35 @@ class TestCnvApplicationRDR:
             )
         )
 
-        # TODO: Validate Data integrity
+        # Validating data integrity (file1) after relocating VMs back to primary managed cluster
+        for count, cnv_wl in enumerate(cnv_workloads):
+            md5sum_file1 = cal_md5sum_vm(
+                cnv_wl.vm_obj, file_path=vm_filepaths[0], username=cnv_wl.vm_username
+            )
+            logger.info(
+                f"Validating MD5sum of file {vm_filepaths[0]} on VM: {cnv_wl.workload_name} after Relocate"
+            )
+            assert (
+                md5sum_original[count] == md5sum_file1
+            ), f"Failed: MD5 comparison of {vm_filepaths[0]} after Relocate"
+
+        # Validating data integrity (file2) after relocating VMs back to primary managed cluster
+        for count, cnv_wl in enumerate(cnv_workloads):
+            md5sum_file2 = cal_md5sum_vm(
+                cnv_wl.vm_obj, file_path=vm_filepaths[1], username=cnv_wl.vm_username
+            )
+            logger.info(
+                f"Validating MD5sum of file {vm_filepaths[1]} on VM: {cnv_wl.workload_name} after Relocate"
+            )
+            assert (
+                md5sum_failover[count] == md5sum_file2
+            ), f"Failed: MD5 comparison of {vm_filepaths[1]} after Relocate"
+
+        # Creating a file (file3) post relocate
+        for cnv_wl in cnv_workloads:
+            run_dd_io(
+                vm_obj=cnv_wl.vm_obj,
+                file_path=vm_filepaths[2],
+                username=cnv_wl.vm_username,
+                verify=True,
+            )
