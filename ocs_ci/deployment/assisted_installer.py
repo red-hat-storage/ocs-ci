@@ -82,7 +82,11 @@ class AssistedInstallerCluster(object):
                 raise ClusterNotFoundException(
                     f"Cluster '{name}' not found in Assisted Installer Console"
                 )
-            self.id = [cl["id"] for cl in clusters if cl["name"] == name][0]
+            self.id = [
+                cl["id"]
+                for cl in clusters
+                if cl["name"] == name and cl["kind"] == "Cluster"
+            ][0]
             # load configuration of existing cluster
             self.load_existing_cluster_configuration()
             logger.info(
