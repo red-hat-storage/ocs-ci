@@ -30,10 +30,12 @@ def configure_cloud_credential_operator():
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         # W/A of the issue https://github.com/red-hat-storage/ocs-ci/issues/9674
         if version.get_semantic_ocp_version_from_config() == version.VERSION_4_16:
-            release_image = constants.OCP_4_16_CCOCTL_WA_IMAGE
+            # use direct cco image till issue https://github.com/red-hat-storage/ocs-ci/issues/9674 is fixed
+            cco_image = constants.CCO_IMAGE
         else:
             release_image = get_ocp_release_image_from_installer()
-        cco_image = get_cco_container_image(release_image, pull_secret_path)
+            cco_image = get_cco_container_image(release_image, pull_secret_path)
+
         extract_ccoctl_binary(cco_image, pull_secret_path)
 
 
