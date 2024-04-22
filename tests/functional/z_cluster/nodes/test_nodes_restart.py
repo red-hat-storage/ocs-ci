@@ -83,7 +83,6 @@ class TestNodesRestart(ManageTest):
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
 
         """
-        if storagecluster_independent_check():
         ocp_nodes = get_node_objs()
         if is_vsphere_ipi_cluster():
             # When using vSphere IPI, we restart the nodes without stopping them.
