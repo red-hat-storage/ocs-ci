@@ -145,6 +145,21 @@ class AssistedInstallerCluster(object):
         self.cpu_architecture = cl_config["cpu_architecture"]
         self.high_availability_mode = cl_config["high_availability_mode"]
         self.image_type = infra_config["type"]
+        self.openshift_cluster_id = cl_config["openshift_cluster_id"]
+        # load records with: 'kind': 'AddHostsCluster'
+        self.add_hosts_clusters = [
+            cl["id"]
+            for cl in self.api.get_clusters()
+            if cl["openshift_cluster_id"] == self.openshift_cluster_id
+        ]
+        self.add_hosts_infra_ids = [
+            [
+                infra["id"]
+                for infra in self.api.get_infra_envs()
+                if infra["cluster_id"] == cl_id
+            ][0]
+            for cl_id in self.add_hosts_clusters
+        ]
 
     def prepare_pull_secret(self, original_pull_secret):
         """
@@ -462,6 +477,12 @@ class AssistedInstallerCluster(object):
         logger.info(
             f"Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
         )
+        if self.add_hosts_clusters:
+            for cl_id in self.add_hosts_clusters:
+                self.api.delete_cluster(cl_id)
+                logger.info(
+                    f"AddHostsCluster {self.name} (id: {cl_id}) was deleted from Assisted Installer Console"
+                )
 
     def delete_infrastructure_environment(self):
         """
@@ -472,3 +493,10 @@ class AssistedInstallerCluster(object):
             f"Infrastructure environment {self.infra_id} for cluster {self.name} (id: {self.id}) "
             "was deleted from Assisted Installer Console"
         )
+        if self.add_hosts_infra_ids:
+            for infra_id in self.add_hosts_infra_ids:
+                self.api.delete_infra_env(infra_id)
+                logger.info(
+                    f"Infrastructure environment {infra_id} for adding hosts to cluster {self.name} (id: {self.id}) "
+                    "was deleted from Assisted Installer Console"
+                )
