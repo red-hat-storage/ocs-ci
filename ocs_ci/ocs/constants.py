@@ -1355,6 +1355,11 @@ ZONE_LABEL = "topology.kubernetes.io/zone"
 REGION_LABEL = "topology.kubernetes.io/region"
 RACK_LABEL = "topology.rook.io/rack"
 
+# csi holder pod labels
+CSI_RBD_PLUGIN_HOLDER_LABEL = "app=csi-rbdplugin-holder"
+CSI_CEPHFS_PLUGIN_HOLDER_LABEL = "app=csi-cephfsplugin-holder"
+CSI_NFS_PLUGIN_HOLDER_LABEL = "app=csi-nfsplugin-holder"
+
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
 CLUSTER_NAME_MAX_CHARACTERS = 17
