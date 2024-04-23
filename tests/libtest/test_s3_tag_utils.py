@@ -3,7 +3,7 @@ from ocs_ci.ocs.bucket_utils import (
     delete_object_tags,
     get_object_to_tags_dict,
     tag_objects,
-    write_random_test_objects_to_s3_path,
+    write_random_test_objects_to_bucket,
 )
 
 
@@ -19,9 +19,9 @@ def test_s3_tags_util_funcs(
     tagA = {"keyA": "valueA"}
     tagB = {"keyB": "valueB"}
 
-    objects = write_random_test_objects_to_s3_path(
+    objects = write_random_test_objects_to_bucket(
         io_pod=awscli_pod_session,
-        s3_path=f"{bucket}",
+        bucket_to_write=bucket,
         file_dir=test_directory_setup.origin_dir,
         amount=10,
         mcg_obj=mcg_obj,

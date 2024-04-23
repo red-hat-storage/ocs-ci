@@ -23,7 +23,6 @@ from ocs_ci.ocs.bucket_utils import (
     s3_get_object,
     tag_objects,
     write_random_test_objects_to_bucket,
-    write_random_test_objects_to_s3_path,
     wait_for_object_count_in_bucket,
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -77,8 +76,8 @@ class TestObjectExpiration(MCGTest):
         """
 
         objects_amount = 10
-        prefix_to_expire = "to_expire/"
-        prefix_not_to_expire = "not_to_expire/"
+        prefix_to_expire = "to_expire"
+        prefix_not_to_expire = "not_to_expire"
 
         # 1. Set S3 expiration policy on an MCG bucket
         bucket = bucket_factory()[0].name
@@ -93,11 +92,12 @@ class TestObjectExpiration(MCGTest):
 
         # 2. Upload random objects under a prefix that is set to expire
         logger.info("Uploading random objects to the bucket for expiration")
-        write_random_test_objects_to_s3_path(
+        write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/{prefix_to_expire}",
+            bucket_to_write=bucket,
             file_dir=test_directory_setup.origin_dir,
             amount=objects_amount,
+            prefix=prefix_to_expire,
             mcg_obj=mcg_obj,
         )
         # Get the names of the objects that were just uploaded for later
@@ -107,11 +107,12 @@ class TestObjectExpiration(MCGTest):
 
         # 3. Upload random objects under a prefix that is not set to expire
         logger.info("Uploading random objects to the bucket for non-expiration")
-        write_random_test_objects_to_s3_path(
+        write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/{prefix_not_to_expire}",
+            bucket_to_write=bucket,
             file_dir=test_directory_setup.origin_dir,
             amount=objects_amount,
+            prefix=prefix_not_to_expire,
             mcg_obj=mcg_obj,
         )
 
@@ -162,8 +163,8 @@ class TestObjectExpiration(MCGTest):
         7. Verify that only the objects that should have been expired were deleted
 
         """
-        first_prefix_to_expire = "to_expire_a/"
-        second_prefix_to_expire = "to_expire_b/"
+        first_prefix_to_expire = "to_expire_a"
+        second_prefix_to_expire = "to_expire_b"
         object_count_per_case = 10
         tag_a_key, tag_a_value = "tag-a", "value-a"
         tag_b_key, tag_b_value = "tag-b", "value-b"
@@ -225,35 +226,36 @@ class TestObjectExpiration(MCGTest):
 
         # 2. Upload objects in the target prefix of the first rule
         logger.info("Uploading objects to match the prefix filter")
-        write_random_test_objects_to_s3_path(
+        write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/{first_prefix_to_expire}",
+            bucket_to_write=bucket,
             file_dir=f"{test_directory_setup.origin_dir}/{first_prefix_to_expire}",
             amount=object_count_per_case,
             pattern="prefixed-obj-",
+            prefix=first_prefix_to_expire,
             mcg_obj=mcg_obj,
         )
 
         # 3. Upload objects and tag them to match the tags filters
-        tagged_objs_a = write_random_test_objects_to_s3_path(
+        tagged_objs_a = write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/",
+            bucket_to_write=bucket,
             file_dir=f"{test_directory_setup.origin_dir}/tagged_objs_a",
             amount=object_count_per_case // 2,
             pattern="tag-a-obj-",
             mcg_obj=mcg_obj,
         )
-        tagged_objs_b = write_random_test_objects_to_s3_path(
+        tagged_objs_b = write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/",
+            bucket_to_write=bucket,
             file_dir=f"{test_directory_setup.origin_dir}/tagged_objs_b",
             amount=object_count_per_case // 2,
             pattern="tag-b-obj-",
             mcg_obj=mcg_obj,
         )
-        tagged_objs_a_b = write_random_test_objects_to_s3_path(
+        tagged_objs_a_b = write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/",
+            bucket_to_write=bucket,
             file_dir=f"{test_directory_setup.origin_dir}/tagged_objs_a_b",
             amount=object_count_per_case // 2,
             pattern="tag-ab-obj-",
@@ -274,12 +276,13 @@ class TestObjectExpiration(MCGTest):
         )
 
         # 4. Upload objects that match a combination of the above filters
-        mixed_criteria_objects = write_random_test_objects_to_s3_path(
+        mixed_criteria_objects = write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/{second_prefix_to_expire}",
+            bucket_to_write=bucket,
             file_dir=f"{test_directory_setup.origin_dir}/{second_prefix_to_expire}",
             amount=object_count_per_case,
             pattern="mixed-criteria-obj-",
+            prefix=second_prefix_to_expire,
             mcg_obj=mcg_obj,
         )
         tag_objects(
@@ -292,26 +295,27 @@ class TestObjectExpiration(MCGTest):
         )
 
         # 5.1 Upload objects that don't match any of the above filters
-        objs_expected_not_to_expire = write_random_test_objects_to_s3_path(
+        objs_expected_not_to_expire = write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/",
+            bucket_to_write=bucket,
             file_dir=f"{test_directory_setup.origin_dir}/no_filter_rules_match",
             amount=object_count_per_case,
             pattern="no-filter-rules-match-obj-",
             mcg_obj=mcg_obj,
         )
         # 5.2 Upload objects to the prefix in the mixed criteria rule but don't match the tags
-        prefixed_objs_expected_not_to_expire = write_random_test_objects_to_s3_path(
+        prefixed_objs_expected_not_to_expire = write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
-            s3_path=f"{bucket}/{second_prefix_to_expire}",
+            bucket_to_write=bucket,
             file_dir=f"{test_directory_setup.origin_dir}/{second_prefix_to_expire}/no_tags_match",
             amount=object_count_per_case,
             pattern="mix-criteria-but-no-tags-obj-",
+            prefix=second_prefix_to_expire,
             mcg_obj=mcg_obj,
         )
         # Add the prefix to the name of the prefixed objects so they'll match the listing results later
         prefixed_objs_expected_not_to_expire = [
-            second_prefix_to_expire + obj
+            f"{second_prefix_to_expire}/{obj}"
             for obj in prefixed_objs_expected_not_to_expire
         ]
         objs_expected_not_to_expire += prefixed_objs_expected_not_to_expire
