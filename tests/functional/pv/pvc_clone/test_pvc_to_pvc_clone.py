@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 @green_squad
 @tier1
-@acceptance
 @skipif_ocs_version("<4.9")
 @skipif_ocp_version("<4.9")
 class TestClone(ManageTest):
@@ -53,6 +52,7 @@ class TestClone(ManageTest):
             pod_dict_path=pod_dict_path,
         )
 
+    @acceptance
     @pytest.mark.parametrize(
         argnames=["interface_type", "pod_dict_path", "access"],
         argvalues=[
@@ -152,6 +152,7 @@ class TestClone(ManageTest):
         clone_pod_obj.get_fio_results()
         logger.info(f"IO completed on pod {clone_pod_obj.name}")
 
+    @acceptance
     @pytest.mark.polarion_id("OCS-5162")
     @pytest.mark.parametrize(
         argnames=["interface_type", "pod_dict_path", "access"],
@@ -229,6 +230,7 @@ class TestClone(ManageTest):
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
     @skipif_hci_provider_and_client
+    @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5444")
     @pytest.mark.polarion_id("OCS-5446")
     @pytest.mark.parametrize(
@@ -335,6 +337,7 @@ class TestClone(ManageTest):
         logger.info(f"File {file_name} exists in {snapshot_restore_pod_obj.name}")
 
     @skipif_hci_provider_and_client
+    @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5445")
     @pytest.mark.polarion_id("OCS-5447")
     @pytest.mark.parametrize(
