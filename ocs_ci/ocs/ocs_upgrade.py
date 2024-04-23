@@ -18,6 +18,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import (
@@ -571,7 +572,7 @@ def run_ocs_upgrade(
         operation_kwargs: (map): Function's keyword arguments
 
     """
-
+    namespace = config.ENV_DATA["cluster_namespace"]
     ceph_cluster = CephCluster()
     original_ocs_version = config.ENV_DATA.get("ocs_version")
     upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
@@ -723,6 +724,23 @@ def run_ocs_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
 
+    # verify all required CSV's
+    ocs_operator_names = get_required_csvs()
+    channel = config.DEPLOYMENT.get("ocs_csv_channel")
+    operator_selector = get_selector_for_ocs_operator()
+    subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
+
+    for ocs_operator_name in ocs_operator_names:
+        package_manifest = PackageManifest(
+            resource_name=ocs_operator_name,
+            selector=operator_selector,
+            subscription_plan_approval=subscription_plan_approval,
+        )
+        package_manifest.wait_for_resource(timeout=300)
+        csv_name = package_manifest.get_current_csv(channel=channel)
+        csv = CSV(resource_name=csv_name, namespace=namespace)
+        csv.wait_for_phase("Succeeded", timeout=720)
+
     verify_image_versions(
         old_image,
         upgrade_ocs.get_parsed_versions()[1],
@@ -759,6 +777,11 @@ def run_ocs_upgrade(
     if config.ENV_DATA.get("mcg_only_deployment"):
         mcg_only_install_verification(ocs_registry_image=upgrade_ocs.ocs_registry_image)
     else:
+        # below check is to make sure all the existing CSV's are in succeeded state and nothing
+        # in pending state
+        is_all_csvs_succeeded = check_all_csvs_are_succeeded(namespace=namespace)
+        assert is_all_csvs_succeeded, "Not all CSV's are in succeeded state"
+
         ocs_install_verification(
             timeout=600,
             skip_osd_distribution_check=True,
