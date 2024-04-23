@@ -151,8 +151,10 @@ class AssistedInstallerCluster(object):
             cl["id"]
             for cl in self.api.get_clusters()
             if cl["openshift_cluster_id"] == self.openshift_cluster_id
+            and cl["kind"] == "AddHostsCluster"
         ]
-        self.add_hosts_infra_ids = [
+        logger.debug(f"AddHostsClusters: {', '.join(self.add_hosts_clusters)}")
+        self.add_hosts_infra_envs = [
             [
                 infra["id"]
                 for infra in self.api.get_infra_envs()
@@ -160,6 +162,9 @@ class AssistedInstallerCluster(object):
             ][0]
             for cl_id in self.add_hosts_clusters
         ]
+        logger.debug(
+            f"AddHosts Infrastructure Environments: {', '.join(self.add_hosts_infra_envs)}"
+        )
 
     def prepare_pull_secret(self, original_pull_secret):
         """
@@ -493,8 +498,8 @@ class AssistedInstallerCluster(object):
             f"Infrastructure environment {self.infra_id} for cluster {self.name} (id: {self.id}) "
             "was deleted from Assisted Installer Console"
         )
-        if self.add_hosts_infra_ids:
-            for infra_id in self.add_hosts_infra_ids:
+        if self.add_hosts_infra_envs:
+            for infra_id in self.add_hosts_infra_envs:
                 self.api.delete_infra_env(infra_id)
                 logger.info(
                     f"Infrastructure environment {infra_id} for adding hosts to cluster {self.name} (id: {self.id}) "
