@@ -155,12 +155,10 @@ class AssistedInstallerCluster(object):
         ]
         logger.debug(f"AddHostsClusters: {', '.join(self.add_hosts_clusters)}")
         self.add_hosts_infra_envs = [
-            [
-                infra["id"]
-                for infra in self.api.get_infra_envs()
-                if infra["cluster_id"] == cl_id
-            ][0]
+            infra["id"]
             for cl_id in self.add_hosts_clusters
+            for infra in self.api.get_infra_envs()
+            if infra["cluster_id"] == cl_id
         ]
         logger.debug(
             f"AddHosts Infrastructure Environments: {', '.join(self.add_hosts_infra_envs)}"
