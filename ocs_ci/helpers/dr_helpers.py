@@ -1337,10 +1337,13 @@ def disable_dr_from_app(secondary_cluster_name):
     placements = placement_obj.get(all_namespaces=True).get("items")
     for placement in placements:
         name = placement["metadata"]["name"]
-        if name != "all-openshift-clusters":
+        if (name != "all-openshift-clusters") and (name != "global"):
+            namespace = placement["metadata"]["namespace"]
             path = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
             params = f"""[{{"op": "replace", "path": "{path}", "value": "{secondary_cluster_name}"}}]"""
-            placement_obj.patch(resource_name=name, params=params, format_type="json")
+            # placement_obj.patch(resource_name=name, params=params, format_type="json")
+            cmd = f"oc patch placement {name} -n {namespace}  -p '{params}' --type=json"
+            run_cmd(cmd)
 
     '''
     placements = placement_obj.get(all_namespaces=True).get("items")
@@ -1365,7 +1368,8 @@ def disable_dr_from_app(secondary_cluster_name):
     # Remove annotation from placements
     for placement in placements:
         name = placement["metadata"]["name"]
-        if name != "all-openshift-clusters":
+        if (name != "all-openshift-clusters") and (name != "global"):
+            namespace = placement["metadata"]["namespace"]
             path = "/metadata/annotations/cluster.open-cluster-management.io~1experimental-scheduling-disable"
             params = f"""[{{"op": "remove", "path": "{path}"}}]"""
             placement_obj.patch(resource_name=name, params=params, format_type="json")
