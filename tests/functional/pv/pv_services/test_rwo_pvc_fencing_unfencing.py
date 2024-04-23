@@ -19,6 +19,7 @@ from ocs_ci.framework.testlib import (
     skipif_tainted_nodes,
     tier4b,
     skipif_managed_service,
+    skipif_hci_provider_or_client,
 )
 from ocs_ci.ocs import constants, machine, node, ocp
 from ocs_ci.ocs.cluster import CephCluster, CephClusterExternal
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @skipif_vsphere_ipi
 @skipif_managed_service
+@skipif_hci_provider_or_client
 class TestRwoPVCFencingUnfencing(ManageTest):
     """
     KNIP-677 OCS support for Automated fencing/unfencing RWO PV

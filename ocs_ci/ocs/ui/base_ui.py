@@ -224,6 +224,7 @@ class BaseUI:
             # appears due to JS graphics on the page: one element overlapping another, or dynamic graphics in progress
             logger.info("ElementClickInterceptedException, try click again")
             take_screenshot("ElementClickInterceptedException")
+            self.copy_dom()
             time.sleep(5)
             _do_click(locator, timeout, enable_screenshot, copy_dom)
 

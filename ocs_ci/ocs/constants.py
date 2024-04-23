@@ -1103,6 +1103,10 @@ OCP_4_16_CCOCTL_WA_IMAGE = (
     "registry.ci.openshift.org/ocp/release@"
     "sha256:d6329f1a221f0422294d41ce2a7bfe3f0d38a41ee3da99fea10e4288fab1efb6"
 )
+CCO_IMAGE = (
+    "quay.io/openshift-release-dev/ocp-v4.0-art-dev@"
+    "sha256:63f758322004b02afb4b12e3294db4d77ea370ca2b2d00ce8ca512b12c0df385"
+)
 
 # Podsecurity admission policies
 PSA_PRIVILEGED = "privileged"
