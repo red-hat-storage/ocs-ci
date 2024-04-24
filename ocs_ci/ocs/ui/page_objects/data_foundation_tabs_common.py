@@ -7,7 +7,6 @@ import pytest
 import pandas as pd
 
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from selenium.webdriver.common.keys import Keys
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.resource_page import ResourcePage
 from ocs_ci.utility.retry import retry
@@ -160,26 +159,7 @@ class CreateResourceForm(PageNavigator):
         Returns:
             bool: True if the input element is successfully cleared, False otherwise.
         """
-        wait_for_element_to_be_visible(self.name_input_loc, 30)
-        elements = self.get_elements(self.name_input_loc)
-        input_el = elements[0]
-        input_len = len(str(input_el.get_attribute("value")))
-
-        # timeout in seconds will be equal to a number of symbols to be removed, but not less than 30s
-        timeout = input_len if input_len > 30 else 30
-        timeout = time.time() + timeout
-        if len(elements):
-            while len(str(input_el.get_attribute("value"))) != 0:
-                if time.time() < timeout:
-                    # to remove text from the input independently where the caret is use both delete and backspace
-                    input_el.send_keys(Keys.BACKSPACE, Keys.DELETE)
-                    time.sleep(0.05)
-                else:
-                    raise TimeoutException("time to clear input os out")
-        else:
-            logger.error("test input locator not found")
-            return False
-        return True
+        return self.clear_input_gradually(self.name_input_loc)
 
     def _check_input_text_length(
         self, rule_exp: str, text_length: int, status_expected: str

@@ -667,6 +667,35 @@ class BaseUI:
         wait = WebDriverWait(self.driver, timeout=timeout)
         wait.until(ec.url_matches(endswith))
 
+    def clear_input_gradually(self, locator):
+        """
+        Clean input field by gradually deleting characters one by one.
+        This way we avoid common automation issue when input field is not cleared.
+
+        Returns:
+            bool: True if the input element is successfully cleared, False otherwise.
+        """
+        wait_for_element_to_be_visible(locator, 30)
+        elements = self.get_elements(locator)
+        input_el = elements[0]
+        input_len = len(str(input_el.get_attribute("value")))
+
+        # timeout in seconds will be equal to a number of symbols to be removed, but not less than 30s
+        timeout = input_len if input_len > 30 else 30
+        timeout = time.time() + timeout
+        if len(elements):
+            while len(str(input_el.get_attribute("value"))) != 0:
+                if time.time() < timeout:
+                    # to remove text from the input independently where the caret is use both delete and backspace
+                    input_el.send_keys(Keys.BACKSPACE, Keys.DELETE)
+                    time.sleep(0.05)
+                else:
+                    raise TimeoutException("time to clear input os out")
+        else:
+            logger.error("test input locator not found")
+            return False
+        return True
+
 
 def screenshot_dom_location(type_loc="screenshot"):
     """

@@ -117,12 +117,14 @@ def test_runbooks(setup_ui, alerts_expected):
 
         test_res[alert_name] = text_as_expected and text_valid
 
-    test_res_df = pd.DataFrame.from_dict(
-        test_res, orient="index", columns=["Runbook Hash Match"]
-    )
-    alerts_failed_check = test_res_df[
-        not test_res_df["Runbook Hash Match"]
-    ].to_markdown(headers="keys", index=True, tablefmt="grid")
-    assert all(
-        test_res.values()
-    ), f"Failed to match runbook hash for alerts: \n{alerts_failed_check}"
+    assert_msg = "Failed to match runbook hash for alerts: \n"
+    if test_res:
+        test_res_df = pd.DataFrame.from_dict(
+            test_res, orient="index", columns=["Runbook Hash Match"]
+        )
+        alerts_failed_check = test_res_df[
+            ~test_res_df["Runbook Hash Match"]
+        ].to_markdown(headers="keys", index=True, tablefmt="grid")
+        assert_msg = f"{assert_msg}{alerts_failed_check}"
+
+    assert all(test_res.values()), assert_msg
