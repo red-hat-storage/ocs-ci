@@ -30,7 +30,7 @@ class TestCephfsWithChunkIo:
 
         """
         This function facilitates
-        1. Create PVC with Cephfs, access mode RWX
+        1. Create PVC with Cephfs
         2. Create dc pod with Fedora image
         3. Copy helper_scripts/chunk.py to Fedora dc pod
         4. Set debug 25 for mds in rook-ceph-tools pod
@@ -41,18 +41,15 @@ class TestCephfsWithChunkIo:
         9. Check for warning "MDS_CLIENT_LATE_RELEASE" in ceph.
         10. If warning found, test will fail.
         """
-        access_mode = constants.ACCESS_MODE_RWX
         file = constants.CHUNK
         interface = constants.CEPHFILESYSTEM
 
         # Creating PVC with cephfs as inetrface
         log.info(f"Creating {interface} based PVC")
-        pvc_obj = pvc_factory(interface=interface, access_mode=access_mode, size="50")
+        pvc_obj = pvc_factory(interface=interface, size="50")
         # Creating a Fedora dc pod
         log.info("Creating fedora dc pod")
-        pod_obj = dc_pod_factory(
-            pvc=pvc_obj, access_mode=access_mode, interface=interface
-        )
+        pod_obj = dc_pod_factory(pvc=pvc_obj, interface=interface)
         # Copy chunk.py to fedora pod
         log.info("Copying chunk.py to fedora pod ")
         cmd = f"oc cp {file} {pvc_obj.namespace}/{pod_obj.name}:/"
