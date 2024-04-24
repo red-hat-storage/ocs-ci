@@ -285,8 +285,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             param = (
                 f'"all": {tolerations}, "mds": {tolerations}, '
                 f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}, '
-                f'"csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
+                f'"csi-plugin": {tolerations}, "csi-provisioner": {tolerations}'
             )
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
