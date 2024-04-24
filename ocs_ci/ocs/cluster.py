@@ -1028,14 +1028,6 @@ class CephCluster(object):
         time.sleep(30)
         self.RBD.exec_oc_cmd(f"patch {patch}")
 
-    def ceph_config_set_debug(self):
-        # default value is 1/5, setting debug level for mds to 25
-        self.toolbox.exec_cmd_on_pod("ceph config set mds debug_mds 25")
-
-    def ceph_config_unset_debug(self):
-        # default value is 1/5, setting debug level for mds to default
-        self.toolbox.exec_cmd_on_pod("ceph config set mds debug_mds 1/5")
-
 
 class CephHealthMonitor(threading.Thread):
     """
@@ -3324,3 +3316,15 @@ def check_cephcluster_status(
             f' {cc_resource["status"]["ceph"]["health"]}'
         )
         raise CephHealthException()
+
+
+def ceph_config_set_debug(debug_level):
+    # default debug level for mds is 1/5, setting debug level with user defined value 'debug_level'
+    # debug_level should be given in str format
+    ceph_tools_pod = pod.get_ceph_tools_pod()
+    ceph_tools_pod.exec_cmd_on_pod("ceph config set mds debug_mds " + debug_level)
+
+
+def ceph_health_detail():
+    ceph_tools_pod = pod.get_ceph_tools_pod()
+    return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
