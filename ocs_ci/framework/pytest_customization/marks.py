@@ -519,6 +519,10 @@ skipif_flexy_deployment = pytest.mark.skipif(
     reason="This test doesn't work correctly on OCP cluster deployed via Flexy",
 )
 
+skipif_noobaa_external_pgsql = pytest.mark.skipif(
+    config.ENV_DATA.get("noobaa_external_pgsql") is True,
+    reason="This test will not run correctly in external DB deployed cluster."
+)
 metrics_for_external_mode_required = pytest.mark.skipif(
     version.get_semantic_ocs_version_from_config() < version.VERSION_4_6
     and config.DEPLOYMENT.get("external_mode") is True,

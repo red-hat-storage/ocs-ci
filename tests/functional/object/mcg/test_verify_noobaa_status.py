@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_noobaa_external_pgsql
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
@@ -46,6 +47,7 @@ def test_verify_noobaa_status_cli(mcg_obj_session):
 @bugzilla("2004130")
 @skipif_openshift_dedicated
 @skipif_managed_service
+@skipif_noobaa_external_pgsql
 def test_verify_noobaa_db_service(mcg_obj_session):
     """
     Validates whether MCG cli and noobaa db logs does not check 'noobaa-db'
