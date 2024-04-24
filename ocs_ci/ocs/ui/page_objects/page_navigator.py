@@ -51,7 +51,7 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
-        self.page_has_loaded(5, 2, self.page_nav["page_navigator_sidebar"])
+        self.page_has_loaded(30, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
         """
@@ -431,3 +431,19 @@ class PageNavigator(BaseUI):
             logger.info("Administrator user was already selected")
         else:
             logger.error("Unknown user role selected by default")
+
+    def navigate_to_storageclients_page(self):
+        """
+        Navigate to Storage Clients Page
+
+        """
+        logger.info("Navigate to Storage Client Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=120, sleep_time=10)
+        self.do_click(
+            locator=self.page_nav["storageclients_page"], enable_screenshot=False
+        )
+        strings_storage_clients_tab = ["Storage clients"]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_storage_clients_tab, page_name="storage clients"
+        )

@@ -1,0 +1,40 @@
+---
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: worker
+  name: 80-worker-enable-nested-virt
+spec:
+  config:
+    ignition:
+      version: 3.4.0
+    storage:
+      files:
+      - contents:
+          source: data:text/plain;charset=utf-8;base64,b3B0aW9ucyBrdm1faW50ZWwgbmVzdGVkPTEKb3B0aW9ucyBrdm1fYW1kIG5lc3RlZD0xCg==
+          verification: {}
+        filesystem: root
+        mode: 420
+        path: /etc/modprobe.d/kvm.conf
+  osImageURL: ""
+---
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: master
+  name: 80-master-enable-nested-virt
+spec:
+  config:
+    ignition:
+      version: 3.4.0
+    storage:
+      files:
+      - contents:
+          source: data:text/plain;charset=utf-8;base64,b3B0aW9ucyBrdm1faW50ZWwgbmVzdGVkPTEKb3B0aW9ucyBrdm1fYW1kIG5lc3RlZD0xCg==
+          verification: {}
+        filesystem: root
+        mode: 420
+        path: /etc/modprobe.d/kvm.conf
+  osImageURL: ""
