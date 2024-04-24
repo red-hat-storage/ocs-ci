@@ -49,15 +49,15 @@ class TestCrossScCloneSnapRestore(ManageTest):
         """
 
         # Create a Storage Class
-        sc_obj = storageclass_factory(interface=interface_type)
+        sc_obj1 = storageclass_factory(interface=interface_type)
         log.info(
-            f"{interface_type}StorageClass: {sc_obj.name} " f"created successfully"
+            f"{interface_type}StorageClass: {sc_obj1.name} " f"created successfully"
         )
 
         # Create a PVC using the created StorageClass
-        log.info(f"Creating a PVC using {sc_obj.name}")
-        pvc_obj = pvc_factory(interface=interface_type, storageclass=sc_obj)
-        log.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
+        log.info(f"Creating a PVC using {sc_obj1.name}")
+        pvc_obj = pvc_factory(interface=interface_type, storageclass=sc_obj1)
+        log.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj1.name}")
 
         # Create app pod and mount each PVC
         log.info(f"Creating an app pod and mount {pvc_obj.name}")
@@ -95,36 +95,36 @@ class TestCrossScCloneSnapRestore(ManageTest):
         if interface_type == constants.CEPHFILESYSTEM:
             restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
 
-        restore_pvc_name = f"{pvc_obj.name}-restored-same-sc"
+        restore_pvc_name1 = f"{pvc_obj.name}-restored-same-sc"
         log.info("Restoring the PVC from snapshot on the same SC")
-        restore_pvc_obj = pvc.create_restore_pvc(
-            sc_name=f"{sc_obj.name}",
+        restore_pvc_obj1 = pvc.create_restore_pvc(
+            sc_name=f"{sc_obj1.name}",
             snap_name=snap_obj.name,
             namespace=snap_obj.namespace,
             size=f"{pvc_obj.size}Gi",
-            pvc_name=restore_pvc_name,
+            pvc_name=restore_pvc_name1,
             restore_pvc_yaml=restore_pvc_yaml,
         )
         helpers.wait_for_resource_state(
-            restore_pvc_obj, constants.STATUS_BOUND, timeout=600
+            restore_pvc_obj1, constants.STATUS_BOUND, timeout=600
         )
-        restore_pvc_obj.reload()
+        restore_pvc_obj1.reload()
         log.info("PVC was restored from the snapshot on the same SC")
-        restore_pvc_obj.delete()
+        restore_pvc_obj1.delete()
 
-        restore_pvc_name = f"{pvc_obj.name}-restored-other-sc"
+        restore_pvc_name2 = f"{pvc_obj.name}-restored-other-sc"
         log.info("Restoring the PVC from Snapshot")
-        restore_pvc_obj = pvc.create_restore_pvc(
+        restore_pvc_obj2 = pvc.create_restore_pvc(
             sc_name=f"{sc_obj2.name}",
             snap_name=snap_obj.name,
             namespace=snap_obj.namespace,
             size=f"{pvc_obj.size}Gi",
-            pvc_name=restore_pvc_name,
+            pvc_name=restore_pvc_name2,
             restore_pvc_yaml=restore_pvc_yaml,
         )
         helpers.wait_for_resource_state(
-            restore_pvc_obj, constants.STATUS_BOUND, timeout=600
+            restore_pvc_obj2, constants.STATUS_BOUND, timeout=600
         )
-        restore_pvc_obj.reload()
+        restore_pvc_obj2.reload()
         log.info("PVC was restored from the snapshot on another SC")
-        restore_pvc_obj.delete()
+        restore_pvc_obj2.delete()
