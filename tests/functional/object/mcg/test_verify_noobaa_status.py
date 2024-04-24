@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
-    skipif_noobaa_external_pgsql
+    skipif_noobaa_external_pgsql,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
