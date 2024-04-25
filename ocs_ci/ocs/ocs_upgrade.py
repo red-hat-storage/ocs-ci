@@ -153,6 +153,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             old_images,
             selector=constants.NOOBAA_APP_LABEL,
             count=noobaa_pods,
+            timeout=1020,
         )
     except TimeoutException as ex:
         if upgrade_version >= parse_version("4.7"):
