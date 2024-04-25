@@ -283,9 +283,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             )
         else:
             param = (
-                f'"all": {tolerations}, "mds": {tolerations}, '
-                f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}, '
-                f'"csi-plugin": {tolerations}, "csi-provisioner": {tolerations}'
+                f'"all": {tolerations}, "csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
+                f'"mds": {tolerations}, "metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, '
+                f'"rgw": {tolerations}, "toolbox": {tolerations}'
             )
             param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
