@@ -56,6 +56,7 @@ from ocs_ci.ocs.node import (
     get_nodes,
     get_nodes_where_ocs_pods_running,
     get_provider_internal_node_ips,
+    add_disk_stretch_arbiter,
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
@@ -1563,8 +1564,14 @@ def add_capacity_lso(ui_flag=False):
         num_available_pv = 2
         set_count = deviceset_count + 2
     else:
-        add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
-        num_available_pv = 3
+        num_available_pv = get_osd_replica_count()
+        if (
+            config.DEPLOYMENT.get("arbiter_deployment") is True
+            and num_available_pv == 4
+        ):
+            add_disk_stretch_arbiter()
+        else:
+            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
     if ui_add_capacity_conditions() and ui_flag:

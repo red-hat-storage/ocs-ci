@@ -42,10 +42,7 @@ log = logging.getLogger(__name__)
 @turquoise_squad
 class TestZoneShutdownsAndCrashes:
 
-    zones = constants.ZONES_LABELS
-    # We dont want to select arbiter zone randomly for the shutdown/crash
-    # because its not valid test scenario
-    zones.remove("arbiter")
+    zones = constants.DATA_ZONE_LABELS
 
     @pytest.fixture()
     def init_sanity(self, request, nodes):

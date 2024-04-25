@@ -4,9 +4,10 @@ import re
 
 from datetime import timedelta
 
-from ocs_ci.ocs.node import get_nodes_having_label, get_node_objs
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.node import get_nodes_having_label, get_ocs_nodes, get_node_objs
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -114,6 +115,42 @@ class StretchCluster(OCS):
     def rbd_old_log(self):
         return self.logfile_map[constants.LOGWRITER_RBD_LABEL][2]
 
+    def get_workload_pvc_obj(self, workload_label):
+        """
+        Gets the PVC object for the volume attached
+        to the workload type mentioned by label
+
+        Args:
+            workload_label (str): Label for the workload
+
+        Returns:
+            PVC object
+
+        """
+        pvcs = None
+
+        if (
+            workload_label == constants.LOGWRITER_CEPHFS_LABEL
+            or workload_label == constants.LOGREADER_CEPHFS_LABEL
+        ):
+            pvcs = get_pvc_objs(
+                pvc_names=[
+                    self.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
+                        "volumes"
+                    ][0]["persistentVolumeClaim"]["claimName"]
+                ],
+                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+            )
+        elif workload_label == constants.LOGWRITER_RBD_LABEL:
+            pvc_names = list()
+            for pod_obj in self.workload_map[workload_label]:
+                pvc_names.append(f"logwriter-rbd-{pod_obj.name}")
+            pvcs = get_pvc_objs(
+                pvc_names=pvc_names, namespace=constants.STRETCH_CLUSTER_NAMESPACE
+            )
+
+        return pvcs
+
     def get_nodes_in_zone(self, zone):
         """
         This will return the list containing OCS objects
@@ -129,6 +166,23 @@ class StretchCluster(OCS):
         """
         label = f"{constants.ZONE_LABEL}={zone}"
         return [OCS(**node_info) for node_info in get_nodes_having_label(label)]
+
+    def get_ocs_nodes_in_zone(self, zone):
+        """
+        Get the OCS nodes in a particular zone
+
+        Args:
+            zone (str): Zone that node belongs to
+
+        Returns:
+            List: Node(OCS) objects
+
+        """
+
+        nodes_in_zone = set([node.name for node in self.get_nodes_in_zone(zone)])
+        ocs_nodes = set([node.name for node in get_ocs_nodes()])
+        ocs_nodes_in_zone = nodes_in_zone.intersection(ocs_nodes)
+        return get_node_objs(list(ocs_nodes_in_zone))
 
     @retry(CommandFailed, tries=10, delay=10)
     def check_for_read_pause(self, label, start_time, end_time):
