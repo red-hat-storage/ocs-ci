@@ -31,21 +31,23 @@ class TestPvcCreationInMegabytes:
         """
         access_mode = constants.ACCESS_MODE_RWX
         interface = constants.CEPHFILESYSTEM
-        given_pvc_size = ["499", "500", "501"]
+        given_pvc_size_mb = ["499", "500", "501"]
         # conversion formulae for 'M' to bytes
         mega_bytes_to_bytes = 1000 * 1000
         # conversion formulae for 'Mi' to bytes
         mebi_bytes_to_bytes = 1024 * 1024
-        for size in given_pvc_size:
+        for size in given_pvc_size_mb:
             log.info(f"Creating {interface} based PVC with the given size {size}M")
             # Creating PVC using pvc_factory
             pvc_obj = pvc_factory(
                 interface=interface, access_mode=access_mode, size=size, size_unit="M"
             )
             # getting pvc yaml using pvc_obj.get() and getting the pvc capacity from the yaml
-            actual_pvc_size = pvc_obj.get().get("status").get("capacity").get("storage")
-            log.info(f"PVC created with the capacity of {actual_pvc_size} ")
-            created_pvc_in_bytes = int(actual_pvc_size[:-2]) * mebi_bytes_to_bytes
+            actual_pvc_size_mib = (
+                pvc_obj.get().get("status").get("capacity").get("storage")
+            )
+            log.info(f"PVC created with the capacity of {actual_pvc_size_mib} ")
+            created_pvc_in_bytes = int(actual_pvc_size_mib[:-2]) * mebi_bytes_to_bytes
             requested_pvc_in_bytes = int(size) * mega_bytes_to_bytes
             if created_pvc_in_bytes >= requested_pvc_in_bytes:
                 log.info(
@@ -54,4 +56,4 @@ class TestPvcCreationInMegabytes:
             else:
                 assert (
                     False
-                ), f"Actual PVC size {actual_pvc_size} is different than the given PVC size {size}M"
+                ), f"Actual PVC size {actual_pvc_size_mib} is different than the given PVC size {size}M"
