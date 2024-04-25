@@ -47,3 +47,4 @@ spec:
         requests:
           storage: 10Gi
       storageClassName: ocs-storagecluster-ceph-rbd
+  volumeClaimDeletePolicy: Delete
