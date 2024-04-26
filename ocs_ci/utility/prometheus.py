@@ -742,7 +742,7 @@ class PrometheusAPI(object):
             if expected_alert not in actual_alerts:
                 logger.error(
                     f"{expected_alert} alert does not exist in alerts list."
-                    f"The actaul alerts: {actual_alerts}"
+                    f"The actual alerts : {actual_alerts}"
                 )
                 return False
         return True

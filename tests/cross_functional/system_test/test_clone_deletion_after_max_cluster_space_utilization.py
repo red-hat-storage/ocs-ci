@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     system_test,
     polarion_id,
+    bugzilla,
 )
 from ocs_ci.ocs.cluster import (
     change_ceph_full_ratio,
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 @system_test
+@bugzilla("2182962")
 @polarion_id("OCS-5763")
 @pytest.mark.parametrize(
     argnames=["interface_type"],
@@ -44,7 +46,7 @@ class TestCloneDeletion(E2ETest):
 
         Args:
         interface_type(str): The type of the interface
-            (e.g. CephBlockPool, CephFileSystem)
+        (e.g. CephBlockPool, CephFileSystem)
         pvc_factory: A fixture to create new pvc
         pod_factory: A fixture to create new pod
 
@@ -58,12 +60,12 @@ class TestCloneDeletion(E2ETest):
 
         logger.info("Starting the test setup")
 
-        self.num_of_clones = 25
+        self.num_of_clones = 75
 
         # Getting the total Storage capacity
         self.ceph_cluster = CephCluster()
         self.ceph_capacity = int(self.ceph_cluster.get_ceph_capacity())
-        logger.info(f"ceph_capacity: {self.ceph_capacity}")
+        logger.info(f"Total ceph_capacity: {self.ceph_capacity}")
 
         # Getting the free Storage capacity
         self.ceph_free_capacity = int(self.ceph_cluster.get_ceph_free_capacity())
@@ -77,24 +79,22 @@ class TestCloneDeletion(E2ETest):
 
         # Available free storage capacity in the test
         self.capacity_to_write = int(self.osd_full_size - self.currently_used_capacity)
-        logger.info(f"capacity_to_wrie: {self.capacity_to_write}")
+        logger.info(f"capacity_to_write: {self.capacity_to_write}")
 
         # Calculating the file size
         self.filesize = int(self.capacity_to_write / (self.num_of_clones + 1))
-
-        logger.info(f"filesize: {self.filesize}")
+        logger.info(f"filesize to fill the cluster to full ratio: {self.filesize}")
 
         # Calculating the PVC size in GiB
         self.pvc_size = int(self.filesize * 1.2)
         logger.info(f"pvc size: {self.pvc_size}")
 
-        # Making filesize to MB
+        # Converting the filesize from GiB to MB
         self.filesize = f"{int(self.filesize) * constants.GB2MB}M"
-
         logger.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "
             f"Free capacity size is : {self.ceph_free_capacity} GiB, "
-            f"With {self.num_of_clones} clones to {self.pvc_size} GiB PVC. "
+            f"Creating {self.num_of_clones} clones of {self.pvc_size} GiB PVC. "
         )
 
         self.pvc_obj = pvc_factory(
@@ -119,7 +119,7 @@ class TestCloneDeletion(E2ETest):
             clone_obj: Object of clone of which image to be flatten
         """
         image_name = clone_obj.get_rbd_image_name
-        pool_name = "ocs-storagecluster-cephblockpool"
+        pool_name = constants.DEFAULT_CEPHBLOCKPOOL
 
         tool_pod = get_ceph_tools_pod()
         out = tool_pod.exec_ceph_cmd(
@@ -198,7 +198,7 @@ class TestCloneDeletion(E2ETest):
         logger.info("Change Ceph full_ratio from from 85% to 95%")
 
         change_ceph_full_ratio(95)
-        # After the cluster is out of full state and IOs started , Try to delete clones.
+        # After the cluster is out of full state try to delete clones.
         # Delete the clones one by one and wait for deletion
         logger.info(
             f"Start deleting {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} Gi."
