@@ -19,6 +19,8 @@ kill_counter = 0
 
 def signal_term_handler(sig, frame):
     print(f"Got SIGTERM: {sig}")
+    if hasattr(framework.config, "RUN"):
+        framework.config.RUN["aborted"] = True
     global kill_counter
     if kill_counter:
         print("Second attempt to SIGTERM, exiting process with RC: 143")
