@@ -61,7 +61,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
             f"aws s3{api} "
-            f"--endpoint={mcg_obj.s3_internal_endpoint} "
+            f"--endpoint={mcg_obj.s3_external_endpoint} "
         )
         string_wrapper = '"'
     elif signed_request_creds:
@@ -287,7 +287,7 @@ def list_objects_from_bucket(
     if recursive:
         retrieve_cmd += " --recursive"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_external_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -345,7 +345,7 @@ def copy_objects(
     else:
         retrieve_cmd = f"cp {src_obj} {target}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_external_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -410,7 +410,7 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
 
     access_key = s3_obj.access_key_id
     secret_key = s3_obj.access_key
-    endpoint = s3_obj.s3_internal_endpoint
+    endpoint = s3_obj.s3_external_endpoint
 
     # compile the src code
     javas3_pod.exec_cmd_on_pod(command="mvn clean compile", out_yaml_format=False)
@@ -448,7 +448,7 @@ def sync_object_directory(
     logger.info(f"Syncing all objects and directories from {src} to {target}")
     retrieve_cmd = f"sync {src} {target}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_external_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -496,7 +496,7 @@ def download_objects_using_s3cmd(
     else:
         retrieve_cmd = f"get {src} {target}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_external_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -535,7 +535,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
         secrets=[
             mcg_obj.access_key_id,
             mcg_obj.access_key,
-            mcg_obj.s3_internal_endpoint,
+            mcg_obj.s3_external_endpoint,
         ],
     )
 
@@ -582,7 +582,7 @@ def write_individual_s3_objects(
             secrets=[
                 mcg_obj.access_key_id,
                 mcg_obj.access_key,
-                mcg_obj.s3_internal_endpoint,
+                mcg_obj.s3_external_endpoint,
             ],
         )
 
@@ -607,7 +607,7 @@ def upload_parts(
 
     """
     parts = []
-    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
+    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_external_endpoint]
     for count, part in enumerate(uploaded_parts, 1):
         upload_cmd = (
             f"upload-part --bucket {bucketname} --key {object_key}"
@@ -1398,7 +1398,7 @@ def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
             secrets=[
                 mcg_obj.access_key_id,
                 mcg_obj.access_key,
-                mcg_obj.s3_internal_endpoint,
+                mcg_obj.s3_external_endpoint,
             ],
         )
 
