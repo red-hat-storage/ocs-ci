@@ -332,6 +332,7 @@ class BusyBox_AppSet(DRWorkload):
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.appset_placement_name = kwargs.get("workload_placement_name")
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
+        self.appset_model = kwargs.get("appset_model")
 
     def deploy_workload(self):
         """
@@ -360,6 +361,19 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                if self.appset_model == "pull":
+                    # load appset_yaml_file
+                    app_set_yaml_data["template"]["metadata"] = "annotations:"
+                    app_set_yaml_data["template"]["metadata"]["annotations:"][0] = (
+                        "apps.open-cluster-management.io/ocm"
+                        "-managed-cluster: '{{name}}'"
+                    )
+                    app_set_yaml_data["template"]["metadata"]["annotations:"][1] = (
+                        "argocd.argoproj.io/skip-reconcile: " "'true'"
+                    )
+                    app_set_yaml_data["template"]["metadata"]["labels"][
+                        1
+                    ] = "apps.open-cluster-management.io/pull-to-ocm-managed-cluster: 'true'"
         log.info(app_set_yaml_data_list)
         templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
         config.switch_acm_ctx()
@@ -645,9 +659,11 @@ class CnvWorkload(DRWorkload):
         placement_obj = ocp.OCP(
             kind=constants.PLACEMENT_KIND,
             resource_name=self.cnv_workload_placement_name,
-            namespace=constants.GITOPS_CLUSTER_NAMESPACE
-            if self.workload_type == constants.APPLICATION_SET
-            else self.workload_namespace,
+            namespace=(
+                constants.GITOPS_CLUSTER_NAMESPACE
+                if self.workload_type == constants.APPLICATION_SET
+                else self.workload_namespace
+            ),
         )
         placement_obj.annotate(
             annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
