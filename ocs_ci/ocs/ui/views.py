@@ -348,7 +348,7 @@ generic_locators = {
         By.XPATH,
     ),
     "delete_resource": (
-        'li[id="Delete"] a[role="menuitem"]',
+        'li[id="Delete"] a[role="menuitem"], button[id="Delete"]',
         By.CSS_SELECTOR,
     ),
     "close_modal_btn": ("//button[@id='modal-close-action']", By.XPATH),
@@ -469,7 +469,7 @@ obc = {
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
     "delete_resource": (
-        'li[id="Delete"] a[role="menuitem"]',
+        'li[id="Delete"] a[role="menuitem"], button[id="Delete"]',
         By.CSS_SELECTOR,
     ),
     "namespace_store_create": (
