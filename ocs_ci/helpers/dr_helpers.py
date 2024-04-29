@@ -7,7 +7,10 @@ import logging
 import tempfile
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.acm.acm import import_recovery_clusters_with_acm
+from ocs_ci.ocs.acm.acm import (
+    import_recovery_clusters_with_acm,
+    validate_cluster_import,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
@@ -1332,7 +1335,6 @@ def disable_dr_from_app(secondary_cluster_name):
     config.switch_acm_ctx()
 
     # get all placement and replace value with surviving cluster
-    config.switch_acm_ctx()
     placement_obj = ocp.OCP(kind=constants.PLACEMENT)
     placements = placement_obj.get(all_namespaces=True).get("items")
     for placement in placements:
@@ -1341,29 +1343,14 @@ def disable_dr_from_app(secondary_cluster_name):
             namespace = placement["metadata"]["namespace"]
             path = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
             params = f"""[{{"op": "replace", "path": "{path}", "value": "{secondary_cluster_name}"}}]"""
-            # placement_obj.patch(resource_name=name, params=params, format_type="json")
             cmd = f"oc patch placement {name} -n {namespace}  -p '{params}' --type=json"
             run_cmd(cmd)
 
-    '''
-    placements = placement_obj.get(all_namespaces=True).get("items")
-    for placement in placements:
-        namespace = placement["metadata"]["namepsace"]
-        name = placement["metadata"]["name"]
-        placements_dict = dict()
-        if namespace != "all-openshift-clusters":
-            placements_dict.update({name: namespace})
-
-    for name, namespace in placements_dict.items():
-        patch_cmd = f"""[{ "op": "replace",
-                    "path": "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0",
-                    "value": {secondary_cluster_name}}]"""
-        cmd = f"oc patch placement {name} --type=json -p '{patch_cmd}' -n namespace"
-        run_cmd(cmd)
-    '''
-
     # Delete all drpc
     run_cmd("oc delete drpc --all -A")
+
+    # Verify all drpc gets deleted
+    # ToDo
 
     # Remove annotation from placements
     for placement in placements:
@@ -1372,10 +1359,28 @@ def disable_dr_from_app(secondary_cluster_name):
             namespace = placement["metadata"]["namespace"]
             path = "/metadata/annotations/cluster.open-cluster-management.io~1experimental-scheduling-disable"
             params = f"""[{{"op": "remove", "path": "{path}"}}]"""
-            placement_obj.patch(resource_name=name, params=params, format_type="json")
+            cmd = f"oc patch {constants.PLACEMENT} {name} -n {namespace} -p '{params}' --type=json"
+            run_cmd(cmd)
 
     config.switch_ctx(old_ctx)
     return placement_obj
+
+
+def apply_drpolicy_to_workload(workload, drcluster_name):
+    """
+    Function for applying drpolicy to indiviusual workload
+
+    Args:
+    workload(List): List of workload objects
+    drcluster_name(str): Name of the DRcluster on which workloads belongs
+    """
+    for wl in workload:
+        drpc_yaml_data = templating.load_yaml(wl.drpc_yaml_file)
+        drpc_yaml_data["spec"]["preferredCluster"] = drcluster_name
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drpc_yaml_file)
+
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -k {wl.drpc_yaml_file}")
 
 
 def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
@@ -1387,7 +1392,6 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     workload(List): List of workload objects
     primary_cluster_name (str): Name of the primary DRcluster
     secondary_cluster_name(str): Name of the secondary DRcluster
-
     """
 
     # Delete dr cluster
@@ -1395,10 +1399,12 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
 
     # Disable DR on hub for each app
-    # run_cmd(cmd =f"sh {constants.DISABLE_DR_EACH_APP} {secondary_cluster_name}")
     placement_obj = disable_dr_from_app(secondary_cluster_name)
+    logger.info("DR configuration is successfully disabled on each app")
 
     # Remove DR configuration from hub and surviving cluster
+    logger.info("Running Remove DR configuration script..")
+    run_cmd(cmd=f"chmod +x {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
     run_cmd(cmd=f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
 
     # add label to openshift-opeartors namespace
@@ -1411,8 +1417,14 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # Detach old primary
     run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
 
+    # Verify old primary cluster is dettached
+    # Todo
+
     # Import Recovery cluster
-    import_recovery_clusters_with_acm()
+    cluster_name_recoevry = import_recovery_clusters_with_acm()
+
+    # Verify recovery cluster is imported
+    validate_cluster_import(cluster_name_recoevry)
 
     # Install MCO on active hub again
     from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
@@ -1428,13 +1440,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     verify_drpolicy_cli(switch_ctx=get_active_acm_index())
 
     # Apply dr policy on all app on secondary cluster
-    for wl in workload:
-        drpc_yaml_data = templating.load_yaml(wl.drpc_yaml_file)
-        drpc_yaml_data["spec"]["preferredCluster"] = secondary_cluster_name
-        templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drpc_yaml_file)
-
-        config.switch_acm_ctx()
-        run_cmd(f"oc create -k {wl.drpc_yaml_file}")
+    apply_drpolicy_to_workload(workload, secondary_cluster_name)
 
     placement_obj.annotate(
         annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"

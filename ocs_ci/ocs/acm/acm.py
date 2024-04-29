@@ -654,12 +654,7 @@ def import_recovery_clusters_with_acm():
     cluster_name_recoevry = clusters_env.get(f"cluster_name_{recovery_index}")
     clusters = (cluster_name_recoevry, kubeconfig_recovery)
     verify_running_acm()
-    if config.DEPLOYMENT.get("ui_acm_import"):
-        login_to_acm()
-        acm_nav = AcmAddClusters()
-        acm_nav.import_cluster(
-            cluster_name=cluster_name_recoevry,
-            kubeconfig_location=kubeconfig_recovery,
-        )
-    else:
-        import_clusters_via_cli(clusters)
+
+    import_clusters_via_cli(clusters)
+
+    return cluster_name_recoevry
