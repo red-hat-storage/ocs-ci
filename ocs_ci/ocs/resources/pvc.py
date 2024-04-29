@@ -10,6 +10,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
@@ -635,3 +636,22 @@ def scale_down_pods_and_remove_pvcs(sc_name):
 
             time.sleep(10)
             delete_pvcs([pvc_obj])
+
+
+def flatten_image(clone_obj):
+    """
+    Flatten the image of clone
+
+    Args:
+        clone_obj: Object of clone of which image to be flatten
+    """
+    image_name = clone_obj.get_rbd_image_name
+    pool_name = constants.DEFAULT_CEPHBLOCKPOOL
+
+    tool_pod = get_ceph_tools_pod()
+    out = tool_pod.exec_ceph_cmd(
+        ceph_cmd=f"rbd flatten {pool_name}/{image_name}",
+        format=None,
+    )
+    log.info(f"{out}")
+    log.info(f"Successfully flatten the image of {clone_obj.name}")

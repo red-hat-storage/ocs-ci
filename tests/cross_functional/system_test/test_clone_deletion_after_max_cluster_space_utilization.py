@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.ocs.resources.pvc import flatten_image
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.pytest_customization.marks import (
@@ -111,6 +111,7 @@ class TestCloneDeletion(E2ETest):
         self.pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {self.pod_obj.name}")
 
+    '''
     def flatten_image(self, clone_obj):
         """
         Flatten the image of clone
@@ -120,7 +121,6 @@ class TestCloneDeletion(E2ETest):
         """
         image_name = clone_obj.get_rbd_image_name
         pool_name = constants.DEFAULT_CEPHBLOCKPOOL
-
         tool_pod = get_ceph_tools_pod()
         out = tool_pod.exec_ceph_cmd(
             ceph_cmd=f"rbd flatten {pool_name}/{image_name}",
@@ -128,6 +128,7 @@ class TestCloneDeletion(E2ETest):
         )
         logger.info(f"{out}")
         logger.info(f"Successfully flatten the image of {clone_obj.name}")
+    '''
 
     @skipif_external_mode
     @magenta_squad
@@ -159,7 +160,7 @@ class TestCloneDeletion(E2ETest):
 
             if interface_type == constants.CEPHBLOCKPOOL:
                 # flatten the image
-                self.flatten_image(cloned_pvc_obj)
+                flatten_image(cloned_pvc_obj)
                 logger.info(
                     f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} 2` {self.pvc_obj.name} was created."
                 )
