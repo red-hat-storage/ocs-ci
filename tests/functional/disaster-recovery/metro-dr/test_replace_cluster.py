@@ -26,7 +26,6 @@ from ocs_ci.helpers.dr_helpers import (
     get_current_primary_cluster_name,
     get_current_secondary_cluster_name,
     wait_for_all_resources_creation,
-    gracefully_reboot_ocp_nodes,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,9 +50,6 @@ class TestReplaceCluster:
                 and get_fence_state(self.primary_cluster_name) == "Fenced"
             ):
                 enable_unfence(self.primary_cluster_name)
-                gracefully_reboot_ocp_nodes(
-                    self.wl_namespace, self.primary_cluster_name
-                )
 
         request.addfinalizer(finalizer)
 
@@ -121,10 +117,11 @@ class TestReplaceCluster:
                         failover,
                         failover_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
+                        workload_type=wl.workload_type,
                         switch_ctx=get_active_acm_index(),
                     )
                 )
-                time.sleep(5)
+                time.sleep(10)
 
         # Wait for failover results
         for fl in failover_results:
