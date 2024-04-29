@@ -150,33 +150,25 @@ class TestCloneDeletion(E2ETest):
         )
         clones_list = []
 
-        if interface_type == constants.CEPHBLOCKPOOL:
-            for clone_num in range(self.num_of_clones + 1):
-                logger.info(f"Start creation of clone number {clone_num}.")
-                cloned_pvc_obj = pvc_clone_factory(
-                    self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=600
-                )
-                cloned_pvc_obj.reload()
+        for clone_num in range(self.num_of_clones + 1):
+            logger.info(f"Start creation of clone number {clone_num}.")
+            cloned_pvc_obj = pvc_clone_factory(
+                self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=600
+            )
+            cloned_pvc_obj.reload()
 
+            if interface_type == constants.CEPHBLOCKPOOL:
                 # flatten the image
                 self.flatten_image(cloned_pvc_obj)
+                logger.info(
+                    f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} 2` {self.pvc_obj.name} was created."
+                )
 
-                clones_list.append(cloned_pvc_obj)
+            else:
                 logger.info(
                     f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
                 )
-
-        else:
-            for clone_num in range(self.num_of_clones + 1):
-                logger.info(f"Start creation of clone number {clone_num}.")
-                cloned_pvc_obj = pvc_clone_factory(
-                    self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=600
-                )
-                cloned_pvc_obj.reload()
-                clones_list.append(cloned_pvc_obj)
-                logger.info(
-                    f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
-                )
+            clones_list.append(cloned_pvc_obj)
 
         logger.info(
             "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
