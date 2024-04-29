@@ -296,7 +296,8 @@ generic_locators = {
     ),
     "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
     "three_dots_specific_resource": (
-        "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions']",
+        "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions'] | "
+        "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "resource_link": ("//td[@id='name']//a[contains(text(),'{}')]", By.XPATH),
@@ -342,7 +343,8 @@ generic_locators = {
     "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
         "//td[@id='name']//a[contains(text(), '{}')]"
-        "/../../..//button[@aria-label='Actions']",
+        "/../../..//button[@aria-label='Actions'] | "
+        "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_resource": (
