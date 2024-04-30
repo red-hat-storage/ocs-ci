@@ -3,12 +3,12 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
     skipif_hci_client,
     skipif_mcg_only,
     skipif_disconnected_cluster,
     polarion_id,
     black_squad,
+    tier2,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import is_hci_provider_cluster
@@ -73,7 +73,7 @@ def alerts_expected():
         return internal_mode_OCP_ODF_alerts
 
 
-@tier1
+@tier2
 @black_squad
 @skipif_mcg_only
 @skipif_hci_client
