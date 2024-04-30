@@ -290,7 +290,7 @@ generic_locators = {
         By.XPATH,
     ),
     "actions": (
-        '//button[@aria-label="Actions"] | '
+        '//button[@aria-label="Actions"] | //div[@data-test-id="details-actions"]//button | '
         '//span[@class="pf-c-dropdown__toggle-text" and text()="Actions"]/..',
         By.XPATH,
     ),
