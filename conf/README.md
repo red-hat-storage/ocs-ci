@@ -66,6 +66,10 @@ run it belongs here.
 * `skipped_on_ceph_health_threshold` - The allowed threshold for the ratio of tests skipped due to Ceph unhealthy against the
   number of tests being collected for the test execution. The default value is set to 0.
   For acceptance suite, the value would be always overwritten to 0.
+* `extra_markexpr` - extra mark expression to add to pytest. Argument -m will be updated with this provided expression.
+  e.g. if you have passed to exectuion `-m tier1` and you will apply `RUN["extra_markexpr"] = "or stretchcluster_required"`
+  it will updte config.option.markexpr to "tier1 or stretchcluster_required" and will select tests decorated
+  with tier1 or stretchcluster_required marker.
 
 #### DEPLOYMENT
 

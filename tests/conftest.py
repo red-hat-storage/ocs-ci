@@ -126,6 +126,7 @@ from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_default_if_keyval_empty,
+    get_mark_expression_name,
     get_ocs_build_number,
     get_openshift_client,
     get_random_str,
@@ -334,6 +335,10 @@ def pytest_collection_modifyitems(session, config, items):
                 item.user_properties.append(("squad", squad.capitalize()))
 
     if not (teardown or deploy or (deploy and skip_ocs_deployment)):
+        if ocsci_config.RUN.get("extra_markexpr"):
+            current_markexpr = config.option.markexpr
+            extra_markexpr = ocsci_config.RUN.get("extra_markexpr")
+            config.option.markexpr = f"{current_markexpr} {extra_markexpr}"
         for item in items[:]:
             skipif_ocp_version_marker = item.get_closest_marker("skipif_ocp_version")
             skipif_ocs_version_marker = item.get_closest_marker("skipif_ocs_version")
@@ -1584,7 +1589,7 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     if launch_url:
         record_testsuite_property("rp_launch_url", launch_url)
     # add markers as separated property
-    markers = ocsci_config.RUN["cli_params"].get("-m", "").replace(" ", "-")
+    markers = get_mark_expression_name()
     record_testsuite_property("rp_markers", markers)
 
 

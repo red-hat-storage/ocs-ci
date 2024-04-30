@@ -2184,6 +2184,22 @@ def ocsci_log_path():
     )
 
 
+def get_mark_expression_name():
+    """
+    Take mark expression from argumets, updtes it with extra_markexpr
+    and returning name which can be used for reporting.
+
+    Returns:
+        str: mark expression with spaces replaced by `-`
+
+    """
+    markers = config.RUN["cli_params"].get("-m", "")
+    if config.RUN.get("extra_markexpr"):
+        extra_markexpr = config.RUN.get("extra_markexpr")
+        config.option.markexpr = f"{markers} {extra_markexpr}"
+    return markers.replace(" ", "-")
+
+
 def get_testrun_name():
     """
     Prepare testrun ID for Polarion (and other reports).
@@ -2192,7 +2208,7 @@ def get_testrun_name():
         str: String containing testrun name
 
     """
-    markers = config.RUN["cli_params"].get("-m", "").replace(" ", "-")
+    markers = get_mark_expression_name()
     us_ds = config.REPORTING.get("us_ds")
     if us_ds.upper() == "US":
         us_ds = "Upstream"
