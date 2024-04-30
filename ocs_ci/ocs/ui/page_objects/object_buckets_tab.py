@@ -28,7 +28,8 @@ class ObjectBucketsTab(ObjectStorage):
                 # locator of three_dots btn aligned with the specific resource name
                 locator = (
                     f"//td[@id='name']//a[contains(text(), '{resource_name}')]"
-                    "/../../..//button[@aria-label='Actions']",
+                    "/../../..//button[@aria-label='Actions'] | "
+                    f"//tr[contains(., '{resource_name}')]//button[@data-test='kebab-button']",
                     By.XPATH,
                 )
                 # when three_dots element is active attribute 'disabled' does not exist
