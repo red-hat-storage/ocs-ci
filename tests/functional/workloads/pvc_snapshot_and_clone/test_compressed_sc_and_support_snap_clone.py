@@ -9,6 +9,8 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_external_mode,
     skipif_hci_provider_and_client,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
 )
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.constants import (
@@ -24,6 +26,8 @@ log = logging.getLogger(__name__)
 @magenta_squad
 @skipif_hci_provider_and_client
 @tier2
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestCompressedSCAndSupportSnapClone(E2ETest):
     """
     Tests to create new compressed sc and their support for

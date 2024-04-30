@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
     create_vm_using_standalone_pvc,
     get_pvc_from_vm,
@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 
 
 @magenta_squad
-@workloads
 @pytest.mark.polarion_id("OCS-5243")
 class TestVmOperations(E2ETest):
     """

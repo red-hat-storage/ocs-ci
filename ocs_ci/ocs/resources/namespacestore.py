@@ -337,6 +337,18 @@ def oc_create_namespacestore(
                 "subPath": nss_tup[2] if nss_tup[2] else "",
             },
         },
+        constants.IBM_COS_PLATFORM: lambda: {
+            "type": "ibm-cos",
+            "ibmCos": {
+                "targetBucket": uls_name,
+                "signatureVersion": "v2",
+                "endpoint": get_attr_chain(cld_mgr, "ibmcos_client.endpoint"),
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "ibmcos_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
+            },
+        },
     }
 
     if (

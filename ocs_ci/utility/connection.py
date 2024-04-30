@@ -129,3 +129,17 @@ class Connection(object):
         )
         logger.debug(f"stderr: {stderr}")
         return (retcode, stdout, stderr)
+
+    def upload_file(self, localpath, remotepath):
+        """
+        Upload a file to remote server
+
+        Args:
+            localpath (str): Local file to upload
+            remotepath (str): Target path on the remote server. Filename should be included
+
+        """
+        sftp = self.client.open_sftp()
+        logger.info(f"uploading {localpath} to {self.user}@{self.host}:{remotepath}")
+        sftp.put(localpath, remotepath)
+        sftp.close()

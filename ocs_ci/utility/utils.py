@@ -37,7 +37,6 @@ from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 from jinja2 import FileSystemLoader, Environment
-
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
@@ -45,6 +44,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ClientDownloadError,
     CommandFailed,
+    ConfigurationError,
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
@@ -56,7 +56,9 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     CephToolBoxNotFoundException,
     NoRunningCephToolBoxException,
+    ClusterNotInSTSModeException,
 )
+
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -547,8 +549,11 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
+    # this need's to be done to skip none value as skip_index accepts type none
+    if not isinstance(skip_index, list):
+        skip_index = [skip_index]
     for cluster in config.clusters:
-        if cluster.MULTICLUSTER["multicluster_index"] == skip_index:
+        if cluster.MULTICLUSTER["multicluster_index"] in skip_index:
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
@@ -1748,7 +1753,11 @@ def email_reports(session):
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart("alternative")
+    aborted_message = ""
+    if config.RUN.get("aborted"):
+        aborted_message = "[JOB ABORTED] "
     msg["Subject"] = (
+        f"{aborted_message}"
         f"ocs-ci results for {get_testrun_name()} "
         f"({build_str}"
         f"RUN ID: {config.RUN['run_id']}) "
@@ -2266,6 +2275,25 @@ def get_az_count():
         return 1
 
 
+def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
+    """
+    Wait until the ceph health is NOT OK
+
+    """
+
+    def check_ceph_health_not_ok():
+        """
+        Check if ceph health is NOT OK
+
+        """
+        return run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE) != "HEALTH_OK"
+
+    sampler = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_ceph_health_not_ok
+    )
+    sampler.wait_for_func_status(True)
+
+
 def ceph_health_check(namespace=None, tries=20, delay=30):
     """
     Args:
@@ -2355,6 +2383,7 @@ def run_ceph_health_cmd(namespace):
 
     """
     # Import here to avoid circular loop
+
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
     try:
@@ -2365,6 +2394,54 @@ def run_ceph_health_cmd(namespace):
     return ct_pod.exec_ceph_cmd(
         ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
     )
+
+
+def ceph_health_multi_storagecluster_external_base():
+    """
+    Check ceph health for multi-storagecluster external implementation.
+
+    Returns:
+        bool: True if cluster health is ok.
+
+    Raises:
+        CephHealthException: Incase ceph health is not ok.
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.utility.connection import Connection
+    from ocs_ci.deployment.helpers.external_cluster_helpers import (
+        get_external_cluster_client,
+    )
+
+    host, user, password, ssh_key = get_external_cluster_client()
+    connection_to_cephcluster = Connection(
+        host=host, user=user, password=password, private_key=ssh_key
+    )
+    ceph_health_tuple = connection_to_cephcluster.exec_cmd("ceph health")
+    health = ceph_health_tuple[1]
+    if health.strip() == "HEALTH_OK":
+        log.info("Ceph external multi-storagecluster health is HEALTH_OK.")
+        return True
+    else:
+        raise CephHealthException(
+            f"Ceph cluster health for external multi-storagecluster is not OK. Health: {health}"
+        )
+
+
+def ceph_health_check_multi_storagecluster_external(tries=20, delay=30):
+    """
+    Check ceph health for multi-storagecluster external.
+
+    """
+    return retry(
+        (
+            CephHealthException,
+            CommandFailed,
+        ),
+        tries=tries,
+        delay=delay,
+        backoff=1,
+    )(ceph_health_multi_storagecluster_external_base)()
 
 
 def get_rook_repo(branch="master", to_checkout=None):
@@ -2796,6 +2873,10 @@ def censor_values(data_to_censor):
             for pattern in constants.config_keys_patterns_to_censor:
                 if pattern in key.lower():
                     data_to_censor[key] = "*" * 5
+            for expression in constants.config_keys_expressions_to_censor:
+                if key == expression:
+                    data_to_censor[key] = "*" * 5
+
     return data_to_censor
 
 
@@ -3538,7 +3619,12 @@ def mirror_image(image, cluster_config=None):
     """
     if not cluster_config:
         cluster_config = config
-    mirror_registry = cluster_config.DEPLOYMENT["mirror_registry"]
+    mirror_registry = cluster_config.DEPLOYMENT.get("mirror_registry")
+    if not mirror_registry:
+        raise ConfigurationError(
+            'DEPLOYMENT["mirror_registry"] parameter not configured!\n'
+            "This might be caused by previous failure in OCP deployment or wrong configuration."
+        )
     if image.startswith(mirror_registry):
         log.debug(f"Skipping mirror of image {image}, it is already mirrored.")
         return image
@@ -4540,6 +4626,23 @@ def archive_ceph_crashes(toolbox_pod):
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
 
 
+def ceph_crash_info_display(toolbox_pod):
+    """
+    Displays ceph crash information
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    """
+    ceph_crashes = get_ceph_crashes(toolbox_pod)
+    for each_crash in ceph_crashes:
+        log.error(f"ceph crash: {each_crash}")
+        crash_info = toolbox_pod.exec_ceph_cmd(
+            f"ceph crash info {each_crash}", out_yaml_format=False
+        )
+        log.error(crash_info)
+
+
 def add_time_report_to_email(session, soup):
     """
     Takes the time report dictionary and converts it into HTML table
@@ -4643,3 +4746,33 @@ def exec_nb_db_query(query):
         output = output[2:-1]
 
     return output
+
+
+def get_role_arn_from_sub():
+    """
+    Get the RoleARN from the OCS subscription
+
+    Returns:
+        role_arn (str): Role ARN used for ODF deployment
+
+    Raises:
+        ClusterNotInSTSModeException (Exception) if cluster
+        not in STS mode
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if config.DEPLOYMENT.get("sts_enabled"):
+        role_arn = None
+        odf_sub = OCP(
+            kind=constants.SUBSCRIPTION,
+            resource_name=constants.ODF_SUBSCRIPTION,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        for item in odf_sub.get()["spec"]["config"]["env"]:
+            if item["name"] == "ROLEARN":
+                role_arn = item["value"]
+                break
+        return role_arn
+    else:
+        raise ClusterNotInSTSModeException

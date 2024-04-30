@@ -15,7 +15,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
-from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +54,8 @@ class TestRelocate:
 
         """
         if config.RUN.get("rdr_relocate_via_ui"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version <= version.VERSION_4_12:
-                logger.error("ODF/ACM version isn't supported for Relocate operation")
-                raise NotImplementedError
+            acm_obj = AcmAddClusters()
 
-        acm_obj = AcmAddClusters()
         if workload_type == constants.SUBSCRIPTION:
             rdr_workload = dr_workload(num_of_subscription=1)[0]
         else:

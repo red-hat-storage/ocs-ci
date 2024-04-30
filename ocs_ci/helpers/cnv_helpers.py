@@ -7,6 +7,7 @@ import logging
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 from ocs_ci.helpers.helpers import (
@@ -14,6 +15,7 @@ from ocs_ci.helpers.helpers import (
     create_ocs_object_from_kind_and_name,
 )
 from ocs_ci.framework import config
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -164,19 +166,24 @@ def convert_ssh_key_to_base64(ssh_key):
     return base64_key
 
 
-def create_vm_secret(path=None, namespace=constants.CNV_NAMESPACE):
+def create_vm_secret(path=None, secret_name=None, namespace=constants.CNV_NAMESPACE):
     """
     Create an SSH secret for the VM
 
     Args:
         path (str): Path to the SSH public key file - optional
+        secret_name (str, optional): Name of the secret. If not provided, a unique name will be generated.
+        namespace (str, optional): Namespace in which the secret will be created. Defaults to constants.CNV_NAMESPACE.
 
     Returns:
         secret_obj: An OCS instance
 
     """
     secret_data = templating.load_yaml(constants.CNV_VM_SECRET_YAML)
-    secret_data["metadata"]["name"] = create_unique_resource_name("vm-test", "secret")
+    secret_name = (
+        secret_name if secret_name else create_unique_resource_name("vm-test", "secret")
+    )
+    secret_data["metadata"]["name"] = secret_name
     secret_data["metadata"]["namespace"] = namespace
     ssh_pub_key, _ = get_ssh_pub_key_with_filename(path=path)
     base64_key = convert_ssh_key_to_base64(ssh_key=ssh_pub_key)
@@ -328,3 +335,55 @@ def get_ssh_private_key_path():
     )
 
     return private_key_path
+
+
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
+def cal_md5sum_vm(vm_obj, file_path, username=None):
+    """
+    Calculate the MD5 checksum of a file via SSH on a virtual machine.
+
+    Args:
+        vm_obj (obj): The virtual machine object.
+        file_path (str): Full path to the file to calculate the MD5 checksum for.
+        username (str, optional): The username to use for SSH authentication. Defaults to None.
+
+    Returns:
+        str: The MD5 checksum of the specified file.
+
+    """
+    md5sum_out = vm_obj.run_ssh_cmd(
+        command=f"md5sum {file_path}",
+        username=username,
+    )
+    return md5sum_out.split()[0]
+
+
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
+def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
+    """
+    Perform input/output (I/O) operation using dd command via SSH on a virtual machine.
+
+    Args:
+        vm_obj (obj): The virtual machine object.
+        file_path (str): The full path of the file to write on
+        size (str, optional): Size in MB. Defaults to "102400" which is 10GB.
+        username (str, optional): The username to use for SSH authentication. Defaults to None.
+        verify (bool, optional): Whether to verify the I/O operation by calculating MD5 checksum.
+            Defaults to False.
+
+    Returns:
+        str or None: If verify is True, returns the MD5 checksum of the written file. Otherwise, None.
+
+    """
+    # Block size defaults to 1MB
+    bs = 1024
+    vm_obj.run_ssh_cmd(
+        command=f"dd if=/dev/urandom of={file_path} bs={bs} count={size}",
+        username=username,
+    )
+    if verify:
+        return cal_md5sum_vm(
+            vm_obj=vm_obj,
+            file_path=file_path,
+            username=username,
+        )

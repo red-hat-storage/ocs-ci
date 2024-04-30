@@ -2102,6 +2102,8 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
             constants.NOOBAA_OPERATOR_POD_LABEL,
             constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
         ]
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            nb_pod_labels.remove(constants.NOOBAA_DB_LABEL_47_AND_ABOVE)
         nb_pods_running = list()
         for pod_label in nb_pod_labels:
             pods = get_pods_having_label(pod_label, statuses=[constants.STATUS_RUNNING])
@@ -2256,7 +2258,7 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
         logger.warning("None of the new osd pods reached the desired status")
 
 
-def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"], label=None):
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2264,7 +2266,16 @@ def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
         dict: dictionary of pod name and its corresponding restart count
 
     """
-    list_of_pods = get_all_pods(namespace)
+    if label:
+        selector = label.split("=")[1]
+        selector_label = label.split("=")[0]
+    else:
+        selector = None
+        selector_label = None
+
+    list_of_pods = get_all_pods(
+        namespace=namespace, selector=[selector], selector_label=selector_label
+    )
     restart_dict = {}
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
@@ -3349,6 +3360,23 @@ def exit_osd_maintenance_mode(osd_deployment):
             os.remove(f"backup_{deployment.name}.yaml")
 
 
+def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Restart the pods having particular label
+
+    Args:
+        label (str): Label of the pod
+        namespace (str): namespace where the pods are running
+
+    """
+    pods_to_restart = [
+        Pod(**pod_data)
+        for pod_data in get_pods_having_label(label, namespace=namespace)
+    ]
+    delete_pods(pods_to_restart, wait=True)
+    logger.info(f"Deleted all the pods with label {label} and in namespace {namespace}")
+
+
 def restart_pods_in_statuses(
     status_options, namespace=config.ENV_DATA["cluster_namespace"], wait=True
 ):
@@ -3564,3 +3592,64 @@ def wait_for_pods_deletion(
         namespace=namespace,
     )
     sampler.wait_for_func_status(True)
+
+
+def calculate_md5sum_of_pod_files(pods_for_integrity_check, pod_file_name):
+    """
+    Calculate the md5sum of the pod files, and save it in the pod objects
+
+    Args:
+        pods_for_integrity_check (list): The list of the pod objects to calculate the md5sum
+        pod_file_name (str): The pod file name to save the md5sum
+
+    """
+    # Wait for IO to finish
+    logger.info("Wait for IO to finish on pods")
+    for pod_obj in pods_for_integrity_check:
+        pod_obj.get_fio_results()
+        logger.info(f"IO finished on pod {pod_obj.name}")
+        # Calculate md5sum
+        pod_file_name = (
+            pod_file_name
+            if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_FILESYSTEM)
+            else pod_obj.get_storage_path(storage_type="block")
+        )
+        logger.info(
+            f"Calculate the md5sum of the file {pod_file_name} in the pod {pod_obj.name}"
+        )
+        pod_obj.pvc.md5sum = cal_md5sum(
+            pod_obj,
+            pod_file_name,
+            pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
+        )
+
+
+def verify_md5sum_on_pod_files(pods_for_integrity_check, pod_file_name):
+    """
+    Verify the md5sum of the pod files
+
+    Args:
+        pods_for_integrity_check (list): The list of the pod objects to verify the md5sum
+        pod_file_name (str): The pod file name to verify its md5sum
+
+    Raises:
+        AssertionError: If file doesn't exist or md5sum mismatch
+
+    """
+    for pod_obj in pods_for_integrity_check:
+        pod_file_name = (
+            pod_obj.get_storage_path(storage_type="block")
+            if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK)
+            else pod_file_name
+        )
+        verify_data_integrity(
+            pod_obj,
+            pod_file_name,
+            pod_obj.pvc.md5sum,
+            pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
+        )
+        logger.info(
+            f"Verified: md5sum of {pod_file_name} on pod {pod_obj.name} "
+            f"matches with the original md5sum"
+        )
+    logger.info("Data integrity check passed on all pods")

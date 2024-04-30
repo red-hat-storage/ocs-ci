@@ -29,6 +29,8 @@ from ocs_ci.ocs.exceptions import (
     LvDataPercentSizeWrong,
     ThinPoolUtilityWrong,
     TimeoutExpiredError,
+    ResourceWrongStatusException,
+    CephHealthException,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -44,18 +46,19 @@ from ocs_ci.utility.utils import (
     get_trim_mean,
     ceph_health_check,
 )
-from ocs_ci.ocs.node import get_node_ip_addresses
+from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
-from ocs_ci.ocs.resources.pod import get_mds_pods
+from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_pods_to_be_running
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
 
@@ -2383,20 +2386,23 @@ class CephClusterExternal(CephCluster):
     """
 
     def __init__(self):
-        self.POD = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
-        self.CEPHCLUSTER = ocp.OCP(
-            kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
-        )
+        if config.DEPLOYMENT.get("multi_storagecluster"):
+            namespace = constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
+        else:
+            namespace = config.ENV_DATA["cluster_namespace"]
+        self.POD = ocp.OCP(kind="Pod", namespace=namespace)
+        self.CEPHCLUSTER = ocp.OCP(kind="CephCluster", namespace=namespace)
 
         self.wait_for_cluster_cr()
         self._cluster_name = self.cluster_resource.get("metadata").get("name")
         self._namespace = self.cluster_resource.get("metadata").get("namespace")
         self.cluster = ocs.OCS(**self.cluster_resource)
-        # Decrease chance that we will hit issue:
-        # https://github.com/red-hat-storage/ocs-ci/issues/5186
-        logger.info("Sleep for 60 seconds before verifying MCG")
-        time.sleep(60)
-        self.wait_for_nooba_cr()
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            # Decrease chance that we will hit issue:
+            # https://github.com/red-hat-storage/ocs-ci/issues/5186
+            logger.info("Sleep for 60 seconds before verifying MCG")
+            time.sleep(60)
+            self.wait_for_nooba_cr()
 
     @property
     def cluster_name(self):
@@ -2429,9 +2435,9 @@ class CephClusterExternal(CephCluster):
         sample = TimeoutSampler(timeout=timeout, sleep=3, func=self.is_health_ok)
         if not sample.wait_for_func_status(result=True):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
-
-        self.wait_for_noobaa_health_ok()
-        self.validate_pvc()
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            self.wait_for_noobaa_health_ok()
+            self.validate_pvc()
 
     def validate_pvc(self):
         """
@@ -3188,3 +3194,123 @@ def get_mon_quorum_ranks():
     for rank in list(out["quorum"]):
         mon_quorum_ranks[list(out["quorum_names"])[rank]] = rank
     return mon_quorum_ranks
+
+
+def client_cluster_health_check():
+    """
+    Check the client cluster health.
+
+    The function will check the following:
+    1. Wait for the cluster connectivity
+    2. Wait for the nodes to be in a Ready state
+    3. Checking that there are no extra Ceph pods on the cluster
+    4. Wait for the pods to be running in the cluster namespace
+    5. Checking that the storageclient is connected
+
+    Raises:
+        ResourceWrongStatusException: In case not all the nodes are ready, not all the pods are running, or
+            the storageclient is not connected
+        CephHealthException: In case there are extra Ceph pods on the cluster
+
+    """
+    wait_for_cluster_connectivity(tries=120, delay=5)
+    logger.info("Checking the cluster health")
+    wait_for_nodes_status(timeout=300, sleep=10)
+
+    logger.info("Checking that there are no extra Ceph pods on the cluster")
+    mon_pods = pod.get_mon_pods()
+    if mon_pods:
+        raise exceptions.CephHealthException(
+            "The client Cluster shouldn't have any mon pods!"
+        )
+    osd_pods = pod.get_osd_pods()
+    if osd_pods:
+        raise exceptions.CephHealthException(
+            "The client Cluster shouldn't have any osd pods!"
+        )
+    mds_pods = pod.get_mds_pods()
+    if mds_pods:
+        raise exceptions.CephHealthException(
+            "The client Cluster shouldn't have any mds pods!"
+        )
+
+    logger.info("Wait for the pods to be running")
+    res = wait_for_pods_to_be_running(timeout=300, sleep=20)
+    if not res:
+        raise ResourceWrongStatusException("Not all the pods in running state")
+
+    logger.info("Checking that the storageclient is connected")
+    sc_obj = OCP(
+        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    sc_obj.wait_for_resource(
+        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
+        column="PHASE",
+        condition="Connected",
+        timeout=180,
+        sleep=10,
+    )
+
+    logger.info("The client cluster health check passed successfully")
+
+
+@switch_to_orig_index_at_last
+def client_clusters_health_check():
+    """
+    Check the client clusters health using the function 'client_cluster_health_check'.
+    This function will be used when running a multi-cluster job, and we want to verify
+    that all the client clusters are in a good health.
+
+    Raises:
+        ResourceWrongStatusException: In case not all the nodes are ready or not all the pods are running
+        CephHealthException: In case there are extra Ceph pods on the cluster
+
+    """
+    client_indices = config.get_consumer_indexes_list()
+    for client_i in client_indices:
+        config.switch_ctx(client_i)
+        client_cluster_health_check()
+
+    logger.info("The client clusters health check passed successfully")
+
+
+def check_cephcluster_status(
+    desired_phase="Connected",
+    desired_health="HEALTH_OK",
+    name=constants.EXTERNAL_CEPHCLUSTER_NAME,
+    namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
+):
+    """
+    Check cephcluster health and phase.
+
+    Args:
+        desired_phase (string): The cephcluster desired phase.
+        desired_health (string): The cephcluster desired health.
+        name (string): name of the cephcluster.
+        namespace (string): namespace of the cephcluster.
+
+    Returns:
+        bool: True incase cluster is healthy and connected.
+
+    Raises:
+        CephHealthException incase phase or health are not as expected.
+
+    """
+    cephcluster = OCP(
+        kind=constants.CEPH_CLUSTER, resource_name=name, namespace=namespace
+    )
+    cc_resource = cephcluster.get()
+    if (
+        cc_resource["status"]["phase"] == desired_phase
+        and cc_resource["status"]["ceph"]["health"] == desired_health
+    ):
+        logger.info(
+            f"Cephcluster health is {desired_health} and phase is {desired_phase}"
+        )
+        return True
+    else:
+        logger.warning(
+            f'Cephcluster not healthy - phase is {cc_resource["status"]["phase"]} and health is'
+            f' {cc_resource["status"]["ceph"]["health"]}'
+        )
+        raise CephHealthException()

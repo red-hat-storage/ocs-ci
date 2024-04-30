@@ -1,13 +1,14 @@
 import base64
 import json
 import logging
-from abc import ABC, abstractmethod
 import tempfile
+from abc import ABC, abstractmethod
 
 import boto3
 import botocore
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import get_current_test_marks
 from ocs_ci.helpers.helpers import (
     create_resource,
     create_unique_resource_name,
@@ -26,7 +27,7 @@ from ocs_ci.ocs.resources.mcg_replication_policy import McgReplicationPolicy
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, mask_secrets
 
 logger = logging.getLogger(name=__file__)
 
@@ -190,9 +191,11 @@ class ObjectBucket(ABC):
                         "rule_id": replication_policy[0],
                         "destination_bucket": replication_policy[1],
                         "filter": {
-                            "prefix": replication_policy[2]
-                            if replication_policy[2] is not None
-                            else ""
+                            "prefix": (
+                                replication_policy[2]
+                                if replication_policy[2] is not None
+                                else ""
+                            )
                         },
                     }
                 ]
@@ -223,7 +226,11 @@ class ObjectBucket(ABC):
             logger.warning(f"{self.name} deletion timed out. Verifying deletion.")
             verify = True
         if verify:
-            self.verify_deletion()
+            # Increase the timeout to 15 minutes if the test is tier4
+            timeout = 60
+            if any("tier4" in mark for mark in get_current_test_marks()):
+                timeout *= 15
+            self.verify_deletion(timeout)
         if original_context:
             config.switch_ctx(original_context)
 
@@ -245,6 +252,7 @@ class ObjectBucket(ABC):
 
         """
         logger.info(f"Verifying deletion of {self.name}")
+
         try:
             for del_check in TimeoutSampler(
                 timeout, interval, self.internal_verify_deletion
@@ -387,7 +395,34 @@ class MCGCLIBucket(ObjectBucket):
             str: OBC status
 
         """
-        return self.mcg.exec_mcg_cmd(f"obc status {self.name}")
+        status = self.mcg.exec_mcg_cmd(f"obc status {self.name}")
+        censored_status = self._censor_status(status.stdout)
+        return censored_status
+
+    def _censor_status(self, status_str):
+        """
+        Omit or mask sensitive data from the status string
+
+        Args:
+            status_str (str): The status string
+
+        Return:
+            str: The censored status string
+
+        """
+        # Remove the alias s3 command from the status string since
+        # it contains sensitive data which isn't relevant
+        censored_status = "\n".join(
+            [line for line in status_str.split("\n") if "alias s3" not in line]
+        )
+
+        # Mask any additional sensitive data based on the MCG class member
+        if self.mcg:
+            censored_status = mask_secrets(
+                censored_status, secrets=self.mcg.data_to_mask
+            )
+
+        return censored_status
 
     def internal_verify_health(self):
         """
@@ -398,7 +433,7 @@ class MCGCLIBucket(ObjectBucket):
 
         """
         return all(
-            healthy_mark in self.status.stdout.replace(" ", "")
+            healthy_mark in self.status.replace(" ", "")
             for healthy_mark in [
                 constants.HEALTHY_OB_CLI_MODE,
                 constants.HEALTHY_OBC_CLI_PHASE,

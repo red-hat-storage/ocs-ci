@@ -26,7 +26,10 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_osd_pods, get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import (
+    get_osd_pods,
+    get_ceph_tools_pod,
+)
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import (
     check_ceph_health_after_add_capacity,

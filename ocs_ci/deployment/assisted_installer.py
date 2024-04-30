@@ -37,6 +37,7 @@ class AssistedInstallerCluster(object):
         cpu_architecture="x86_64",
         high_availability_mode="Full",
         image_type="minimal-iso",
+        static_network_config=None,
     ):
         """
         Args:
@@ -59,6 +60,11 @@ class AssistedInstallerCluster(object):
                 (default: x86_64)
             high_availability_mode (str): High availability mode: Full or None (default: "Full")
             image_type (str): Type of discovery image full-iso or minimal-iso (default: minimal-iso)
+            static_network_config (list(dict)): Static network configuration of hosts, where network_yaml is yaml string
+                that can be processed by nmstate
+                [{"mac_interface_map": [{"logical_nic_name": "string", "mac_address": "string"}],
+                    "network_yaml": "string"},
+                    ...]
 
         """
         self.api = ai.AssistedInstallerAPI()
@@ -76,7 +82,11 @@ class AssistedInstallerCluster(object):
                 raise ClusterNotFoundException(
                     f"Cluster '{name}' not found in Assisted Installer Console"
                 )
-            self.id = [cl["id"] for cl in clusters if cl["name"] == name][0]
+            self.id = [
+                cl["id"]
+                for cl in clusters
+                if cl["name"] == name and cl["kind"] == "Cluster"
+            ][0]
             # load configuration of existing cluster
             self.load_existing_cluster_configuration()
             logger.info(
@@ -108,6 +118,7 @@ class AssistedInstallerCluster(object):
             self.cpu_architecture = cpu_architecture
             self.high_availability_mode = high_availability_mode
             self.image_type = image_type
+            self.static_network_config = static_network_config
 
     def load_existing_cluster_configuration(self):
         """
@@ -134,6 +145,24 @@ class AssistedInstallerCluster(object):
         self.cpu_architecture = cl_config["cpu_architecture"]
         self.high_availability_mode = cl_config["high_availability_mode"]
         self.image_type = infra_config["type"]
+        self.openshift_cluster_id = cl_config["openshift_cluster_id"]
+        # load records with: 'kind': 'AddHostsCluster'
+        self.add_hosts_clusters = [
+            cl["id"]
+            for cl in self.api.get_clusters()
+            if cl["openshift_cluster_id"] == self.openshift_cluster_id
+            and cl["kind"] == "AddHostsCluster"
+        ]
+        logger.debug(f"AddHostsClusters: {', '.join(self.add_hosts_clusters)}")
+        self.add_hosts_infra_envs = [
+            infra["id"]
+            for cl_id in self.add_hosts_clusters
+            for infra in self.api.get_infra_envs()
+            if infra["cluster_id"] == cl_id
+        ]
+        logger.debug(
+            f"AddHosts Infrastructure Environments: {', '.join(self.add_hosts_infra_envs)}"
+        )
 
     def prepare_pull_secret(self, original_pull_secret):
         """
@@ -210,6 +239,12 @@ class AssistedInstallerCluster(object):
             "ssh_authorized_key": self.ssh_public_key,
             "pull_secret": self.pull_secret,
         }
+
+        if self.static_network_config:
+            infra_env_configuration[
+                "static_network_config"
+            ] = self.static_network_config
+
         infra_data = self.api.create_infra_env(infra_env_configuration)
         self.infra_id = infra_data["id"]
         logger.info(
@@ -227,6 +262,26 @@ class AssistedInstallerCluster(object):
         iso_url = self.api.get_discovery_iso_url(self.infra_id)
         download_file(iso_url, local_path)
         logger.info(f"Downloaded discovery iso from '{iso_url}' to {local_path}")
+
+    def download_ipxe_config(self, local_path):
+        """
+        Download the ipxe config for discovery boot
+
+        Args:
+            local_path (str): path where to store the ipxe config
+
+        Return:
+            str: path to the downloaded ipxe config file
+
+        """
+        ipxe_config_path = self.api.download_infra_file(
+            infra_env_id=self.infra_id,
+            dest_dir=local_path,
+            file_name="ipxe-script",
+            ipxe_script_type="discovery-image-always",
+        )
+        logger.info(f"Downloaded iPXE config {ipxe_config_path}")
+        return ipxe_config_path
 
     def wait_for_discovered_nodes(self, expected_nodes):
         """
@@ -271,13 +326,16 @@ class AssistedInstallerCluster(object):
         """
         failed_validations = []
         for host in self.api.get_cluster_hosts(self.id):
-            vi = json.loads(host["validations_info"])
-            for section in vi:
-                for v in vi[section]:
-                    if v["status"] in ("failure", "pending"):
-                        failed_validations.append(
-                            f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
-                        )
+            try:
+                vi = json.loads(host["validations_info"])
+                for section in vi:
+                    for v in vi[section]:
+                        if v["status"] in ("failure", "pending"):
+                            failed_validations.append(
+                                f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
+                            )
+            except KeyError as err:
+                failed_validations.append(f"host {host['id']}: {err}")
         if failed_validations:
             msg = f"Failed hosts validations: \n{os.linesep.join(failed_validations)}"
             logger.debug(msg)
@@ -289,13 +347,15 @@ class AssistedInstallerCluster(object):
         Prepare mapping between host ID and mac addresses
 
         Return:
-            dict: host id to mac mapping
+            list of lists: host id to mac mapping ([[host1_id, mac1], [host1_id, mac2], [host2_id, mac3],...])
         """
         hosts = self.api.get_infra_env_hosts(self.infra_id)
-        return {
-            h["id"]: json.loads(h["inventory"])["interfaces"][0]["mac_address"]
-            for h in hosts
-        }
+        mapping = []
+        for host in hosts:
+            for interface in json.loads(host["inventory"])["interfaces"]:
+                if interface["ipv4_addresses"]:
+                    mapping.append((host["id"], interface["mac_address"]))
+        return mapping
 
     def update_hosts_config(self, mac_name_mapping, mac_role_mapping):
         """
@@ -306,13 +366,18 @@ class AssistedInstallerCluster(object):
             mac_role_mapping (dict): host mac address to host role mapping
         """
         host_id_mac_mapping = self.get_host_id_mac_mapping()
-        for host_id in host_id_mac_mapping:
-            update_data = {
-                "host_name": mac_name_mapping[host_id_mac_mapping[host_id]],
-                "host_role": mac_role_mapping[host_id_mac_mapping[host_id]],
-            }
-            self.api.update_infra_env_host(self.infra_id, host_id, update_data)
-            logger.info(f"Updated host {host_id} configuration: {update_data}")
+        for host_id, mac in host_id_mac_mapping:
+            try:
+                update_data = {
+                    "host_name": mac_name_mapping[mac],
+                    "host_role": mac_role_mapping[mac],
+                }
+                self.api.update_infra_env_host(self.infra_id, host_id, update_data)
+                logger.info(f"Updated host {host_id} configuration: {update_data}")
+            except KeyError:
+                # ignoring KeyError failure, because we have more than one mac address for each host and only one of
+                # them is used to the name and role mapping
+                pass
 
     def install_cluster(self):
         """
@@ -413,8 +478,14 @@ class AssistedInstallerCluster(object):
         """
         self.api.delete_cluster(self.id)
         logger.info(
-            "Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
+            f"Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
         )
+        if self.add_hosts_clusters:
+            for cl_id in self.add_hosts_clusters:
+                self.api.delete_cluster(cl_id)
+                logger.info(
+                    f"AddHostsCluster {self.name} (id: {cl_id}) was deleted from Assisted Installer Console"
+                )
 
     def delete_infrastructure_environment(self):
         """
@@ -425,3 +496,10 @@ class AssistedInstallerCluster(object):
             f"Infrastructure environment {self.infra_id} for cluster {self.name} (id: {self.id}) "
             "was deleted from Assisted Installer Console"
         )
+        if self.add_hosts_infra_envs:
+            for infra_id in self.add_hosts_infra_envs:
+                self.api.delete_infra_env(infra_id)
+                logger.info(
+                    f"Infrastructure environment {infra_id} for adding hosts to cluster {self.name} (id: {self.id}) "
+                    "was deleted from Assisted Installer Console"
+                )

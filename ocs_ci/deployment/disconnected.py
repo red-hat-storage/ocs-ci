@@ -109,7 +109,7 @@ def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
         f"oc image mirror --filter-by-os='.*' -f {mapping_file} "
         f"--insecure --registry-config={pull_secret_path} "
         "--max-per-registry=2 --continue-on-error=true --skip-missing=true",
-        timeout=3600,
+        timeout=18000,
         ignore_error=True,
     )
 
@@ -277,7 +277,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
     if icsp:
         cmd += " --continue-on-error --skip-missing"
     try:
-        exec_cmd(cmd, timeout=7200)
+        exec_cmd(cmd, timeout=18000)
     except CommandFailed:
         # if icsp is configured, the oc mirror command might fail (return non 0 rc),
         # even though we use --continue-on-error and --skip-missing arguments
@@ -547,25 +547,3 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         ics,
         icsp,
     )
-
-
-def get_ocp_release_image():
-    """
-    Get the url of ocp release image
-    * from DEPLOYMENT["custom_ocp_image"] or
-    * from openshift-install version command output
-    """
-    if not config.DEPLOYMENT.get("ocp_image"):
-        if config.DEPLOYMENT.get("custom_ocp_image"):
-            config.DEPLOYMENT["ocp_image"] = config.DEPLOYMENT.get("custom_ocp_image")
-        else:
-            installer_version_str = exec_cmd(
-                f"{config.RUN['bin_dir']}/openshift-install version"
-            ).stdout.decode()
-            release_image_line = [
-                line
-                for line in installer_version_str.splitlines()
-                if "release image" in line
-            ][0]
-            config.DEPLOYMENT["ocp_image"] = release_image_line.split()[2]
-    return config.DEPLOYMENT["ocp_image"]

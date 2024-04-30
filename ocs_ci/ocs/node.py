@@ -43,6 +43,7 @@ from ocs_ci.utility.rosa import (
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
+
 log = logging.getLogger(__name__)
 
 
@@ -2061,6 +2062,24 @@ def add_new_disk_for_vsphere(sc_name):
     add_disk_to_node(node_with_min_pvs)
 
 
+def add_disk_stretch_arbiter():
+    """
+    Adds disk to storage nodes in a stretch cluster with arbiter
+    configuration evenly spread across two zones. Stretch cluster has
+    replica 4, hence 2 disks to each of the zones
+
+    """
+
+    from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+
+    data_zones = constants.DATA_ZONE_LABELS
+    sc_obj = StretchCluster()
+
+    for zone in data_zones:
+        for node in sc_obj.get_ocs_nodes_in_zone(zone)[:2]:
+            add_disk_to_node(node)
+
+
 def get_odf_zone_count():
     """
     Get the number of Availability zones used by ODF cluster
@@ -2788,7 +2807,7 @@ def gracefully_reboot_nodes(disable_eviction=False):
         time.sleep(waiting_time)
         schedule_nodes([node_name])
         wait_for_nodes_status(
-            node_names=[node], status=constants.NODE_READY, timeout=1800
+            node_names=[node_name], status=constants.NODE_READY, timeout=1800
         )
 
 

@@ -2,6 +2,7 @@
 In this pytest plugin we will keep all our pytest marks used in our tests and
 all related hooks/plugins to markers.
 """
+
 import os
 
 import pytest
@@ -195,6 +196,11 @@ stretchcluster_required = pytest.mark.skipif(
     reason="Test runs only on Stretch cluster with arbiter deployments",
 )
 
+sts_deployment_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("sts_enabled") is False,
+    reason="Test runs only on the AWS STS enabled cluster deployments",
+)
+
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(config.RUN["google_api_secret"])),
     reason="Google API credentials don't exist",
@@ -385,6 +391,7 @@ skipif_bmpsi = pytest.mark.skipif(
     reason="Test will not run on Baremetal PSI",
 )
 
+
 skipif_managed_service = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
     reason="Test will not run on Managed service cluster",
@@ -572,6 +579,11 @@ skipif_multus_enabled = pytest.mark.skipif(
     reason="This test doesn't work correctly with multus deployments",
 )
 
+skipif_gcp_platform = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "gcp",
+    reason="Test will not run on GCP deployed cluster",
+)
+
 # Squad marks
 aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
@@ -591,3 +603,16 @@ ignore_owner = pytest.mark.ignore_owner
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
+
+current_test_marks = []
+
+
+def get_current_test_marks():
+    """
+    Get the list of the current active marks
+
+    The current_active_marks global is updated by
+    ocs_ci/tests/conftest.py::update_current_test_marks_global at the start of each test
+
+    """
+    return current_test_marks

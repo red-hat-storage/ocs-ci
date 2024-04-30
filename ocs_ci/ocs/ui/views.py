@@ -207,7 +207,46 @@ deployment_4_15 = {
     "drop_down_projects": (
         'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
-    )
+    ),
+    "drop_down_performance": (
+        "//*[@class='pf-c-select odf-configure-performance__selector pf-u-mb-md']",
+        By.XPATH,
+    ),
+    "lean_mode": (
+        "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Lean mode')]",
+        By.XPATH,
+    ),
+    "balanced_mode": (
+        "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Balanced mode')]",
+        By.XPATH,
+    ),
+    "performance_mode": (
+        "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Performance mode')]",
+        By.XPATH,
+    ),
+}
+
+deployment_4_16 = {
+    "osd_size_dropdown": (
+        "//*[@class='pf-v5-c-select dropdown--full-width']",
+        By.XPATH,
+    ),
+    "drop_down_performance": (
+        "//*[@class='pf-v5-c-select odf-configure-performance__selector pf-v5-u-mb-md']",
+        By.XPATH,
+    ),
+    "lean_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Lean mode')]",
+        By.XPATH,
+    ),
+    "balanced_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Balanced mode')]",
+        By.XPATH,
+    ),
+    "performance_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Performance mode')]",
+        By.XPATH,
+    ),
 }
 
 generic_locators = {
@@ -252,7 +291,12 @@ generic_locators = {
     "check_first_row_checkbox": ('input[name="checkrow0"]', By.CSS_SELECTOR),
     "remove_search_filter": ('button[aria-label="close"]', By.CSS_SELECTOR),
     "delete_resource_kebab_button": ('//*[contains(text(), "Delete")]', By.XPATH),
-    "text_input_popup_rules": ("//*[@class='pf-c-helper-text__item-text']", By.XPATH),
+    "text_input_popup_rules": (
+        "//*[@class='pf-c-helper-text__item-text'] | "
+        "//div[@data-test='field-requirements-popover']"
+        "//*[@class='pf-v5-c-helper-text__item-text']",
+        By.XPATH,
+    ),
     "ocp-overview-status-storage-popup-btn": (
         "//button[@type='button'][normalize-space()='Storage']",
         By.XPATH,
@@ -391,7 +435,7 @@ obc = {
     "storageclass_text_field": ("//input[@id='search-bar']", By.XPATH),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
     "bucketclass_text_field": (
-        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"]',
+        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"], input[id="search-bar"]',
         By.CSS_SELECTOR,
     ),
     "resource_name": (
@@ -600,7 +644,7 @@ page_nav = {
         By.XPATH,
     ),
     "object_storage": ("//a[normalize-space()='Object Storage']", By.XPATH),
-    "Monitoring": ("//button[text()='Monitoring']", By.XPATH),
+    "observe": ("//button[text()='Observe']", By.XPATH),
     "alerting_page": ("Alerting", By.LINK_TEXT),
     "metrics_page": ("Metrics", By.LINK_TEXT),
     "dashboards_page": ("Dashboards", By.LINK_TEXT),
@@ -1002,7 +1046,7 @@ block_pool_4_12 = {
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool']",
+        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
         By.XPATH,
     ),
 }
@@ -1239,7 +1283,7 @@ validation = {
     "backingstore_name": ("input[placeholder='my-backingstore']", By.CSS_SELECTOR),
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
     "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
-    "input_value_validator_icon": (".pf-c-icon", By.CSS_SELECTOR),
+    "input_value_validator_icon": (".pf-c-icon, .pf-v5-c-icon", By.CSS_SELECTOR),
     "text_input_field_error_improvements": (
         "input[data-ouia-component-id='OUIA-Generated-TextInputBase-1']",
         By.CSS_SELECTOR,
@@ -1259,19 +1303,23 @@ validation = {
         By.XPATH,
     ),
     "req_capacity_dropdown_selected": (
-        "//div[@id='breakdown-card-title']/following-sibling::*//*[@class = 'pf-c-select__toggle-text']",
+        "//div[@id='breakdown-card-title']/following-sibling::*//*[@class = 'pf-c-select__toggle-text'] | "
+        "//div[@class='pf-v5-c-select ceph-capacity-breakdown-card-header__dropdown']"
+        "//*[@class='pf-v5-c-select__toggle-text']",
         By.XPATH,
     ),
     "req_capacity_dropdown_btn_one": (
-        "//div[@class='pf-c-select ceph-capacity-breakdown-card-header__dropdown']",
+        "//div[@class='pf-c-select ceph-capacity-breakdown-card-header__dropdown'] | "
+        "//div[@class='pf-v5-c-select ceph-capacity-breakdown-card-header__dropdown']",
         By.XPATH,
     ),
     "req_capacity_dropdown_btn_two": (
-        "(//span[@class='pf-c-select__toggle-arrow'])[2]",
+        "(//span[@class='pf-c-select__toggle-arrow'])[2] | "
+        "(//span[@class='pf-v5-c-select__toggle-arrow'])[2]",
         By.XPATH,
     ),
     "req_capacity_dropdown_list_option": (
-        "//*[@class='pf-c-select__menu-item' and contains(text(), '{}')]",
+        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{}')]",
         By.XPATH,
     ),
     "req_capacity_dropdown_namespace": (
@@ -1280,6 +1328,15 @@ validation = {
     ),
     "req_capacity_dropdown_namespace_input": ("search-bar", By.ID),
     "req_capacity_dropdown_namespace_input_select": ("//li[@id='{}-link']", By.XPATH),
+    "developer_dropdown": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_administrator": (
+        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator'] | "
+        "//a[@class='pf-m-icon pf-v5-c-dropdown__menu-item']//h2[normalize-space()='Administrator']",
+        By.XPATH,
+    ),
 }
 
 validation_4_7 = {
@@ -1348,12 +1405,16 @@ validation_4_9 = {
         By.XPATH,
     ),
     "odf-performanceCardLink": (
-        "td[class='pf-u-w-10 performanceCard--verticalAlign'] a",
+        "td[class*='performanceCard--verticalAlign'] a",
         By.CSS_SELECTOR,
     ),
-    "storagesystems": (".pf-c-breadcrumb__link", By.CSS_SELECTOR),
+    "storagesystems": (
+        ".pf-c-breadcrumb__link, .pf-v5-c-breadcrumb__link",
+        By.CSS_SELECTOR,
+    ),
     "console_plugin_option": (
-        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin']",
+        ".pf-c-button.pf-m-link.pf-m-inline[data-test='edit-console-plugin'], "
+        "button[data-test='edit-console-plugin']",
         By.CSS_SELECTOR,
     ),
     "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
@@ -1388,7 +1449,8 @@ validation_4_9 = {
     "system-capacity": ("//h2[normalize-space()='System Capacity']", By.XPATH),
     "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
     "storagesystem-status-card": (
-        ".pf-c-button.pf-m-link.pf-m-inline.co-dashboard-card__button-link.co-status-card__popup",
+        ".pf-c-button.pf-m-link.pf-m-inline.co-dashboard-card__button-link.co-status-card__popup, "
+        "button[data-test='health-popover-link']",
         By.CSS_SELECTOR,
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
@@ -1409,7 +1471,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "storagecluster-blockpool-details-compress-status": (
-        "article[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
+        "[data-test-id='compression-details-card'] dd[class='co-overview-details-card__item-value']",
         By.CSS_SELECTOR,
     ),
     "performance-card": (
@@ -1438,21 +1500,13 @@ validation_4_9 = {
     ),
     "namespace-store": ("//a[normalize-space()='Namespace Store']", By.XPATH),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
-    "developer_dropdown": (
-        'button[data-test-id="perspective-switcher-toggle"]',
-        By.CSS_SELECTOR,
-    ),
-    "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
-        By.XPATH,
-    ),
 }
 
 validation_4_10 = {
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "ocs-storagecluster-storagesystem": (
-        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-storagecluster-storagesystem/overview']",
-        By.CSS_SELECTOR,
+        "//a[.='ocs-storagecluster-storagesystem']",
+        By.XPATH,
     ),
     "ocs-external-storagecluster-storagesystem": (
         "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']",
@@ -1460,19 +1514,11 @@ validation_4_10 = {
     ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
     "storagesystem-status-card": (
-        ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup",
+        ".pf-c-button.pf-m-link.pf-m-inline.co-status-card__popup, button[data-test='health-popover-link']",
         By.CSS_SELECTOR,
     ),
     "storage-system-health-card-hyperlink": (
         "//div[@class='odf-storageSystemPopup__item--margin']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
-        By.XPATH,
-    ),
-    "developer_dropdown": (
-        'button[data-test-id="perspective-switcher-toggle"]',
-        By.CSS_SELECTOR,
-    ),
-    "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
         By.XPATH,
     ),
 }
@@ -1495,14 +1541,6 @@ validation_4_11 = {
     "bucketclass-breadcrumb": ("//a[normalize-space()='BucketClasses']", By.XPATH),
     "bucketclass-breadcrumb-odf-4-10": (
         "//a[normalize-space()='noobaa.io~v1alpha1~BucketClass']",
-        By.XPATH,
-    ),
-    "developer_dropdown": (
-        'button[data-test-id="perspective-switcher-toggle"]',
-        By.CSS_SELECTOR,
-    ),
-    "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator']",
         By.XPATH,
     ),
 }
@@ -1528,6 +1566,8 @@ validation_4_13 = {
     ),
     "namespace-store-tab-active": (
         "//button[@class='pf-c-tabs__link' and @aria-selected='true']"
+        "//span[normalize-space()='Namespace Store'] | "
+        "//button[@class='pf-v5-c-tabs__link' and @aria-selected='true']"
         "//span[normalize-space()='Namespace Store']",
         By.XPATH,
     ),
@@ -1540,7 +1580,6 @@ validation_4_14 = {
         By.XPATH,
     ),
 }
-
 
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
@@ -1727,7 +1766,65 @@ topology = {
     ),
 }
 
+
+alerting = {
+    "alerts-tab-link": ("Alerts", By.LINK_TEXT),
+    "silences-tab-link": ("Silences", By.LINK_TEXT),
+    "alerting-rules-tab-link": ("Alerting rules", By.LINK_TEXT),
+    "runbook_link": ("//a[@class='co-external-link']", By.XPATH),
+    "alerting_rule_details_link": ("//a[normalize-space()='{}']", By.XPATH),
+}
+
+
 locators = {
+    "4.16": {
+        "login": {**login, **login_4_11, **login_4_14},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "generic": generic_locators,
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+            **deployment_4_15,
+            **deployment_4_16,
+        },
+        "obc": obc,
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+        "alerting": alerting,
+    },
     "4.15": {
         "login": {**login, **login_4_11, **login_4_14},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
@@ -1774,6 +1871,7 @@ locators = {
         "bucketclass": bucketclass,
         "topology": topology,
         "mcg_stores": mcg_stores,
+        "alerting": alerting,
     },
     "4.14": {
         "login": {**login, **login_4_11, **login_4_14},

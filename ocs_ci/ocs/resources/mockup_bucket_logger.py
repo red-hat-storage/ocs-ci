@@ -56,6 +56,10 @@ class MockupBucketLogger:
             f"ls -A1 {constants.AWSCLI_TEST_OBJ_DIR}"
         ).split(" ")
 
+    @property
+    def standard_test_obj_list(self):
+        return self._standard_test_obj_list
+
     def upload_test_objs_and_log(self, bucket_name):
         """
         Uploads files from files_dir to the MCG bucket and write matching
@@ -96,6 +100,30 @@ class MockupBucketLogger:
         )
 
         self._upload_mockup_logs(bucket_name, [obj_name], "PUT")
+
+    def delete_objs_and_log(self, bucket_name, objs):
+        """
+        Delete list of objects from the MCG bucket and write
+        matching mockup logs
+
+        Args:
+            bucket_name(str): Name of the MCG bucket
+            objs(list): List of the objects to delete
+
+        """
+        logger.info(f"Deleting the {objs} from the bucket")
+        obj_list = list_objects_from_bucket(
+            self.awscli_pod,
+            f"s3://{bucket_name}",
+            s3_obj=self.mcg_obj,
+        )
+        if set(objs).issubset(set(obj_list)):
+            for i in range(len(objs)):
+                s3cmd = craft_s3_command(
+                    f"rm s3://{bucket_name}/{objs[i]}", self.mcg_obj
+                )
+                self.awscli_pod.exec_cmd_on_pod(s3cmd)
+            self._upload_mockup_logs(bucket_name, objs, "DELETE")
 
     def delete_all_objects_and_log(self, bucket_name):
         """

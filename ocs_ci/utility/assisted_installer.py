@@ -367,6 +367,9 @@ class AssistedInstallerAPI(OpenShiftAPI):
             cluster_id (str): cluster ID
             log_dir (str): destination directory, where to place the logs
 
+        Returns:
+            str: the path of the downloaded file
+
         """
         params = {
             "logs_type": "all",
@@ -385,6 +388,7 @@ class AssistedInstallerAPI(OpenShiftAPI):
         os.makedirs(log_dir, exist_ok=True)
         with open(os.path.join(log_dir, filename), "wb") as fd:
             fd.write(resp.content)
+        return os.path.join(log_dir, filename)
 
     def download_cluster_file(self, cluster_id, dest_dir, file_name="metadata.json"):
         """
@@ -495,6 +499,53 @@ class AssistedInstallerAPI(OpenShiftAPI):
         return self.patch_request(
             f"infra-envs/{infra_env_id}/hosts/{host_id}", data=data
         )
+
+    def download_infra_file(
+        self,
+        infra_env_id,
+        dest_dir,
+        file_name,
+        ipxe_script_type=None,
+        discovery_iso_type=None,
+    ):
+        """
+        Download Infrastructure Environment related file
+
+        Args:
+            infra_env_id (str): Infra environment ID
+            dest_dir (str): destination directory, where to place the file
+            file_name (str): file to download [discovery.ign, ipxe-script, static-network-config]
+            ipxe_script_type (str): None or specify the script type to be served for iPXE
+                ['discovery-image-always', 'boot-order-control']
+            discovery_iso_type (str): None or overrides the ISO type for the disovery ignition
+                ['full-iso', 'minimal-iso']
+
+        Returns:
+            str: the path of the downloaded file
+
+        """
+        params = {
+            "file_name": file_name,
+        }
+        if ipxe_script_type:
+            params["ipxe_script_type"] = ipxe_script_type
+        if discovery_iso_type:
+            params["discovery_iso_type"] = discovery_iso_type
+        resp = self.get_request(
+            f"infra-envs/{infra_env_id}/downloads/files", params=params, json=False
+        )
+        filenames = re.findall(
+            "filename=(.+)", resp.headers.get("content-disposition", "")
+        )
+        if filenames:
+            filename = filenames[0].strip("\"'")
+        else:
+            filename = file_name
+        dest_dir = os.path.expanduser(dest_dir)
+        os.makedirs(dest_dir, exist_ok=True)
+        with open(os.path.join(dest_dir, filename), "wb") as fd:
+            fd.write(resp.content)
+        return os.path.join(dest_dir, filename)
 
     def get_discovery_iso_url(self, infra_env_id):
         """

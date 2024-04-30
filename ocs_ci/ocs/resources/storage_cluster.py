@@ -56,6 +56,7 @@ from ocs_ci.ocs.node import (
     get_nodes,
     get_nodes_where_ocs_pods_running,
     get_provider_internal_node_ips,
+    add_disk_stretch_arbiter,
 )
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
@@ -73,7 +74,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler, convert_device_size
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
@@ -240,6 +241,8 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
+    if config.ENV_DATA.get("noobaa_external_pgsql"):
+        del resources_dict[nb_db_label]
 
     if provider_cluster:
         resources_dict.update(
@@ -561,12 +564,12 @@ def ocs_install_verification(
                 ]
         else:
             deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
-        if post_upgrade_verification:
-            retry((ValidationError), tries=3, delay=60)(verify_osd_tree_schema)(
-                ct_pod, deviceset_pvcs
-            )
-        else:
-            verify_osd_tree_schema(ct_pod, deviceset_pvcs)
+        # Allowing re-try here in the deployment, as there might be a case in RDR
+        # scenario, that OSD is getting delayed for few seconds and is not UP yet.
+        # Issue: https://github.com/red-hat-storage/ocs-ci/issues/9666
+        retry((ValidationError), tries=3, delay=60)(verify_osd_tree_schema)(
+            ct_pod, deviceset_pvcs
+        )
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
@@ -1165,6 +1168,8 @@ def verify_mcg_only_pods():
         constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
     }
+    if config.ENV_DATA.get("noobaa_external_pgsql"):
+        del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         resources_dict.update(
             {
@@ -1559,8 +1564,14 @@ def add_capacity_lso(ui_flag=False):
         num_available_pv = 2
         set_count = deviceset_count + 2
     else:
-        add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
-        num_available_pv = 3
+        num_available_pv = get_osd_replica_count()
+        if (
+            config.DEPLOYMENT.get("arbiter_deployment") is True
+            and num_available_pv == 4
+        ):
+            add_disk_stretch_arbiter()
+        else:
+            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
     if ui_add_capacity_conditions() and ui_flag:
@@ -1644,26 +1655,7 @@ def get_osd_size():
         int: osd size
 
     """
-    sc = get_storage_cluster()
-    size = (
-        sc.get()
-        .get("items")[0]
-        .get("spec")
-        .get("storageDeviceSets")[0]
-        .get("dataPVCTemplate")
-        .get("spec")
-        .get("resources")
-        .get("requests")
-        .get("storage")
-    )
-    if size.isdigit or config.DEPLOYMENT.get("local_storage"):
-        # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
-        # is set to 1, so we can not take OSD size from there. For LSO we will return
-        # the size from PVC.
-        pvc = get_deviceset_pvcs()[0]
-        return int(pvc.get()["status"]["capacity"]["storage"][:-2])
-    else:
-        return int(size[:-2])
+    return int(get_storage_size()[:-2])
 
 
 def get_deviceset_count():
@@ -2665,3 +2657,74 @@ def validate_serviceexport():
     assert mon_count == len(
         get_mon_pods()
     ), f"Mon serviceexport count mismatch {mon_count} != {len(get_mon_pods())}"
+
+
+def get_storage_size():
+    """
+    Get the storagecluster storage size
+
+    Returns:
+        str: The storagecluster storage size
+
+    """
+    sc = get_storage_cluster()
+    storage = (
+        sc.get()
+        .get("items")[0]
+        .get("spec")
+        .get("storageDeviceSets")[0]
+        .get("dataPVCTemplate")
+        .get("spec")
+        .get("resources")
+        .get("requests")
+        .get("storage")
+    )
+    if storage.isdigit or config.DEPLOYMENT.get("local_storage"):
+        # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
+        # is set to 1, so we can not take OSD size from there. For LSO we will return
+        # the size from PVC.
+        pvc = get_deviceset_pvcs()[0]
+        return pvc.get()["status"]["capacity"]["storage"]
+    else:
+        return storage
+
+
+def resize_osd(new_osd_size, check_size=True):
+    """
+    Resize the OSD(e.g., from 512 to 1024, 1024 to 2048, etc.)
+
+    Args:
+        new_osd_size (str): The new osd size(e.g, 512Gi, 1024Gi, 1Ti, 2Ti, etc.)
+        check_size (bool): Check that the given osd size is valid
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    Raises:
+        ValueError: In case the osd size is not valid(start with digits and follow by string)
+            or the new osd size is less than the current osd size
+
+    """
+    if check_size:
+        pattern = r"^\d+[a-zA-Z]+$"
+        if not re.match(pattern, new_osd_size):
+            raise ValueError(f"The osd size '{new_osd_size}' is not valid")
+        new_osd_size_in_gb = convert_device_size(new_osd_size, "GB")
+        current_osd_size = get_storage_size()
+        current_osd_size_in_gb = convert_device_size(current_osd_size, "GB")
+        if new_osd_size_in_gb < current_osd_size_in_gb:
+            raise ValueError(
+                f"The new osd size {new_osd_size} is less than the "
+                f"current osd size {current_osd_size}"
+            )
+
+    sc = get_storage_cluster()
+    # Patch the OSD storage size
+    path = "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources/requests/storage"
+    params = f"""[{{ "op": "replace", "path": "{path}", "value": {new_osd_size}}}]"""
+    res = sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params.strip("\n"),
+        format_type="json",
+    )
+    return res
