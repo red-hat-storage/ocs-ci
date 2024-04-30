@@ -151,7 +151,7 @@ class TestCloneDeletion(E2ETest):
         )
         clones_list = []
 
-        for clone_num in range(self.num_of_clones + 1):
+        for clone_num in range(self.num_of_clones + 2):
             logger.info(f"Start creation of clone number {clone_num}.")
             cloned_pvc_obj = pvc_clone_factory(
                 self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=600
