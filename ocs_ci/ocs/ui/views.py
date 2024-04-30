@@ -458,7 +458,8 @@ obc = {
     "storageclass_text_field": ("//input[@id='search-bar']", By.XPATH),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
     "bucketclass_text_field": (
-        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"], input[id="search-bar"]',
+        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"], '
+        'input[id="search-bar"], input[data-test="name-filter-input"]',
         By.CSS_SELECTOR,
     ),
     "resource_name": (
