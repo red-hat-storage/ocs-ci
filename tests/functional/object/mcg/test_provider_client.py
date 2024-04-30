@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
+    acceptance,
     red_squad,
     runs_on_provider,
     mcg,
@@ -32,6 +33,7 @@ def return_to_original_context():
 @red_squad
 @runs_on_provider
 @provider_client_ms_platform_required
+@acceptance
 @tier1
 @polarion_id("OCS-5415")
 def test_verify_backingstore_uses_rgw(mcg_obj_session):
@@ -58,6 +60,7 @@ def test_verify_backingstore_uses_rgw(mcg_obj_session):
 @mcg
 @red_squad
 @tier1
+@acceptance
 @runs_on_provider
 @provider_client_ms_platform_required
 @pytest.mark.polarion_id("OCS-5214")
