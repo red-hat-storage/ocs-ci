@@ -638,7 +638,6 @@ def scale_down_pods_and_remove_pvcs(sc_name):
             delete_pvcs([pvc_obj])
 
 
-
 def flatten_image(clone_obj):
     """
     Flatten the image of clone
