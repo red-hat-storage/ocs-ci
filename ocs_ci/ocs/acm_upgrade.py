@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import get_ocp_version, get_running_acm_version, run_cmd
-from ocs_ci.utility.version import get_semantic_version
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +31,11 @@ class ACMUpgrade(object):
         self.upgrade_version = config.UPGRADE["upgrade_acm_version"]
         # In case if we are using registry image
         self.acm_registry_image = config.UPGRADE.get("upgrade_acm_registry_image", "")
+        self.zstream_upgrade = False
 
     def get_acm_version_before_upgrade(self):
         running_acm_version = get_running_acm_version()
-        return get_semantic_version(running_acm_version)
+        return running_acm_version
 
     def get_parsed_versions(self):
         parsed_version_before_upgrade = parse_version(self.version_before_upgrade)
@@ -46,6 +47,8 @@ class ACMUpgrade(object):
         self.version_change = (
             self.get_parsed_versions()[1] > self.get_parsed_versions()[0]
         )
+        if not self.version_change:
+            self.zstream_upgrade = True
         # either this would be GA to Unreleased upgrade of same version OR
         # GA to unreleased upgrade to higher version
         if self.acm_registry_image and self.version_change:
@@ -123,12 +126,13 @@ class ACMUpgrade(object):
         acm_sub = OCP(
             namespace=self.namespace,
             resource_name=self.operator_name,
-            kind="Subscription",
+            kind="Subscription.operators.coreos.com",
         )
-        assert (
-            acm_sub.get()["items"][0]["spec"]["channel"]
-            == config.ENV_DATA["acm_hub_channel"]
-        )
+        if not self.zstream_upgrade:
+            acm_prev_channel = f"release-{self.upgrade_version}"
+        else:
+            acm_prev_channel = config.ENV_DATA["acm_hub_channel"]
+        assert acm_sub.get().get("spec").get("channel") == acm_prev_channel
         logger.info("Checking ACM status")
         acm_mch = OCP(
             kind=constants.ACM_MULTICLUSTER_HUB,

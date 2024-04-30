@@ -5,7 +5,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
     multicluster_roles,
-    skipif_z_stream_upgrade,
 )
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
@@ -24,6 +23,7 @@ from ocs_ci.ocs.dr_upgrade import (
     DRHubUpgrade,
 )
 from ocs_ci.utility.reporting import get_polarion_id
+from ocs_ci.utility.utils import is_z_stream_upgrade
 
 log = logging.getLogger(__name__)
 
@@ -102,26 +102,32 @@ def test_mco_upgrade(zone_rank, role_rank, config_index):
 
 @purple_squad
 @dr_hub_upgrade
-@skipif_z_stream_upgrade
 @multicluster_roles(["mdr-all-acm"])
 def test_dr_hub_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for DR hub operator
 
     """
+    if is_z_stream_upgrade():
+        pytest.skip(
+            "This is z-stream upgrade and this component upgrade should have been taken care by ODF upgrade"
+        )
     dr_hub_upgrade_obj = DRHubUpgrade()
     dr_hub_upgrade_obj.run_upgrade()
 
 
 @purple_squad
 @dr_cluster_operator_upgrade
-@skipif_z_stream_upgrade
 @multicluster_roles(["mdr-all-odf"])
 def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for DR cluster operator
 
     """
+    if is_z_stream_upgrade():
+        pytest.skip(
+            "This is z-stream upgrade and this component upgrade should have been taken care by ODF upgrade"
+        )
     dr_cluster_upgrade_obj = DRClusterOperatorUpgrade()
     dr_cluster_upgrade_obj.run_upgrade()
 
