@@ -656,6 +656,7 @@ def flatten_image(clone_obj):
     log.info(f"{out}")
     log.info(f"Successfully flatten the image of {clone_obj.name}")
 
+
 def get_pvc_size(pvc_obj, convert_size=1024):
     """
     Returns the PVC size in GB
@@ -672,4 +673,3 @@ def get_pvc_size(pvc_obj, convert_size=1024):
         pvc_obj.data.get("spec").get("resources").get("requests").get("storage")
     )
     return convert_device_size(unformatted_size, "GB", convert_size)
-

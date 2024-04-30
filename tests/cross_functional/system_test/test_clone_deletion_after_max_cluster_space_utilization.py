@@ -111,25 +111,6 @@ class TestCloneDeletion(E2ETest):
         self.pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {self.pod_obj.name}")
 
-    '''
-    def flatten_image(self, clone_obj):
-        """
-        Flatten the image of clone
-
-        Args:
-            clone_obj: Object of clone of which image to be flatten
-        """
-        image_name = clone_obj.get_rbd_image_name
-        pool_name = constants.DEFAULT_CEPHBLOCKPOOL
-        tool_pod = get_ceph_tools_pod()
-        out = tool_pod.exec_ceph_cmd(
-            ceph_cmd=f"rbd flatten {pool_name}/{image_name}",
-            format=None,
-        )
-        logger.info(f"{out}")
-        logger.info(f"Successfully flatten the image of {clone_obj.name}")
-    '''
-
     @skipif_external_mode
     @magenta_squad
     def test_clone_deletion_after_max_cluster_space_utilization(
