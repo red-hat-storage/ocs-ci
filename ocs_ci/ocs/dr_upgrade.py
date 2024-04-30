@@ -239,13 +239,15 @@ class DRHubUpgrade(DRUpgrade):
     def __init__(self):
         super().__init__(resource_name=defaults.DR_HUB_OPERATOR_NAME)
         self.operator_name = defaults.DR_HUB_OPERATOR_NAME
-        self.subscription_name = constants.DR_HUB_OPERATOR_SUBSCRIPTION
+        self.subscription_name = constants.DR_HUB_OPERATOR_SUBSCRIPTION.replace(
+            "PLACEHOLDER", config.ENV_DATA["ocs_version"]
+        )
 
     def run_upgrade(self):
         self.pod_name_pattern = "ramen-hub-operator"
         self.collect_data()
         assert (
-            self.pre_upgrade_data["pod_status"] == "Running"
+            self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "ramen-hub-operator pod is not in Running status"
         super().run_upgrade()
         self.upgrade_phase = "post_upgrade"
@@ -265,15 +267,20 @@ class DRClusterOperatorUpgrade(DRUpgrade):
     """
 
     def __init__(self):
-        super().__init__(resource_name=defaults.DR_CLUSTER_OPERATOR_NAME)
+        super().__init__(
+            resource_name=defaults.DR_CLUSTER_OPERATOR_NAME,
+            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+        )
         self.operator_name = defaults.DR_CLUSTER_OPERATOR_NAME
-        self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION
+        self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION.replace(
+            "PLACEHOLDER", config.ENV_DATA["ocs_version"]
+        )
 
     def run_upgrade(self):
         self.pod_name_pattern = "ramen-dr-cluster-operator"
         self.collect_data()
         assert (
-            self.pre_upgrade_data["pod_status"] == "Running"
+            self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "ramen-dr-operator pod is not in Running status"
         super().run_upgrade()
         self.upgrade_phase = "post_upgrade"
