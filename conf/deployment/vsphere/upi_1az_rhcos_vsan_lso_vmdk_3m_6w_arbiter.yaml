@@ -31,3 +31,5 @@ ENV_DATA:
   compute_memory: '65536'
   extra_disks: 2
   fio_storageutilization_min_mbps: 10.0
+RUN:
+  extra_markexpr: 'or stretchcluster_required'
