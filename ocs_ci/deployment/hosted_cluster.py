@@ -551,8 +551,8 @@ class HostedODF(HypershiftHostedOCP):
             bool: True if ODF client is installed, False otherwise
         """
         logger.info("Waiting for ODF client CSV's to be installed")
-        timeout_wait_csvs = 10
-        timeout_wait_pod = 5
+        timeout_wait_csvs = 20
+        timeout_wait_pod = 20
 
         try:
             sample = TimeoutSampler(
