@@ -4776,3 +4776,21 @@ def get_role_arn_from_sub():
         return role_arn
     else:
         raise ClusterNotInSTSModeException
+
+
+def get_glibc_version():
+    """
+    Gets the GLIBC version.
+
+    Returns:
+        str: GLIBC version
+
+    """
+    cmd = "ldd --version ldd"
+    res = exec_cmd(cmd)
+    out = res.stdout.decode("utf-8")
+    version_match = re.search(r"ldd \(GNU libc\) (\d+\.\d+)", out)
+    if version_match:
+        return version_match.group(1)
+    else:
+        log.warning("GLIBC version number not found")
