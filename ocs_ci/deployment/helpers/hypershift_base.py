@@ -270,7 +270,7 @@ class HyperShiftBase:
         )
 
         create_hcp_cluster_cmd = (
-            f"{self.hcp_binary_path} create cluster kubevirt "
+            f"{self.hypershift_binary_path} create cluster kubevirt "
             f"--name {name} "
             f"--release-image {index_image} "
             f"--node-pool-replicas {nodepool_replicas} "
@@ -280,6 +280,7 @@ class HyperShiftBase:
             f"--pull-secret {pull_secret_path} "
             f"--image-content-sources {self.icsp_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true'"
+            "--olm-catalog-placement Guest"
         )
 
         logger.info("Creating HyperShift hosted cluster")
