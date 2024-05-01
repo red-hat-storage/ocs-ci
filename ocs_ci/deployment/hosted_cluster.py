@@ -353,7 +353,8 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         )
 
         if provider_ocp_version > latest_released_ocp_version:
-            if not self.hypershift_upstream_installed():
+            logger.info("running on unreleased OCP version")
+            if config.ENV_DATA.get("install_hypershift_upstream"):
                 try:
                     self.disable_multicluster_engine()
                     # avoid timelapse error "
@@ -363,6 +364,10 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
                     )
                     time.sleep(5 * 60)
                     self.install_hypershift_upstream_on_cluster()
+                    hypershift_installed = self.hypershift_upstream_installed()
+                    if not hypershift_installed:
+                        logger.error("Hypershift upstream installation failed")
+                        raise ResourceWrongStatusException
                 except CommandFailed as e:
                     raise AssertionError(
                         f"Failed to install Hypershift on the cluster: {e}"

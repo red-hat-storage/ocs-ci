@@ -611,7 +611,7 @@ class HyperShiftBase:
         Returns:
             bool: True if hypershift is installed, False otherwise
         """
-        logger.info("Installing hypershift on the cluster")
+        logger.info("Installing hypershift upstream on the cluster")
         hypershift_image = f"{constants.HCP_REGISTRY}:{config.ENV_DATA['hcp_version']}"
         cmd_res = exec_cmd(
             f"{self.hypershift_binary_path} install "
