@@ -7,7 +7,7 @@ metadata:
     ocs-operator-internal: "true"
 spec:
   displayName: Openshift Container Storage
-  image: quay.io/orenc/ocs-client-operator-index:{}
+  image: {}
   publisher: Red Hat
   sourceType: grpc
   priority: 100
