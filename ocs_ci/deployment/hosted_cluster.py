@@ -31,7 +31,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -574,9 +574,10 @@ class HostedODF(HypershiftHostedOCP):
 
         try:
             pods_are_running = wait_for_pods_to_be_in_statuses_concurrently(
-                app_selectors_to_resource_count_list,
-                self.namespace_client,
-                timeout_wait_pod * 60,
+                app_selectors_to_resource_count_list=app_selectors_to_resource_count_list,
+                namespace=self.namespace_client,
+                timeout=timeout_wait_pod * 60,
+                cluster_kubeconfig=self.cluster_kubeconfig,
             )
         except Exception as e:
             logger.error(f"Error during ODF client pods status check: {e}")
@@ -955,9 +956,12 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
             bool: True if storage class claim for CephFS exists, False otherwise
         """
-        if get_semantic_version(
-            config.ENV_DATA.get("hosted_odf_version"), True
-        ) < get_semantic_version("4.16"):
+        if (
+            get_semantic_version(
+                config.ENV_DATA.get("hosted_odf_version"), only_major_minor=True
+            )
+            < version.VERSION_4_16
+        ):
             ocp = OCP(
                 kind=constants.STORAGECLASSCLAIM,
                 namespace=self.namespace_client,
