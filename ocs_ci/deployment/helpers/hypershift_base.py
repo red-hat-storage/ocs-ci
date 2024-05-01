@@ -307,9 +307,7 @@ class HyperShiftBase:
         app_selectors_to_resource_count_list = [
             {"app=capi-provider-controller-manager": 1},
             {"app=catalog-operator": 1},
-            {"app=certified-operators-catalog": 1},
             {"app=cluster-api": 1},
-            {"app=redhat-operators-catalog": 1},
         ]
 
         validation_passed = True

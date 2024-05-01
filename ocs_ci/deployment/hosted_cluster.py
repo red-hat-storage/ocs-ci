@@ -820,7 +820,6 @@ class HostedODF(HypershiftHostedOCP):
         catalog_source_data = templating.load_yaml(
             constants.PROVIDER_MODE_CATALOGSOURCE
         )
-        image_placeholder = catalog_source_data["spec"]["image"]
 
         if not config.ENV_DATA.get("hosted_odf_version"):
             raise ValueError(
@@ -841,9 +840,9 @@ class HostedODF(HypershiftHostedOCP):
             f"ODF version: {provider_odf_version} will be installed on client. Setting up CatalogSource"
         )
 
-        catalog_source_data["spec"]["image"] = image_placeholder.format(
-            f"{provider_odf_registry}:{provider_odf_version}"
-        )
+        catalog_source_data["spec"][
+            "image"
+        ] = f"{provider_odf_registry}:{provider_odf_version}"
 
         catalog_source_name = catalog_source_data["metadata"]["name"]
 
