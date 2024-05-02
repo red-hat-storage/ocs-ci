@@ -336,14 +336,26 @@ class PageNavigator(BaseUI):
         Navigate to block pools page
 
         """
-        logger.info("Navigate to block pools page")
+        logger.info("Navigate to Block Pools Page")
         storage_system_details = (
             self.nav_odf_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )
         storage_system_details.nav_ceph_blockpool()
-        logger.info("Now at Block pool page")
+        logger.info("Now at Block Pools page")
+
+    def navigate_client_page(self):
+        """
+        Navigate to clients page (for Provider/Client setup)
+
+        """
+        logger.info("Navigate to Clients Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["clients_page"],
+            enable_screenshot=False,
+        )
 
     def select_namespace(self, project_name):
         """
