@@ -4865,11 +4865,13 @@ def update_volsync_channel():
     ):
         from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
+        logger.info("Verify volsync-controller-manager pods exist")
         pods = get_pod_name_by_pattern(
             pattern="volsync-controller-manager",
             namespace=constants.OPENSHIFT_OPERATORS,
         )
         if len(pods) > 0:
+            logger.info("No volsync-controller-manager pods found")
             return
         channel = get_volsync_channel()
 
