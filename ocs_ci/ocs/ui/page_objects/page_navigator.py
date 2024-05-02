@@ -347,13 +347,14 @@ class PageNavigator(BaseUI):
 
     def navigate_client_page(self):
         """
-        Navigate to clients page (for Provider/Client setup)
+        Navigate to Storage Clients page of Provider cluster UI
+        in Provider/Client setup
 
         """
-        logger.info("Navigate to Clients Page")
+        logger.info("Navigate to Storage Clients Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(
-            locator=self.page_nav["clients_page"],
+            locator=self.page_nav["storageclients_page"],
             enable_screenshot=False,
         )
 

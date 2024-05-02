@@ -652,7 +652,7 @@ page_nav = {
     "Workloads": ("//button[text()='Workloads']", By.XPATH),
     "Pods": ("Pods", By.LINK_TEXT),
     "quickstarts": ('a[href="/quickstart"]', By.CSS_SELECTOR),
-    "clients": ("Storage Clients", By.LINK_TEXT),
+    "storageclients": ("Storage Clients", By.LINK_TEXT),
     "block_pool_link": (
         'a[data-test-id="horizontal-link-Block Pools"]',
         By.CSS_SELECTOR,
@@ -1243,7 +1243,7 @@ storageclass_4_9 = {
     "toggle_switch": ("no-label-switch-on-on", By.ID),
 }
 
-client = {
+storageclient = {
     "generate_token": ("//button[text()='Generate client onboarding token']", By.XPATH),
     "copy": ("//button[text()='Copy to clipboard']", By.XPATH),
     "token": ("//div[@class='odf-onboarding-modal__text-area']", By.XPATH),
