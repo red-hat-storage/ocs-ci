@@ -859,7 +859,9 @@ class Deployment(object):
         """
         namespace = namespace or self.namespace
         ocp.OCP(kind="subscription", namespace=namespace)
-        for sample in TimeoutSampler(300, 10, ocp.OCP, kind="csv", namespace=namespace):
+        for sample in TimeoutSampler(
+            1800, 60, ocp.OCP, kind="csv", namespace=namespace
+        ):
             csvs = sample.get().get("items", [])
             for csv in csvs:
                 found_csv_name = csv.get("metadata", {}).get("name", "")
