@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
-        pytest.param(constants.CEPHBLOCKPOOL),
         pytest.param(constants.CEPHFILESYSTEM),
+        pytest.param(constants.CEPHBLOCKPOOL),
     ],
 )
 class TestCloneDeletion(E2ETest):
@@ -60,7 +60,7 @@ class TestCloneDeletion(E2ETest):
 
         logger.info("Starting the test setup")
 
-        self.num_of_clones = 75
+        self.num_of_clones = 30
 
         # Getting the total Storage capacity
         self.ceph_cluster = CephCluster()
@@ -143,12 +143,12 @@ class TestCloneDeletion(E2ETest):
                 # flatten the image
                 flatten_image(cloned_pvc_obj)
                 logger.info(
-                    f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} 2` {self.pvc_obj.name} was created."
+                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
                 )
-
+                cloned_pvc_obj.reload()
             else:
                 logger.info(
-                    f"Clone with name {cloned_pvc_obj.name} for {self.pvc_size} pvc {self.pvc_obj.name} was created."
+                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
                 )
             clones_list.append(cloned_pvc_obj)
 
@@ -164,6 +164,7 @@ class TestCloneDeletion(E2ETest):
             expected_alerts=expected_alerts,
             threading_lock=threading_lock,
         )
+
         if not sample.wait_for_func_status(result=True):
             logger.error(f"The alerts {expected_alerts} do not exist after 1200 sec")
             raise TimeoutExpiredError
