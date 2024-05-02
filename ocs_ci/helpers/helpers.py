@@ -5139,6 +5139,7 @@ def check_pods_status_by_pattern(pattern, namespace, expected_status):
     """
     from ocs_ci.ocs.resources.pod import get_pod_obj
 
+    logger.info("Check pods status by pattern")
     pod_names = get_pod_name_by_pattern(
         pattern=pattern,
         namespace=namespace,
@@ -5168,11 +5169,14 @@ def get_volsync_channel():
     Returns:
         str: volsync channel
     """
+    logger.info("Get Volsync Channel")
     volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
     last_index = len(volsync_product_obj.data.get("status").get("channels")) - 1
-    return (
+    volsync_channel = (
         volsync_product_obj.data.get("status").get("channels")[last_index].get("name")
     )
+    logger.info(f"volsync channel is {volsync_channel}")
+    return volsync_channel
 
 
 def get_managed_cluster_addons(resource_name, namespace):
@@ -5222,6 +5226,9 @@ def update_volsync_channel():
 
     with RunWithAcmConfigContext():
         for non_acm_cluster in non_acm_clusters:
+            logger.info(
+                f"Add operator-subscription-channel:{channel} annotation to managed cluster addons CR"
+            )
             ms_addon = get_managed_cluster_addons(
                 resource_name="volsync",
                 namespace=non_acm_cluster.ENV_DATA.get("cluster_name"),
@@ -5240,6 +5247,7 @@ def update_volsync_channel():
         with RunWithConfigContext(
             non_acm_cluster.MULTICLUSTER.get("multicluster_index")
         ):
+            logger.info("Verify volsync-controller-manager pods in Running state")
             sample = TimeoutSampler(
                 timeout=300,
                 sleep=10,
