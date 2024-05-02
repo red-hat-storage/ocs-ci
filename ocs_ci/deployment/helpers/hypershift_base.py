@@ -592,7 +592,7 @@ class HyperShiftBase:
         logger.info(f"Multicluster engine version: {cmd_res.stdout.decode('utf-8')}")
         return cmd_res.stdout.decode("utf-8")
 
-    def hypershift_upstream_installed(self):
+    def hypershift_clusters_exist(self):
         """
         Check if hypershift is installed on the cluster
         Returns:

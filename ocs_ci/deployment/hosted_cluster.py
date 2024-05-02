@@ -364,10 +364,6 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
                     )
                     time.sleep(5 * 60)
                     self.install_hypershift_upstream_on_cluster()
-                    hypershift_installed = self.hypershift_upstream_installed()
-                    if not hypershift_installed:
-                        logger.error("Hypershift upstream installation failed")
-                        raise ResourceWrongStatusException
                 except CommandFailed as e:
                     raise AssertionError(
                         f"Failed to install Hypershift on the cluster: {e}"
