@@ -56,7 +56,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         else:
             region = ""
         endpoint = (
-            mcg_obj.s3_external_endpoint
+            mcg_obj.s3_endpoint
             if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
             else mcg_obj.s3_internal_endpoint
         )
@@ -111,7 +111,7 @@ def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
         else:
             region = ""
         endpoint = (
-            mcg_obj.s3_external_endpoint
+            mcg_obj.s3_endpoint
             if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
             else mcg_obj.s3_internal_endpoint
         )
@@ -298,7 +298,7 @@ def list_objects_from_bucket(
         retrieve_cmd += " --recursive"
     if s3_obj:
         endpoint = (
-            s3_obj.s3_external_endpoint
+            s3_obj.s3_endpoint
             if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
             else s3_obj.s3_internal_endpoint
         )
@@ -361,7 +361,7 @@ def copy_objects(
         retrieve_cmd = f"cp {src_obj} {target}"
     if s3_obj:
         endpoint = (
-            s3_obj.s3_external_endpoint
+            s3_obj.s3_endpoint
             if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
             else s3_obj.s3_internal_endpoint
         )
@@ -431,7 +431,7 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
     access_key = s3_obj.access_key_id
     secret_key = s3_obj.access_key
     endpoint = (
-        s3_obj.s3_external_endpoint
+        s3_obj.s3_endpoint
         if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
         else s3_obj.s3_internal_endpoint
     )
@@ -473,7 +473,7 @@ def sync_object_directory(
     retrieve_cmd = f"sync {src} {target}"
     if s3_obj:
         endpoint = (
-            s3_obj.s3_external_endpoint
+            s3_obj.s3_endpoint
             if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
             else s3_obj.s3_internal_endpoint
         )
@@ -526,7 +526,7 @@ def download_objects_using_s3cmd(
         retrieve_cmd = f"get {src} {target}"
     if s3_obj:
         endpoint = (
-            s3_obj.s3_external_endpoint
+            s3_obj.s3_endpoint
             if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
             else s3_obj.s3_internal_endpoint
         )
@@ -564,7 +564,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
     """
     rm_command = f"rm s3://{target} --recursive {option}"
     endpoint = (
-        mcg_obj.s3_external_endpoint
+        mcg_obj.s3_endpoint
         if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
         else mcg_obj.s3_internal_endpoint
     )
@@ -613,7 +613,7 @@ def write_individual_s3_objects(
     bucketname = bucket_name or bucket_factory(1)[0].name
     logger.info("Writing objects to bucket")
     endpoint = (
-        mcg_obj.s3_external_endpoint
+        mcg_obj.s3_endpoint
         if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
         else mcg_obj.s3_internal_endpoint
     )
@@ -652,7 +652,7 @@ def upload_parts(
     """
     parts = []
     endpoint = (
-        mcg_obj.s3_external_endpoint
+        mcg_obj.s3_endpoint
         if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
         else mcg_obj.s3_internal_endpoint
     )
@@ -1441,7 +1441,7 @@ def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
 
     """
     endpoint = (
-        mcg_obj.s3_external_endpoint
+        mcg_obj.s3_endpoint
         if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
         else mcg_obj.s3_internal_endpoint
     )
