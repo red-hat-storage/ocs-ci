@@ -815,7 +815,15 @@ def get_openshift_installer(
     version = version or config.DEPLOYMENT["installer_version"]
     bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     bin_dir = os.path.abspath(bin_dir_rel_path)
-    installer_filename = "openshift-install"
+    if (
+        config.ENV_DATA.get("fips")
+        and version_module.get_semantic_ocp_version_from_config()
+        >= version_module.VERSION_4_16
+    ):
+        installer_filename = "openshift-install-fips"
+        os.environ["OPENSHIFT_INSTALL_SKIP_HOSTCRYPT_VALIDATION"] = "True"
+    else:
+        installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     client_binary_path = os.path.join(bin_dir, "oc")
     client_exist = os.path.isfile(client_binary_path)
@@ -832,21 +840,31 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        version = expose_ocp_version(version)
+        if (
+            config.ENV_DATA.get("fips")
+            and version_module.get_semantic_ocp_version_from_config()
+            >= version_module.VERSION_4_16
+        ):
+            # WA issue https://github.com/red-hat-storage/ocs-ci/issues/9755
+            version = "4.16.0-0.nightly-2024-04-26-145258"
+        else:
+            version = expose_ocp_version(version)
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        tarball = f"{installer_filename}.tar.gz"
-        url = get_openshift_mirror_url(installer_filename, version)
-        download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball} {installer_filename}")
-        delete_file(tarball)
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        cmd = (
+            f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
+            f"--to ./ registry.ci.openshift.org/ocp/release:{version}"
+        )
+        exec_cmd(cmd)
         # return to the previous working directory
         os.chdir(previous_dir)
 
     installer_version = run_cmd(f"{installer_binary_path} version")
+    config.ENV_DATA["installer_path"] = installer_binary_path
     log.info(f"OpenShift Installer version: {installer_version}")
     return installer_binary_path
 
