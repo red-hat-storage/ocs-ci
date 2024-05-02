@@ -7,6 +7,7 @@ osd_sizes = ("512", "2048", "4096")
 
 OCS_OPERATOR = "OpenShift Container Storage"
 ODF_OPERATOR = "OpenShift Data Foundation"
+LOCAL_STORAGE = "Local Storage"
 
 login = {
     "pre_login_page_title": "Log In",

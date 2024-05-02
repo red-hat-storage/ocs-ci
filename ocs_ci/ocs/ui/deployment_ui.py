@@ -2,7 +2,7 @@ import logging
 import time
 
 
-from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR
+from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
@@ -115,7 +115,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 self.dep_loc["click_install_lso_page"], enable_screenshot=True
             )
-            self.verify_operator_succeeded(operator="Local Storage")
+            self.verify_operator_succeeded(operator=LOCAL_STORAGE, timeout_install=300)
 
     def install_storage_cluster(self):
         """
@@ -433,7 +433,14 @@ class DeploymentUI(PageNavigator):
         """
         self.search_operator_installed_operators_page(operator=operator)
         time.sleep(5)
-        if self.ocs_version_semantic > version.VERSION_4_15:
+        if operator == LOCAL_STORAGE:
+            sample = TimeoutSampler(
+                timeout=timeout_install,
+                sleep=sleep,
+                func=self.check_element_text,
+                expected_text="Succeeded",
+            )
+        elif self.ocs_version_semantic > version.VERSION_4_15:
             sample = TimeoutSampler(
                 timeout=timeout_install,
                 sleep=sleep,
@@ -457,6 +464,7 @@ class DeploymentUI(PageNavigator):
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
         self.take_screenshot()
+        logger.info(f"{operator} operator installed Successfully.")
 
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
         """
