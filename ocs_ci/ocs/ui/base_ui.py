@@ -151,7 +151,6 @@ class BaseUI:
             locators, self.ocp_version, "storageclient"
         )
 
-
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
 
