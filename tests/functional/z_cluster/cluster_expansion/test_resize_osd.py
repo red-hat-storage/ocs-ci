@@ -19,15 +19,12 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
 )
-from ocs_ci.ocs.constants import (
-    VOLUME_MODE_BLOCK,
-    MAX_RESIZE_OSD,
-    AWS_MAX_RESIZE_OSD_COUNT,
-    AWS_PLATFORM,
-)
+from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK
 from ocs_ci.ocs.resources.osd_resize import (
     ceph_verification_steps_post_resize_osd,
     check_ceph_health_after_resize_osd,
+    check_resize_osd_pre_conditions,
+    update_resize_osd_count,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -37,40 +34,9 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
 from ocs_ci.ocs.resources.storage_cluster import resize_osd, get_storage_size
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.utility.utils import convert_device_size
-from ocs_ci.framework import config
 
 
 logger = logging.getLogger(__name__)
-
-
-def check_resize_osd_pre_conditions():
-    """
-    Check the resize osd pre-conditions:
-    1. Check that the current storage size is less than the osd max size
-    2. If we use AWS, check that the osd resize count is no more than the AWS max resize count
-
-    If the conditions are not met, the test will be skipped.
-
-    """
-    current_storage_size = get_storage_size()
-    current_storage_size_in_gb = convert_device_size(current_storage_size, "GB", 1024)
-    max_storage_size_in_gb = convert_device_size(MAX_RESIZE_OSD, "GB", 1024)
-    if current_storage_size_in_gb >= max_storage_size_in_gb:
-        pytest.skip(
-            f"The current storage size {current_storage_size} is greater or equal to the "
-            f"max resize osd {MAX_RESIZE_OSD}"
-        )
-
-    config.RUN["resize_osd_count"] = config.RUN.get("resize_osd_count", 0)
-    logger.info(f"resize osd count = {config.RUN['resize_osd_count']}")
-    if (
-        config.ENV_DATA["platform"].lower() == AWS_PLATFORM
-        and config.RUN["resize_osd_count"] >= AWS_MAX_RESIZE_OSD_COUNT
-    ):
-        pytest.skip(
-            f"We can resize the osd no more than {AWS_MAX_RESIZE_OSD_COUNT} times when using aws platform"
-        )
 
 
 @brown_squad
@@ -123,21 +89,7 @@ class TestResizeOSD(ManageTest):
         """
 
         def finalizer():
-            old_storage_size_in_gb = convert_device_size(
-                self.old_storage_size, "GB", 1024
-            )
-            new_storage_size_in_gb = convert_device_size(get_storage_size(), "GB", 1024)
-            logger.info(
-                f"old storage size in GB = {old_storage_size_in_gb}, "
-                f"new storage size in GB = {new_storage_size_in_gb}"
-            )
-            if new_storage_size_in_gb > old_storage_size_in_gb:
-                logger.info(
-                    "The osd size has increased successfully. Increasing the resize osd count by 1"
-                )
-                config.RUN["resize_osd_count"] += 1
-            else:
-                logger.warning("The osd size has not increased")
+            update_resize_osd_count(self.old_storage_size)
 
         request.addfinalizer(finalizer)
 
