@@ -3317,7 +3317,6 @@ def check_cephcluster_status(
         )
         raise CephHealthException()
 
-
 def ceph_config_set_debug(debug_level):
     """
     This function will be useful to set default debug level for mds i.e 1/5
@@ -3341,3 +3340,67 @@ def ceph_health_detail():
     """
     ceph_tools_pod = pod.get_ceph_tools_pod()
     return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
+
+def get_active_mds_info():
+    """Return information about the active Ceph MDS.
+
+    Returns:
+        dict: A dictionary containing information about the active MDS daemon,
+        including the following keys in case of success, otherwise None.
+        - "node_ip": The IP address of the node running the active MDS daemon.
+        - "mds_daemon": The name of the MDS daemon.
+        - "active_pod": The name of the active pod.
+        - "node_name": The name of the node where active mds pod is running.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+
+    # Find ceph daemon state as 'active'
+    ceph_daemon_name = next(
+        (
+            daemon["name"]
+            for daemon in ceph_mdsmap["mdsmap"]
+            if daemon["state"] == "active"
+        ),
+        None,
+    )
+
+    if ceph_daemon_name is None:
+        logger.error("No active MDS daemon found")
+        return None
+
+    logger.info(f"Found active MDS daemon: {ceph_daemon_name}")
+
+    # Find ceph MDS pod running 'active' daemon.
+    mds_pods = get_mds_pods()
+    active_pod = next((srp for srp in mds_pods if ceph_daemon_name in srp.name), None)
+
+    if active_pod is None:
+        logger.error(
+            f"No active MDS Pod found with running daemon '{ceph_daemon_name}'"
+        )
+        return None
+
+    logger.info(f"Found active MDS pod: {active_pod.name}")
+
+    # Get the node IP of running pod
+    node_ip = active_pod.data["status"].get("hostIP")
+    if not node_ip:
+        logger.error(
+            f"Unable to determine IP address of node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+    # Get the node name of running pod.
+    node_name = active_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+
+    return {
+        "node_ip": node_ip,
+        "mds_daemon": ceph_daemon_name,
+        "active_pod": active_pod.name,
+        "node_name": node_name,
+    }
