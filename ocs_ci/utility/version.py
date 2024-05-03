@@ -11,7 +11,9 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import WrongVersionExpression
 
 
-def get_semantic_version(version, only_major_minor=False, ignore_pre_release=False):
+def get_semantic_version(
+    version, only_major_minor=False, ignore_pre_release=False, only_major=False
+):
     """
     Returning semantic version from provided version as string.
 
@@ -19,13 +21,18 @@ def get_semantic_version(version, only_major_minor=False, ignore_pre_release=Fal
         version (str): String version (e.g. 4.6)
         only_major_minor (bool): If True, only major and minor will be parsed.
         ignore_pre_release (bool): If True, the pre release version will be ignored
+        only_major(bool): If True, only major will be parsed.
 
     Returns:
        semantic_version.base.Version: Object of semantic version.
 
     """
     version = Version.coerce(version)
-    if only_major_minor:
+    if only_major:
+        version.minor = None
+        version.patch = None
+        version.prerelease = None
+    elif only_major_minor:
         version.patch = None
         version.prerelease = None
     elif ignore_pre_release:

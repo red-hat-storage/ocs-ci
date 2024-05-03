@@ -1098,15 +1098,6 @@ OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
 )
-# OCP 4.16.0-0.nightly-2024-04-08-024331 image where it didn't require glibc 2.34
-OCP_4_16_CCOCTL_WA_IMAGE = (
-    "registry.ci.openshift.org/ocp/release@"
-    "sha256:d6329f1a221f0422294d41ce2a7bfe3f0d38a41ee3da99fea10e4288fab1efb6"
-)
-CCO_IMAGE = (
-    "quay.io/openshift-release-dev/ocp-v4.0-art-dev@"
-    "sha256:63f758322004b02afb4b12e3294db4d77ea370ca2b2d00ce8ca512b12c0df385"
-)
 
 # Podsecurity admission policies
 PSA_PRIVILEGED = "privileged"
