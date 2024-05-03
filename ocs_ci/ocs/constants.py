@@ -1216,6 +1216,7 @@ ALERT_STORAGECLIENTHEARTBEATMISSED = "StorageClientHeartbeatMissed"
 ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = (
     "StorageClientIncompatibleOperatorVersion"
 )
+
 ALERT_CEPH_OSD_VERSION_MISMATCH = "CephOSDVersionMismatch"
 ALERT_PERSISTENT_VOLUME_USAGE_CRITICAL = "PersistentVolumeUsageCritical"
 ALERT_CEPH_CLUSTER_READ_ONLY = "CephClusterReadOnly"
@@ -1237,6 +1238,7 @@ ALERT_CEPH_OSD_NEAR_FULL = "CephOSDNearFull"
 ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL = "PersistentVolumeUsageNearFull"
 ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
 ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
+ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -2862,3 +2864,6 @@ NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
 
 # ascii characters
 ENTER_KEY = chr(13)
+
+# helper script to perform meta data operations [create, rename, change permissions...etc] on app pod to fill MDS cache
+METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
