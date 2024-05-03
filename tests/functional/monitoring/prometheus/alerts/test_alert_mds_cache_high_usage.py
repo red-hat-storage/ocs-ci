@@ -2,6 +2,7 @@ import time
 import logging
 import pytest
 
+from ocs_ci.framework.testlib import tier2
 from ocs_ci.ocs import constants
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers
@@ -93,6 +94,7 @@ def active_mds_alert_values(threading_lock):
     return True
 
 
+@tier2
 @magenta_squad
 class TestMdsMemoryAlerts:
     def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
