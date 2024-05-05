@@ -31,7 +31,11 @@ TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
+<<<<<<< HEAD
 TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
+=======
+TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment")
+>>>>>>> 07fb050fc (Added NMState deployment)
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -791,7 +795,8 @@ SUBSCRIPTION_CERT_MANAGER_YAML = os.path.join(
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
 
 STORAGE_SYSTEM_ODF_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf.yaml"
+    TEMPLATE_DEPLOYMENT_DIR,
+    "storagesysocs_ci/templates/nmstate-deployment/tem_odf.yaml",
 )
 STORAGE_SYSTEM_ODF_EXTERNAL = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf_external.yaml"
@@ -857,6 +862,7 @@ CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
     TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
 )
 
+<<<<<<< HEAD
 METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
 METALLB_WEBHOOK_PREFIX = "metallb-operator-webhook-server"
@@ -882,6 +888,20 @@ METALLB_L2_ADVERTISEMENT_PATH = os.path.join(
 QE_APP_REGISTRY_SOURCE = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "qe-app-registry-catalog-source.yaml"
 )
+
+# NMState deployment
+NMSTATE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "namespace.yaml")
+NMSTATE_OPERATORGROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "operatorgroup.yaml"
+)
+NMSTATE_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "subscription.yaml"
+)
+NMSTATE_INSTANCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "nmstate_instance.yaml"
+)
+NMSTATE_NAMESPACE = "openshift-nmstate"
+NMSTATE_CSV_NAME = "kubernetes-nmstate-operator"
 
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")
