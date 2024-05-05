@@ -1,3 +1,9 @@
+"""
+This module is a test suite for the Page Object Model (POM) framework. The POM framework is a design pattern that
+creates an object repository for web UI elements. This allows for the separation of the test logic from the UI logic.
+The POM framework is implemented in the OCS UI tests to improve the maintainability and readability of the tests.
+"""
+
 import logging
 
 from ocs_ci.framework.pytest_customization.marks import libtest
