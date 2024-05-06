@@ -667,8 +667,12 @@ def default_storage_class(
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
                 storage_class = OCP(kind="storageclass")
-                # TODO: Select besed on storageclient name or namespace in case of multiple storageclients in a cluster
-                resource_name = [sc_data["metadata"]["name"] for sc_data in storage_class.get()["items"] if sc_data["provisioner"] == constants.RBD_PROVISIONER][0]
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
++                    sc_data["metadata"]["name"]
++                    for sc_data in storage_class.get()["items"]
++                    if sc_data["provisioner"] == constants.RBD_PROVISIONER
++                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_RBD
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -684,8 +688,12 @@ def default_storage_class(
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
             elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
                 storage_class = OCP(kind="storageclass")
-                # TODO: Select besed on storageclient name or namespace in case of multiple storageclients in a cluster
-                resource_name = [sc_data["metadata"]["name"] for sc_data in storage_class.get()["items"] if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER][0]
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
++                    sc_data["metadata"]["name"]
++                    for sc_data in storage_class.get()["items"]
++                    if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
++                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
