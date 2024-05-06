@@ -8,7 +8,7 @@ import logging
 
 from ocs_ci.framework.pytest_customization.marks import libtest
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.utility.utils import human_to_bytes
+from ocs_ci.utility.utils import human_to_bytes_ui
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +26,9 @@ def test_raw_capacity(setup_ui_session):
         .nav_block_and_file()
     )
     used, available = block_and_file.get_raw_capacity_card_values()
-    used_bytes = human_to_bytes(used)
+    used_bytes = human_to_bytes_ui(used)
     logger.info(f"Used capacity: {used_bytes}")
-    available_bytes = human_to_bytes(available)
+    available_bytes = human_to_bytes_ui(available)
     logger.info(f"Available capacity: {available_bytes}")
     assert (
         used_bytes < available_bytes

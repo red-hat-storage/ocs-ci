@@ -3469,14 +3469,14 @@ def convert_bytes_to_unit(bytes_to_convert):
         return f"{size:.2f}TB"
 
 
-def human_to_bytes(size_str):
+def human_to_bytes_ui(size_str):
     """
     Convert human readable size to bytes.
-    Use this function when working with UI pages or when format "MiB", "KiB",  is used.
+    Use this function when working with UI pages or when format "MiB", "KiB" with space separation,  is used.
 
     Args:
-        size_str (str): The size to convert (i.e, 1GiB is 1048576 bytes)
-            acceptable units are: "EiB", "PiB", "TiB", "GiB", "MiB", "KiB", "B"
+        size_str (str): The size to convert (i.e, "1 GiB" is 1048576 bytes)
+            acceptable units are: "EiB"/"Ei", "PiB"/"Pi" "TiB"/"Ti", "GiB"/"Gi", "MiB"/"Mi", "KiB"/"Ki", "B"/"Bytes"
 
     Returns:
         int: The converted size in bytes
