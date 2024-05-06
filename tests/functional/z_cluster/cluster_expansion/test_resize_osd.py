@@ -19,10 +19,12 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
 )
-from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK
 from ocs_ci.ocs.resources.osd_resize import (
     ceph_verification_steps_post_resize_osd,
     check_ceph_health_after_resize_osd,
+    check_resize_osd_pre_conditions,
+    update_resize_osd_count,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -59,6 +61,7 @@ class TestResizeOSD(ManageTest):
         Init all the data for the resize osd test
 
         """
+        check_resize_osd_pre_conditions()
         self.create_pvcs_and_pods = create_pvcs_and_pods
 
         self.old_osd_pods = get_osd_pods()
@@ -78,6 +81,18 @@ class TestResizeOSD(ManageTest):
             pvc_size=pvc_size, num_of_rbd_pvc=5, num_of_cephfs_pvc=5
         )
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Check that the new osd size has increased and increase the resize osd count
+
+        """
+
+        def finalizer():
+            update_resize_osd_count(self.old_storage_size)
+
+        request.addfinalizer(finalizer)
+
     def run_io_on_pods(self, pods, size="1G", runtime=30):
         """
         Run IO on the pods
@@ -91,9 +106,7 @@ class TestResizeOSD(ManageTest):
         logger.info("Starting IO on all pods")
         for pod_obj in pods:
             storage_type = (
-                "block"
-                if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
-                else "fs"
+                "block" if pod_obj.pvc.volume_mode == VOLUME_MODE_BLOCK else "fs"
             )
             rate = f"{random.randint(1, 5)}M"
             pod_obj.run_io(

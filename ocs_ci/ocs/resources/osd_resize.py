@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.ocs.exceptions import (
     StorageSizeNotReflectedException,
@@ -18,12 +19,18 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_device_class,
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
+    get_deviceset_count,
 )
 from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, convert_device_size
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.ocs.constants import (
+    MAX_RESIZE_OSD,
+    AWS_MAX_RESIZE_OSD_COUNT,
+    AWS_PLATFORM,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -182,10 +189,11 @@ def check_storage_size_is_reflected(expected_storage_size):
         f"Check that the Ceph capacity {ceph_capacity} is equal "
         f"to the expected storage size {expected_storage_size_in_gb}"
     )
-    if not int(ceph_capacity) == expected_storage_size_in_gb:
+    expected_ceph_capacity = expected_storage_size_in_gb * get_deviceset_count()
+    if not int(ceph_capacity) == expected_ceph_capacity:
         raise StorageSizeNotReflectedException(
             f"The Ceph capacity {ceph_capacity} is not equal to the "
-            f"expected storage size {expected_storage_size_in_gb}"
+            f"expected size {expected_ceph_capacity}"
         )
 
 
@@ -314,3 +322,55 @@ def check_ceph_health_after_resize_osd(
     assert ceph_cluster_obj.wait_for_rebalance(
         timeout=ceph_rebalance_timeout
     ), "Data re-balance failed to complete"
+
+
+def check_resize_osd_pre_conditions():
+    """
+    Check the resize osd pre-conditions:
+    1. Check that the current storage size is less than the osd max size
+    2. If we use AWS, check that the osd resize count is no more than the AWS max resize count
+
+    If the conditions are not met, the test will be skipped.
+
+    """
+    current_storage_size = get_storage_size()
+    current_storage_size_in_gb = convert_device_size(current_storage_size, "GB", 1024)
+    max_storage_size_in_gb = convert_device_size(MAX_RESIZE_OSD, "GB", 1024)
+    if current_storage_size_in_gb >= max_storage_size_in_gb:
+        pytest.skip(
+            f"The current storage size {current_storage_size} is greater or equal to the "
+            f"max resize osd {MAX_RESIZE_OSD}"
+        )
+
+    config.RUN["resize_osd_count"] = config.RUN.get("resize_osd_count", 0)
+    logger.info(f"resize osd count = {config.RUN['resize_osd_count']}")
+    if (
+        config.ENV_DATA["platform"].lower() == AWS_PLATFORM
+        and config.RUN["resize_osd_count"] >= AWS_MAX_RESIZE_OSD_COUNT
+    ):
+        pytest.skip(
+            f"We can resize the osd no more than {AWS_MAX_RESIZE_OSD_COUNT} times when using aws platform"
+        )
+
+
+def update_resize_osd_count(old_storage_size):
+    """
+    Update the resize osd count
+
+    Args:
+        old_storage_size (str): The old storage size before the osd resizing
+
+    """
+    old_storage_size_in_gb = convert_device_size(old_storage_size, "GB", 1024)
+    new_storage_size_in_gb = convert_device_size(get_storage_size(), "GB", 1024)
+    logger.info(
+        f"old storage size in GB = {old_storage_size_in_gb}, "
+        f"new storage size in GB = {new_storage_size_in_gb}"
+    )
+    if new_storage_size_in_gb > old_storage_size_in_gb:
+        logger.info(
+            "The osd size has increased successfully. Increasing the resize osd count by 1"
+        )
+        config.RUN["resize_osd_count"] = config.RUN.get("resize_osd_count", 0) + 1
+    else:
+        logger.warning("The osd size has not increased")
