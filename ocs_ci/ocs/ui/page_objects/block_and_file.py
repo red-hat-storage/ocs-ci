@@ -167,9 +167,9 @@ class BlockAndFile(StorageSystemDetails):
         """
         Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
         Get the raw capacity card values
-\
+
         Returns:
-            tuple: Used and available capacity values
+            tuple: Used and available capacity values in format similar to "1.23 TiB"
         """
         logger.info("Get the raw capacity card values")
 
