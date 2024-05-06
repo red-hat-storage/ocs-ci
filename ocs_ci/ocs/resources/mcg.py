@@ -67,7 +67,7 @@ class MCG:
         noobaa_password,
         noobaa_token,
         data_to_mask,
-    ) = (None,) * 13
+    ) = (None,) * 14
 
     def __init__(self, *args, **kwargs):
         """
@@ -120,7 +120,7 @@ class MCG:
             .get("serviceS3")
             .get("internalDNS")[0]
         )
-        self.s3_endpoint = determine_s3_endpoint()
+        self.s3_endpoint = self.determine_s3_endpoint()
         self.mgmt_endpoint = (
             get_noobaa.get("items")[0]
             .get("status")
