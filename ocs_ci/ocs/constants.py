@@ -31,11 +31,8 @@ TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
-<<<<<<< HEAD
 TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
-=======
 TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment")
->>>>>>> 07fb050fc (Added NMState deployment)
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -862,7 +859,6 @@ CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
     TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
 )
 
-<<<<<<< HEAD
 METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
 METALLB_WEBHOOK_PREFIX = "metallb-operator-webhook-server"
