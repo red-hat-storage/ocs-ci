@@ -37,6 +37,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
 )
 from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
 
 logger = logging.getLogger(__name__)
@@ -1348,9 +1349,15 @@ def disable_dr_from_app(secondary_cluster_name):
 
     # Delete all drpc
     run_cmd("oc delete drpc --all -A")
-
-    # Verify all drpc gets deleted
-    # ToDo
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=run_cmd_verify_cli_output,
+        cmd="oc get drpc -A",
+        expected_output_lst="No resources found",
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("All drpcs are not deleted")
 
     # Remove annotation from placements
     for placement in placements:
@@ -1418,7 +1425,10 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
 
     # Verify old primary cluster is dettached
-    # Todo
+    expected_output = primary_cluster_name
+    out = run_cmd(cmd=f"oc get managedcluster {primary_cluster_name}")
+    if expected_output not in out:
+        raise Exception("Old primary cluster is not dettached.")
 
     # Import Recovery cluster
     cluster_name_recoevry = import_recovery_clusters_with_acm()
