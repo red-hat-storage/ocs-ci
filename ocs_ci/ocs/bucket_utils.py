@@ -55,18 +55,13 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             region = f"AWS_DEFAULT_REGION={mcg_obj.region} "
         else:
             region = ""
-        endpoint = (
-            mcg_obj.s3_endpoint
-            if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-            else mcg_obj.s3_internal_endpoint
-        )
         base_command = (
             f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
             f"aws s3{api} "
-            f"--endpoint={endpoint} "
+            f"--endpoint={mcg_obj.s3_endpoint} "
         )
         string_wrapper = '"'
     elif signed_request_creds:
@@ -110,17 +105,12 @@ def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
             region = f"--region={mcg_obj.region} "
         else:
             region = ""
-        endpoint = (
-            mcg_obj.s3_endpoint
-            if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-            else mcg_obj.s3_internal_endpoint
-        )
         base_command = (
             f"s3cmd --access_key={mcg_obj.access_key_id} "
             f"--secret_key={mcg_obj.access_key} "
             f"{region}"
-            f"--host={endpoint} "
-            f"--host-bucket={endpoint} "
+            f"--host={mcg_obj.s3_endpoint} "
+            f"--host-bucket={mcg_obj.s3_endpoint} "
             f"{no_ssl} "
         )
     elif signed_request_creds:
@@ -297,12 +287,7 @@ def list_objects_from_bucket(
     if recursive:
         retrieve_cmd += " --recursive"
     if s3_obj:
-        endpoint = (
-            s3_obj.s3_endpoint
-            if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-            else s3_obj.s3_internal_endpoint
-        )
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -360,12 +345,7 @@ def copy_objects(
     else:
         retrieve_cmd = f"cp {src_obj} {target}"
     if s3_obj:
-        endpoint = (
-            s3_obj.s3_endpoint
-            if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-            else s3_obj.s3_internal_endpoint
-        )
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -430,11 +410,7 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
 
     access_key = s3_obj.access_key_id
     secret_key = s3_obj.access_key
-    endpoint = (
-        s3_obj.s3_endpoint
-        if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-        else s3_obj.s3_internal_endpoint
-    )
+    endpoint = s3_obj.s3_endpoint
 
     # compile the src code
     javas3_pod.exec_cmd_on_pod(command="mvn clean compile", out_yaml_format=False)
@@ -472,12 +448,7 @@ def sync_object_directory(
     logger.info(f"Syncing all objects and directories from {src} to {target}")
     retrieve_cmd = f"sync {src} {target}"
     if s3_obj:
-        endpoint = (
-            s3_obj.s3_endpoint
-            if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-            else s3_obj.s3_internal_endpoint
-        )
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -525,12 +496,7 @@ def download_objects_using_s3cmd(
     else:
         retrieve_cmd = f"get {src} {target}"
     if s3_obj:
-        endpoint = (
-            s3_obj.s3_endpoint
-            if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-            else s3_obj.s3_internal_endpoint
-        )
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -563,18 +529,13 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
 
     """
     rm_command = f"rm s3://{target} --recursive {option}"
-    endpoint = (
-        mcg_obj.s3_endpoint
-        if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-        else mcg_obj.s3_internal_endpoint
-    )
     podobj.exec_cmd_on_pod(
         command=craft_s3_command(rm_command, mcg_obj),
         out_yaml_format=False,
         secrets=[
             mcg_obj.access_key_id,
             mcg_obj.access_key,
-            endpoint,
+            mcg_obj.s3_endpoint,
         ],
     )
 
@@ -612,11 +573,6 @@ def write_individual_s3_objects(
     """
     bucketname = bucket_name or bucket_factory(1)[0].name
     logger.info("Writing objects to bucket")
-    endpoint = (
-        mcg_obj.s3_endpoint
-        if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-        else mcg_obj.s3_internal_endpoint
-    )
     for obj_name in downloaded_files:
         full_object_path = f"s3://{bucketname}/{obj_name}"
         copycommand = f"cp {target_dir}{obj_name} {full_object_path}"
@@ -626,7 +582,7 @@ def write_individual_s3_objects(
             secrets=[
                 mcg_obj.access_key_id,
                 mcg_obj.access_key,
-                endpoint,
+                mcg_obj.s3_endpoint,
             ],
         )
 
@@ -651,12 +607,7 @@ def upload_parts(
 
     """
     parts = []
-    endpoint = (
-        mcg_obj.s3_endpoint
-        if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-        else mcg_obj.s3_internal_endpoint
-    )
-    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, endpoint]
+    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
     for count, part in enumerate(uploaded_parts, 1):
         upload_cmd = (
             f"upload-part --bucket {bucketname} --key {object_key}"
@@ -1440,11 +1391,6 @@ def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
         mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
 
     """
-    endpoint = (
-        mcg_obj.s3_endpoint
-        if config.ENV_DATA["platform"] in constants.HCI_PC_OR_MS_PLATFORM
-        else mcg_obj.s3_internal_endpoint
-    )
     for uploaded_filename in uploaded_objects_paths:
         logger.info(f"Deleting object {uploaded_filename}")
         awscli_pod.exec_cmd_on_pod(
@@ -1452,7 +1398,7 @@ def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
             secrets=[
                 mcg_obj.access_key_id,
                 mcg_obj.access_key,
-                endpoint,
+                mcg_obj.s3_endpoint,
             ],
         )
 

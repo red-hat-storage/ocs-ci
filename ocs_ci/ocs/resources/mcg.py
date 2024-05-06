@@ -55,6 +55,7 @@ class MCG:
     (
         s3_resource,
         s3_endpoint,
+        s3_external_endpoint,
         s3_internal_endpoint,
         ocp_resource,
         mgmt_endpoint,
@@ -105,7 +106,7 @@ class MCG:
 
         get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
 
-        self.s3_endpoint = (
+        self.s3_external_endpoint = (
             get_noobaa.get("items")[0]
             .get("status")
             .get("services")
@@ -119,6 +120,7 @@ class MCG:
             .get("serviceS3")
             .get("internalDNS")[0]
         )
+        self.s3_endpoint = determine_s3_endpoint()
         self.mgmt_endpoint = (
             get_noobaa.get("items")[0]
             .get("status")
@@ -378,6 +380,24 @@ class MCG:
                 "Data reduction is insufficient. "
                 f"{total_size - total_reduced} bytes reduced out of {expected_reduction_in_bytes}."
             )
+
+    def determine_s3_endpoint(self):
+        """
+        Get internal mcg S3 endpoint if the cluster is in disconnected or proxy environment.
+        Get external endpoint otherwise.
+
+        Returns:
+            string: S3 endpoint URI
+        """
+        return (
+            self.s3_internal_endpoint
+            if (
+                config.DEPLOYMENT.get("disconnected")
+                or config.DEPLOYMENT.get("proxy")
+                or config.ENV_DATA.get("private_link")
+            )
+            else self.s3_external_endpoint
+        )
 
     def request_aws_credentials(self):
         """
