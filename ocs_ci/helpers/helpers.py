@@ -669,10 +669,10 @@ def default_storage_class(
                 storage_class = OCP(kind="storageclass")
                 # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
                 resource_name = [
-+                    sc_data["metadata"]["name"]
-+                    for sc_data in storage_class.get()["items"]
-+                    if sc_data["provisioner"] == constants.RBD_PROVISIONER
-+                ][0]
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.RBD_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_RBD
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -690,10 +690,10 @@ def default_storage_class(
                 storage_class = OCP(kind="storageclass")
                 # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
                 resource_name = [
-+                    sc_data["metadata"]["name"]
-+                    for sc_data in storage_class.get()["items"]
-+                    if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
-+                ][0]
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
@@ -807,9 +807,9 @@ def create_storage_class(
     sc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     for key in ["node-stage", "provisioner", "controller-expand"]:
         sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-name"] = secret_name
-        sc_data["parameters"][
-            f"csi.storage.k8s.io/{key}-secret-namespace"
-        ] = config.ENV_DATA["cluster_namespace"]
+        sc_data["parameters"][f"csi.storage.k8s.io/{key}-secret-namespace"] = (
+            config.ENV_DATA["cluster_namespace"]
+        )
 
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -2944,12 +2944,12 @@ def collect_performance_stats(dir_name):
 
     performance_stats["master_node_utilization"] = master_node_utilization_from_adm_top
     performance_stats["worker_node_utilization"] = worker_node_utilization_from_adm_top
-    performance_stats[
-        "master_node_utilization_from_oc_describe"
-    ] = master_node_utilization_from_oc_describe
-    performance_stats[
-        "worker_node_utilization_from_oc_describe"
-    ] = worker_node_utilization_from_oc_describe
+    performance_stats["master_node_utilization_from_oc_describe"] = (
+        master_node_utilization_from_oc_describe
+    )
+    performance_stats["worker_node_utilization_from_oc_describe"] = (
+        worker_node_utilization_from_oc_describe
+    )
 
     file_name = os.path.join(log_dir_path, "performance")
     with open(file_name, "w") as outfile:
