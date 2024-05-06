@@ -3138,29 +3138,53 @@ def default_volumesnapshotclass(interface_type):
     """
     external = config.DEPLOYMENT["external_mode"]
     if interface_type == constants.CEPHBLOCKPOOL:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
-            if external
-            else (
-                constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
-                if (
-                    config.ENV_DATA["platform"].lower()
-                    in constants.HCI_PC_OR_MS_PLATFORM
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.RBD_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
+                    if (
+                        config.ENV_DATA["platform"].lower()
+                        in constants.MANAGED_SERVICE_PLATFORMS
+                    )
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
                 )
-                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
             )
-        )
     elif interface_type == constants.CEPHFILESYSTEM:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            if external
-            else (
-                constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
-                if config.ENV_DATA["platform"].lower()
-                in constants.HCI_PC_OR_MS_PLATFORM
-                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
+                    if config.ENV_DATA["platform"].lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+                )
             )
-        )
     base_snapshot_class = OCP(
         kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
     )
