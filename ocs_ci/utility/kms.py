@@ -1820,7 +1820,7 @@ class AzureKV(KMS):
         self.vault_url = azure_auth.get("AZURE_KV_URL")
         self.vault_client_id = azure_auth.get("AZURE_KV_CLIENT_ID")
         self.vault_tenant_id = azure_auth.get("AZURE_KV_TENANT_ID")
-        self.vault_cert_path = self._vault_cert_path()
+        self.vault_cert_path = self._azure_kv_cert_path()
 
         self.conn_data = {
             "KMS_PROVIDER": self.kms_provider,
@@ -1858,7 +1858,7 @@ class AzureKV(KMS):
         """
 
         csi_kms_configmap = ocp.OCP(
-            kind="ConfigMap",
+            kind=constants.CONFIGMAP,
             resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
             namespace=self.namespace,
         )
@@ -1872,8 +1872,6 @@ class AzureKV(KMS):
             raise ValueError(
                 f"Azure Key vault connection {self.azure_kms_connection_name} not exists."
             )
-
-        return True
 
     def create_azure_kv_secrets(self, prefix="azure-ocs-"):
         """
@@ -1899,7 +1897,7 @@ class AzureKV(KMS):
 
         # Check is already configmap exists
         csi_kms_configmap = ocp.OCP(
-            kind="ConfigMap",
+            kind=constants.CONFIGMAP,
             resource_name=constants.AZURE_KV_CSI_CONNECTION_DETAILS,
             namespace=self.namespace,
         )
@@ -1927,6 +1925,7 @@ class AzureKV(KMS):
             csi_kms_conn_details["metadata"]["namespace"] = self.namespace
             self.create_resource(csi_kms_conn_details, prefix="csiazureconn")
         else:
+            # Append the connection details to existing ConfigMap.
             logger.info(
                 f"Adding Azure connection to existing ConfigMap {constants.AZURE_KV_CSI_CONNECTION_DETAILS}"
             )
@@ -1937,28 +1936,12 @@ class AzureKV(KMS):
             csi_kms_configmap.patch(params=param, format_type="merge")
 
         # verifying ConfigMap is created or not.
-        try:
-            self.is_azure_kv_connection_exists()
-            return True
-        except ValueError as ex:
-            logger.info(
-                f"Error Creating resource {constants.AZURE_KV_CSI_CONNECTION_DETAILS} : {ex}"
-            )
-            return False
+        self.is_azure_kv_connection_exists()
 
     def create_azure_kv_ocs_csi_kms_connection_details(self):
         """
         Creates Azure KV OCS CSI KMS connection details ConfigMap.
         """
-
-        # First Check Azure KV connection is exists or not
-        if not self.is_azure_kv_connection_exists():
-            logger.info(
-                f"Azure connection {self.azure_kms_connection_name} "
-                f" not present in the ConfigMap {constants.VAULT_KMS_CSI_CONNECTION_DETAILS}"
-            )
-            logger.info("Adding Azure KV connection.")
-            self.create_azure_kv_csi_kms_connection_details(self)
 
         # Creating ConfigMap for OCS CSI KMS connection details.
         azure_data = self.conn_data
@@ -1981,25 +1964,23 @@ class AzureKV(KMS):
 
         # Verify ConfigMap is created or not.
         ocs_kms_configmap = ocp.OCP(
-            kind="ConfigMap",
+            kind=constants.CONFIGMAP,
             resource_name=constants.AZURE_KV_CONNECTION_DETAILS_RESOURCE,
             namespace=self.namespace,
         )
 
         if not ocs_kms_configmap.is_exist():
-            logger.info(
+            raise ValueError(
                 f"ConfigMap Resource {constants.AZURE_KV_CONNECTION_DETAILS_RESOURCE}"
                 f" is not created in namespace {self.namespace}"
             )
-            return False
 
         logger.info(
             f"Successfully Created configmap {constants.AZURE_KV_CONNECTION_DETAILS_RESOURCE} "
             f"in {self.namespace} namespace"
         )
-        return True
 
-    def _vault_cert_path(self):
+    def _azure_kv_cert_path(self):
         """
         Create a temporary certificate file and write the Azure Key Vault certificate to it.
         """
