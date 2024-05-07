@@ -1493,7 +1493,7 @@ def service_account_factory_fixture(request):
 
 
 @pytest.fixture()
-def deploy_pod_factory(request, pvc_factory, service_account_factory):
+def deployment_pod_factory(request, pvc_factory, service_account_factory):
     """
     Create deployment pods
     """
@@ -3710,9 +3710,10 @@ def measurement_dir(tmp_path):
 
 
 @pytest.fixture()
-def multi_dc_pod(multi_pvc_factory, deploy_pod_factory, service_account_factory):
+def multi_deployment_pods(multi_pvc_factory, deployment_pod_factory, service_account_factory):
     """
-    Prepare multiple dc pods for the test
+    Prepare multiple deployment pods for the test
+
     Returns:
         any: Pod instances
     """
@@ -3755,7 +3756,7 @@ def multi_dc_pod(multi_pvc_factory, deploy_pod_factory, service_account_factory)
                 if create_rbd_block_rwx_pod:
                     dc_pods_res.append(
                         p.submit(
-                            deploy_pod_factory,
+                            deployment_pod_factory,
                             interface=constants.CEPHBLOCKPOOL,
                             pvc=pvc_obj,
                             raw_block_pv=True,
@@ -3765,7 +3766,7 @@ def multi_dc_pod(multi_pvc_factory, deploy_pod_factory, service_account_factory)
                 else:
                     dc_pods_res.append(
                         p.submit(
-                            deploy_pod_factory,
+                            deployment_pod_factory,
                             interface=dict_types[pool_type],
                             pvc=pvc_obj,
                             sa_obj=sa_obj,
