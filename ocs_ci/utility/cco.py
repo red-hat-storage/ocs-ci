@@ -7,6 +7,7 @@ import shutil
 import yaml
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     delete_file,
     download_file,
@@ -107,7 +108,11 @@ def create_service_id(cluster_name, cluster_path, credentials_requests_dir):
         f"ccoctl ibmcloud create-service-id --credentials-requests-dir {credentials_requests_dir} "
         f"--name {cluster_name} --output-dir {cluster_path}"
     )
-    exec_cmd(cmd)
+    completed_process = exec_cmd(cmd)
+    stderr = completed_process.stderr
+    if stderr:
+        with open(os.path.join(cluster_path, constants.CCOCTL_LOG_FILE), "+w") as fd:
+            fd.write(stderr.decode())
 
 
 def delete_service_id(cluster_name, credentials_requests_dir):

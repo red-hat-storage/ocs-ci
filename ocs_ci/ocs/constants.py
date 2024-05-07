@@ -2509,3 +2509,6 @@ OPERATION_STOP = "stop"
 OPERATION_START = "start"
 OPERATION_RESTART = "restart"
 OPERATION_TERMINATE = "terminate"
+
+# CCOCTL
+CCOCTL_LOG_FILE = "ccoctl-service-id.log"
