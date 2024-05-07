@@ -46,7 +46,7 @@ class TestRunIOMultipleDcPods(ManageTest):
     pvc_size = 5
 
     @pytest.fixture()
-    def dc_pods(self, interface, multi_pvc_factory, dc_pod_factory):
+    def dc_pods(self, interface, multi_pvc_factory, deploy_pod_factory):
         """
         Prepare multiple dc pods for the test
 
@@ -59,7 +59,7 @@ class TestRunIOMultipleDcPods(ManageTest):
 
         dc_pod_objs = list()
         for pvc_obj in pvc_objs:
-            dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
+            dc_pod_objs.append(deploy_pod_factory(pvc=pvc_obj))
         return dc_pod_objs
 
     def test_run_io_multiple_dc_pods(self, dc_pods):
