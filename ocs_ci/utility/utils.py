@@ -1165,16 +1165,37 @@ def get_openshift_mirror_url(file_name, version):
         UnsupportedOSType: In case the OS type is not supported
         UnavailableBuildException: In case the build url is not reachable
     """
+    target_arch = ""
+    rhel_version = ""
+    arch = get_architecture_host()
+    log.debug(f"Host architecture: {arch}")
     if platform.system() == "Darwin":
         os_type = "mac"
     elif platform.system() == "Linux":
         os_type = "linux"
+        # form the target architecture and rhel version to download oc
+        if "openshift-client" in file_name:
+            # form the target architecture to download oc
+            if "x86_64" in arch:
+                target_arch = "-amd64"
+            elif "arm" in arch or "aarch" in arch:
+                target_arch = "-arm64"
+            elif "ppc" in arch:
+                target_arch = "-ppc64le"
+
+            glibc_version = get_glibc_version()
+            if version_module.get_semantic_version(
+                glibc_version
+            ) < version_module.get_semantic_version("2.34"):
+                rhel_version = "-rhel8"
+            else:
+                rhel_version = "-rhel9"
     else:
         raise UnsupportedOSType
     url_template = config.DEPLOYMENT.get(
         "ocp_url_template",
         "https://openshift-release-artifacts.apps.ci.l2s4.p1.openshiftapps.com/"
-        "{version}/{file_name}-{os_type}-{version}.tar.gz",
+        f"{version}/{file_name}-{os_type}{target_arch}{rhel_version}-{version}.tar.gz",
     )
     url = url_template.format(
         version=version,
@@ -4794,3 +4815,14 @@ def get_glibc_version():
         return version_match.group(1)
     else:
         log.warning("GLIBC version number not found")
+
+
+def get_architecture_host():
+    """
+    Gets the architecture of host
+
+    Returns:
+        str: Host architecture
+
+    """
+    return os.uname().machine
