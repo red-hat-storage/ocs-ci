@@ -3469,6 +3469,34 @@ def convert_bytes_to_unit(bytes_to_convert):
         return f"{size:.2f}TB"
 
 
+def human_to_bytes_ui(size_str):
+    """
+    Convert human readable size to bytes.
+    Use this function when working with UI pages or when format "MiB", "KiB" with space separation,  is used.
+
+    Args:
+        size_str (str): The size to convert (i.e, "1 GiB" is 1048576 bytes)
+            acceptable units are: "EiB"/"Ei", "PiB"/"Pi" "TiB"/"Ti", "GiB"/"Gi", "MiB"/"Mi", "KiB"/"Ki", "B"/"Bytes"
+
+    Returns:
+        int: The converted size in bytes
+
+    """
+    units = {
+        "E": 2**60,
+        "P": 2**50,
+        "T": 2**40,
+        "G": 2**30,
+        "M": 2**20,
+        "K": 2**10,
+        "B": 1,
+    }
+    size, unit = size_str.split()
+    unit = unit[0]
+    size = float(size)
+    return int(size * units[unit])
+
+
 def prepare_customized_pull_secret(images=None):
     """
     Prepare customized pull-secret containing auth section related to given

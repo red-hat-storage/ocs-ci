@@ -1580,6 +1580,11 @@ validation_4_14 = {
         "//button[@data-test='horizontal-link-Overview']",
         By.XPATH,
     ),
+    "storage_capacity": (
+        "//div[contains(@class,'ceph-raw-card-legend__title') and text()='{}']"
+        "/ancestor::div[2]//div[@class='ceph-raw-card-legend__text']",
+        By.XPATH,
+    ),
 }
 
 topology = {
