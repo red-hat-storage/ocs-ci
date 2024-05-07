@@ -4,15 +4,17 @@ Module for interactions with IBM Cloud Cluster.
 
 """
 
-
 import json
 import logging
 import os
+import re
+import requests
 import time
-
+from json import JSONDecodeError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
+    APIRequestError,
     CommandFailed,
     UnsupportedPlatformVersionError,
     UnexpectedBehaviour,
@@ -20,7 +22,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
 )
 from ocs_ci.utility import version as util_version
-from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
 
 
@@ -51,8 +53,11 @@ def login():
 
 def set_region():
     """
-    Sets the cluster region to ENV_DATA
+    Sets the cluster region to ENV_DATA when enable_region_dynamic_switching is
+    enabled.
     """
+    if not config.ENV_DATA.get("enable_region_dynamic_switching"):
+        return
     region = get_region(config.ENV_DATA["cluster_path"])
     logger.info(f"cluster region is {region}")
     logger.info(f"updating region {region} to ENV_DATA ")
@@ -99,7 +104,7 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
     try:
         return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     except CommandFailed as ex:
-        if "Please login" in ex.message:
+        if "Please login" in str(ex):
             login()
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
 
@@ -558,3 +563,146 @@ def label_nodes_region():
     worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
     for node in worker_nodes:
         node.add_label(rf"ibm-cloud\.kubernetes\.io/region={region}")
+
+
+def get_cluster_service_ids(cluster_name, get_infra_id_from_metadata=True):
+    """
+    Get cluster service IDs
+
+    Args:
+        cluster_name (str): cluster name
+        get_infra_id_from_metadata (bool): if set to true it will try to get
+            infra ID from metadata.json file (Default: True)
+
+    Returns:
+        list: service IDs for cluster
+
+    """
+    cmd = "ibmcloud iam service-ids --output json"
+    out = run_ibmcloud_cmd(cmd)
+    infra_id = ""
+    pattern = rf"{cluster_name}-[a-z0-9]{{5}}-.*"
+    service_ids = []
+    if get_infra_id_from_metadata:
+        try:
+            cluster_path = config.ENV_DATA["cluster_path"]
+            infra_id = get_infra_id(cluster_path)
+            pattern = rf"{infra_id}-.*"
+
+        except (FileNotFoundError, JSONDecodeError, KeyError):
+            logger.warning("Could not get infra ID")
+    for service_id in json.loads(out):
+        if re.match(pattern, service_id["name"]):
+            service_ids.append(service_id)
+    return service_ids
+
+
+def get_cluster_account_policies(cluster_name, cluster_service_ids):
+    """
+    Get cluster account policies.
+
+    Args:
+        cluster_name (str): cluster name
+        cluster_service_ids (list): list of service IDs, e.g. output from get_cluster_service_ids.
+
+    Returns:
+        list: Account policies for cluster
+
+    """
+    cmd = "ibmcloud iam account-policies --output json"
+    out = run_ibmcloud_cmd(cmd)
+    account_policies = json.loads(out)
+    matched_account_policies = []
+    if not cluster_service_ids:
+        logger.warning(
+            "No service ID provided, we cannot match any account policy without it!"
+        )
+        return matched_account_policies
+        cluster_service_ids = get_cluster_service_ids(cluster_name)
+    for account_policy in account_policies:
+        for subject in account_policy.get("subjects", []):
+            for attr in subject.get("attributes", []):
+                for service_id in cluster_service_ids:
+                    if attr.get("name") == "iam_id" and (
+                        attr.get("value") == service_id.get("iam_id")
+                    ):
+                        matched_account_policies.append(account_policy)
+    return matched_account_policies
+
+
+def delete_service_id(service_id):
+    """
+    Delete service ID
+
+    Args:
+        service_id (str): ID of service ID to delete
+    """
+    logger.info(f"Deleting service ID: {service_id}")
+    cmd = f"ibmcloud iam service-id-delete -f {service_id}"
+    run_ibmcloud_cmd(cmd)
+
+
+def get_api_token():
+    """
+    Get IBM Cloud API Token for API Calls authentication
+
+    Returns:
+        str: IBM Cloud API Token
+
+    """
+    token_cmd = "ibmcloud iam oauth-tokens --output json"
+    out = run_ibmcloud_cmd(token_cmd)
+    token = json.loads(out)
+    return token["iam_token"].split()[1]
+
+
+def delete_account_policy(policy_id, token=None):
+    """
+    Delete account policy
+
+    Args:
+        policy_id (str): policy ID
+        token (str): IBM Cloud token to be used for API calls - if not provided it will
+            create new one.
+
+    Returns:
+        bool: True in case it successfully deleted
+
+    Raises:
+        APIRequestError: in case API call didn't went well
+
+    """
+    if not token:
+        token = get_api_token()
+    url = f"https://iam.cloud.ibm.com/v1/policies/{policy_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.delete(url.format("YOUR_POLICY_ID_HERE"), headers=headers)
+    if response.status_code == 204:  # 204 means success (No Content)
+        logger.info(f"Policy id: {policy_id} deleted successfully.")
+    else:
+        raise APIRequestError(
+            f"Failed to delete policy id: {policy_id}. Status code: {response.status_code}\n"
+            f"Response content: {response.text}"
+        )
+
+
+def cleanup_policies_and_service_ids(cluster_name, get_infra_id_from_metadata=True):
+    """
+    Cleanup Account Policies and Service IDs for cluster.
+
+    Args:
+        cluster_name (str): cluster name
+        get_infra_id_from_metadata (bool): if set to true it will try to get
+            infra ID from metadata.json file (Default: True)
+
+    """
+    service_ids = get_cluster_service_ids(cluster_name, get_infra_id_from_metadata)
+    if not service_ids:
+        logger.info(f"No service ID found for cluster {cluster_name}")
+        return
+    account_policies = get_cluster_account_policies(cluster_name, service_ids)
+    api_token = get_api_token()
+    for policy in account_policies:
+        delete_account_policy(policy["id"], api_token)
+    for service_id in service_ids:
+        delete_service_id(service_id["id"])

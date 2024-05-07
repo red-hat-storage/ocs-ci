@@ -2544,3 +2544,6 @@ OPERATION_TERMINATE = "terminate"
 # Resize osd
 MAX_RESIZE_OSD = "8Ti"
 AWS_MAX_RESIZE_OSD_COUNT = 1
+
+# CCOCTL
+CCOCTL_LOG_FILE = "ccoctl-service-id.log"
