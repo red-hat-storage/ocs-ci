@@ -322,6 +322,7 @@ def create_pod(
     if dc_deployment or deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
         if dc_deployment or deployment:
@@ -351,6 +352,7 @@ def create_pod(
             constants.FEDORA_DC_YAML,
             constants.FIO_DC_YAML,
             constants.FIO_DEPLOYMENT_YAML,
+            constants.FEDORA_DEPLOY_YAML
         ]:
             temp_dict = [
                 {
@@ -362,7 +364,7 @@ def create_pod(
                     .get("name"),
                 }
             ]
-            if pod_dict_path == constants.FEDORA_DC_YAML:
+            if pod_dict_path == constants.FEDORA_DC_YAML or constants.FEDORA_DEPLOY_YAML:
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]

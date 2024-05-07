@@ -119,7 +119,7 @@ from ocs_ci.ocs.resources.pod import (
     verify_data_integrity_for_multi_pvc_objs,
     get_noobaa_pods,
     get_pod_count,
-    wait_for_pods_by_label_count,
+    wait_for_pods_by_label_count, delete_deployment_pods,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -1618,9 +1618,9 @@ def service_account_factory_fixture(request):
 
 
 @pytest.fixture()
-def dc_pod_factory(request, pvc_factory, service_account_factory):
+def deploy_pod_factory(request, pvc_factory, service_account_factory):
     """
-    Create deploymentconfig pods
+    Create deployment pods
     """
     instances = []
 
@@ -1661,7 +1661,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
 
         """
         if custom_data:
-            dc_pod_obj = helpers.create_resource(**custom_data)
+            deploy_pod_obj = helpers.create_resource(**custom_data)
         else:
             pvc = pvc or pvc_factory(
                 interface=interface, size=size, access_mode=access_mode
@@ -1669,34 +1669,34 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
             sa_obj = sa_obj or service_account_factory(
                 project=pvc.project, service_account=service_account
             )
-            dc_pod_obj = helpers.create_pod(
+            deploy_pod_obj = helpers.create_pod(
                 interface_type=interface,
                 pvc_name=pvc.name,
                 do_reload=False,
                 namespace=pvc.namespace,
                 sa_name=sa_obj.name,
-                dc_deployment=True,
+                deployment=True,
                 replica_count=replica_count,
                 node_name=node_name,
                 node_selector=node_selector,
                 raw_block_pv=raw_block_pv,
-                pod_dict_path=constants.FEDORA_DC_YAML,
+                pod_dict_path=constants.FEDORA_DEPLOY_YAML,
             )
-        instances.append(dc_pod_obj)
-        log.info(dc_pod_obj.name)
+        instances.append(deploy_pod_obj)
+        log.info(deploy_pod_obj.name)
         if wait:
             helpers.wait_for_resource_state(
-                dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+                deploy_pod_obj, constants.STATUS_RUNNING, timeout=180
             )
-        dc_pod_obj.pvc = pvc
-        return dc_pod_obj
+        deploy_pod_obj.pvc = pvc
+        return deploy_pod_obj
 
     def finalizer():
         """
         Delete dc pods
         """
         for instance in instances:
-            delete_deploymentconfig_pods(instance)
+            delete_deployment_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3846,7 +3846,7 @@ def measurement_dir(tmp_path):
 
 
 @pytest.fixture()
-def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
+def multi_dc_pod(multi_pvc_factory, deploy_pod_factory, service_account_factory):
     """
     Prepare multiple dc pods for the test
     Returns:
@@ -3891,7 +3891,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
                 if create_rbd_block_rwx_pod:
                     dc_pods_res.append(
                         p.submit(
-                            dc_pod_factory,
+                            deploy_pod_factory,
                             interface=constants.CEPHBLOCKPOOL,
                             pvc=pvc_obj,
                             raw_block_pv=True,
@@ -3901,7 +3901,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
                 else:
                     dc_pods_res.append(
                         p.submit(
-                            dc_pod_factory,
+                            deploy_pod_factory,
                             interface=dict_types[pool_type],
                             pvc=pvc_obj,
                             sa_obj=sa_obj,
