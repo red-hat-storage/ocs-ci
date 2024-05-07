@@ -58,7 +58,7 @@ class TestAddCapacity(ManageTest):
         self,
         add_capacity_setup,
         project_factory,
-        multi_dc_pod,
+        multi_deployment_pods,
         multi_pvc_factory,
         pod_factory,
         mcg_obj,
@@ -93,7 +93,7 @@ class TestAddCapacity(ManageTest):
         # & cephfs-rwo,rwx)
         num_of_pvcs = 40
 
-        rwo_rbd_pods = multi_dc_pod(
+        rwo_rbd_pods = multi_deployment_pods(
             num_of_pvcs=num_of_pvcs,
             pvc_size=175,
             project=project,
@@ -107,7 +107,7 @@ class TestAddCapacity(ManageTest):
         # Todo: https://github.com/red-hat-storage/ocs-ci/issues/2360
 
         # Create rwx-rbd pods
-        pods_ios_rwx_rbd = multi_dc_pod(
+        pods_ios_rwx_rbd = multi_deployment_pods(
             num_of_pvcs=10,
             pvc_size=175,
             project=project,
@@ -330,21 +330,21 @@ class TestAddCapacity(ManageTest):
             )
         else:
             num_of_pvcs = 1
-            rwo_rbd_pods = multi_dc_pod(
+            rwo_rbd_pods = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
                 access_mode="RWO",
                 pool_type="rbd",
             )
-            rwo_cephfs_pods = multi_dc_pod(
+            rwo_cephfs_pods = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
                 access_mode="RWO",
                 pool_type="cephfs",
             )
-            rwx_cephfs_pods = multi_dc_pod(
+            rwx_cephfs_pods = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
@@ -352,7 +352,7 @@ class TestAddCapacity(ManageTest):
                 pool_type="cephfs",
             )
             # Create rwx-rbd pods
-            pods_ios_rwx_rbd = multi_dc_pod(
+            pods_ios_rwx_rbd = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
