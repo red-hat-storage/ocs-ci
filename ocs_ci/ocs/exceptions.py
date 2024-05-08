@@ -702,3 +702,7 @@ class StorageSizeNotReflectedException(Exception):
 
 class ClusterNotInSTSModeException(Exception):
     pass
+
+
+class APIRequestError(Exception):
+    pass

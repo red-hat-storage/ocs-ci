@@ -209,18 +209,25 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.warning(
                 "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
             )
-        # Make sure ccoctl is downloaded before using it in destroy job.
-        cco.configure_cloud_credential_operator()
-        cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
-        if resource_group:
-            resource_group = self.get_resource_group()
-        # Based on docs:
-        # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
-        # The volumes should be removed before running openshift-installer for destroy, but it's not
-        # working and failing, hence moving this step back after openshift-installer.
-        self.delete_volumes(resource_group)
-        self.delete_leftover_resources(resource_group)
-        self.delete_resource_group(resource_group)
+        try:
+            # Make sure ccoctl is downloaded before using it in destroy job.
+            cco.configure_cloud_credential_operator()
+            cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
+            if resource_group:
+                resource_group = self.get_resource_group()
+            # Based on docs:
+            # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
+            # The volumes should be removed before running openshift-installer for destroy, but it's not
+            # working and failing, hence moving this step back after openshift-installer.
+            self.delete_volumes(resource_group)
+            self.delete_leftover_resources(resource_group)
+            self.delete_resource_group(resource_group)
+        except Exception as ex:
+            logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
+            raise
+        finally:
+            logger.info("Force cleaning up Service IDs and Account Policies leftovers")
+            ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
 
     def manually_create_iam_for_vpc(self):
         """
