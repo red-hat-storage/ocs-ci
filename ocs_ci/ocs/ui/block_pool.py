@@ -364,3 +364,87 @@ class BlockPoolUI(PageNavigator):
             f"Pool name {pool_name} has {storage_class_attached} storageclass attached to it."
         )
         return int(storage_class_attached)
+
+    def pool_raw_capacity_loaded(self, pool_name):
+        """
+        Takes pool name and returns True if the raw capacity of the block pool is loaded
+        or returns False if the capacity is not loaded.
+
+        Args:
+            pool_name (str): The name of the pool to be deleted
+
+        Returns:
+            bool: True if raw capacity of the blockpool is loaded, otherwise False
+
+        """
+        logger.info("Checking if the Block Pool Raw Capacity has loaded in UI")
+
+        self.select_blockpool(pool_name)
+
+        raw_capacity_loaded = self.check_element_text(
+            "Available",
+            "div[@class='ceph-raw-card-legend__title']",
+        )
+        if raw_capacity_loaded:
+            logger.info("Block Pool Raw Capacity has loaded in UI")
+        else:
+            logger.warning("Block Pool Raw Capacity has not loaded in UI")
+        return raw_capacity_loaded
+
+    def cross_check_raw_capacity(self, pool_name):
+        """
+        Takes pool name and returns True if the raw capacity of the block pool is same in GUI as obtained from CLI
+        or returns False if the raw capacity of the block pool doesnt match with CLI
+
+        Args:
+            pool_name (str): The name of the pool to be deleted
+
+        Returns:
+            bool: True if raw capacity of the blockpool is is same in GUI as obtained from CLI, otherwise False
+
+        """
+        logger.info(
+            "Checking if the Block Pool Raw Capacity is same in GUI as obtained from CLI"
+        )
+        if self.pool_raw_capacity_loaded(pool_name):
+            cmd = "rados df"
+            ct_pod = pod.get_ceph_tools_pod()
+            df_op = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
+            for pools in df_op["pools"]:
+                if pools["name"] == pool_name:
+                    raw_capacity = round(
+                        int(pools["size_kb"]) / 1024, 1
+                    )  # converting it into MiB because we are only running io in MiB in the previous step
+
+            logger.info(
+                f"Raw capacity of {pool_name} is {raw_capacity} MiB as checked by CLI"
+            )
+
+            used_raw_capacity_in_UI = self.get_element_text(
+                self.bp_loc["used_raw_capacity_in_UI"]
+            )
+
+            if used_raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
+                logger.info("UI values did matched as per CLI for the Raw Capacity")
+                return True
+            else:
+                logger.error(
+                    f"UI value (i.e {used_raw_capacity_in_UI}) did not matched as per CLI for the Raw Capacity"
+                )
+                return False
+
+    def select_blockpool(self, pool_name):
+        """
+        Selects and clicks on the blocpool according to the blockpool name passed.
+
+        Args:
+            pool_name (str): Block pool name that is to be selected.
+
+        Returns:
+            True (bool): Successfull selection of the blockpool
+
+        """
+        self.navigate_block_pool_page()
+        self.page_has_loaded()
+        self.do_click((f"//a[text()='{pool_name}']", By.XPATH))
+        return True

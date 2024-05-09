@@ -1172,10 +1172,6 @@ block_pool = {
         'button[data-test-action="Edit BlockPool"]',
         By.CSS_SELECTOR,
     ),
-    "delete_pool_inside_pool": (
-        'button[data-test-action="Delete BlockPool"]',
-        By.CSS_SELECTOR,
-    ),
     "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
     "replica_dropdown_edit": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
     "compression_checkbox_edit": (
@@ -1186,6 +1182,15 @@ block_pool = {
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
     "pool_cannot_be_deleted_warning": (
         "//p[@data-test='pool-bound-message']",
+        By.XPATH,
+    ),
+    "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
+    "actions_inside_pool": (
+        "//div[@class='pf-c-dropdown pf-m-align-right']",
+        By.XPATH,
+    ),
+    "delete_pool_inside_pool": (
+        "//a[text()='Delete BlockPool']",
         By.XPATH,
     ),
 }
@@ -1283,6 +1288,15 @@ storageclass = {
         By.XPATH,
     ),
     "button_with_txt": ("//button[text()=('{}')]", By.XPATH),
+    "volume_binding_mode": (
+        "button[id='storage-class-volume-binding-mode']",
+        By.CSS_SELECTOR,
+    ),
+    "immediate_binding_mode": ("button[id='Immediate-link']", By.CSS_SELECTOR),
+    "storage_class_breadcrumb": (
+        "//a[@class='pf-c-breadcrumb__link'][text()='StorageClasses']",
+        By.XPATH,
+    ),
 }
 
 storageclass_4_9 = {
@@ -2075,6 +2089,8 @@ locators = {
         },
         "add_capacity": {**add_capacity, **add_capacity_4_11},
         "obc": obc,
+        "block_pool": {**block_pool, **block_pool_4_12},
+        "storageclass": storageclass,
     },
     "4.10": {
         "login": login,

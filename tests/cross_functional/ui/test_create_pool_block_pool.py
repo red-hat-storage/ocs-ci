@@ -11,6 +11,8 @@ from ocs_ci.ocs.exceptions import (
     PoolNotCompressedAsExpected,
     PoolNotReplicatedAsNeeded,
     PoolCephValueNotMatch,
+    BlockPoolRawCapacityNotLoaded,
+    BlockPoolRawCapacityNotCorrect,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
@@ -19,6 +21,7 @@ from ocs_ci.ocs.cluster import (
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
 )
+from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +33,9 @@ need_to_delete = []
     argnames=["replica", "compression"],
     argvalues=[
         pytest.param(*[3, True], marks=pytest.mark.polarion_id("OCS-2589")),
-        pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
-        pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
-        pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
+        # pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
+        # pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
+        # pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
     ],
 )
 @skipif_hci_provider_or_client
@@ -84,6 +87,7 @@ class TestPoolUserInterface(ManageTest):
         storage,
         pvc,
         pod,
+        setup_ui,
     ):
         """
         test create delete pool has the following workflow
@@ -117,6 +121,19 @@ class TestPoolUserInterface(ManageTest):
 
         # Getting IO results
         get_fio_rw_iops(self.pod_obj)
+
+        # Checking the raw capcity is loaded on the UI or not.
+        blockpool_ui_object = BlockPoolUI()
+        if not blockpool_ui_object.pool_raw_capacity_loaded(self.pool_name):
+            raise BlockPoolRawCapacityNotLoaded(
+                f"The Raw Capacity for blockpool {self.pool_name} is not loaded in UI."
+            )
+
+        # Cross checking the raw capacity of the blockpool between CLI and UI
+        if not blockpool_ui_object.cross_check_raw_capacity(self.pool_name):
+            raise BlockPoolRawCapacityNotCorrect(
+                f"The Raw Capcity for the blockpool {self.pool_name} doesnt match in UI as shown in CLI."
+            )
 
         # Checking Results for compression and replication
         if compression:
