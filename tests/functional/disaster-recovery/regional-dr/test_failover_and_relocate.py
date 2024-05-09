@@ -21,7 +21,7 @@ from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_active_acm_index
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, skipif_ocs_version
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +54,14 @@ class TestFailoverAndRelocate:
             pytest.param(
                 constants.SUBSCRIPTION,
                 False,
-                "none",
+                None,
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
                 id="primary_up_subscription",
             ),
             pytest.param(
                 constants.SUBSCRIPTION,
                 True,
-                "none",
+                None,
                 marks=pytest.mark.polarion_id(polarion_id_primary_down),
                 id="primary_down_subscription",
             ),
@@ -76,7 +76,10 @@ class TestFailoverAndRelocate:
                 constants.APPLICATION_SET,
                 False,
                 "pull",
-                marks=pytest.mark.polarion_id(polarion_id_primary_up_appset_pull),
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_up_appset_pull),
+                    skipif_ocs_version("<4.16"),
+                ],
                 id="primary_up_appset",
             ),
             pytest.param(
@@ -90,7 +93,10 @@ class TestFailoverAndRelocate:
                 constants.APPLICATION_SET,
                 True,
                 "pull",
-                marks=pytest.mark.polarion_id(polarion_id_primary_down_appset_pull),
+                marks=[
+                    pytest.mark.polarion_id(polarion_id_primary_down_appset_pull),
+                    skipif_ocs_version("<4.16"),
+                ],
                 id="primary_down_appset",
             ),
         ],

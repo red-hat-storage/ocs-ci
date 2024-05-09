@@ -363,15 +363,16 @@ class BusyBox_AppSet(DRWorkload):
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
                 if self.appset_model == "pull":
                     # load appset_yaml_file
-                    app_set_yaml_data["template"]["metadata"] = "annotations:"
-                    app_set_yaml_data["template"]["metadata"]["annotations:"][0] = (
+                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
+                        0
+                    ] = (
                         "apps.open-cluster-management.io/ocm"
                         "-managed-cluster: '{{name}}'"
                     )
-                    app_set_yaml_data["template"]["metadata"]["annotations:"][1] = (
-                        "argocd.argoproj.io/skip-reconcile: " "'true'"
-                    )
-                    app_set_yaml_data["template"]["metadata"]["labels"][
+                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
+                        1
+                    ] = "argocd.argoproj.io/skip-reconcile: 'true'"
+                    app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
                         1
                     ] = "apps.open-cluster-management.io/pull-to-ocm-managed-cluster: 'true'"
         log.info(app_set_yaml_data_list)
@@ -445,6 +446,18 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self.check_pod_pvc_status(skip_replication_resources=False)
+
+        appset_resource_name = (
+            self._get_applicaionset_name() + self.preferred_primary_cluster
+        )
+
+        if self.appset_model == "pull":
+            appset_pull_obj = ocp.OCP(
+                kind=constants.APPLICATION_ARGOCD,
+                resource_name=appset_resource_name,
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            )
+            appset_pull_obj.wait_for_phase(phase="Succeeded", timeout=60)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
