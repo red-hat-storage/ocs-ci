@@ -22,11 +22,12 @@ from ocs_ci.framework.testlib import (
     tier4c,
 )
 from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK, OSD, ROOK_OPERATOR, MON_DAEMON
-from ocs_ci.ocs.resources.osd_resize import (
+from ocs_ci.helpers.osd_resize import (
     ceph_verification_steps_post_resize_osd,
     check_ceph_health_after_resize_osd,
     check_resize_osd_pre_conditions,
     update_resize_osd_count,
+    basic_resize_osd,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -34,7 +35,7 @@ from ocs_ci.ocs.resources.pod import (
     verify_md5sum_on_pod_files,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
-from ocs_ci.ocs.resources.storage_cluster import resize_osd, get_storage_size
+from ocs_ci.ocs.resources.storage_cluster import get_storage_size
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
@@ -85,19 +86,6 @@ class TestResizeOSD(ManageTest):
         self.pvcs2, self.pods_for_run_io = create_pvcs_and_pods(
             pvc_size=pvc_size, num_of_rbd_pvc=5, num_of_cephfs_pvc=5
         )
-
-    def basic_resize_osd_steps(self):
-        """
-        Run the basic resize osd steps. The method increase the osd size by multiply 2
-        and save the result in a new class member 'self.new_storage_size'
-
-        """
-        logger.info(f"The current osd size is {self.old_storage_size}")
-        size = int(self.old_storage_size[0:-2])
-        size_type = self.old_storage_size[-2:]
-        self.new_storage_size = f"{size * 2}{size_type}"
-        logger.info(f"Increase the osd size to {self.new_storage_size}")
-        resize_osd(self.new_storage_size)
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -178,7 +166,7 @@ class TestResizeOSD(ManageTest):
         Test resize OSD
         """
         self.prepare_data_before_resize_osd()
-        self.basic_resize_osd_steps()
+        self.new_storage_size = basic_resize_osd(self.old_storage_size)
         self.verification_steps_post_resize_osd()
 
     @tier4b
@@ -189,7 +177,7 @@ class TestResizeOSD(ManageTest):
 
         """
         self.prepare_data_before_resize_osd()
-        self.basic_resize_osd_steps()
+        self.new_storage_size = basic_resize_osd(self.old_storage_size)
         # Restart one of the worker nodes while additional storage is being added
         wnode = random.choice(get_nodes())
         logger.info(f"Restart the worker node: {wnode.name}")
@@ -225,6 +213,6 @@ class TestResizeOSD(ManageTest):
 
         """
         self.prepare_data_before_resize_osd()
-        self.basic_resize_osd_steps()
+        self.new_storage_size = basic_resize_osd(self.old_storage_size)
         delete_resource_multiple_times(resource_name, num_of_iterations)
         self.verification_steps_post_resize_osd()

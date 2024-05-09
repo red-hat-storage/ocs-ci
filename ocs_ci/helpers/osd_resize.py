@@ -20,6 +20,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
     get_deviceset_count,
+    resize_osd,
 )
 from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, convert_device_size
@@ -374,3 +375,23 @@ def update_resize_osd_count(old_storage_size):
         config.RUN["resize_osd_count"] = config.RUN.get("resize_osd_count", 0) + 1
     else:
         logger.warning("The osd size has not increased")
+
+
+def basic_resize_osd(old_storage_size):
+    """
+    The function perform the basic resize osd scenario. It increases the osd size by multiply 2
+
+    Args:
+        old_storage_size (str): The old storagecluster storage size(which represent the old osd size)
+
+    Returns:
+        str: The new storage size after increasing the osd size
+
+    """
+    logger.info(f"The current osd size is {old_storage_size}")
+    size = int(old_storage_size[0:-2])
+    size_type = old_storage_size[-2:]
+    new_storage_size = f"{size * 2}{size_type}"
+    logger.info(f"Increase the osd size to {new_storage_size}")
+    resize_osd(new_storage_size)
+    return new_storage_size
