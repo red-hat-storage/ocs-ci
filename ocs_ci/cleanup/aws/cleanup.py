@@ -324,9 +324,12 @@ def delete_buckets(bucket_prefix, hours):
     aws = AWS()
     buckets_to_delete = aws.get_buckets_to_delete(bucket_prefix, hours)
     logger.info(f"buckets to delete: {buckets_to_delete}")
+    filename = "s3_bucket_deletion_list.txt"
+    with open(filename, "w") as f:
+        f.write(str(buckets_to_delete))
     for bucket in buckets_to_delete:
         logger.info(f"Delete bucket {bucket}")
-        aws.delete_bucket(bucket)
+        # aws.delete_bucket(bucket)
 
 
 def aws_cleanup():
