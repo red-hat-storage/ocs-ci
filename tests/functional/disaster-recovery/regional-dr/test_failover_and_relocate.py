@@ -6,7 +6,10 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    turquoise_squad,
+    skipif_ocs_version,
+)
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -21,7 +24,7 @@ from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_active_acm_index
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, skipif_ocs_version
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
