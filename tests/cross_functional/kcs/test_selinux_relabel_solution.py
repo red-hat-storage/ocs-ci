@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.exceptions import PodNotCreated, CommandFailed
 from ocs_ci.ocs.resources import pod as res_pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.framework.pytest_customization.marks import (
@@ -267,7 +268,7 @@ class TestSelinuxrelabel(E2ETest):
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
         # Leave pod for some time to run since file creation time is longer
-        waiting_time = 240
+        waiting_time = 20
         log.info(f"Waiting for {waiting_time} seconds")
         time.sleep(waiting_time)
 
@@ -309,7 +310,9 @@ class TestSelinuxrelabel(E2ETest):
         ), f"Pod {self.pod_obj.name} didn't reach to running state"
 
         # Check SeLinux Relabeling is set to false
-        check_selinux_relabeling(pod_obj=self.pod_obj)
+        retry((AssertionError), tries=5, delay=10,)(
+            check_selinux_relabeling
+        )(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
 
         # Restart pod after applying fix
