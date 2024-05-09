@@ -10,9 +10,11 @@ import os
 import re
 import requests
 import time
+from copy import copy
 from json import JSONDecodeError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.defaults import IBM_CLOUD_REGIONS
 from ocs_ci.ocs.exceptions import (
     APIRequestError,
     CommandFailed,
@@ -30,9 +32,12 @@ logger = logging.getLogger(name=__file__)
 ibm_config = config.AUTH.get("ibmcloud", {})
 
 
-def login():
+def login(region=None):
     """
     Login to IBM Cloud cluster
+
+    Args:
+        region (str): region to log in, if not specified it will use one from config
     """
     api_key = ibm_config["api_key"]
     login_cmd = f"ibmcloud login --apikey {api_key}"
@@ -42,7 +47,8 @@ def login():
     api_endpoint = ibm_config.get("api_endpoint")
     if api_endpoint:
         login_cmd += f" -a {api_endpoint}"
-    region = config.ENV_DATA.get("region")
+    if not region:
+        region = config.ENV_DATA.get("region")
     if region:
         login_cmd += f" -r {region}"
     logger.info("Logging to IBM cloud")
@@ -51,17 +57,32 @@ def login():
     config.RUN["ibmcloud_last_login"] = time.time()
 
 
-def set_region():
+def set_region(region=None):
     """
     Sets the cluster region to ENV_DATA when enable_region_dynamic_switching is
     enabled.
+
+    Args:
+        region (str): region to set, if not defined it will try to get from metadata.json
+
     """
     if not config.ENV_DATA.get("enable_region_dynamic_switching"):
         return
-    region = get_region(config.ENV_DATA["cluster_path"])
+    if not region:
+        region = get_region(config.ENV_DATA["cluster_path"])
     logger.info(f"cluster region is {region}")
     logger.info(f"updating region {region} to ENV_DATA ")
     config.ENV_DATA["region"] = region
+    other_region = list(IBM_CLOUD_REGIONS - {region})[0]
+    for node_type in ["master", "worker"]:
+        for idx, zone in enumerate(
+            copy(config.ENV_DATA.get(f"{node_type}_availability_zones", []))
+        ):
+            config.ENV_DATA[f"{node_type}_availability_zones"][idx] = zone.replace(
+                other_region, region
+            )
+    # Make sure we are logged in proper region from config, once region changed!
+    login()
 
 
 def get_region(cluster_path):

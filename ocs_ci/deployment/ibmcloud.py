@@ -12,7 +12,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.defaults import IBM_CLOUD_LOAD_BALANCER_QUOTA
+from ocs_ci.ocs.defaults import IBM_CLOUD_REGIONS
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnsupportedPlatformVersionError,
@@ -162,14 +162,17 @@ class IBMCloudIPI(CloudDeploymentBase):
         # switch to us-south, if current load balancers are more than 45.
         # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas
         ibmcloud.login()
+        current_region = config.ENV_DATA["region"]
+        other_region = list(IBM_CLOUD_REGIONS - {current_region})[0]
         if config.ENV_DATA.get("enable_region_dynamic_switching"):
-            lb_count = self.get_load_balancers_count()
-            if lb_count > (IBM_CLOUD_LOAD_BALANCER_QUOTA - 5):
+            current_region_lb_count = self.get_load_balancers_count()
+            ibmcloud.login(region=other_region)
+            other_region_lb_count = self.get_load_balancers_count(other_region)
+            if current_region_lb_count > other_region_lb_count:
                 logger.info(
-                    "Switching region to us-south due to lack of load balancers"
+                    f"Switching region to {other_region} due to lack of load balancers"
                 )
-                config.ENV_DATA["region"] = "us-south"
-                ibmcloud.login()
+                ibmcloud.set_region(other_region)
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 
@@ -479,16 +482,19 @@ class IBMCloudIPI(CloudDeploymentBase):
         logger.debug(f"load balancers: {load_balancers}")
         return load_balancers
 
-    def get_load_balancers_count(self):
+    def get_load_balancers_count(self, region=None):
         """
         Gets the number of load balancers
 
+        Args:
+            region (str): region (e.g. us-south), if not defined it will take from config.
         Return:
             int: number of load balancers
 
         """
         load_balancers_count = len(self.get_load_balancers())
-        region = config.ENV_DATA.get("region")
+        if not region:
+            region = config.ENV_DATA.get("region")
         logger.info(
             f"Current load balancers count in region {region} is {load_balancers_count}"
         )
