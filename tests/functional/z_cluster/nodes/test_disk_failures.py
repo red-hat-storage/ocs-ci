@@ -74,7 +74,7 @@ class TestDiskFailures(ManageTest):
             """
             assert nodes.wait_for_volume_attach(data_volume), (
                 f"Volume {data_volume} failed to be re-attached to worker "
-                f"node {worker_node}"
+                f"node {worker_node.name}"
             )
 
     @pytest.fixture(autouse=True)
@@ -131,6 +131,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers = Sanity()
 
     @skipif_managed_service
+    @skipif_ibm_cloud
     @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
