@@ -282,8 +282,9 @@ class Deployment(object):
 
         # Multicluster operations
         if config.multicluster:
-            for _ in config.clusters:
-                # Gitops operator is needed on all clusters for appset type workload deployment using pull model
+            # Gitops operator is needed on all clusters for appset type workload deployment using pull model
+            for cluster_index in range(config.multicluster):
+                config.switch_ctx(cluster_index)
                 self.deploy_gitops_operator()
 
             # Switching back context to ACM as below configs are specific to hub cluster
