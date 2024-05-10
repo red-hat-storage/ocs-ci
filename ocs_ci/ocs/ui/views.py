@@ -322,11 +322,11 @@ generic_locators = {
     "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
         "//td[@id='name']//a[contains(text(), '{}')]"
-        "/../../..//button[@aria-label='Actions']",
+        "/../../..//button[@aria-label='Dropdown toggle']",
         By.XPATH,
     ),
     "delete_resource": (
-        'li[id="Delete"] a[role="menuitem"]',
+        'li[data-test-action="Delete BlockPool"] button[id="Delete"]',
         By.CSS_SELECTOR,
     ),
     "close_modal_btn": ("//button[@id='modal-close-action']", By.XPATH),
