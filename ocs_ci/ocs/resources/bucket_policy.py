@@ -168,12 +168,9 @@ def gen_bucket_policy(
     resource = resource_property if resource_property else "Resource"
 
     logger.info(f"version: {ver}")
-    logger.info(f"Principal: {principal}")
-    logger.info(f"principal_list: {principals}")
-    logger.info(f"Action: {action}")
-    logger.info(f"actions_list: {actions_list}")
-    logger.info(f"Resource: {resource}")
-    logger.info(f"resource: {resources_list}")
+    logger.info(f"{principal}: {principals}")
+    logger.info(f"{action}: {actions_list}")
+    logger.info(f"{resource}: {resources_list}")
     logger.info(f"effect: {effect}")
     logger.info(f"sid: {sid}")
     bucket_policy = {
