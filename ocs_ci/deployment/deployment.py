@@ -283,7 +283,7 @@ class Deployment(object):
         # Multicluster operations
         if config.multicluster:
             # Gitops operator is needed on all clusters for appset type workload deployment using pull model
-            for cluster_index in range(config.multicluster):
+            for cluster_index in range(config.nclusters):
                 config.switch_ctx(cluster_index)
                 self.deploy_gitops_operator()
 
@@ -343,7 +343,8 @@ class Deployment(object):
                 "Create clusterrolebinding on both the managed clusters needed "
                 "for appset pull model gitops deployment"
             )
-            for _ in managed_clusters:
+            for cluster in managed_clusters:
+                config.switch_to_cluster_by_name(cluster["metadata"]["name"])
                 run_cmd(f"oc create -f {CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}")
 
     def do_deploy_ocs(self):

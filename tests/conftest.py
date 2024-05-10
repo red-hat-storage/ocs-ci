@@ -6473,7 +6473,7 @@ def dr_workload(request):
     def factory(
         num_of_subscription=1,
         num_of_appset=0,
-        appset_model=None,
+        appset_model="pull",
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
     ):
@@ -6484,8 +6484,8 @@ def dr_workload(request):
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             switch_ctx (int): The cluster index by the cluster name
-            appset_model (str): Appset Gitops deployment now supports "pull" model starting ACM 2.10 in addition
-                to default "push" model. Default value is set to None.
+            appset_model (str): Appset Gitops deployment now supports "pull" model starting ACM 2.10 which is now the
+                default selection in addition to "push" model.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
