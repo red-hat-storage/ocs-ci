@@ -40,7 +40,6 @@ from ocs_ci.ocs.cluster import (
     get_lvm_full_version,
     check_cephcluster_status,
 )
-from ocs_ci.ocs.constants import CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ChannelNotFound,
@@ -345,7 +344,9 @@ class Deployment(object):
             )
             for cluster in managed_clusters:
                 config.switch_to_cluster_by_name(cluster["metadata"]["name"])
-                run_cmd(f"oc create -f {CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}")
+                run_cmd(
+                    f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
+                )
 
     def do_deploy_ocs(self):
         """
