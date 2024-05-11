@@ -2319,6 +2319,11 @@ GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
 GITOPS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
+OADP_NAMESPACE = "openshift-adp"
+OADP_OPERATOR_NAME = "redhat-oadp-operator"
+OADP_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DIR, "oadp-deployment", "subscription.yaml"
+)
 ACM_HUB_BACKUP_NAMESPACE = "open-cluster-management-backup"
 ACM_HUB_RESTORE = "Restore"
 
