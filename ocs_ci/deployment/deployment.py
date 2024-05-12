@@ -343,10 +343,11 @@ class Deployment(object):
                 "for appset pull model gitops deployment"
             )
             for cluster in managed_clusters:
-                config.switch_to_cluster_by_name(cluster["metadata"]["name"])
-                run_cmd(
-                    f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
-                )
+                if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+                    config.switch_to_cluster_by_name(cluster["metadata"]["name"])
+                    run_cmd(
+                        f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
+                    )
 
     def do_deploy_ocs(self):
         """
