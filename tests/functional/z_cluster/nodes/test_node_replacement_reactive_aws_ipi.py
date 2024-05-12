@@ -114,7 +114,9 @@ class TestNodeReplacement(ManageTest):
             interface = constants.CEPHFILESYSTEM
         dc_pod_obj = []
         for i in range(2):
-            dc_pod = deployment_pod_factory(interface=interface, node_selector={"dc": "fedora"})
+            dc_pod = deployment_pod_factory(
+                interface=interface, node_selector={"dc": "fedora"}
+            )
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
