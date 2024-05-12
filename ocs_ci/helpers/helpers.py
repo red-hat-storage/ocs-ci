@@ -352,7 +352,7 @@ def create_pod(
             constants.FEDORA_DC_YAML,
             constants.FIO_DC_YAML,
             constants.FIO_DEPLOYMENT_YAML,
-            constants.FEDORA_DEPLOY_YAML
+            constants.FEDORA_DEPLOY_YAML,
         ]:
             temp_dict = [
                 {
@@ -364,7 +364,10 @@ def create_pod(
                     .get("name"),
                 }
             ]
-            if pod_dict_path == constants.FEDORA_DC_YAML or constants.FEDORA_DEPLOY_YAML:
+            if (
+                pod_dict_path == constants.FEDORA_DC_YAML
+                or constants.FEDORA_DEPLOY_YAML
+            ):
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]
