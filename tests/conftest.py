@@ -104,7 +104,6 @@ from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
-    delete_deploymentconfig_pods,
     get_pods_having_label,
     get_deployments_having_label,
     Pod,
@@ -114,7 +113,8 @@ from ocs_ci.ocs.resources.pod import (
     verify_data_integrity_for_multi_pvc_objs,
     get_noobaa_pods,
     get_pod_count,
-    wait_for_pods_by_label_count, delete_deployment_pods,
+    wait_for_pods_by_label_count,
+    delete_deployment_pods,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -3710,7 +3710,9 @@ def measurement_dir(tmp_path):
 
 
 @pytest.fixture()
-def multi_deployment_pods(multi_pvc_factory, deployment_pod_factory, service_account_factory):
+def multi_deployment_pods(
+    multi_pvc_factory, deployment_pod_factory, service_account_factory
+):
     """
     Prepare multiple deployment pods for the test
 
