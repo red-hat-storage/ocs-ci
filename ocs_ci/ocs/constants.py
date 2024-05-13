@@ -904,6 +904,8 @@ MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-ne
 MULTUS_CLUSTER_NET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net.yaml"
 )
+NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
+
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
