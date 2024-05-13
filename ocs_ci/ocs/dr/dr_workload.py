@@ -361,6 +361,7 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+            elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
                 if self.appset_model == "pull":
                     # load appset_yaml_file
                     app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
@@ -375,6 +376,7 @@ class BusyBox_AppSet(DRWorkload):
                     app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
                         1
                     ] = "apps.open-cluster-management.io/pull-to-ocm-managed-cluster: 'true'"
+
         log.info(app_set_yaml_data_list)
         templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
         config.switch_acm_ctx()
