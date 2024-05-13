@@ -464,7 +464,7 @@ class Deployment(object):
                     resource_name=constants.OADP_OPERATOR_NAME,
                     namespace=constants.OADP_NAMESPACE,
                 ).get()
-                oadp_csv_name = oadp_subscriptions["status"]["startingCSV"]
+                oadp_csv_name = oadp_subscriptions["spec"]["startingCSV"]
                 csv = CSV(
                     resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
                 )
