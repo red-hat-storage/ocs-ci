@@ -128,7 +128,7 @@ class CNVInstaller(object):
         logger.info("Creating subscription for CNV operator")
         run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
         self.wait_for_the_resource_to_discover(
-            kind=constants.SUBSCRIPTION,
+            kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
