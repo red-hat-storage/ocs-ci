@@ -243,10 +243,10 @@ class Deployment(object):
         package_manifest = PackageManifest(
             resource_name=constants.GITOPS_OPERATOR_NAME,
         )
-        gitops_subscription_yaml_data["spec"][
-            "startingCSV"
-        ] = package_manifest.get_current_csv(
-            channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
+        gitops_subscription_yaml_data["spec"]["startingCSV"] = (
+            package_manifest.get_current_csv(
+                channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
+            )
         )
 
         gitops_subscription_manifest = tempfile.NamedTemporaryFile(
@@ -427,13 +427,9 @@ class Deployment(object):
                 index = cluster.MULTICLUSTER["multicluster_index"]
                 config.switch_ctx(index)
                 logger.info("Creating Namespace")
-                try:
-                    run_cmd(f"oc create namespace {constants.OADP_NAMESPACE}")
-                except CommandFailed as ex:
-                    if "already exists" in str(ex):
-                        logger.warning("Namespace already exists!")
-                    else:
-                        raise
+                # creating Namespace and operator group for cert-manager
+                logger.info("Creating namespace and operator group for Openshift-oadp")
+                run_cmd(f"oc create -f {constants.OADP_NS_YAML}")
                 logger.info("Creating OADP Operator Subscription")
                 oadp_subscription_yaml_data = templating.load_yaml(
                     constants.OADP_SUBSCRIPTION_YAML
@@ -442,11 +438,11 @@ class Deployment(object):
                     resource_name=constants.OADP_OPERATOR_NAME,
                 )
                 oadp_default_channel = package_manifest.get_default_channel()
-                oadp_subscription_yaml_data["spec"][
-                    "startingCSV"
-                ] = package_manifest.get_current_csv(
-                    channel=oadp_default_channel,
-                    csv_pattern=constants.OADP_OPERATOR_NAME,
+                oadp_subscription_yaml_data["spec"]["startingCSV"] = (
+                    package_manifest.get_current_csv(
+                        channel=oadp_default_channel,
+                        csv_pattern=constants.OADP_OPERATOR_NAME,
+                    )
                 )
                 oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
                 oadp_subscription_manifest = tempfile.NamedTemporaryFile(
@@ -468,7 +464,7 @@ class Deployment(object):
                     resource_name=constants.OADP_OPERATOR_NAME,
                     namespace=constants.OADP_NAMESPACE,
                 ).get()
-                oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
+                oadp_csv_name = oadp_subscriptions["status"]["startingCSV"]
                 csv = CSV(
                     resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
                 )
@@ -1675,9 +1671,9 @@ class Deployment(object):
 
             # Setting up custom storageclass names for 'encryption' service
             if cluster_data["spec"].get("encryption", {}).get("enable"):
-                cluster_data["spec"]["encryption"][
-                    "storageClassName"
-                ] = storageclassnames["encryption"]
+                cluster_data["spec"]["encryption"]["storageClassName"] = (
+                    storageclassnames["encryption"]
+                )
 
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
@@ -1822,7 +1818,11 @@ class Deployment(object):
             if config.DEPLOYMENT.get("multi_storagecluster"):
                 self.deploy_with_external_mode()
                 # Checking external cephcluster health
-                retry((CephHealthException, CommandFailed), tries=5, delay=20,)(
+                retry(
+                    (CephHealthException, CommandFailed),
+                    tries=5,
+                    delay=20,
+                )(
                     check_cephcluster_status(
                         desired_phase="Connected",
                         desired_health="HEALTH_OK",
@@ -2185,10 +2185,10 @@ class Deployment(object):
             tries=10,
             delay=2,
         )(package_manifest.get_current_csv)(channel, constants.ACM_HUB_OPERATOR_NAME)
-        acm_hub_subscription_yaml_data["spec"][
-            "startingCSV"
-        ] = package_manifest.get_current_csv(
-            channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+        acm_hub_subscription_yaml_data["spec"]["startingCSV"] = (
+            package_manifest.get_current_csv(
+                channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+            )
         )
 
         acm_hub_subscription_manifest = tempfile.NamedTemporaryFile(
