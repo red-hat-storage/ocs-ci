@@ -339,7 +339,7 @@ class Deployment(object):
             gitops_obj.wait_for_phase("successful", timeout=720)
 
             logger.info(
-                "Create clusterrolebinding on both the managed clusters needed "
+                "Create clusterrolebinding on both the managed clusters, needed "
                 "for appset pull model gitops deployment"
             )
             for cluster in managed_clusters:
