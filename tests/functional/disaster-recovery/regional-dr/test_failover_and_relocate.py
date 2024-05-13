@@ -21,7 +21,6 @@ from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_active_acm_index
-from ocs_ci.utility import version
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -98,14 +97,8 @@ class TestFailoverAndRelocate:
 
         """
         if config.RUN.get("rdr_failover_via_ui"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version <= version.VERSION_4_12:
-                logger.error(
-                    "ODF/ACM version isn't supported for Failover/Relocate operation"
-                )
-                raise NotImplementedError
+            acm_obj = AcmAddClusters()
 
-        acm_obj = AcmAddClusters()
         if workload_type == constants.SUBSCRIPTION:
             rdr_workload = dr_workload(num_of_subscription=1)[0]
             drpc_obj = DRPC(namespace=rdr_workload.workload_namespace)
