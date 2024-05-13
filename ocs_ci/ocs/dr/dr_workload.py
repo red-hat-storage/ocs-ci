@@ -454,7 +454,7 @@ class BusyBox_AppSet(DRWorkload):
         self.check_pod_pvc_status(skip_replication_resources=False)
 
         appset_resource_name = (
-            self._get_applicaionset_name() + self.preferred_primary_cluster
+            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
         )
 
         if self.appset_model == "pull":
@@ -463,7 +463,7 @@ class BusyBox_AppSet(DRWorkload):
                 resource_name=appset_resource_name,
                 namespace=constants.GITOPS_CLUSTER_NAMESPACE,
             )
-            appset_pull_obj.wait_for_phase(phase="Succeeded", timeout=60)
+            appset_pull_obj.wait_for_phase(phase="Succeeded", timeout=120)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
