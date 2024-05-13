@@ -1822,11 +1822,7 @@ class Deployment(object):
             if config.DEPLOYMENT.get("multi_storagecluster"):
                 self.deploy_with_external_mode()
                 # Checking external cephcluster health
-                retry(
-                    (CephHealthException, CommandFailed),
-                    tries=5,
-                    delay=20,
-                )(
+                retry((CephHealthException, CommandFailed), tries=5, delay=20,)(
                     check_cephcluster_status(
                         desired_phase="Connected",
                         desired_health="HEALTH_OK",
