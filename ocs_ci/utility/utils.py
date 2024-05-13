@@ -840,15 +840,7 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        if (
-            config.ENV_DATA.get("fips")
-            and version_module.get_semantic_ocp_version_from_config()
-            >= version_module.VERSION_4_16
-        ):
-            # WA issue https://github.com/red-hat-storage/ocs-ci/issues/9755
-            version = "4.16.0-0.nightly-2024-04-26-145258"
-        else:
-            version = expose_ocp_version(version)
+        version = expose_ocp_version(version)
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
