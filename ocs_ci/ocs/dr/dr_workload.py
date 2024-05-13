@@ -463,6 +463,7 @@ class BusyBox_AppSet(DRWorkload):
                 resource_name=appset_resource_name,
                 namespace=constants.GITOPS_CLUSTER_NAMESPACE,
             )
+            appset_pull_obj._has_phase = True
             appset_pull_obj.wait_for_phase(phase="Succeeded", timeout=120)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
