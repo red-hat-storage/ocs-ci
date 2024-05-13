@@ -1724,7 +1724,11 @@ def email_reports(session):
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart("alternative")
+    aborted_message = ""
+    if config.RUN.get("aborted"):
+        aborted_message = "[JOB ABORTED] "
     msg["Subject"] = (
+        f"{aborted_message}"
         f"ocs-ci results for {get_testrun_name()} "
         f"({build_str}"
         f"RUN ID: {config.RUN['run_id']}) "

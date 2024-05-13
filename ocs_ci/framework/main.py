@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+import signal
 import sys
 import time
 
@@ -11,6 +12,27 @@ from ocs_ci import framework
 from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 from ocs_ci.utility import utils
+
+
+kill_counter = 0
+
+
+def signal_term_handler(sig, frame):
+    print(f"Got SIGTERM: {sig}")
+    if hasattr(framework.config, "RUN"):
+        framework.config.RUN["aborted"] = True
+    global kill_counter
+    if kill_counter:
+        print("Second attempt to SIGTERM, exiting process with RC: 143")
+        sys.exit(143)
+    else:
+        pid = os.getpid()
+        print(f"Killing run-ci process {pid} with SIGINT to allow fixtures finalize!")
+        kill_counter += 1
+        os.kill(pid, signal.SIGINT)
+
+
+signal.signal(signal.SIGTERM, signal_term_handler)
 
 
 def check_config_requirements():
