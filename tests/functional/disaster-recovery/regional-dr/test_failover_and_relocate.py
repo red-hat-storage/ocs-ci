@@ -73,7 +73,7 @@ class TestFailoverAndRelocate:
             #     False,
             #     "push",
             #     marks=pytest.mark.polarion_id(polarion_id_primary_up_appset),
-            #     id="primary_up_appset",
+            #     id="primary_up_appset_push",
             # ),
             pytest.param(
                 constants.APPLICATION_SET,
@@ -83,14 +83,14 @@ class TestFailoverAndRelocate:
                     pytest.mark.polarion_id(polarion_id_primary_up_appset_pull),
                     skipif_ocs_version("<4.16"),
                 ],
-                id="primary_up_appset",
+                id="primary_up_appset_pull",
             ),
             # pytest.param(
             #     constants.APPLICATION_SET,
             #     True,
             #     "push",
             #     marks=pytest.mark.polarion_id(polarion_id_primary_down_appset),
-            #     id="primary_down_appset",
+            #     id="primary_down_appset_push",
             # ),
             # pytest.param(
             #     constants.APPLICATION_SET,
@@ -100,7 +100,7 @@ class TestFailoverAndRelocate:
             #         pytest.mark.polarion_id(polarion_id_primary_down_appset_pull),
             #         skipif_ocs_version("<4.16"),
             #     ],
-            #     id="primary_down_appset",
+            #     id="primary_down_appset_pull",
             # ),
         ],
     )
@@ -157,9 +157,9 @@ class TestFailoverAndRelocate:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace, workload_type
         )
-        wait_time = 2 * scheduling_interval  # Time in minutes
+        wait_time = scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(wait_time)
 
         # Set cluster_kubeconfig value for 'drpc_obj' object to fetch the details without switching the cluster context
         acm_cluster_kubeconfig = os.path.join(
@@ -252,11 +252,11 @@ class TestFailoverAndRelocate:
             logger.info(
                 f"Waiting for {wait_time} minutes before starting nodes of primary cluster: {primary_cluster_name}"
             )
-            sleep(wait_time * 60)
+            sleep(wait_time)
             nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
             wait_for_nodes_status([node.name for node in primary_cluster_nodes])
             logger.info("Wait for 180 seconds for pods to stabilize")
-            sleep(180)
+            sleep(60)
             logger.info(
                 "Wait for all the pods in openshift-storage to be in running state"
             )

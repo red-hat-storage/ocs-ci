@@ -6,6 +6,8 @@ This module will have all DR related workload classes
 import logging
 import os
 import tempfile
+import yaml
+
 from subprocess import TimeoutExpired
 from time import sleep
 
@@ -369,17 +371,17 @@ class BusyBox_AppSet(DRWorkload):
                     )
                     app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
                         "apps.open-cluster-management.io/ocm-managed-cluster"
-                    ] = "'{{name}}'"
+                    ] = "{{name}}"
                     app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
                         "argocd.argoproj.io/skip-reconcile"
-                    ] = "'true'"
+                    ] = "true"
 
                     # Assign values to the "labels" key
                     app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
                         "apps.open-cluster-management.io/pull-to-ocm-managed-cluster"
-                    ] = "'true'"
+                    ] = "true"
 
-        log.info(app_set_yaml_data_list)
+        log.info(yaml.dump(app_set_yaml_data_list))
         templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {self.appset_yaml_file}")
