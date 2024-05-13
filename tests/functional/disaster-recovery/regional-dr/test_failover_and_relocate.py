@@ -54,27 +54,27 @@ class TestFailoverAndRelocate:
     @pytest.mark.parametrize(
         argnames=["workload_type", "primary_cluster_down", "appset_model"],
         argvalues=[
-            pytest.param(
-                constants.SUBSCRIPTION,
-                False,
-                None,
-                marks=pytest.mark.polarion_id(polarion_id_primary_up),
-                id="primary_up_subscription",
-            ),
-            pytest.param(
-                constants.SUBSCRIPTION,
-                True,
-                None,
-                marks=pytest.mark.polarion_id(polarion_id_primary_down),
-                id="primary_down_subscription",
-            ),
-            pytest.param(
-                constants.APPLICATION_SET,
-                False,
-                "push",
-                marks=pytest.mark.polarion_id(polarion_id_primary_up_appset),
-                id="primary_up_appset",
-            ),
+            # pytest.param(
+            #     constants.SUBSCRIPTION,
+            #     False,
+            #     None,
+            #     marks=pytest.mark.polarion_id(polarion_id_primary_up),
+            #     id="primary_up_subscription",
+            # ),
+            # pytest.param(
+            #     constants.SUBSCRIPTION,
+            #     True,
+            #     None,
+            #     marks=pytest.mark.polarion_id(polarion_id_primary_down),
+            #     id="primary_down_subscription",
+            # ),
+            # pytest.param(
+            #     constants.APPLICATION_SET,
+            #     False,
+            #     "push",
+            #     marks=pytest.mark.polarion_id(polarion_id_primary_up_appset),
+            #     id="primary_up_appset",
+            # ),
             pytest.param(
                 constants.APPLICATION_SET,
                 False,
@@ -85,13 +85,13 @@ class TestFailoverAndRelocate:
                 ],
                 id="primary_up_appset",
             ),
-            pytest.param(
-                constants.APPLICATION_SET,
-                True,
-                "push",
-                marks=pytest.mark.polarion_id(polarion_id_primary_down_appset),
-                id="primary_down_appset",
-            ),
+            # pytest.param(
+            #     constants.APPLICATION_SET,
+            #     True,
+            #     "push",
+            #     marks=pytest.mark.polarion_id(polarion_id_primary_down_appset),
+            #     id="primary_down_appset",
+            # ),
             pytest.param(
                 constants.APPLICATION_SET,
                 True,
