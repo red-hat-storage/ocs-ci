@@ -243,10 +243,10 @@ class Deployment(object):
         package_manifest = PackageManifest(
             resource_name=constants.GITOPS_OPERATOR_NAME,
         )
-        gitops_subscription_yaml_data["spec"]["startingCSV"] = (
-            package_manifest.get_current_csv(
-                channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
-            )
+        gitops_subscription_yaml_data["spec"][
+            "startingCSV"
+        ] = package_manifest.get_current_csv(
+            channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
         )
 
         gitops_subscription_manifest = tempfile.NamedTemporaryFile(
@@ -442,11 +442,11 @@ class Deployment(object):
                     resource_name=constants.OADP_OPERATOR_NAME,
                 )
                 oadp_default_channel = package_manifest.get_default_channel()
-                oadp_subscription_yaml_data["spec"]["startingCSV"] = (
-                    package_manifest.get_current_csv(
-                        channel=oadp_default_channel,
-                        csv_pattern=constants.OADP_OPERATOR_NAME,
-                    )
+                oadp_subscription_yaml_data["spec"][
+                    "startingCSV"
+                ] = package_manifest.get_current_csv(
+                    channel=oadp_default_channel,
+                    csv_pattern=constants.OADP_OPERATOR_NAME,
                 )
                 oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
                 oadp_subscription_manifest = tempfile.NamedTemporaryFile(
@@ -1675,9 +1675,9 @@ class Deployment(object):
 
             # Setting up custom storageclass names for 'encryption' service
             if cluster_data["spec"].get("encryption", {}).get("enable"):
-                cluster_data["spec"]["encryption"]["storageClassName"] = (
-                    storageclassnames["encryption"]
-                )
+                cluster_data["spec"]["encryption"][
+                    "storageClassName"
+                ] = storageclassnames["encryption"]
 
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
@@ -2189,10 +2189,10 @@ class Deployment(object):
             tries=10,
             delay=2,
         )(package_manifest.get_current_csv)(channel, constants.ACM_HUB_OPERATOR_NAME)
-        acm_hub_subscription_yaml_data["spec"]["startingCSV"] = (
-            package_manifest.get_current_csv(
-                channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
-            )
+        acm_hub_subscription_yaml_data["spec"][
+            "startingCSV"
+        ] = package_manifest.get_current_csv(
+            channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
         )
 
         acm_hub_subscription_manifest = tempfile.NamedTemporaryFile(
