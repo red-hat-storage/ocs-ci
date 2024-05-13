@@ -68,13 +68,13 @@ class TestFailoverAndRelocate:
             #     marks=pytest.mark.polarion_id(polarion_id_primary_down),
             #     id="primary_down_subscription",
             # ),
-            # pytest.param(
-            #     constants.APPLICATION_SET,
-            #     False,
-            #     "push",
-            #     marks=pytest.mark.polarion_id(polarion_id_primary_up_appset),
-            #     id="primary_up_appset",
-            # ),
+            pytest.param(
+                constants.APPLICATION_SET,
+                False,
+                "push",
+                marks=pytest.mark.polarion_id(polarion_id_primary_up_appset),
+                id="primary_up_appset",
+            ),
             pytest.param(
                 constants.APPLICATION_SET,
                 False,
