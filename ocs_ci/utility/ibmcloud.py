@@ -651,7 +651,7 @@ class IBMCloudIPI(object):
             force (bool): True for force instance stop, False otherwise
             timeout (int): Timeout for the command, defaults to 300 seconds.
         """
-        logger.info(f"Stopping instances {list(nodes)}")
+        logger.info(f"Stopping instances {list(node.name for node in nodes )}")
         self.stop_nodes(nodes=nodes, force=force)
         if wait:
             for node in nodes:
@@ -663,7 +663,7 @@ class IBMCloudIPI(object):
                     node_status=constants.STATUS_STOPPED,
                 )
                 sample.wait_for_func_status(result=True)
-        logger.info(f"Starting instances {list(nodes)}")
+        logger.info(f"Starting instances {list(node.name for node in nodes )}")
 
         self.start_nodes(nodes=nodes)
         if wait:
