@@ -1,6 +1,7 @@
 """
 General OCP object
 """
+
 import logging
 import os
 import re
@@ -1015,7 +1016,10 @@ class OCP(object):
             log.info(f"Cannot find resource object {self.resource_name}")
             return False
         try:
-            current_phase = data["status"]["phase"]
+            if self.kind == constants.APPLICATION_ARGOCD:
+                current_phase = data["status"]["operationState"]["phase"]
+            else:
+                current_phase = data["status"]["phase"]
             log.info(f"Resource {self.resource_name} is in phase: {current_phase}!")
             return current_phase == phase
         except KeyError:
