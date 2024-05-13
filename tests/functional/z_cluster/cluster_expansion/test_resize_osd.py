@@ -18,13 +18,16 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
     tier1,
+    tier4b,
+    tier4c,
 )
-from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK
-from ocs_ci.ocs.resources.osd_resize import (
+from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK, OSD, ROOK_OPERATOR, MON_DAEMON
+from ocs_ci.helpers.osd_resize import (
     ceph_verification_steps_post_resize_osd,
     check_ceph_health_after_resize_osd,
     check_resize_osd_pre_conditions,
     update_resize_osd_count,
+    basic_resize_osd,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -32,8 +35,11 @@ from ocs_ci.ocs.resources.pod import (
     verify_md5sum_on_pod_files,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
-from ocs_ci.ocs.resources.storage_cluster import resize_osd, get_storage_size
+from ocs_ci.ocs.resources.storage_cluster import get_storage_size
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
+from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
+from ocs_ci.helpers.disruption_helpers import delete_resource_multiple_times
 
 
 logger = logging.getLogger(__name__)
@@ -160,12 +166,53 @@ class TestResizeOSD(ManageTest):
         Test resize OSD
         """
         self.prepare_data_before_resize_osd()
+        self.new_storage_size = basic_resize_osd(self.old_storage_size)
+        self.verification_steps_post_resize_osd()
 
-        logger.info(f"The current osd size is {self.old_storage_size}")
-        size = int(self.old_storage_size[0:-2])
-        size_type = self.old_storage_size[-2:]
-        self.new_storage_size = f"{size * 2}{size_type}"
-        logger.info(f"Increase the osd size to {self.new_storage_size}")
-        resize_osd(self.new_storage_size)
+    @tier4b
+    @polarion_id("OCS-5780")
+    def test_resize_osd_with_node_restart(self, nodes):
+        """
+        Test resize OSD when one of the worker nodes got restarted in the middle of the process
 
+        """
+        self.prepare_data_before_resize_osd()
+        self.new_storage_size = basic_resize_osd(self.old_storage_size)
+        # Restart one of the worker nodes while additional storage is being added
+        wnode = random.choice(get_nodes())
+        logger.info(f"Restart the worker node: {wnode.name}")
+        if is_vsphere_ipi_cluster():
+            nodes.restart_nodes(nodes=[wnode], wait=False)
+            wait_for_nodes_status(node_names=[wnode], timeout=300)
+        else:
+            nodes.restart_nodes(nodes=[wnode], wait=True)
+
+        self.verification_steps_post_resize_osd()
+
+    @tier4c
+    @pytest.mark.parametrize(
+        argnames=["resource_name", "num_of_iterations"],
+        argvalues=[
+            pytest.param(
+                *[OSD, 3],
+                marks=pytest.mark.polarion_id("OCS-5781"),
+            ),
+            pytest.param(
+                *[ROOK_OPERATOR, 3],
+                marks=pytest.mark.polarion_id("OCS-5782"),
+            ),
+            pytest.param(
+                *[MON_DAEMON, 5],
+                marks=pytest.mark.polarion_id("OCS-5783"),
+            ),
+        ],
+    )
+    def test_resize_osd_with_resource_delete(self, resource_name, num_of_iterations):
+        """
+        Test resize OSD when one of the resources got deleted in the middle of the process
+
+        """
+        self.prepare_data_before_resize_osd()
+        self.new_storage_size = basic_resize_osd(self.old_storage_size)
+        delete_resource_multiple_times(resource_name, num_of_iterations)
         self.verification_steps_post_resize_osd()
