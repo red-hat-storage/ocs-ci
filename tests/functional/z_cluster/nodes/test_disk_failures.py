@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_managed_service,
     skipif_hci_provider_and_client,
+    skipif_ocs_version,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
@@ -233,6 +234,25 @@ class TestDiskFailures(ManageTest):
 
         """
         osd_operations.osd_device_replacement(nodes)
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
+
+    @bugzilla("2234479")
+    @vsphere_platform_required
+    @skipif_ocs_version("<4.15")
+    @pytest.mark.polarion_id("OCS-5502")
+    @skipif_external_mode
+    def test_recovery_from_volume_deletion_cli_tool(
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
+        """
+        Test cluster recovery from disk deletion from the platform side.
+        Based on documented procedure detailed in
+        https://bugzilla.redhat.com/show_bug.cgi?id=1823183
+
+        """
+        osd_operations.osd_device_replacement(nodes, cli_tool=True)
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
