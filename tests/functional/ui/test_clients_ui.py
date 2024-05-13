@@ -31,3 +31,14 @@ class TestStorageClientUI(ManageTest):
         logger.info("Verifying number of clients on the dashboard")
         storageclient_obj = StorageClientUI()
         storageclient_obj.verify_clients_on_dashboard()
+
+    @hci_provider_required
+    def test_storage_clients_page(self, setup_ui_class):
+        """
+        Test the values of Storage Clients page:
+        Storage client name, cluster ID, OCP and ODF versions, heartbeat
+
+        """
+        logger.info("Verifying values on Storage Clients page")
+        storageclient_obj = StorageClientUI()
+        storageclient_obj.verify_client_data_in_ui()
