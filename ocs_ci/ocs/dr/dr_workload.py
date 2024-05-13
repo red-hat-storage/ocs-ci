@@ -363,19 +363,21 @@ class BusyBox_AppSet(DRWorkload):
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
             elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
                 if self.appset_model == "pull":
-                    # load appset_yaml_file
-                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
-                        0
-                    ] = (
-                        "apps.open-cluster-management.io/ocm"
-                        "-managed-cluster: '{{name}}'"
+                    # load appset_yaml_file, add "annotations" key and add values to it
+                    app_set_yaml_data["spec"]["template"]["metadata"].setdefault(
+                        "annotations", {}
                     )
                     app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
-                        1
-                    ] = "argocd.argoproj.io/skip-reconcile: 'true'"
+                        "apps.open-cluster-management.io/ocm-managed-cluster"
+                    ] = "'{{name}}'"
+                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
+                        "argocd.argoproj.io/skip-reconcile"
+                    ] = "'true'"
+
+                    # Assign values to the "labels" key
                     app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
-                        1
-                    ] = "apps.open-cluster-management.io/pull-to-ocm-managed-cluster: 'true'"
+                        "apps.open-cluster-management.io/pull-to-ocm-managed-cluster"
+                    ] = "'true'"
 
         log.info(app_set_yaml_data_list)
         templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
