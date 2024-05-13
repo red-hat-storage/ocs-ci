@@ -268,7 +268,7 @@ class TestSelinuxrelabel(E2ETest):
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
         # Leave pod for some time to run since file creation time is longer
-        waiting_time = 20
+        waiting_time = 200
         log.info(f"Waiting for {waiting_time} seconds")
         time.sleep(waiting_time)
 
@@ -301,13 +301,14 @@ class TestSelinuxrelabel(E2ETest):
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
 
         # Delete pod so that fix will be applied for new pod
-        self.pod_obj = self.get_app_pod_obj()
-        self.pod_obj.delete(wait=True)
-        time.sleep(waiting_time)
-        self.pod_obj = self.get_app_pod_obj()
-        assert wait_for_pods_to_be_running(
-            pod_names=[self.pod_obj.name], timeout=600, sleep=15
-        ), f"Pod {self.pod_obj.name} didn't reach to running state"
+        for _ in range(2):
+            self.pod_obj = self.get_app_pod_obj()
+            self.pod_obj.delete(wait=True)
+            time.sleep(waiting_time)
+            self.pod_obj = self.get_app_pod_obj()
+            assert wait_for_pods_to_be_running(
+                pod_names=[self.pod_obj.name], timeout=600, sleep=15
+            ), f"Pod {self.pod_obj.name} didn't reach to running state"
 
         # Check SeLinux Relabeling is set to false
         retry((AssertionError), tries=5, delay=10,)(
