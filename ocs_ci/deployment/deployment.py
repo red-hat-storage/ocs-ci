@@ -234,7 +234,6 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
-        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
 
         logger.info("Creating GitOps Operator Subscription")
         gitops_subscription_yaml_data = templating.load_yaml(
@@ -282,6 +281,14 @@ class Deployment(object):
 
         # Multicluster operations
         if config.multicluster:
+            # Gitops operator is needed on all clusters for appset type workload deployment using pull model
+            for cluster_index in range(config.nclusters):
+                config.switch_ctx(cluster_index)
+                self.deploy_gitops_operator()
+
+            # Switching back context to ACM as below configs are specific to hub cluster
+            config.switch_acm_ctx()
+
             acm_indexes = get_all_acm_indexes()
             for acm_ctx in acm_indexes:
                 self.deploy_gitops_operator(switch_ctx=acm_ctx)
@@ -293,7 +300,6 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
-
             cluster_set = []
             managed_clusters = (
                 ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
@@ -331,6 +337,17 @@ class Deployment(object):
             )
             gitops_obj._has_phase = True
             gitops_obj.wait_for_phase("successful", timeout=720)
+
+            logger.info(
+                "Create clusterrolebinding on both the managed clusters, needed "
+                "for appset pull model gitops deployment"
+            )
+            for cluster in managed_clusters:
+                if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+                    config.switch_to_cluster_by_name(cluster["metadata"]["name"])
+                    run_cmd(
+                        f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
+                    )
 
     def do_deploy_ocs(self):
         """

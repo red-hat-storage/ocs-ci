@@ -6,6 +6,8 @@ This module will have all DR related workload classes
 import logging
 import os
 import tempfile
+import yaml
+
 from subprocess import TimeoutExpired
 from time import sleep
 
@@ -332,6 +334,7 @@ class BusyBox_AppSet(DRWorkload):
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.appset_placement_name = kwargs.get("workload_placement_name")
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
+        self.appset_model = kwargs.get("appset_model")
 
     def deploy_workload(self):
         """
@@ -360,7 +363,25 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
-        log.info(app_set_yaml_data_list)
+            elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
+                if self.appset_model == "pull":
+                    # load appset_yaml_file, add "annotations" key and add values to it
+                    app_set_yaml_data["spec"]["template"]["metadata"].setdefault(
+                        "annotations", {}
+                    )
+                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
+                        "apps.open-cluster-management.io/ocm-managed-cluster"
+                    ] = "{{name}}"
+                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
+                        "argocd.argoproj.io/skip-reconcile"
+                    ] = "true"
+
+                    # Assign values to the "labels" key
+                    app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
+                        "apps.open-cluster-management.io/pull-to-ocm-managed-cluster"
+                    ] = "true"
+
+        log.info(yaml.dump(app_set_yaml_data_list))
         templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {self.appset_yaml_file}")
@@ -431,6 +452,19 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self.check_pod_pvc_status(skip_replication_resources=False)
+
+        appset_resource_name = (
+            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+        )
+
+        if self.appset_model == "pull":
+            appset_pull_obj = ocp.OCP(
+                kind=constants.APPLICATION_ARGOCD,
+                resource_name=appset_resource_name,
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            )
+            appset_pull_obj._has_phase = True
+            appset_pull_obj.wait_for_phase(phase="Succeeded", timeout=120)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -645,9 +679,11 @@ class CnvWorkload(DRWorkload):
         placement_obj = ocp.OCP(
             kind=constants.PLACEMENT_KIND,
             resource_name=self.cnv_workload_placement_name,
-            namespace=constants.GITOPS_CLUSTER_NAMESPACE
-            if self.workload_type == constants.APPLICATION_SET
-            else self.workload_namespace,
+            namespace=(
+                constants.GITOPS_CLUSTER_NAMESPACE
+                if self.workload_type == constants.APPLICATION_SET
+                else self.workload_namespace
+            ),
         )
         placement_obj.annotate(
             annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
