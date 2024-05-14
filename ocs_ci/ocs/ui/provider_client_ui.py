@@ -32,31 +32,36 @@ class StorageClientUI(PageNavigator):
         token = self.get_element_text(self.validation["token"])
         return token
 
-    def verify_client_data_in_ui(
-        self, client_name, ocp_version, odf_version, heartbeat
-    ):
+    def verify_client_data_in_ui(self):
         """
         Verify client details on Storage Clients page
 
-        Args:
-            client_name (str): name of the client
-            ocp_version (str): OCP version of the client
-            odf_version (str): ODF version of the client
-            heartbeat (str): last heartbeat of the client in the form "X minutes ago"
-
         """
         self.navigate_client_page()
-        logger.info(f"Search for {client_name} client")
-        self.do_send_keys(self.validation["search_client"], text=client_name)
-        time.sleep(2)
-        client_name_ui = self.get_element_text(self.validation["client_name"])
-        assert (
-            client_name_ui == client_name
-        ), f"Client name in the UI is {client_name_ui}. It should be {client_name}"
-        ocp_version_ui = self.get_element_text(self.validation["client_ocp_version"])
-        assert (
-            ocp_version_ui == ocp_version
-        ), f"OCP version in the UI is {ocp_version_ui}. It should be {ocp_version}"
+        consumer_names = get_all_storageconsumer_names()
+        for consumer_name in consumer_names:
+            consumers_obj = ocp.OCP(
+                kind=constants.STORAGECONSUMER,
+                namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+                resource_name=consumer_name,
+            )
+            client_name = consumers_obj.get("status").get("client").get("name")
+            logger.info(f"Search for {client_name} client")
+            self.do_send_keys(self.validation["search_client"], text=client_name)
+            time.sleep(2)
+            client_name_ui = self.get_element_text(self.validation["client_name"])
+            assert (
+                client_name_ui == client_name
+            ), f"Client name in the UI is {client_name_ui}. It should be {client_name}"
+            ocp_version = (
+                consumers_obj.get("status").get("client").get("platformVersion")
+            )
+            ocp_version_ui = self.get_element_text(
+                self.validation["client_ocp_version"]
+            )
+            assert (
+                ocp_version_ui == ocp_version
+            ), f"OCP version in the UI is {ocp_version_ui}. It should be {ocp_version}"
 
     def get_number_of_clients_from_dashboard(self):
         """
