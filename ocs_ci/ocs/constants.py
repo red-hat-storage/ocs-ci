@@ -1179,9 +1179,9 @@ MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
-VSPHERE_CLUSTER_LAUNCHER = (
-    VSPHERE_SCALEUP_REPO
-) = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
+VSPHERE_CLUSTER_LAUNCHER = VSPHERE_SCALEUP_REPO = (
+    "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
+)
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -1755,21 +1755,21 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     ],
 }
 # the list of packages for 4.13 and 4.14 seems to be the same as 4.12
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.13"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.13"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+)
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.14"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.14"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+)
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.15"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.15"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+)
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.16"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+)
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
@@ -2324,9 +2324,7 @@ OADP_OPERATOR_NAME = "redhat-oadp-operator"
 OADP_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "oadp-deployment", "subscription.yaml"
 )
-OADP_NS_YAML = os.path.join(
-    TEMPLATE_DIR, "oadp-deployment", "namespace_opg_oadp.yaml"
-)
+OADP_NS_YAML = os.path.join(TEMPLATE_DIR, "oadp-deployment", "namespace_opg_oadp.yaml")
 ACM_HUB_BACKUP_NAMESPACE = "open-cluster-management-backup"
 ACM_HUB_RESTORE = "Restore"
 
