@@ -4,5 +4,4 @@ metadata:
   name: metallb-operator
   namespace: metallb-system
 spec:
-  targetNamespaces:
-  - metallb-system
+  upgradeStrategy: Default
