@@ -343,7 +343,7 @@ class AWSUPI(AWSBase):
                 "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
                 "DISABLE_MASTER_MACHINESET": "yes",
                 "DISABLE_WORKER_MACHINESET": "yes",
-                "INSTALLER_BIN": "openshift-install",
+                "INSTALLER_BIN": f"{self.installer_filename}",
                 "num_workers_additional": str(
                     config.ENV_DATA["num_workers_additional"]
                 ),
@@ -377,16 +377,22 @@ class AWSUPI(AWSBase):
             # script dir
             bindir = os.path.abspath(os.path.expanduser(config.RUN["bin_dir"]))
             shutil.copy2(
-                os.path.join(bindir, "openshift-install"),
-                self.upi_script_path,
+                os.path.join(bindir, f"{self.installer_filename}"),
+                f"{self.upi_script_path}/openshift-install",
+            )
+            shutil.copy2(
+                os.path.join(bindir, f"{self.installer_filename}"),
+                f"{self.upi_script_path}/{self.installer_filename}",
             )
             shutil.copy2(os.path.join(bindir, "oc"), self.upi_script_path)
             # and another UGLY WORKAROUND: copy openshift-install also to the
             # absolute_cluster_path (for more details, see
             # https://github.com/red-hat-storage/ocs-ci/pull/4650)
             shutil.copy2(
-                os.path.join(bindir, "openshift-install"),
-                os.path.abspath(os.path.join(self.cluster_path, "..")),
+                os.path.join(bindir, f"{self.installer_filename}"),
+                os.path.abspath(
+                    os.path.join(self.cluster_path, f"../{self.installer_filename}")
+                ),
             )
 
         def deploy(self, log_cli_level="DEBUG"):
@@ -453,7 +459,9 @@ class AWSUPI(AWSBase):
             # Delete openshift-install copied to cluster_dir (see WORKAROUND at
             # the end of deploy_prereq method of this class)
             delete_file(
-                os.path.abspath(os.path.join(self.cluster_path, "../openshift-install"))
+                os.path.abspath(
+                    os.path.join(self.cluster_path, f"../{self.installer_filename}")
+                )
             )
 
     def deploy_ocp(self, log_cli_level="DEBUG"):

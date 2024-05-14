@@ -11,7 +11,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.utility import utils, templating, system
+from ocs_ci.utility import utils, templating, system, version
 from ocs_ci.utility.deployment import get_ocp_release_image
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 
@@ -45,6 +45,13 @@ class OCPDeployment:
             self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.cluster_name = config.ENV_DATA["cluster_name"]
+        if (
+            config.ENV_DATA.get("fips")
+            and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_16
+        ):
+            self.installer_filename = "openshift-install-fips"
+        else:
+            self.installer_filename = "openshift-install"
 
     def download_installer(self):
         """
