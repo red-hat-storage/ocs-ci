@@ -1,6 +1,50 @@
+# origin - Default YAML view from Management Console OCP 4.16
 apiVersion: hco.kubevirt.io/v1beta1
 kind: HyperConverged
 metadata:
-    name: kubevirt-hyperconverged
-    namespace: openshift-cnv
-spec: {}
+  name: kubevirt-hyperconverged
+  annotations:
+    deployOVS: 'false'
+  namespace: openshift-cnv
+spec:
+  virtualMachineOptions:
+    disableFreePageReporting: false
+    disableSerialConsoleLog: true
+  liveMigrationConfig:
+    allowAutoConverge: false
+    allowPostCopy: false
+    completionTimeoutPerGiB: 800
+    parallelMigrationsPerCluster: 5
+    parallelOutboundMigrationsPerNode: 2
+    progressTimeout: 150
+  certConfig:
+    ca:
+      duration: 48h0m0s
+      renewBefore: 24h0m0s
+    server:
+      duration: 24h0m0s
+      renewBefore: 12h0m0s
+  applicationAwareConfig:
+    allowApplicationAwareClusterResourceQuota: false
+    vmiCalcConfigName: DedicatedVirtualResources
+  featureGates:
+    deployTektonTaskResources: false
+    enableCommonBootImageImport: true
+    withHostPassthroughCPU: false
+    disableMDevConfiguration: false
+    enableApplicationAwareQuota: false
+    deployKubeSecondaryDNS: false
+    nonRoot: true
+    alignCPUs: false
+    enableManagedTenantQuota: false
+    deployVmConsoleProxy: false
+    persistentReservation: false
+    autoResourceLimits: false
+  workloadUpdateStrategy:
+    batchEvictionInterval: 1m0s
+    batchEvictionSize: 10
+    workloadUpdateMethods:
+      - LiveMigrate
+  uninstallStrategy: BlockUninstallIfWorkloadsExist
+  resourceRequirements:
+    vmiCPUAllocationRatio: 10

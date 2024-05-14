@@ -1,6 +1,7 @@
 """
 This module contains functionality required for CNV installation.
 """
+
 import io
 import os
 import logging
@@ -118,8 +119,17 @@ class CNVInstaller(object):
         logger.info("Creating OperatorGroup for CNV")
         self.create_cnv_operatorgroup()
         cnv_subscription_yaml_data = templating.load_yaml(CNV_SUBSCRIPTION_YAML)
-        cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
-        cnv_sub_channel = f"nightly-{cnv_channel_version}"
+
+        if config.DEPLOYMENT.get("cnv_latest_stable"):
+            cnv_subscription_yaml_data["spec"][
+                "source"
+            ] = constants.OPERATOR_CATALOG_SOURCE_NAME
+            cnv_subscription_yaml_data["spec"]["installPlanApproval"] = "Automatic"
+            cnv_sub_channel = "stable"
+        else:
+            cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
+            cnv_sub_channel = f"nightly-{cnv_channel_version}"
+
         cnv_subscription_yaml_data["spec"]["channel"] = f"{cnv_sub_channel}"
         cnv_subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cnv_subscription_manifest", delete=False
@@ -217,9 +227,10 @@ class CNVInstaller(object):
         useEmulation.
 
         """
-        if config.ENV_DATA["platform"].lower() == "baremetal" and config.DEPLOYMENT.get(
-            "local_storage"
-        ):
+        if config.ENV_DATA["platform"].lower() in [
+            "baremetal",
+            "hci_baremetal",
+        ] and config.DEPLOYMENT.get("local_storage"):
             logger.info("Skipping enabling software emulation")
         else:
             logger.info("Enabling software emulation on the cluster")
@@ -601,8 +612,10 @@ class CNVInstaller(object):
                 return
 
         logger.info("Installing CNV")
-        # Create CNV catalog source
-        self.create_cnv_catalog_source()
+        # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
+        if not config.DEPLOYMENT.get("cnv_latest_stable"):
+            # Create CNV catalog source
+            self.create_cnv_catalog_source()
         # Create openshift-cnv namespace
         self.create_cnv_namespace()
         # create CNV subscription

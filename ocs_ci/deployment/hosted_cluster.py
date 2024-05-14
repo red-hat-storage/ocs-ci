@@ -269,7 +269,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         CNVInstaller.__init__(self)
         self.name = name
         if config.ENV_DATA["clusters"].get(self.name):
-            cluster_path = config.ENV_DATA["clusters"].get(self.name)
+            cluster_path = config.ENV_DATA["clusters"].get(self.name).get("auth_path")
             self.cluster_kubeconfig = os.path.expanduser(
                 os.path.join(cluster_path, "kubeconfig")
             )
@@ -314,8 +314,9 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         self.deploy_dependencies(
             deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
         )
+        ocp_version = config.ENV_DATA["clusters"].get(self.name).get("ocp_version")
 
-        return self.create_kubevirt_ocp_cluster(name=self.name)
+        return self.create_kubevirt_ocp_cluster(name=self.name, ocp_version=ocp_version)
 
     def deploy_dependencies(
         self, deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
