@@ -277,7 +277,9 @@ class CNVInstaller(object):
         # Validate that all the nodes are ready and CNV pods are running
         logger.info("Validate that all the nodes are ready and CNV pods are running")
 
-        if not OCP(kind="namespace").get(self.namespace):
+        try:
+            OCP(kind="namespace").get(self.namespace)
+        except exceptions.CommandFailed:
             if raise_exception:
                 raise exceptions.ResourceNotFoundError(
                     f"Namespace {self.namespace} does not exist"
@@ -599,14 +601,13 @@ class CNVInstaller(object):
             check_cnv_deployed (bool): If True, check if CNV is already deployed. If so, skip the deployment.
             check_cnv_ready (bool): If True, check if CNV is ready. If so, skip the deployment.
         """
-        if check_cnv_deployed and self.cnv_hyperconverged_installed():
-            logger.info("CNV operator is already deployed, skipping the deployment")
-            return
+        if check_cnv_deployed:
+            if self.cnv_hyperconverged_installed():
+                logger.info("CNV operator is already deployed, skipping the deployment")
+                return
 
-        if self.cnv_hyperconverged_installed():
-            if check_cnv_ready and self.post_install_verification(
-                raise_exception=False
-            ):
+        if check_cnv_ready:
+            if self.post_install_verification(raise_exception=False):
                 logger.info("CNV operator ready, skipping the deployment")
                 return
 
