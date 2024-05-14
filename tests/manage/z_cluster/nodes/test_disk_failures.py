@@ -150,7 +150,7 @@ class TestDiskFailures(ManageTest):
         - Wait for the volumes to be re-attached back to the worker node
         - Validate cluster functionality, without checking cluster and Ceph
           health (as one node volume is detached, the cluster will be
-          unhealthy) by creating resources and running IO
+          unhealthy) by creating resources and running IOs
         - Restart the node so the volume will get re-mounted
 
         """
