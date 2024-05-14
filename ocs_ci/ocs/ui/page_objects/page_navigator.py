@@ -4,7 +4,7 @@ from selenium.common.exceptions import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.base_ui import BaseUI, logger
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, navigate_to_local_cluster
 from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
 from ocs_ci.utility import version
 
@@ -351,6 +351,8 @@ class PageNavigator(BaseUI):
         in Provider/Client setup
 
         """
+        logger.info("Navigate to local cluster")
+        navigate_to_local_cluster()
         logger.info("Navigate to Storage Clients Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(
