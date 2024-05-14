@@ -124,7 +124,6 @@ class CNVInstaller(object):
             cnv_subscription_yaml_data["spec"][
                 "source"
             ] = constants.OPERATOR_CATALOG_SOURCE_NAME
-            cnv_subscription_yaml_data["spec"]["installPlanApproval"] = "Automatic"
             cnv_sub_channel = "stable"
         else:
             cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
