@@ -4730,7 +4730,7 @@ def add_time_report_to_email(session, soup):
     summary_tag.insert_after(time_div)
 
 
-def get_oadp_version():
+def get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE):
     """
     Returns:
         str: returns version string
@@ -4738,9 +4738,7 @@ def get_oadp_version():
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
-    csv_list = get_csvs_start_with_prefix(
-        "oadp-operator", namespace=constants.ACM_HUB_BACKUP_NAMESPACE
-    )
+    csv_list = get_csvs_start_with_prefix("oadp-operator", namespace=namespace)
     for csv in csv_list:
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string

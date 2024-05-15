@@ -12,9 +12,11 @@ import tempfile
 import time
 from pathlib import Path
 import base64
+
+import boto3
 import yaml
 
-from botocore.exceptions import EndpointConnectionError
+from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -31,15 +33,7 @@ from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.helpers.dr_helpers import (
-    build_bucket_name,
     configure_drcluster_for_fencing,
-    create_dpa,
-    create_generic_credentials,
-    create_s3_bucket,
-    enable_cluster_backup,
-    enable_managed_serviceaccount,
-    validate_secret_creation_oadp,
-    validate_policy_compliance_status,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -61,6 +55,8 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
+    ResourceNotFoundError,
+    ACMClusterConfigurationException,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -2799,6 +2795,256 @@ class MultiClusterDROperatorsDeploy(object):
         if not sample.wait_for_func_status(True):
             raise TimeoutExpiredError("DR Policy failed to reach Succeeded state")
 
+    def enable_cluster_backup(self):
+        """
+        set cluster-backup to True in mch resource
+        Note: changing this flag automatically installs OADP operator
+        """
+        mch_resource = ocp.OCP(
+            kind=constants.ACM_MULTICLUSTER_HUB,
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            namespace=constants.ACM_HUB_NAMESPACE,
+        )
+        mch_resource._has_phase = True
+        resource_dict = mch_resource.get()
+        for components in resource_dict["spec"]["overrides"]["components"]:
+            if components["name"] == "cluster-backup":
+                components["enabled"] = True
+        mch_resource_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="mch", delete=False
+        )
+        yaml_serialized = yaml.dump(resource_dict)
+        mch_resource_yaml.write(yaml_serialized)
+        mch_resource_yaml.flush()
+        run_cmd(f"oc apply -f {mch_resource_yaml.name}")
+        mch_resource.wait_for_phase("Running")
+        self.backup_pod_status_check()
+
+    def create_s3_bucket(self, access_key, secret_key, bucket_name):
+        """
+        Create s3 bucket
+        Args:
+            access_key (str): S3 access key
+            secret_key (str): S3 secret key
+            acm_indexes (list): List of acm indexes
+        """
+        client = boto3.resource(
+            "s3",
+            verify=True,
+            endpoint_url="https://s3.amazonaws.com",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+        try:
+            client.create_bucket(
+                Bucket=bucket_name,
+                CreateBucketConfiguration={"LocationConstraint": constants.AWS_REGION},
+            )
+            logger.info(f"Successfully created backup bucket: {bucket_name}")
+        except BotoCoreError as e:
+            logger.error(f"Failed to create s3 bucket {e}")
+            raise
+
+    def build_bucket_name(self, acm_indexes):
+        """
+        Create backupname from cluster names
+        Args:
+            acm_indexes (list): List of acm indexes
+        """
+        bucket_name = ""
+        for index in acm_indexes:
+            bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
+        return bucket_name
+
+    @retry((TimeoutExpiredError, ACMClusterConfigurationException), tries=20, delay=10)
+    def backup_pod_status_check(self):
+        pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+        if len(pods_list) != 3:
+            raise ACMClusterConfigurationException("backup pod count mismatch ")
+        for pod in pods_list:
+            # check pod status Running
+            if not pod.data["status"]["phase"] == "Running":
+                raise ACMClusterConfigurationException(
+                    "backup pods not in Running state"
+                )
+
+    def create_generic_credentials(self, access_key, secret_key, acm_indexes):
+        """
+        Create s3 secret for backup and restore
+        Args:
+            access_key (str): S3 access key
+            secret_key (str): S3 secret key
+            acm_indexes (list): List of acm indexes
+        """
+        s3_cred_str = (
+            "[default]\n"
+            f"aws_access_key_id={access_key}\n"
+            f"aws_secret_access_key={secret_key}\n"
+        )
+        cred_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="s3_creds", delete=False
+        )
+        cred_file.write(s3_cred_str)
+        cred_file.flush()
+
+        cmd = (
+            f"oc create secret generic cloud-credentials --namespace {constants.ACM_HUB_BACKUP_NAMESPACE} "
+            f"--from-file cloud={cred_file.name}"
+        )
+        old_index = config.cur_index
+        # Create on all ACM clusters
+        for index in acm_indexes:
+            config.switch_ctx(index)
+            try:
+                run_cmd(f"oc create namespace {constants.ACM_HUB_BACKUP_NAMESPACE}")
+            except CommandFailed as ex:
+                if "already exists" in str(ex):
+                    logger.warning("Namespace already exists!")
+                else:
+                    raise
+            try:
+                run_cmd(cmd)
+            except CommandFailed:
+                logger.error("Failed to create generic secrets cloud-credentials")
+
+        config.switch_ctx(old_index)
+
+    def enable_managed_serviceaccount(self):
+        """
+        update MultiClusterEngine
+
+        """
+        old_ctx = config.cur_index
+        config.switch_ctx(get_active_acm_index())
+
+        multicluster_engine = ocp.OCP(
+            kind="MultiClusterEngine",
+            resource_name=constants.MULTICLUSTER_ENGINE,
+        )
+        multicluster_engine._has_phase = True
+        resource = multicluster_engine.get()
+        for item in resource["spec"]["overrides"]["components"]:
+            if item["name"] == "managedserviceaccount":
+                item["enabled"] = True
+        multicluster_engine_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multiengine", delete=False
+        )
+        yaml_serialized = yaml.dump(resource)
+        multicluster_engine_yaml.write(yaml_serialized)
+        multicluster_engine_yaml.flush()
+        run_cmd(f"oc apply -f {multicluster_engine_yaml.name}")
+        multicluster_engine.wait_for_phase("Available")
+        config.switch_ctx(old_ctx)
+
+    def create_dpa(self, bucket_name):
+        """
+        create DPA
+        OADP will be already installed when we enable backup flag
+        Here we will create dataprotection application and
+        update bucket name and s3 storage link
+        Args:
+            bucket_name (str): Name of the Bucket
+        """
+        oadp_data = templating.load_yaml(constants.ACM_DPA)
+        oadp_data["spec"]["backupLocations"][0]["velero"]["objectStorage"][
+            "bucket"
+        ] = bucket_name
+        oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
+        templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
+        run_cmd(f"oc create -f {oadp_yaml.name}")
+        # Validation
+        self.validate_dpa()
+
+    @retry((CommandFailed, ACMClusterConfigurationException), tries=10, delay=10)
+    def validate_dpa(self):
+        """
+        Validate
+        1. 3 restic / Node-agent pods
+        2. 1 velero pod
+        3. backupstoragelocation resource in "Available" phase
+        """
+        # Restic pods have been renamed to node-agent after oadp 1.2
+        oadp_version = get_oadp_version()
+
+        if version.compare_versions(f"{oadp_version} >= 1.2"):
+            restic_or_node_agent_pod_prefix = "node-agent"
+        else:
+            restic_or_node_agent_pod_prefix = "restic"
+        restic_or_node_agent_list = get_pods_having_label(
+            f"name={restic_or_node_agent_pod_prefix}",
+            constants.ACM_HUB_BACKUP_NAMESPACE,
+        )
+        if len(restic_or_node_agent_list) != constants.RESTIC_OR_NODE_AGENT_POD_COUNT:
+            raise ACMClusterConfigurationException("restic/node pod count mismatch")
+        for pod in restic_or_node_agent_list:
+            if pod["status"]["phase"] != "Running":
+                raise ACMClusterConfigurationException(
+                    "restic/node-agent pod not in 'Running' phase"
+                )
+
+        # Check velero pod
+        veleropod = get_pods_having_label(
+            "app.kubernetes.io/name=velero", constants.ACM_HUB_BACKUP_NAMESPACE
+        )
+        if len(veleropod) != constants.VELERO_POD_COUNT:
+            raise ACMClusterConfigurationException("Velero pod count mismatch")
+        if veleropod[0]["status"]["phase"] != "Running":
+            raise ACMClusterConfigurationException("Velero pod not in 'Running' phase")
+
+        # Check backupstoragelocation resource in "Available" phase
+        backupstorage = ocp.OCP(
+            kind="BackupStorageLocation",
+            resource_name="default",
+            namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
+        )
+        resource = backupstorage.get()
+        if resource["status"].get("phase") != "Available":
+            raise ACMClusterConfigurationException(
+                "Backupstoragelocation resource is not in 'Avaialble' phase"
+            )
+        logger.info("Dataprotection application successful")
+
+    def validate_secret_creation_oadp(self):
+        """
+        Verify Secret are created
+
+        Raises:
+            ResourceNotFoundError: raised when secret not found
+
+        """
+        try:
+            secret = ocp.OCP(
+                kind=constants.SECRET,
+                resource_name="cloud-credentials",
+                namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
+            )
+            secret.get()
+            logger.info("Secret found")
+        except CommandFailed:
+            raise ResourceNotFoundError("Secret Not found")
+
+    def validate_policy_compliance_status(
+        self, resource_name, resource_namespace, compliance_state
+    ):
+        """
+        Validate policy status for given resource
+
+        Raises:
+            ResourceWrongStatusException: Raised when resource state does not match
+
+        """
+
+        compliance_output = ocp.OCP(
+            kind=constants.ACM_POLICY,
+            resource_name=resource_name,
+            namespace=resource_namespace,
+        )
+        compliance_status = compliance_output.get()
+        if compliance_status["status"]["compliant"] == compliance_state:
+            logger.info("Compliance status Matches ")
+        else:
+            raise ResourceWrongStatusException("Compliance status does not match")
+
     class s3_meta_obj_store:
         """
         Internal class to handle aws s3 metadata obj store
@@ -2952,25 +3198,25 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
             config.switch_ctx(i)
-            enable_cluster_backup()
+            self.enable_cluster_backup()
         # Configuring s3 bucket
         self.meta_obj.get_meta_access_secret_keys()
         # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
-        self.meta_obj.bucket_name = build_bucket_name(acm_indexes)
+        self.meta_obj.bucket_name = self.build_bucket_name(acm_indexes)
         # create s3 bucket
-        create_s3_bucket(
+        self.create_s3_bucket(
             self.meta_obj.access_key,
             self.meta_obj.secret_key,
             self.meta_obj.bucket_name,
         )
-        create_generic_credentials(
+        self.create_generic_credentials(
             self.meta_obj.access_key, self.meta_obj.secret_key, acm_indexes
         )
-        validate_secret_creation_oadp()
+        self.validate_secret_creation_oadp()
         # Reconfigure OADP on all ACM clusters
         for i in acm_indexes:
             config.switch_ctx(i)
-            create_dpa(self.meta_obj.bucket_name)
+            self.create_dpa(self.meta_obj.bucket_name)
         # Only on the active hub enable managedserviceaccount-preview
         config.switch_acm_ctx()
         acm_version = get_acm_version()
@@ -2978,7 +3224,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         if version.compare_versions(f"{acm_version} >= 2.10"):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
-            enable_managed_serviceaccount()
+            self.enable_managed_serviceaccount()
 
 
 class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
@@ -3007,26 +3253,26 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
             config.switch_ctx(i)
-            enable_cluster_backup()
+            self.enable_cluster_backup()
         # Configuring s3 bucket
         self.meta_obj.get_meta_access_secret_keys()
         # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
-        self.meta_obj.bucket_name = build_bucket_name(acm_indexes)
+        self.meta_obj.bucket_name = self.build_bucket_name(acm_indexes)
         # create s3 bucket
-        create_s3_bucket(
+        self.create_s3_bucket(
             self.meta_obj.access_key,
             self.meta_obj.secret_key,
             self.meta_obj.bucket_name,
         )
-        create_generic_credentials(
+        self.create_generic_credentials(
             self.meta_obj.access_key, self.meta_obj.access_key, acm_indexes
         )
-        validate_secret_creation_oadp()
+        self.validate_secret_creation_oadp()
         # Reconfigure OADP on all ACM clusters
         old_ctx = config.cur_index
         for i in acm_indexes:
             config.switch_ctx(i)
-            create_dpa(self.meta_obj.bucket_name)
+            self.create_dpa(self.meta_obj.bucket_name)
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
         acm_version = get_acm_version()
@@ -3034,13 +3280,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         if version.compare_versions(f"{acm_version} >= 2.10"):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
-            enable_managed_serviceaccount()
-
-        validate_policy_compliance_status(
-            resource_name=constants.ACM_POLICY_BACKUP_RESTORE,
-            resource_namespace=constants.ACM_HUB_BACKUP_NAMESPACE,
-            compliance_state=constants.ACM_POLICY_COMPLIANT,
-        )
+            self.enable_managed_serviceaccount()
 
     def deploy_multicluster_orchestrator(self):
         super().deploy()
