@@ -371,9 +371,8 @@ class MetalLBInstaller:
         )
         templating.dump_data_to_temp_yaml(ipaddresspool_data, ipaddresspool_file.name)
 
-        exec_cmd(
-            f"oc apply -f {ipaddresspool_file.name}",
-            timeout=240,
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(
+            f"oc apply -f {ipaddresspool_file.name}", timeout=240
         )
 
         return self.ip_address_pool_created()
