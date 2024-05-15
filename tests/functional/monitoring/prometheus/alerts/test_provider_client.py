@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     tier4c,
@@ -41,20 +42,31 @@ def test_change_client_ocs_version_and_stop_heartbeat(
     client_name = measure_change_client_ocs_version_and_stop_heartbeat.get(
         "metadata"
     ).get("client_name")
+    cluster_namespace = config.ENV_DATA["cluster_namespace"]
+    cluster_name = config.ENV_DATA["storage_cluster_name"]
     target_alerts = [
         {
             "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
-            "msg": f"Storage Client ({client_name}) heartbeat missed for more than 120 (s)",
+            "msg": (
+                f"Storage Client ({client_name}) heartbeat missed for more than 120 (s) "
+                f"in namespace:cluster {cluster_namespace}:{cluster_name}."
+            ),
             "severity": "warning",
         },
         {
             "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
-            "msg": f"Storage Client ({client_name}) heartbeat missed for more than 300 (s)",
+            "msg": (
+                f"Storage Client ({client_name}) heartbeat missed for more than 300 (s) "
+                f"in namespace:cluster {cluster_namespace}:{cluster_name}."
+            ),
             "severity": "error",
         },
         {
             "label": constants.ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION,
-            "msg": f"Storage Client Operator ({client_name}) differs by more than 1 minor version",
+            "msg": (
+                f"Storage Client Operator ({client_name}) differs by more than 1 minor "
+                f"version in namespace:cluster {cluster_namespace}:{cluster_name}."
+            ),
             "severity": "error",
         },
     ]
