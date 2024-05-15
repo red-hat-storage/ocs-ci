@@ -120,9 +120,14 @@ deployment_4_6 = {
         'button[id="ceph-sc-dropdown"]',
         By.CSS_SELECTOR,
     ),
-    "enable_encryption": ('//span[@class="pf-c-switch__toggle"]', By.XPATH),
+    "enable_encryption": (
+        '//span[@class="pf-v5-c-switch__toggle"] | '
+        '//span[@class="pf-c-switch__toggle"]',
+        By.XPATH,
+    ),
     "click_install_lso_page": ("//button[text()='Install']", By.XPATH),
     "project_dropdown": (
+        'button[class="pf-v5-c-dropdown__toggle pf-m-plain"], '
         'button[class="pf-c-dropdown__toggle pf-m-plain"]',
         By.CSS_SELECTOR,
     ),
@@ -148,10 +153,14 @@ deployment_4_7 = {
 
 deployment_4_9 = {
     "drop_down_projects": (
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
         'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
-    "enable_default_porjects": ('span[class="pf-c-switch__toggle"]', By.CSS_SELECTOR),
+    "enable_default_porjects": (
+        'span[class="pf-v5-c-switch__toggle"], span[class="pf-c-switch__toggle"]',
+        By.CSS_SELECTOR,
+    ),
     "choose_openshift-storage_project": (
         "//span[text()='openshift-storage']",
         By.XPATH,
@@ -175,7 +184,11 @@ deployment_4_9 = {
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
     "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
-    "expand_advanced_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "expand_advanced_mode": (
+        'button[class="pf-v5-c-select__toggle"], '
+        'button[class="pf-c-select__toggle"]',
+        By.CSS_SELECTOR,
+    ),
     "mcg_only_option": ("//button[text()='MultiCloud Object Gateway']", By.XPATH),
     "plugin-available": ("//*[text()='Plugin available']", By.XPATH),
 }
@@ -210,18 +223,22 @@ deployment_4_15 = {
         By.CSS_SELECTOR,
     ),
     "drop_down_performance": (
+        "//*[@class='pf-v5-c-select odf-configure-performance__selector pf-u-mb-md'] | "
         "//*[@class='pf-c-select odf-configure-performance__selector pf-u-mb-md']",
         By.XPATH,
     ),
     "lean_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Lean mode')] |"
         "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Lean mode')]",
         By.XPATH,
     ),
     "balanced_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Balanced mode')] | "
         "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Balanced mode')]",
         By.XPATH,
     ),
     "performance_mode": (
+        "//span[@class='pf-v5-c-select__menu-item-main' and contains(text(), 'Performance mode')] | "
         "//span[@class='pf-c-select__menu-item-main' and contains(text(), 'Performance mode')]",
         By.XPATH,
     ),
@@ -229,7 +246,8 @@ deployment_4_15 = {
 
 deployment_4_16 = {
     "osd_size_dropdown": (
-        "//*[@class='pf-v5-c-select dropdown--full-width']",
+        "//*[@class='pf-v5-c-select dropdown--full-width'] | "
+        "//*[@class='pf-c-select dropdown--full-width']",
         By.XPATH,
     ),
     "drop_down_performance": (
@@ -272,12 +290,14 @@ generic_locators = {
         By.XPATH,
     ),
     "actions": (
+        '//button[@aria-label="Actions"] | //div[@data-test-id="details-actions"]//button | '
         '//span[@class="pf-c-dropdown__toggle-text" and text()="Actions"]/..',
         By.XPATH,
     ),
     "three_dots": ('//button[@aria-label="Actions"]', By.XPATH),
     "three_dots_specific_resource": (
-        "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions']",
+        "//td[@id='name']//a[contains(text(), '{}')]/../../..//button[@aria-label='Actions'] | "
+        "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "resource_link": ("//td[@id='name']//a[contains(text(),'{}')]", By.XPATH),
@@ -303,6 +323,7 @@ generic_locators = {
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-content": (
+        "//div[@class='pf-v5-c-popover__content']//div[contains(.,'Storage')] | "
         "//div[@class='pf-c-popover__content']//div[contains(.,'Storage')]",
         By.XPATH,
     ),
@@ -322,11 +343,12 @@ generic_locators = {
     "resource_list_breadcrumbs": ("//*[@data-test-id='breadcrumb-link-1']", By.XPATH),
     "actions_of_resource_from_list": (
         "//td[@id='name']//a[contains(text(), '{}')]"
-        "/../../..//button[@aria-label='Actions']",
+        "/../../..//button[@aria-label='Actions'] | "
+        "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_resource": (
-        'li[id="Delete"] a[role="menuitem"]',
+        'li[id="Delete"] a[role="menuitem"], button[id="Delete"]',
         By.CSS_SELECTOR,
     ),
     "close_modal_btn": ("//button[@id='modal-close-action']", By.XPATH),
@@ -337,8 +359,7 @@ generic_locators = {
     ),
     # project name in the dropdown list, tested on OCP 4.14 and OCP 4.15
     "test-project-link": (
-        "//li[@class='pf-c-menu__list-item']/descendant::*//*[text()='{}'] | "
-        "//li[@class='pf-v5-c-menu__list-item']/descendant::*//*[text()='{}']",
+        "//li[contains(@class, 'c-menu__list-item')]/descendant::*//*[text()='{}']",
         By.XPATH,
     ),
     "show_default_projects_toggle": (
@@ -375,7 +396,7 @@ mcg_stores = {
         By.XPATH,
     ),
     "store_dropdown_option": (
-        "//ul[@ class='pf-c-dropdown__menu']//a[normalize-space()='{}']",
+        "//ul[contains(@class, 'c-dropdown__menu')]//a[normalize-space()='{}']",
         By.XPATH,
     ),
     "store_secret_option": ("//*[contains(text(), '{}')]", By.XPATH),
@@ -424,7 +445,8 @@ obc = {
         By.CSS_SELECTOR,
     ),
     "select_administrator": (
-        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator'] | "
+        "//a[contains(@class,'c-dropdown__menu-item')]"
+        "//h2[contains(@class, 'c-title pf-m-md')][normalize-space()='Administrator'] | "
         "//h2[.='Administrator']",
         By.XPATH,
     ),
@@ -436,7 +458,8 @@ obc = {
     "storageclass_text_field": ("//input[@id='search-bar']", By.XPATH),
     "bucketclass_dropdown": ("bc-dropdown", By.ID),
     "bucketclass_text_field": (
-        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"], input[id="search-bar"]',
+        'input[placeholder="Select BucketClass"],input[class="pf-c-form-control pf-m-search"], '
+        'input[id="search-bar"], input[data-test="name-filter-input"]',
         By.CSS_SELECTOR,
     ),
     "resource_name": (
@@ -447,7 +470,7 @@ obc = {
     "obc_name": ("obc-name", By.ID),
     "first_obc_link": ('a[class="co-resource-item__resource-name"]', By.CSS_SELECTOR),
     "delete_resource": (
-        'li[id="Delete"] a[role="menuitem"]',
+        'li[id="Delete"] a[role="menuitem"], button[id="Delete"]',
         By.CSS_SELECTOR,
     ),
     "namespace_store_create": (
@@ -603,7 +626,7 @@ pvc_4_9 = {
 pvc_4_10 = {
     # similar to generic["test-project-link"]
     "test-project-link": (
-        "//li[@class='pf-c-menu__list-item']/descendant::*//*[contains(text(), '{}')]",
+        "//li[contains(@class, 'c-menu__list-item')]/descendant::*//*[contains(text(), '{}')]",
         By.XPATH,
     ),
 }
@@ -698,7 +721,7 @@ acm_page_nav = {
     "Credentials": ("Credentials", By.LINK_TEXT),
     "Import_cluster": ("//*[text()='Import cluster']", By.XPATH),
     "Import_cluster_enter_name": ("clusterName", By.ID),
-    "Import_mode": ('button[class="pf-c-select__toggle"]', By.CSS_SELECTOR),
+    "Import_mode": ('button[class*="c-select__toggle"]', By.CSS_SELECTOR),
     "choose_kubeconfig": ("//button[text()='Kubeconfig']", By.XPATH),
     "Kubeconfig_text": ("kubeConfigEntry", By.ID),
     "Submit_import": ("//button[text()='Import']", By.XPATH),
@@ -708,7 +731,10 @@ acm_page_nav = {
 
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
-    "create-cluster-set": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "create-cluster-set": (
+        ".pf-c-button.pf-m-primary, .pf-v5-c-button.pf-m-primary",
+        By.CSS_SELECTOR,
+    ),
     "cluster-set-name": (
         "input[placeholder='Enter cluster set name']",
         By.CSS_SELECTOR,
@@ -726,9 +752,15 @@ acm_configuration = {
     "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
     "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
     "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
-    "review-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "review-btn": (
+        ".pf-c-button.pf-m-primary, .pf-v5-c-button.pf-m-primary",
+        By.CSS_SELECTOR,
+    ),
     "confirm-btn": ("button[type='submit']", By.CSS_SELECTOR),
-    "cluster-set-status": ("//span[@class='pf-c-modal-box__title-text']", By.XPATH),
+    "cluster-set-status": (
+        "//span[contains(@class, 'pf-c-modal-box__title-text'])",
+        By.XPATH,
+    ),
     "submariner-tab": ("//a[normalize-space()='Submariner add-ons']", By.XPATH),
     "install-submariner-btn": (
         "//button[normalize-space()='Install Submariner add-ons']",
@@ -736,11 +768,17 @@ acm_configuration = {
     ),
     "target-clusters": ("input[placeholder='Select clusters']", By.CSS_SELECTOR),
     "cluster-name-selection": ("//button[normalize-space()='{}']", By.XPATH),
-    "next-btn": (".pf-c-button.pf-m-primary", By.CSS_SELECTOR),
+    "next-btn": (
+        ".pf-c-button.pf-m-primary, .pf-v5-c-button.pf-m-primary",
+        By.CSS_SELECTOR,
+    ),
     "nat-t-checkbox": ("input[type='checkbox']", By.CSS_SELECTOR),
     "gateway-count-btn": ("//button[@aria-label='Plus']", By.XPATH),
     "check-globalnet": ("//div[normalize-space()='True']", By.XPATH),
-    "install-btn": (".pf-c-button.pf-m-primary.pf-m-progress", By.CSS_SELECTOR),
+    "install-btn": (
+        ".pf-c-button.pf-m-primary.pf-m-progress, .pf-v5-c-button.pf-m-primary.pf-m-progress",
+        By.CSS_SELECTOR,
+    ),
     "connection-status-1": (
         "(//button[@type='button'][normalize-space()='Healthy'])[1]",
         By.XPATH,
@@ -798,7 +836,7 @@ acm_configuration = {
     ),
     "cc_provider_credentials": ("//div[@id='add-provider-connection']", By.XPATH),
     "cc_provider_creds_vsphere": (
-        "//div[@id='vmw']//div[@class='pf-c-tile__header pf-m-stacked']",
+        "//div[@id='vmw']//div[contains(@class, 'c-tile__header pf-m-stacked')]",
         By.XPATH,
     ),
     "cc_provider_creds_vsphere_cred_name": ("//input[@id='credentialsName']", By.XPATH),
@@ -866,11 +904,11 @@ acm_configuration = {
     "cc_cluster_details_page": ("//div[text()='Details']", By.XPATH),
     "cc_cluster_status_text": ("//span[text()='Status']", By.XPATH),
     "cc_details_toggle_icon": (
-        "//span[@class='pf-c-card__header-toggle-icon']",
+        "//span[contains(@class, 'c-card__header-toggle-icon')]",
         By.XPATH,
     ),
     "cc_deployment_yaml_toggle_button": (
-        "//span[@class='pf-c-switch__toggle']",
+        "//span[contains(@class, 'c-switch__toggle')]",
         By.XPATH,
     ),
     "cc_yaml_editor": ("//div[@class='yamlEditorContainer']", By.CSS_SELECTOR),
@@ -934,16 +972,19 @@ acm_configuration_4_12 = {
     ),
     "cluster_status_check": ('//button[normalize-space()="{}"]', By.XPATH),
     "cluster_name": ("//a[normalize-space()='{}']", By.XPATH),
-    "clusters-page": ("a[class='pf-c-breadcrumb__link']", By.CSS_SELECTOR),
+    "clusters-page": ("a[class*='c-breadcrumb__link']", By.CSS_SELECTOR),
     "nodes-tab": ("//a[normalize-space()='Nodes']", By.XPATH),
     "data-services": ("//button[normalize-space()='Data Services']", By.XPATH),
     "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
     "replication-policy": ("//td[@id='replicationPolicy']", By.XPATH),
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
-    "search-bar": ("//input[@class='pf-c-text-input-group__text-input']", By.XPATH),
+    "search-bar": (
+        "//input[contains(@class, 'c-text-input-group__text-input')]",
+        By.XPATH,
+    ),
     "kebab-action": (
-        "//button[@class='pf-c-dropdown__toggle pf-m-plain']",
+        "//button[contains(@class, 'c-dropdown__toggle pf-m-plain')]",
         By.XPATH,
     ),
     "failover-app": ("//button[normalize-space()='Failover application']", By.XPATH),
@@ -974,7 +1015,7 @@ acm_configuration_4_12 = {
     "action-status-relocate": ('//*[text()="Relocated"]', By.XPATH),
     "create-cluster-set": ("//button[@id='createClusterSet']", By.XPATH),
     "review-btn": ("//button[@id='save']", By.XPATH),
-    "next-btn": ("//button[@class='pf-c-button pf-m-primary']", By.XPATH),
+    "next-btn": ("//button[contains(@class, 'c-button pf-m-primary')]", By.XPATH),
     "acm_nav_sidebar": (
         "//*[@data-test-id='acm-perspective-nav'] | //*[@class='pf-v5-c-nav__list oc-perspective-nav']",
         By.XPATH,
@@ -1110,7 +1151,7 @@ block_pool = {
     "edit_labels_of_pool": ("//a[normalize-space()='Edit labels']", By.XPATH),
     "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
     "invalid_label_name_note_edit_label_pool": (
-        "//h4[@class='pf-c-alert__title']",
+        "//h4[contains(@class, 'c-alert__title')]",
         By.XPATH,
     ),
     "edit_labels_of_pool_save": ("//button[normalize-space()='Save']", By.XPATH),
@@ -1178,21 +1219,25 @@ storageclass = {
         By.XPATH,
     ),
     "storage-pool": ("#pool-dropdown-id", By.CSS_SELECTOR),
-    "ceph-block-pool": ("//div[@class='pf-c-dropdown__menu-item-main']", By.XPATH),
+    "ceph-block-pool": (
+        "//div[contains(@class, 'c-dropdown__menu-item-main')]",
+        By.XPATH,
+    ),
     "encryption": ("#storage-class-encryption", By.CSS_SELECTOR),
     "connections-details": (
-        ".pf-c-button.pf-m-link[data-test='edit-kms-link']",
+        ".pf-c-button.pf-m-link[data-test='edit-kms-link'], .pf-v5-c-button.pf-m-link[data-test='edit-kms-link']",
         By.CSS_SELECTOR,
     ),
     "service-name": ("#kms-service-name", By.CSS_SELECTOR),
     "kms-address": ("#kms-address", By.CSS_SELECTOR),
     "kms-port": ("#kms-address-port", By.CSS_SELECTOR),
     "save-btn": (
-        ".pf-c-button.pf-m-secondary[data-test='save-action']",
+        ".pf-c-button.pf-m-secondary[data-test='save-action'], .pf-v5-c-button.pf-m-secondary[data-test='save-action']",
         By.CSS_SELECTOR,
     ),
     "advanced-settings": (
-        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
+        ".pf-c-button.pf-m-link.ocs-storage-class-encryption__form-body, "
+        ".pf-v5-c-button.pf-m-link.ocs-storage-class-encryption__form-body",
         By.CSS_SELECTOR,
     ),
     "backend-path": ("#kms-service-backend-path", By.CSS_SELECTOR),
@@ -1207,7 +1252,7 @@ storageclass = {
     ),
     "save-advanced-settings": ("#confirm-action", By.CSS_SELECTOR),
     "save-service-details": (
-        ".pf-c-button.pf-m-secondary[data-test='save-action']",
+        ".pf-c-button.pf-m-secondary[data-test='save-action'], .pf-v5-c-button.pf-m-secondary[data-test='save-action']",
         By.CSS_SELECTOR,
     ),
     "create": ("#save-changes", By.CSS_SELECTOR),
@@ -1275,7 +1320,7 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "capacity_breakdown_options": (
-        'button[class="pf-c-select__toggle"]',
+        'button[class*="c-select__toggle"]',
         By.CSS_SELECTOR,
     ),
     "capacity_breakdown_projects": ("//button[text()='Projects']", By.XPATH),
@@ -1419,7 +1464,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "save_console_plugin_settings": ("#confirm-action", By.CSS_SELECTOR),
-    "warning-alert": ("//div[@class='pf-c-alert pf-m-warning']", By.XPATH),
+    "warning-alert": ("//div[contains(@class, 'c-alert pf-m-warning')]", By.XPATH),
     "refresh-web-console": (
         "//button[normalize-space()='Refresh web console']",
         By.XPATH,
@@ -1476,6 +1521,7 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "performance-card": (
+        "//div[@class='pf-v5-c-card__title' and contains(text(), 'Performance')] | "
         "//div[@class='pf-c-card__title' and contains(text(), 'Performance')]",
         By.XPATH,
     ),
@@ -1486,6 +1532,7 @@ validation_4_9 = {
     ),
     "backingstore-status": ("span[data-test='status-text']", By.CSS_SELECTOR),
     "backingstorage-breadcrumb": (
+        ".pf-v5-c-breadcrumb__link[data-test-id='breadcrumb-link-1'], "
         ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
         By.CSS_SELECTOR,
     ),
@@ -1496,6 +1543,7 @@ validation_4_9 = {
     ),
     "bucketclass-status": ("//span[@data-test='status-text']", By.XPATH),
     "bucketclass-breadcrumb": (
+        ".pf-v5-c-breadcrumb__link[data-test-id='breadcrumb-link-1'], "
         ".pf-c-breadcrumb__link[data-test-id='breadcrumb-link-1']",
         By.CSS_SELECTOR,
     ),
@@ -1562,6 +1610,7 @@ validation_4_13 = {
         By.XPATH,
     ),
     "status-storage-popup-content": (
+        "//div[@class='pf-v5-c-popover pf-m-top']//*[contains(text(), 'Storage System')] | "
         "//div[@class='pf-c-popover pf-m-top']//*[contains(text(), 'Storage System')]",
         By.XPATH,
     ),
@@ -1758,6 +1807,7 @@ topology = {
     "topology_search_bar_enter_arrow": ("//button[@aria-label='Search']", By.XPATH),
     "topology_search_bar_reset_search": ("//button[@aria-label='Reset']", By.XPATH),
     "node_filter_toggle_icon_from_node_filtering_bar": (
+        "//*[@class='pf-v5-c-options-menu__toggle-icon']/.. | "
         "//*[@class='pf-c-options-menu__toggle-icon']/..",
         By.XPATH,
     ),
@@ -1767,11 +1817,11 @@ topology = {
         By.XPATH,
     ),
     "current_node_from_node_filtering_bar": (
+        "//span[@class='pf-v5-c-options-menu__toggle-text'] | "
         "//span[@class='pf-c-options-menu__toggle-text']",
         By.XPATH,
     ),
 }
-
 
 alerting = {
     "alerts-tab-link": ("Alerts", By.LINK_TEXT),
