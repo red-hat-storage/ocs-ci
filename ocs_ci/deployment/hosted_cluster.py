@@ -234,10 +234,9 @@ class HostedClients(HyperShiftBase):
         if not self.hcp_binary_exists():
             self.download_hcp_binary_with_podman()
 
-        cluster_names_to_paths = config.ENV_DATA["clusters"]
-
         kubeconfig_paths = []
-        for name, path in cluster_names_to_paths.items():
+        for name in config.ENV_DATA["clusters"].keys():
+            path = config.ENV_DATA["clusters"][name]["auth_path"]
             kubeconfig_paths.append(self.download_hosted_cluster_kubeconfig(name, path))
 
         return kubeconfig_paths
