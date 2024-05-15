@@ -185,7 +185,8 @@ class Submariner(object):
                 "Not a supported architecture for subctl binary"
             )
         cmd = (
-            f"oc image extract --registry-config {pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+            f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
+            f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
             f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
         )
         run_cmd(cmd)

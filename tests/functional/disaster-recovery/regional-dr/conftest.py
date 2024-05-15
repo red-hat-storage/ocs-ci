@@ -33,7 +33,7 @@ def check_subctl_cli():
     if config.MULTICLUSER.get("multicluster_mode") != constants.RDR_MODE:
         return
     try:
-        run_cmd("subctl")
+        run_cmd("./bin/subctl")
     except (CommandFailed, FileNotFoundError):
         log.debug("subctl binary not found, downloading now...")
         submariner = acm.Submariner()
