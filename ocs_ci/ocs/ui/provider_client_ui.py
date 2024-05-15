@@ -2,6 +2,8 @@ import logging
 import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.storageconsumer import (
     get_all_storageconsumer_names,
     StorageConsumer,
