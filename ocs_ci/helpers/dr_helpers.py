@@ -6,21 +6,14 @@ import json
 import logging
 import tempfile
 
-import yaml
-from botocore.exceptions import BotoCoreError
-import boto3
-
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
-    ACMClusterConfigurationException,
-    ResourceNotFoundError,
-    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pods_having_label
+from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
@@ -36,7 +29,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     CommandFailed,
     run_cmd,
-    get_oadp_version,
 )
 
 logger = logging.getLogger(__name__)
