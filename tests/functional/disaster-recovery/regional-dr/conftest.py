@@ -30,9 +30,11 @@ def pytest_collection_modifyitems(items):
 @pytest.fixture(autouse=True)
 def check_subctl_cli():
     # Check whether subctl cli is present
+    if config.MULTICLUSER.get("multicluster_mode") != constants.RDR_MODE:
+        return
     try:
         run_cmd("subctl")
-    except CommandFailed:
+    except (CommandFailed, FileNotFoundError):
         log.debug("subctl binary not found, downloading now...")
         submariner = acm.Submariner()
         submariner.download_binary()
