@@ -33,9 +33,9 @@ need_to_delete = []
     argnames=["replica", "compression"],
     argvalues=[
         pytest.param(*[3, True], marks=pytest.mark.polarion_id("OCS-2589")),
-        # pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
-        # pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
-        # pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
+        pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
+        pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
+        pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
     ],
 )
 @skipif_hci_provider_or_client
