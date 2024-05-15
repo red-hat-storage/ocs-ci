@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 
 class StorageClientDeployment(object):
     def __init__(self):
-        print("Initializing webdriver and logn to webconsole")
+        print("Initializing webdriver and login to webconsole")
         # Call a function during initialization
         self.initial_function()
 
@@ -116,12 +116,16 @@ class StorageClientDeployment(object):
         8. Create storage profile
         """
 
-        # set control nodes as scheduleable
-        path = "/spec/mastersSchedulable"
-        params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-        self.scheduler_obj.patch(params=params, format_type="json"), (
-            "Failed to run patch command to update control nodes as scheduleable"
-        )
+        if (
+            self.ocs_version < version.VERSION_4_16
+            and self.ocs_version >= version.VERSION_4_14
+        ):
+            # set control nodes as scheduleable
+            path = "/spec/mastersSchedulable"
+            params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+            self.scheduler_obj.patch(params=params, format_type="json"), (
+                "Failed to run patch command to update control nodes as scheduleable"
+            )
 
         # Allow ODF to be deployed on all nodes
         nodes = get_all_nodes()
