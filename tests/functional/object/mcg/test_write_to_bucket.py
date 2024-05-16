@@ -460,6 +460,7 @@ class TestBucketIO(MCGTest):
             "Put object operation is preserving ContentEncoding as a object metadata"
         )
 
+    @tier2
     @bugzilla("2259189")
     @bugzilla("2264480")
     @pytest.mark.polarion_id("OCS-5773")
