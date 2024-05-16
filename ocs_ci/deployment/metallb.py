@@ -306,11 +306,13 @@ class MetalLBInstaller:
         metallb_inst_data.get("metadata").update({"namespace": self.namespace_lb})
 
         metallb_inst_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="metallb_instance", delete=False
+            mode="w+", prefix="metallb_instance_", delete=False
         )
         templating.dump_data_to_temp_yaml(metallb_inst_data, metallb_inst_file.name)
 
-        exec_cmd(f"oc create -f {metallb_inst_file.name}", timeout=240)
+        retry(CommandFailed, tries=3, delay=15)(exec_cmd)(
+            f"oc apply -f {metallb_inst_file.name}", timeout=240
+        )
 
         return self.metallb_instance_created()
 
