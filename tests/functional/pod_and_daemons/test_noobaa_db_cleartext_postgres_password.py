@@ -20,7 +20,7 @@ class TestNoobaaSecurity(BaseTest):
     @bugzilla("2274193")
     def test_noobaa_db_cleartext_postgres_password(self):
         """
-        1.Get noobaa deb pod
+        1.Get noobaa db pod
         2.Get logs from all containers in pod oc logs "noobaa-db-pg-0 --all-containers"
         3.Verify postgres password does not exist in noobaa-db pod logs
         """
@@ -34,4 +34,6 @@ class TestNoobaaSecurity(BaseTest):
             all_containers=True,
         )
         log.info("Verify postgres password does not exist in noobaa-db pod logs")
-        assert "set=password" not in nooobaa_db_pod_logs
+        assert (
+            "set=password" not in nooobaa_db_pod_logs
+        ), f"noobaa-db pod logs include password logs:{nooobaa_db_pod_logs}"
