@@ -16,6 +16,12 @@ from functools import partial
 
 import boto3
 from botocore.exceptions import ClientError
+from ocs_ci.ocs.resources.mcg_bucket_replication.log_based.lbr_handler_factory import (
+    LbrHandlerFactory,
+)
+from ocs_ci.ocs.resources.mcg_bucket_replication.log_based.mockup_bucket_logger import (
+    MockupBucketLogger,
+)
 import pytest
 from collections import namedtuple
 
@@ -59,9 +65,6 @@ from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
     AwsLogBasedReplicationPolicy,
-)
-from ocs_ci.ocs.resources.mcg_bucket_replication.mockup_bucket_logger import (
-    MockupBucketLogger,
 )
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
@@ -7560,3 +7563,13 @@ def update_current_active_test_marks_global(request):
     """
     marks = [mark.name for mark in request.node.iter_markers()]
     ocs_ci.framework.pytest_customization.marks.current_test_marks = marks
+
+
+@pytest.fixture()
+def log_based_replication_handler_factory(
+    mcg_obj_session, bucket_factory, awscli_pod_session
+):
+    """
+    Return a factory method for creating log-based replication handlers
+    """
+    return LbrHandlerFactory(mcg_obj_session, bucket_factory, awscli_pod_session).create
