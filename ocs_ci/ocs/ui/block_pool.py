@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
 import ocs_ci.ocs.resources.pod as pod
+from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 
 logger = logging.getLogger(__name__)
 
@@ -381,10 +382,9 @@ class BlockPoolUI(PageNavigator):
 
         self.select_blockpool(pool_name)
 
-        raw_capacity_loaded = self.check_element_text(
-            "Available",
-            "div[@class='ceph-raw-card-legend__title']",
-        )
+        bf_obj = BlockAndFile()
+        _, raw_capacity_loaded = bf_obj.get_raw_capacity_card_values()
+
         if raw_capacity_loaded:
             logger.info("Block Pool Raw Capacity has loaded in UI")
         else:
@@ -420,9 +420,8 @@ class BlockPoolUI(PageNavigator):
                 f"Raw capacity of {pool_name} is {raw_capacity} MiB as checked by CLI"
             )
 
-            used_raw_capacity_in_UI = self.get_element_text(
-                self.bp_loc["used_raw_capacity_in_UI"]
-            )
+            bf_obj = BlockAndFile()
+            used_raw_capacity_in_UI, _ = bf_obj.get_raw_capacity_card_values()
 
             if used_raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
                 logger.info("UI values did matched as per CLI for the Raw Capacity")

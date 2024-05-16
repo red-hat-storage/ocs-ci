@@ -1185,10 +1185,6 @@ block_pool = {
         By.XPATH,
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
-    "actions_inside_pool": (
-        "//div[@class='pf-c-dropdown pf-m-align-right']",
-        By.XPATH,
-    ),
     "delete_pool_inside_pool": (
         "//a[text()='Delete BlockPool']",
         By.XPATH,
@@ -1293,10 +1289,6 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "immediate_binding_mode": ("button[id='Immediate-link']", By.CSS_SELECTOR),
-    "storage_class_breadcrumb": (
-        "//a[@class='pf-c-breadcrumb__link'][text()='StorageClasses']",
-        By.XPATH,
-    ),
 }
 
 storageclass_4_9 = {
