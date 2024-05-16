@@ -467,6 +467,11 @@ skipif_disconnected_cluster = pytest.mark.skipif(
     reason="Test will not run on disconnected clusters",
 )
 
+skipif_stretch_cluster = pytest.mark.skipif(
+    config.DEPLOYMENT.get("arbiter_deployment") is True,
+    reason="Test will not run on stretch cluster",
+)
+
 skipif_proxy_cluster = pytest.mark.skipif(
     config.DEPLOYMENT.get("proxy") is True,
     reason="Test will not run on proxy clusters",

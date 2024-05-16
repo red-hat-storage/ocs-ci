@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_no_lso,
     skipif_lso,
     skipif_managed_service,
+    skipif_stretch_cluster,
     skipif_hci_provider_and_client,
     brown_squad,
 )
@@ -156,6 +157,7 @@ class TestAddCapacity(ManageTest):
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @skipif_no_lso
+@skipif_stretch_cluster
 class TestAddCapacityLSO(ManageTest):
     """
     Add capacity on lso cluster
