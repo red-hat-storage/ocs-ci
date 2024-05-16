@@ -377,6 +377,7 @@ class HostedODF(HypershiftHostedOCP):
         self.namespace_client = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
         self.timeout_check_resources_exist = 6
         self.timeput_wait_csvs_min = 10
+        self.storage_client_name = None
 
     @kubeconfig_exists_decorator
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
@@ -528,13 +529,23 @@ class HostedODF(HypershiftHostedOCP):
         # starting from ODF 4.16 on StorageClient creation Storage Claims created automatically
 
         logger.info("Verify Storage Class cephfs exists")
-        if not self.wait_storage_class_claim_cephfs():
+        if not self.wait_storage_claim_cephfs():
             logger.error("Storage class claim cephfs does not exist")
             return False
 
         logger.info("Verify Storage Class rbd exists")
-        if not self.wait_storage_class_claim_rbd():
+        if not self.wait_storage_claim_rbd():
             logger.error("Storage class claim rbd does not exist")
+            return False
+
+        cephfs_storage_class_name = f"{self.storage_client_name}-cephfs"
+        if not self.storage_class_exists(cephfs_storage_class_name):
+            logger.error("cephfs storage class does not exist")
+            return False
+
+        rbd_storage_class_name = f"{self.storage_client_name}-rbd"
+        if not self.storage_class_exists(rbd_storage_class_name):
+            logger.error("rbd storage class does not exist")
             return False
 
         return True
@@ -643,6 +654,8 @@ class HostedODF(HypershiftHostedOCP):
                 return False
 
             storage_client_data["spec"]["onboardingTicket"] = onboarding_key
+
+            self.storage_client_name = storage_client_data["metadata"]["name"]
 
             storage_client_file = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storage_client", delete=False
@@ -950,7 +963,7 @@ class HostedODF(HypershiftHostedOCP):
         logger.info(f"Provider address: {storage_provider_endpoint}")
         return storage_provider_endpoint
 
-    def wait_storage_class_claim_cephfs(self):
+    def wait_storage_claim_cephfs(self):
         """
         Wait for storage class claim for CephFS to be created
 
@@ -958,16 +971,16 @@ class HostedODF(HypershiftHostedOCP):
             bool: True if storage class claim for CephFS is created, False otherwise
         """
         for sample in TimeoutSampler(
-            timeout=self.timeout_check_resources_existence,
+            timeout=300,
             sleep=60,
-            func=self.storage_class_claim_exists_cephfs,
+            func=self.storage_claim_exists_cephfs,
         ):
             if sample:
                 return True
         return False
 
     @kubeconfig_exists_decorator
-    def storage_class_claim_exists_cephfs(self):
+    def storage_claim_exists_cephfs(self):
         """
         Check if storage class claim for CephFS exists
 
@@ -999,7 +1012,7 @@ class HostedODF(HypershiftHostedOCP):
         )
 
     @kubeconfig_exists_decorator
-    def create_storage_class_claim_cephfs(self):
+    def create_storage_claim_cephfs(self):
         """
         Create storage class claim for CephFS
 
@@ -1007,7 +1020,7 @@ class HostedODF(HypershiftHostedOCP):
             bool: True if storage class claim for CephFS is created, False otherwise
         """
 
-        if self.storage_class_claim_exists_cephfs():
+        if self.storage_claim_exists_cephfs():
             logger.info("Storage class claim for CephFS already exists")
             return True
 
@@ -1028,9 +1041,9 @@ class HostedODF(HypershiftHostedOCP):
             logger.error(f"Error during storage class claim creation: {e}")
             return False
 
-        return self.storage_class_claim_exists_cephfs()
+        return self.storage_claim_exists_cephfs()
 
-    def wait_storage_class_claim_rbd(self):
+    def wait_storage_claim_rbd(self):
         """
         Wait for storage class claim for RBD to be created
 
@@ -1038,7 +1051,7 @@ class HostedODF(HypershiftHostedOCP):
             bool: True if storage class claim for RBD is created, False otherwise
         """
         for sample in TimeoutSampler(
-            timeout=self.timeout_check_resources_existence,
+            timeout=300,
             sleep=60,
             func=self.storage_class_claim_exists_rbd,
         ):
@@ -1076,7 +1089,7 @@ class HostedODF(HypershiftHostedOCP):
         )
 
     @kubeconfig_exists_decorator
-    def create_storage_class_claim_rbd(self):
+    def create_storage_claim_rbd(self):
         """
         Create storage class claim for RBD
 
