@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework.testlib import tier2, BaseTest, bugzilla
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import red_squad
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 
@@ -16,7 +16,7 @@ class TestNoobaaSecurity(BaseTest):
     Test Noobaa Security
     """
 
-    @green_squad
+    @red_squad
     @bugzilla("2274193")
     def test_noobaa_db_cleartext_postgres_password(self):
         """
