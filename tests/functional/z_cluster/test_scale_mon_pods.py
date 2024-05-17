@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 
 
 @brown_squad
-@ignore_leftovers
 @skipif_less_than_five_workers
 @skipif_ocs_version("<4.15")
 class TestFiveMonInCluster(ManageTest):
