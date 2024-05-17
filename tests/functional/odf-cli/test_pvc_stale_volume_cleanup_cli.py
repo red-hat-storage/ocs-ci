@@ -30,7 +30,10 @@ class TestSubvolumesCommand(ManageTest):
         5. Check for stale volumes
         6. No stale volumes should be present of the deleted PVC.
         """
-        retrieve_cli_binary(cli_type="odf")
+        from pathlib import Path
+
+        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+            retrieve_cli_binary(cli_type="odf")
         output = run_cmd(cmd="odf subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         logger.info(f"{inital_subvolume_list=}")
