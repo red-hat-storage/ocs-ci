@@ -5,6 +5,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     acceptance,
+    green_squad,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import retrieve_cli_binary
@@ -16,9 +17,10 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @acceptance
+@ignore_leftovers
+@green_squad
 class TestSubvolumesCommand(ManageTest):
     @skipif_ocs_version("<4.15")
-    @ignore_leftovers
     def test_pvc_stale_volume_cleanup_cli(self, storageclass_factory, pvc_factory):
         """
         1. Create a new PVC with Retain strategy.
