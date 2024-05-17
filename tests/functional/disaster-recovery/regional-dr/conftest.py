@@ -30,7 +30,7 @@ def pytest_collection_modifyitems(items):
 @pytest.fixture(autouse=True)
 def check_subctl_cli():
     # Check whether subctl cli is present
-    if config.MULTICLUSER.get("multicluster_mode") != constants.RDR_MODE:
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
     try:
         run_cmd("./bin/subctl")
