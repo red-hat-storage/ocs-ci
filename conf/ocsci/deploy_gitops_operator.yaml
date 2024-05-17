@@ -1,3 +1,0 @@
----
-ENV_DATA:
-  deploy_gitops_operator: True

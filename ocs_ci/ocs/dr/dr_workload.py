@@ -6,16 +6,21 @@ This module will have all DR related workload classes
 import logging
 import os
 import tempfile
+import yaml
+
 from subprocess import TimeoutExpired
 from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.helpers.cnv_helpers import create_vm_secret
 from ocs_ci.helpers.helpers import (
     delete_volume_in_backend,
     verify_volume_deleted_in_backend,
+    create_project,
 )
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     CommandFailed,
@@ -329,6 +334,7 @@ class BusyBox_AppSet(DRWorkload):
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.appset_placement_name = kwargs.get("workload_placement_name")
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
+        self.appset_model = kwargs.get("appset_model")
 
     def deploy_workload(self):
         """
@@ -357,7 +363,25 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
-        log.info(app_set_yaml_data_list)
+            elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
+                if self.appset_model == "pull":
+                    # load appset_yaml_file, add "annotations" key and add values to it
+                    app_set_yaml_data["spec"]["template"]["metadata"].setdefault(
+                        "annotations", {}
+                    )
+                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
+                        "apps.open-cluster-management.io/ocm-managed-cluster"
+                    ] = "{{name}}"
+                    app_set_yaml_data["spec"]["template"]["metadata"]["annotations"][
+                        "argocd.argoproj.io/skip-reconcile"
+                    ] = "true"
+
+                    # Assign values to the "labels" key
+                    app_set_yaml_data["spec"]["template"]["metadata"]["labels"][
+                        "apps.open-cluster-management.io/pull-to-ocm-managed-cluster"
+                    ] = "true"
+
+        log.info(yaml.dump(app_set_yaml_data_list))
         templating.dump_data_to_temp_yaml(app_set_yaml_data_list, self.appset_yaml_file)
         config.switch_acm_ctx()
         run_cmd(f"oc create -f {self.appset_yaml_file}")
@@ -428,6 +452,19 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self.check_pod_pvc_status(skip_replication_resources=False)
+
+        appset_resource_name = (
+            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+        )
+
+        if self.appset_model == "pull":
+            appset_pull_obj = ocp.OCP(
+                kind=constants.APPLICATION_ARGOCD,
+                resource_name=appset_resource_name,
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            )
+            appset_pull_obj._has_phase = True
+            appset_pull_obj.wait_for_phase(phase="Succeeded", timeout=120)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -509,12 +546,20 @@ class CnvWorkload(DRWorkload):
     """
 
     def __init__(self, **kwargs):
+        """
+        Initialize CnvWorkload instance
+
+        """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
         super().__init__("cnv", workload_repo_url, workload_repo_branch)
 
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
+        self.vm_secret_name = kwargs.get("vm_secret")
+        self.vm_secret_obj = []
+        self.vm_obj = None
+        self.vm_username = kwargs.get("vm_username")
         self.workload_type = kwargs.get("workload_type")
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
@@ -545,6 +590,24 @@ class CnvWorkload(DRWorkload):
         """
         self._deploy_prereqs()
         self.workload_namespace = self._get_workload_namespace()
+        self.vm_obj = VirtualMachine(
+            vm_name=self.vm_name, namespace=self.workload_namespace
+        )
+
+        # Creating secrets to access the VMs via SSH
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            try:
+                create_project(project_name=self.workload_namespace)
+            except CommandFailed as ex:
+                if str(ex).find("(AlreadyExists)"):
+                    log.warning("The namespace already exists !")
+
+            self.vm_secret_obj.append(
+                create_vm_secret(
+                    secret_name=self.vm_secret_name, namespace=self.workload_namespace
+                )
+            )
 
         # Load DRPC
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -616,9 +679,11 @@ class CnvWorkload(DRWorkload):
         placement_obj = ocp.OCP(
             kind=constants.PLACEMENT_KIND,
             resource_name=self.cnv_workload_placement_name,
-            namespace=constants.GITOPS_CLUSTER_NAMESPACE
-            if self.workload_type == constants.APPLICATION_SET
-            else self.workload_namespace,
+            namespace=(
+                constants.GITOPS_CLUSTER_NAMESPACE
+                if self.workload_type == constants.APPLICATION_SET
+                else self.workload_namespace
+            ),
         )
         placement_obj.annotate(
             annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
@@ -695,8 +760,11 @@ class CnvWorkload(DRWorkload):
             config.switch_acm_ctx()
             run_cmd(cmd=f"oc delete -f {self.cnv_workload_yaml_file}", timeout=900)
 
-            for cluster in get_non_acm_cluster_config():
+            for cluster, secret_obj in zip(
+                get_non_acm_cluster_config(), self.vm_secret_obj
+            ):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                secret_obj.delete()
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
                     check_replication_resources_state=False,

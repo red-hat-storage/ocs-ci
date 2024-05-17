@@ -3,8 +3,8 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
-    green_squad,
     skipif_hci_provider_or_client,
+    black_squad,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -75,7 +75,7 @@ class TestPoolUserInterface(ManageTest):
     @ui
     @tier1
     @skipif_ocs_version("<4.8")
-    @green_squad
+    @black_squad
     def test_create_delete_pool(
         self,
         replica,
@@ -86,7 +86,7 @@ class TestPoolUserInterface(ManageTest):
         pod,
     ):
         """
-        test create delete pool have the following workflow
+        test create delete pool has the following workflow
         .* Create new RBD pool
         .* Associate the pool with storageclass
         .* Create PVC based on the storageclass

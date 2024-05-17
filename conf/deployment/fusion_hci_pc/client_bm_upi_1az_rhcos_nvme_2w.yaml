@@ -1,0 +1,13 @@
+---
+ENV_DATA:
+  platform: 'hci_baremetal'
+  cluster_type: 'hci_client'
+  cluster_namespace: "openshift-storage-client"
+  deployment_type: 'upi'
+  worker_replicas: 2
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+REPORTING:
+  # This is to be used in internal image for must gather on HCI
+  ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  ocs_must_gather_latest_tag: '4.14-fusion-hci'

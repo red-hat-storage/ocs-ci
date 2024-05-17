@@ -547,25 +547,3 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         ics,
         icsp,
     )
-
-
-def get_ocp_release_image():
-    """
-    Get the url of ocp release image
-    * from DEPLOYMENT["custom_ocp_image"] or
-    * from openshift-install version command output
-    """
-    if not config.DEPLOYMENT.get("ocp_image"):
-        if config.DEPLOYMENT.get("custom_ocp_image"):
-            config.DEPLOYMENT["ocp_image"] = config.DEPLOYMENT.get("custom_ocp_image")
-        else:
-            installer_version_str = exec_cmd(
-                f"{config.RUN['bin_dir']}/openshift-install version"
-            ).stdout.decode()
-            release_image_line = [
-                line
-                for line in installer_version_str.splitlines()
-                if "release image" in line
-            ][0]
-            config.DEPLOYMENT["ocp_image"] = release_image_line.split()[2]
-    return config.DEPLOYMENT["ocp_image"]

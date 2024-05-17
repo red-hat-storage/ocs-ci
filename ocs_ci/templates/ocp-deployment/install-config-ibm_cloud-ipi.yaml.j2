@@ -8,13 +8,26 @@ compute:
   platform:
     ibmcloud:
       type: {{ worker_instance_type | default('bx2-16x64') }}
+{% if worker_availability_zones %}
+      zones:
+{% for zone in worker_availability_zones %}
+      - {{ zone }}
+{% endfor %}
+{% endif %}
   replicas: {{ worker_replicas | default(3) }}
 controlPlane:
   architecture: amd64
   hyperthreading: Enabled
   name: master
   platform:
-    ibmcloud: {}
+    ibmcloud:
+      type: {{ master_instance_type | default('bx2-4x16') }}
+{% if master_availability_zones %}
+      zones:
+{% for zone in master_availability_zones %}
+      - {{ zone }}
+{% endfor %}
+{% endif %}
   replicas: {{ master_replicas | default(3) }}
 metadata:
   creationTimestamp: null

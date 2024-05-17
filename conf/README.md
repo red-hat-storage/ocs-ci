@@ -140,8 +140,11 @@ anywhere else.
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
 * `in_transit_encryption` - Enable in-transit encryption.
+* `sc_encryption` - Enable StorageClass encryption.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
+* `sts_enabled` - Enable STS deployment functionality.
+* `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
 
 #### REPORTING
 
@@ -175,8 +178,10 @@ higher priority).
 
 * `cluster_name` - Defaults to null, is set by the --cluster-name CLI argument
 * `storage_cluster_name` - OCS storage cluster name
+* `external_storage_cluster_name` - External storagecluster name
 * `storage_device_sets_name` - OCS storage device sets name
 * `cluster_namespace` - Namespace where OCS pods are created
+* `external_storage_cluster_namespace` - Namespace for external storageSystem incase multi-storagecluster
 * `local_storage_namespace` - Namespace where local storage operator pods are created
 * `monitoring_enabled` - For testing OCS monitoring based on Prometheus (Default: false)
 * `persistent-monitoring` - Change monitoring backend to OCS (Default: true)
@@ -262,6 +267,39 @@ higher priority).
 * `submariner_unreleased_channel` - submariner channel for unreleased downstream build
 * `enable_hw_virtualization` - enable hardware virtualization for vSphere platform.
 * `performance_profile` - performance profile to be used (balanced, lean, performance).
+* `noobaa_external_pgsql` - Set to True if external PgSQL server for noobaa should be used.
+  See AUTH and pgsql section there for additional data you need to provide via config.
+* `baremetal` - sub-section related to Bare Metal platform
+    * `env_name` - name of the Bare Metal environment (used mainly for identification of configuration specific for the particular environment, e.g. _dnsmasq_ or _iPXE_ configuration)
+    * `bm_httpd_server` - hostname or IP of helper/provisioning node (publicly accessible)
+    * `bm_path_to_upload` - used by UPI deployment - place where to upload files accessible via http
+    * `bm_httpd_document_root` - Apache document root, where to place files accessible via http (usually `/var/www/html/`)
+    * `bm_install_files` - used by UPI deployment - base link to the files accessible via http
+    * `bm_httpd_server_user` - user name used to ssh to the helper node
+    * `bm_tftp_base_dir` - TFTP root dir where are placed files for PXE boot (usually `/tftpboot/`)
+    * `bm_dnsmasq_dir` - _dnsmasq_ configuration files place
+    * `bm_status_check` - link to status service for BM environment (deprecated in favor of Resource Locker, but still used for one environment)
+    * `bm_provisioning_network` - which network is used as provisioning (`public` or `private`)
+    * `bm_httpd_provision_server` - IP or hostname of the helper/provisioning server (http server) accessible from the provisioning network
+    * `servers` - definition of the servers in the BM environment (map where key is the name of the server)
+        * `<server-name>`
+            * `mgmt_provider` - defines how the server should be managed (`ipmitool` or `ibmcloud`)
+            * `mgmt_console` - IP or link of management console of the BM server (required for `mgmt_provider == ipmitool`)
+            * `mgmt_username` - login for the mgmt console (required for `mgmt_provider == ipmitool`)
+            * `mgmt_password` - password for the mgmt console (required for `mgmt_provider == ipmitool`)
+            * `role` - role of the server (`master`, `worker`, `bootstrap`)
+            * `public_mac` - MAC address of public interface
+            * `private_mac` - MAC address of private interface
+            * `ip` - (deprecated in favor of `public_ip`/`private_ip`)
+            * `gw` - (deprecated in favor of `public_gw`/`private_gw`)
+            * `public_ip` - IP address of the public interface
+            * `public_prefix_length` - Subnet prefix length for the public network
+            * `public_gw` - GW for the public interface
+            * `private_ip` - IP address of the private interface
+            * `private_prefix_length` - Subnet prefix length for the private network
+            * `private_gw` - GW for the private interface
+            * `root_disk_id` - ID of the root disk
+            * `root_disk_sn` - Serial number of the root disk
 
 #### UPGRADE
 
@@ -281,6 +319,11 @@ This section of the config is used for storing secret data that is read from a l
 auth file or pulled from s3.
 
 * `test_quay_auth` - Config variable used during unit_testing
+* `pgsql` - Section for PostgreSQL section
+  * `host` - IP or hostname of PgSQL server
+  * `username` - username for database
+  * `password` - password of database user
+  * `port` - port where PgSQL server listen to
 
 #### MULTICLUSTER
 

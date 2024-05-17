@@ -9,6 +9,8 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
     skipif_hci_provider_and_client,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
 )
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.constants import STATUS_COMPLETED, VOLUME_MODE_FILESYSTEM, CEPHBLOCKPOOL
@@ -22,6 +24,8 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @tier2
+@skipif_proxy_cluster
+@skipif_disconnected_cluster
 class TestPvcCloneOfWorkloads(E2ETest):
     """
     Tests to create multiple clones of same pgsql PVC at different utilization

@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
@@ -267,3 +268,24 @@ class Disruptions:
             raise TimeoutExpiredError(
                 f"Waiting for pid of ceph-{self.resource} in {node_name}"
             )
+
+
+def delete_resource_multiple_times(resource_name, num_of_iterations):
+    """
+    Delete a specific resource(osd, rook-operator, mon, etc,.) multiple times.
+
+    Args:
+        resource_name (str): The resource name to delete
+        num_of_iterations (int): The number of iterations we delete the resource
+
+    """
+    d = Disruptions()
+    d.set_resource(resource_name)
+    resource_id = random.randrange(d.resource_count)
+
+    for i in range(num_of_iterations):
+        log.info(
+            f"Iteration {i}: Delete resource {resource_name} with id {resource_id}"
+        )
+        d.set_resource(resource_name)
+        d.delete_resource(resource_id)

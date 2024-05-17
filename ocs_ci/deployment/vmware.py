@@ -191,13 +191,7 @@ class VSPHEREBASE(Deployment):
         config.ENV_DATA["vsphere_resource_pool"] = config.ENV_DATA.get("cluster_name")
 
         # sync guest time with host
-        sync_time_with_host_file = constants.SCALEUP_VSPHERE_MACHINE_CONF
-        if config.ENV_DATA["folder_structure"]:
-            sync_time_with_host_file = os.path.join(
-                constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
-                f"aos-{get_ocp_version(seperator='_')}",
-                constants.CLUSTER_LAUNCHER_MACHINE_CONF,
-            )
+        sync_time_with_host_file = helpers.get_host_file_for_time_sync()
         if config.ENV_DATA.get("sync_time_with_host"):
             sync_time_with_host(sync_time_with_host_file, True)
 
@@ -213,7 +207,10 @@ class VSPHEREBASE(Deployment):
         # choose the vsphere_dir based on OCP version
         # generate cluster_info and config yaml files
         # for OCP version greater than 4.4
-        vsphere_dir = constants.SCALEUP_VSPHERE_DIR
+        vsphere_dir = os.path.join(
+            constants.EXTERNAL_DIR,
+            f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
+        )
         rhel_module = "rhel-worker"
         if Version.coerce(self.ocp_version) >= Version.coerce("4.5"):
             vsphere_dir = os.path.join(
@@ -951,6 +948,11 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"worker-machineset-*.yaml"
                 )
             )
+            files_to_remove.extend(
+                glob.glob(
+                    f"{manifest_files_path}/99_openshift-machine-api_master-control-plane-machine-set.yaml"
+                )
+            )
             logger.debug(f"Removing machines and machineset files: {files_to_remove}")
             for each_file in files_to_remove:
                 os.remove(each_file)
@@ -1397,6 +1399,9 @@ class VSPHEREUPI(VSPHEREBASE):
             hosts = [f"{constants.SNO_NODE_NAME}.{config.ENV_DATA['cluster_name']}"]
             ipam.release_ips(hosts)
 
+        # Delete pgsql DB
+        self.cleanup_pgsql_db()
+
         # post destroy checks
         self.post_destroy_checks()
 
@@ -1421,7 +1426,10 @@ class VSPHEREUPI(VSPHEREBASE):
         helpers = VSPHEREHELPERS()
         helpers.modify_scaleup_repo()
 
-        vsphere_dir = constants.SCALEUP_VSPHERE_DIR
+        vsphere_dir = os.path.join(
+            constants.EXTERNAL_DIR,
+            f"v4-scaleup/ocp4-rhel-scaleup/aos-{get_ocp_version(seperator='_')}/vsphere",
+        )
         if Version.coerce(self.ocp_version) >= Version.coerce("4.5"):
             vsphere_dir = os.path.join(
                 constants.CLUSTER_LAUNCHER_VSPHERE_DIR,
@@ -1554,6 +1562,13 @@ class VSPHEREIPI(VSPHEREBASE):
         installer = get_openshift_installer(
             config.DEPLOYMENT["installer_version"], force_download=force_download
         )
+        metadata_file = os.path.join(self.cluster_path, "metadata.json")
+        template_folder = None
+        if os.path.exists(metadata_file):
+            template_folder = get_infra_id(self.cluster_path)
+        else:
+            logger.warning("metadata.json file doesn't exist.")
+
         try:
             run_cmd(
                 f"{installer} destroy cluster "
@@ -1567,6 +1582,9 @@ class VSPHEREIPI(VSPHEREBASE):
         # Delete DNS records
         delete_dns_records()
 
+        # Delete pgsql DB
+        self.cleanup_pgsql_db()
+
         # release the IP's
         ipam = IPAM(appiapp="address")
         hosts = [
@@ -1574,6 +1592,22 @@ class VSPHEREIPI(VSPHEREBASE):
             for i in range(constants.NUM_OF_VIPS)
         ]
         ipam.release_ips(hosts)
+
+        # post destroy checks
+        if template_folder:
+            self.post_destroy_checks(template_folder=template_folder)
+
+    def post_destroy_checks(self, template_folder):
+        """
+        Post destroy checks on vSphere IPI cluster
+
+        Args:
+            template_folder (str): template folder for the cluster
+
+        """
+        logger.debug("post destroy checks for vSphere IPI ")
+        # destroy the folder in templates
+        self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
 
 
 class VSPHEREAI(VSPHEREBASE):

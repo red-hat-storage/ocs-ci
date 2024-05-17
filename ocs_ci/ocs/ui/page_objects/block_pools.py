@@ -82,7 +82,9 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, Search
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
         resource_actions = format_locator(
-            self.generic_locators["actions_of_resource_from_list"], block_pool_name
+            self.generic_locators["actions_of_resource_from_list"],
+            block_pool_name,
+            block_pool_name,
         )
         self.do_click(resource_actions, enable_screenshot=True)
         self.do_click(self.generic_locators["delete_resource"], enable_screenshot=True)

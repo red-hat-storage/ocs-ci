@@ -680,7 +680,7 @@ def pytest_runtest_makereport(item, call):
                 for x in [
                     "ecosystem",
                     "e2e/performance",
-                    "tests/manage/z_cluster",
+                    "tests/functional/z_cluster",
                 ]
             )
             else False

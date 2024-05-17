@@ -26,6 +26,7 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
@@ -37,6 +38,7 @@ from ocs_ci.ocs.cluster import (
     validate_pdb_creation,
     CephClusterExternal,
     get_lvm_full_version,
+    check_cephcluster_status,
 )
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -95,6 +97,7 @@ from ocs_ci.ocs.utils import (
     get_all_acm_indexes,
     get_active_acm_index,
     enable_mco_console_plugin,
+    label_pod_security_admission,
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
@@ -105,9 +108,10 @@ from ocs_ci.utility import (
     templating,
     ibmcloud,
     kms as KMS,
+    pgsql,
     version,
 )
-from ocs_ci.utility.aws import update_config_from_s3
+from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -132,6 +136,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_acm_tag_unreleased,
     get_oadp_version,
+    ceph_health_check_multi_storagecluster_external,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -176,6 +181,7 @@ class Deployment(object):
         self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.namespace = config.ENV_DATA["cluster_namespace"]
+        self.sts_role_arn = None
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -273,13 +279,15 @@ class Deployment(object):
         Returns:
 
         """
-        if not config.ENV_DATA.get("deploy_gitops_operator"):
-            return
 
         # Multicluster operations
         if config.multicluster:
-            config.switch_acm_ctx()
-            self.deploy_gitops_operator()
+            # Gitops operator is needed on all clusters for appset type workload deployment using pull model
+            for cluster_index in range(config.nclusters):
+                self.deploy_gitops_operator(switch_ctx=cluster_index)
+
+            # Switching back context to ACM as below configs are specific to hub cluster
+            config.switch_ctx(get_active_acm_index())
 
             logger.info("Creating GitOps CLuster Resource")
             run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")
@@ -288,7 +296,6 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
-
             cluster_set = []
             managed_clusters = (
                 ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
@@ -326,6 +333,17 @@ class Deployment(object):
             )
             gitops_obj._has_phase = True
             gitops_obj.wait_for_phase("successful", timeout=720)
+
+            logger.info(
+                "Create clusterrolebinding on both the managed clusters, needed "
+                "for appset pull model gitops deployment"
+            )
+            for cluster in managed_clusters:
+                if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+                    config.switch_to_cluster_by_name(cluster["metadata"]["name"])
+                    run_cmd(
+                        f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
+                    )
 
     def do_deploy_ocs(self):
         """
@@ -786,6 +804,14 @@ class Deployment(object):
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
+        if config.DEPLOYMENT.get("sts_enabled"):
+            if "config" not in subscription_yaml_data["spec"]:
+                subscription_yaml_data["spec"]["config"] = {}
+            role_arn_data = {"name": "ROLEARN", "value": self.sts_role_arn}
+            if "env" not in subscription_yaml_data["spec"]["config"]:
+                subscription_yaml_data["spec"]["config"]["env"] = [role_arn_data]
+            else:
+                subscription_yaml_data["spec"]["config"]["env"].append([role_arn_data])
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription_manifest", delete=False
         )
@@ -906,6 +932,10 @@ class Deployment(object):
         else:
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
+
+        if config.DEPLOYMENT.get("sts_enabled"):
+            role_data = create_and_attach_sts_role()
+            self.sts_role_arn = role_data["Role"]["Arn"]
 
         if not live_deployment:
             create_catalog_source(image)
@@ -1030,30 +1060,7 @@ class Deployment(object):
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_9:
-            ocs_operator_names = [
-                defaults.ODF_OPERATOR_NAME,
-                defaults.OCS_OPERATOR_NAME,
-                defaults.MCG_OPERATOR,
-            ]
-            # workaround for https://bugzilla.redhat.com/show_bug.cgi?id=2075422
-            ocp_version = version.get_semantic_ocp_version_from_config()
-            if live_deployment and (
-                (
-                    ocp_version == version.VERSION_4_10
-                    and ocs_version == version.VERSION_4_9
-                )
-                or (
-                    ocp_version == version.VERSION_4_11
-                    and ocs_version == version.VERSION_4_10
-                )
-            ):
-                ocs_operator_names.remove(defaults.MCG_OPERATOR)
-        else:
-            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
-
-        if ocs_version >= version.VERSION_4_10:
-            ocs_operator_names.append(defaults.ODF_CSI_ADDONS_OPERATOR)
+        ocs_operator_names = get_required_csvs()
 
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         is_ibm_sa_linked = False
@@ -1331,6 +1338,12 @@ class Deployment(object):
                 cluster_data["spec"]["encryption"]["kms"] = {
                     "enable": True,
                 }
+            if config.DEPLOYMENT.get("sc_encryption"):
+                if not config.DEPLOYMENT.get("kms_deployment"):
+                    raise UnsupportedFeatureError(
+                        "StorageClass encryption can be enabled only when KMS is enabled!"
+                    )
+                cluster_data["spec"]["encryption"]["storageClass"] = True
 
         if config.DEPLOYMENT.get("ceph_debug"):
             setup_ceph_debug()
@@ -1415,6 +1428,27 @@ class Deployment(object):
             merge_dict(
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
             )
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            pgsql_data = config.AUTH["pgsql"]
+            user = pgsql_data["username"]
+            password = pgsql_data["password"]
+            host = pgsql_data["host"]
+            port = pgsql_data["port"]
+            pgsql_manager = pgsql.PgsqlManager(
+                username=user,
+                password=password,
+                host=host,
+                port=port,
+            )
+            cluster_name = config.ENV_DATA["cluster_name"]
+            db_name = f"nbcore_{cluster_name.replace('-', '_')}"
+            pgsql_manager.create_database(
+                db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
+            )
+            create_external_pgsql_secret()
+            cluster_data["spec"]["multiCloudGateway"] = {
+                "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
+            }
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -1427,6 +1461,26 @@ class Deployment(object):
                 command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
                 f"{constants.NODE_SELECTOR_ANNOTATION}"
             )
+
+    def cleanup_pgsql_db(self):
+        """
+        Perform cleanup for noobaa external pgsql DB in case external pgsq is enabled.
+        """
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            pgsql_data = config.AUTH["pgsql"]
+            user = pgsql_data["username"]
+            password = pgsql_data["password"]
+            host = pgsql_data["host"]
+            port = pgsql_data["port"]
+            pgsql_manager = pgsql.PgsqlManager(
+                username=user,
+                password=password,
+                host=host,
+                port=port,
+            )
+            cluster_name = config.ENV_DATA["cluster_name"]
+            db_name = f"nbcore_{cluster_name.replace('-', '_')}"
+            pgsql_manager.delete_database(db_name=db_name)
 
     def deploy_odf_addon(self):
         """
@@ -1468,37 +1522,33 @@ class Deployment(object):
         external/indpendent RHCS cluster
 
         """
-        live_deployment = config.DEPLOYMENT.get("live_deployment")
-        logger.info("Deploying OCS with external mode RHCS")
-        ui_deployment = config.DEPLOYMENT.get("ui_deployment")
-        if not ui_deployment:
-            logger.info("Creating namespace and operator group.")
-            run_cmd(f"oc create -f {constants.OLM_YAML}")
-        if not live_deployment:
-            create_catalog_source()
-        self.subscribe_ocs()
-        operator_selector = get_selector_for_ocs_operator()
-        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_9:
-            ocs_operator_names = [
-                defaults.ODF_OPERATOR_NAME,
-                defaults.OCS_OPERATOR_NAME,
-            ]
-        else:
-            ocs_operator_names = [defaults.OCS_OPERATOR_NAME]
-        channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        for ocs_operator_name in ocs_operator_names:
-            package_manifest = PackageManifest(
-                resource_name=ocs_operator_name,
-                selector=operator_selector,
-                subscription_plan_approval=subscription_plan_approval,
-            )
-            package_manifest.wait_for_resource(timeout=300)
-            csv_name = package_manifest.get_current_csv(channel=channel)
-            csv = CSV(resource_name=csv_name, namespace=self.namespace)
-            csv.wait_for_phase("Succeeded", timeout=720)
 
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            live_deployment = config.DEPLOYMENT.get("live_deployment")
+            logger.info("Deploying OCS with external mode RHCS")
+            ui_deployment = config.DEPLOYMENT.get("ui_deployment")
+            if not ui_deployment:
+                logger.info("Creating namespace and operator group.")
+                run_cmd(f"oc create -f {constants.OLM_YAML}")
+            if not live_deployment:
+                create_catalog_source()
+            self.subscribe_ocs()
+            operator_selector = get_selector_for_ocs_operator()
+            subscription_plan_approval = config.DEPLOYMENT.get(
+                "subscription_plan_approval"
+            )
+            ocs_operator_names = get_required_csvs()
+            channel = config.DEPLOYMENT.get("ocs_csv_channel")
+            for ocs_operator_name in ocs_operator_names:
+                package_manifest = PackageManifest(
+                    resource_name=ocs_operator_name,
+                    selector=operator_selector,
+                    subscription_plan_approval=subscription_plan_approval,
+                )
+                package_manifest.wait_for_resource(timeout=300)
+                csv_name = package_manifest.get_current_csv(channel=channel)
+                csv = CSV(resource_name=csv_name, namespace=self.namespace)
+                csv.wait_for_phase("Succeeded", timeout=720)
         # Set rook log level
         self.set_rook_log_level()
 
@@ -1510,12 +1560,27 @@ class Deployment(object):
         # get admin keyring
         external_cluster.get_admin_keyring()
 
+        cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
+
+        if config.DEPLOYMENT.get("multi_storagecluster"):
+            cluster_data["metadata"]["namespace"] = config.ENV_DATA[
+                "external_storage_cluster_namespace"
+            ]
+            cluster_data["metadata"]["name"] = config.ENV_DATA[
+                "external_storage_cluster_name"
+            ]
+            exec_cmd(
+                f"oc create -f {constants.MULTI_STORAGECLUSTER_EXTERNAL_NAMESPACE}"
+            )
+            label_pod_security_admission(
+                namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
+            )
+            exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
+        else:
+            cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+
         # Create secret for external cluster
         create_external_secret()
-
-        cluster_data = templating.load_yaml(constants.EXTERNAL_STORAGE_CLUSTER_YAML)
-        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
-
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
@@ -1578,8 +1643,26 @@ class Deployment(object):
         # enable secure connection mode for in-transit encryption
         if config.ENV_DATA.get("in_transit_encryption"):
             external_cluster.enable_secure_connection_mode()
-
-        setup_ceph_toolbox()
+        if config.DEPLOYMENT.get("multi_storagecluster"):
+            logger.info("not setting toolbox in multi-storagecluster")
+        else:
+            setup_ceph_toolbox()
+        logger.info("Checking ceph health for external cluster")
+        if not config.DEPLOYMENT.get("multi_storagecluster"):
+            try:
+                ceph_health_check(
+                    tries=30,
+                    delay=10,
+                )
+            except CephHealthException:
+                raise CephHealthException("External ceph cluster not healthy")
+        else:
+            try:
+                ceph_health_check_multi_storagecluster_external()
+            except CephHealthException:
+                raise CephHealthException(
+                    "External multi-storagecluster external ceph cluster not healthy"
+                )
 
     def set_rook_log_level(self):
         rook_log_level = config.DEPLOYMENT.get("rook_log_level")
@@ -1685,6 +1768,17 @@ class Deployment(object):
                     defaults.CEPHFILESYSTEM_NAME = cfs_name
                 else:
                     logger.error("MDS deployment Failed! Please check logs!")
+            if config.DEPLOYMENT.get("multi_storagecluster"):
+                self.deploy_with_external_mode()
+                # Checking external cephcluster health
+                retry((CephHealthException, CommandFailed), tries=5, delay=20,)(
+                    check_cephcluster_status(
+                        desired_phase="Connected",
+                        desired_health="HEALTH_OK",
+                        name=constants.EXTERNAL_CEPHCLUSTER_NAME,
+                        namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
+                    )
+                )
 
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
@@ -1883,7 +1977,10 @@ class Deployment(object):
             except Exception as ex:
                 logger.error(f"Failed to uninstall OCS. Exception is: {ex}")
                 logger.info("resuming teardown")
-            self.ocp_deployment.destroy(log_level)
+            try:
+                self.ocp_deployment.destroy(log_level)
+            finally:
+                self.cleanup_pgsql_db()
 
     def add_node(self):
         """
@@ -1977,7 +2074,9 @@ class Deployment(object):
         logger.info("Writing tag data to snapshot.ver")
         acm_version = config.ENV_DATA.get("acm_version")
 
-        image_tag = get_latest_acm_tag_unreleased(version=acm_version)
+        image_tag = config.ENV_DATA.get(
+            "acm_unreleased_image"
+        ) or get_latest_acm_tag_unreleased(version=acm_version)
 
         with open(os.path.join(acm_hub_deploy_dir, "snapshot.ver"), "w") as f:
             f.write(image_tag)
@@ -2059,6 +2158,30 @@ class Deployment(object):
             f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
         validate_acm_hub_install()
+
+
+def create_external_pgsql_secret():
+    """
+    Creates secret for external PgSQL to be used by Noobaa
+    """
+    secret_data = templating.load_yaml(constants.EXTERNAL_PGSQL_NOOBAA_SECRET_YAML)
+    secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    pgsql_data = config.AUTH["pgsql"]
+    user = pgsql_data["username"]
+    password = pgsql_data["password"]
+    host = pgsql_data["host"]
+    port = pgsql_data["port"]
+    cluster_name = config.ENV_DATA["cluster_name"].replace("-", "_")
+    secret_data["stringData"][
+        "db_url"
+    ] = f"postgres://{user}:{password}@{host}:{port}/nbcore_{cluster_name}"
+
+    secret_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="external_pgsql_noobaa_secret", delete=False
+    )
+    templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
+    logger.info("Creating external PgSQL Noobaa secret")
+    run_cmd(f"oc create -f {secret_data_yaml.name}")
 
 
 def validate_acm_hub_install():
@@ -2260,7 +2383,7 @@ class RBDDRDeployOps(object):
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=config.get_active_acm_index()
+            query_mirroring, skip_index=get_all_acm_indexes()
         )
         index = 0
         for out in out_list:

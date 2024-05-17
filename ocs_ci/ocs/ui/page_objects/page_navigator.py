@@ -297,8 +297,12 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Alerting Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
         self.do_click(locator=self.page_nav["alerting_page"], enable_screenshot=False)
+
+        from ocs_ci.ocs.ui.page_objects.alerting import Alerts
+
+        return Alerts()
 
     def navigate_metrics_page(self):
         """
@@ -306,7 +310,7 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Metrics Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
         self.do_click(locator=self.page_nav["metrics_page"], enable_screenshot=False)
 
     def navigate_dashboards_page(self):
@@ -420,8 +424,8 @@ class PageNavigator(BaseUI):
         """
         logger.info("Select the OCP administrator user role from the dropdown")
         if self.get_elements(self.generic_locators["developer_selected"]):
-            self.do_click(self.sc_loc["Developer_dropdown"])
-            self.do_click(self.sc_loc["select_administrator"], timeout=5)
+            self.do_click(self.validation_loc["developer_dropdown"])
+            self.do_click(self.validation_loc["select_administrator"], timeout=5)
             logger.info("Administrator user is selected")
         elif self.get_elements(self.generic_locators["administrator_selected"]):
             logger.info("Administrator user was already selected")

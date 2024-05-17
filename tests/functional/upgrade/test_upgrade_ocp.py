@@ -6,9 +6,13 @@ from semantic_version import Version
 
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CephHealthException
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import (
+    archive_ceph_crashes,
+    ceph_crash_info_display,
     TimeoutSampler,
     get_latest_ocp_version,
     expose_ocp_version,
@@ -200,4 +204,12 @@ class TestUpgradeOCP(ManageTest):
             # Increased timeout because of this bug:
             # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
             new_ceph_cluster.wait_for_rebalance(timeout=3000)
-            ceph_health_check(tries=160, delay=30)
+            ct_pod = get_ceph_tools_pod()
+            try:
+                ceph_health_check(tries=160, delay=30)
+            except CephHealthException as err:
+                if "daemons have recently crashed" in str(err):
+                    logger.error(err)
+                    ceph_crash_info_display(ct_pod)
+                    archive_ceph_crashes(ct_pod)
+                raise err

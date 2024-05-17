@@ -33,5 +33,13 @@ class SearchBar(BaseUI):
         Args:
             search_text (str): Text to search
         """
-        logger.info(f"Enter the text into search input: '{search_text}'")
+        logger.debug(f"Enter the text into search input: '{search_text}'")
         self.do_send_keys(self.generic_locators["searchbar_input"], search_text)
+
+    def clear_search(self):
+        """
+        Clear search input
+
+        """
+        logger.info("Clear search input")
+        self.clear_input_gradually(self.generic_locators["searchbar_input"])

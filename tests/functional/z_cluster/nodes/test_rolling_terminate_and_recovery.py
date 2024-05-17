@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_external_mode,
     skipif_ibm_cloud,
-    provider_client_ms_platform_required,
     ipi_deployment_required,
 )
 from ocs_ci.ocs.machine import (
@@ -38,7 +37,6 @@ from ocs_ci.ocs.cluster import (
     is_vsphere_ipi_cluster,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs.constants import MS_PROVIDER_TYPE, MS_CONSUMER_TYPE
 from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -166,23 +164,6 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                 self.sanity_helpers.health_check_ms(cluster_check=False, tries=40)
             else:
                 self.sanity_helpers.health_check(cluster_check=False, tries=40)
-
-    @provider_client_ms_platform_required
-    @pytest.mark.parametrize(
-        "cluster_type",
-        [MS_PROVIDER_TYPE, MS_CONSUMER_TYPE],
-    )
-    def test_rolling_terminate_and_recovery_in_controlled_fashion_ms(
-        self, cluster_type, nodes
-    ):
-        """
-        Test rolling terminate and recovery of the OCS worker nodes, when waiting for the pods to
-        be running and Ceph Health OK between the iterations. This test is for the Managed Service
-
-        """
-        self.rolling_terminate_and_recovery_of_ocs_worker_nodes(nodes)
-        # Check basic cluster functionality by creating some resources
-        self.sanity_helpers.create_resources_on_ms_consumers()
 
     @ipi_deployment_required
     def test_rolling_terminate_and_recovery_in_controlled_fashion_ipi(

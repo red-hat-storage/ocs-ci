@@ -1,6 +1,7 @@
 """
 Utility functions that are used as a part of OCP or OCS deployments
 """
+
 import logging
 import os
 import re
@@ -67,6 +68,10 @@ def create_external_secret(ocs_version=None, apply=False):
     if not external_cluster_details:
         raise ExternalClusterDetailsException("No external cluster data found")
     secret_data["data"]["external_cluster_details"] = external_cluster_details
+    if config.DEPLOYMENT.get("multi_storagecluster"):
+        secret_data["metadata"][
+            "namespace"
+        ] = constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
     secret_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="external_cluster_secret", delete=False
     )
@@ -160,3 +165,38 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
             wait_for_machineconfigpool_status("all")
 
     return icsp_file_dest_location
+
+
+def get_ocp_release_image():
+    """
+    Get the url of ocp release image
+    * from DEPLOYMENT["custom_ocp_image"] or
+    * from openshift-install version command output
+
+    Returns:
+        str: Release image of the openshift installer
+
+    """
+    if not config.DEPLOYMENT.get("ocp_image"):
+        if config.DEPLOYMENT.get("custom_ocp_image"):
+            config.DEPLOYMENT["ocp_image"] = config.DEPLOYMENT.get("custom_ocp_image")
+        else:
+            config.DEPLOYMENT["ocp_image"] = get_ocp_release_image_from_installer()
+    return config.DEPLOYMENT["ocp_image"]
+
+
+def get_ocp_release_image_from_installer():
+    """
+    Retrieve release image using the openshift installer.
+
+    Returns:
+        str: Release image of the openshift installer
+
+    """
+    logger.info("Retrieving release image from openshift installer")
+    installer_path = config.ENV_DATA["installer_path"]
+    cmd = f"{installer_path} version"
+    proc = exec_cmd(cmd)
+    for line in proc.stdout.decode().split("\n"):
+        if "release image" in line:
+            return line.split(" ")[2].strip()

@@ -162,3 +162,22 @@ class BlockAndFile(StorageSystemDetails):
                 }
             else:
                 logger.info(f"pvc {data_struct.pvc_obj.name} capacity is as expected.")
+
+    def get_raw_capacity_card_values(self):
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Get the raw capacity card values
+
+        Returns:
+            tuple: Used and available capacity values in format similar to "1.23 TiB"
+        """
+        logger.info("Get the raw capacity card values")
+
+        used = self.get_element_text(
+            format_locator(self.validation_loc["storage_capacity"], "Used")
+        )
+        available = self.get_element_text(
+            format_locator(self.validation_loc["storage_capacity"], "Available")
+        )
+
+        return used, available

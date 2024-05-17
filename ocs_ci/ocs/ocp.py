@@ -1,6 +1,7 @@
 """
 General OCP object
 """
+
 import logging
 import os
 import re
@@ -563,7 +564,7 @@ class OCP(object):
             CommandFailed: When the project deletion does not succeed.
 
         """
-        command = f"oc delete project {project_name}"
+        command = f"oc delete projects.project.openshift.io {project_name}"
         if f' "{project_name}" deleted' in run_cmd(
             f"{command}", threading_lock=self.threading_lock
         ):
@@ -941,7 +942,7 @@ class OCP(object):
 
         return resource_info[column_index]
 
-    def get_resource_status(self, resource_name):
+    def get_resource_status(self, resource_name, column="STATUS"):
         """
         Get the resource STATUS column based on:
         'oc get <resource_kind> <resource_name>' command
@@ -954,7 +955,7 @@ class OCP(object):
                 format
         """
 
-        return self.get_resource(resource_name, "STATUS")
+        return self.get_resource(resource_name, column)
 
     def check_name_is_specified(self, resource_name=""):
         """
@@ -1015,7 +1016,10 @@ class OCP(object):
             log.info(f"Cannot find resource object {self.resource_name}")
             return False
         try:
-            current_phase = data["status"]["phase"]
+            if self.kind == constants.APPLICATION_ARGOCD:
+                current_phase = data["status"]["operationState"]["phase"]
+            else:
+                current_phase = data["status"]["phase"]
             log.info(f"Resource {self.resource_name} is in phase: {current_phase}!")
             return current_phase == phase
         except KeyError:

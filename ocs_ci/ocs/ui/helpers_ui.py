@@ -44,6 +44,7 @@ def ui_deployment_conditions():
         constants.VSPHERE_PLATFORM,
         constants.AZURE_PLATFORM,
         constants.GCP_PLATFORM,
+        constants.BAREMETAL_PLATFORM,
     ):
         logger.info(f"OCS deployment via UI is not supported on platform {platform}")
         return False
@@ -131,6 +132,7 @@ def ui_add_capacity_conditions():
         "4.13",
         "4.14",
         "4.15",
+        "4.16",
     ):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"

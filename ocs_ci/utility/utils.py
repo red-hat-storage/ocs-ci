@@ -37,7 +37,6 @@ from paramiko.auth_handler import AuthenticationException, SSHException
 from semantic_version import Version
 from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 from jinja2 import FileSystemLoader, Environment
-
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
@@ -57,7 +56,9 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     CephToolBoxNotFoundException,
     NoRunningCephToolBoxException,
+    ClusterNotInSTSModeException,
 )
+
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -496,7 +497,9 @@ def run_cmd(
     return mask_secrets(completed_process.stdout.decode(), secrets)
 
 
-def run_cmd_interactive(cmd, prompts_answers, timeout=300):
+def run_cmd_interactive(
+    cmd, prompts_answers, timeout=300, string_answer=False, raise_exception=True
+):
     """
     Handle interactive prompts with answers during subctl command
 
@@ -504,7 +507,8 @@ def run_cmd_interactive(cmd, prompts_answers, timeout=300):
         cmd(str): Command to be executed
         prompts_answers(dict): Prompts as keys and answers as values
         timeout(int): Timeout in seconds, for pexpect to wait for prompt
-
+        string_answer (bool): string answer
+        raise_exception (bool): raise excption
     Raises:
         InteractivePromptException: in case something goes wrong
 
@@ -512,9 +516,13 @@ def run_cmd_interactive(cmd, prompts_answers, timeout=300):
     child = pexpect.spawn(cmd)
     for prompt, answer in prompts_answers.items():
         if child.expect(prompt, timeout=timeout):
-            raise InteractivePromptException("Unexpected Prompt")
-
-        if not child.sendline("".join([answer, constants.ENTER_KEY])):
+            if raise_exception:
+                raise InteractivePromptException("Unexpected Prompt")
+        if string_answer:
+            send_line = answer
+        else:
+            send_line = "".join([answer, constants.ENTER_KEY])
+        if not child.sendline(send_line):
             raise InteractivePromptException("Failed to provide answer to the prompt")
 
 
@@ -548,8 +556,11 @@ def run_cmd_multicluster(
     # Useful to skip operations on ACM cluster
     restore_ctx_index = config.cur_index
     completed_process = [None] * len(config.clusters)
+    # this need's to be done to skip none value as skip_index accepts type none
+    if not isinstance(skip_index, list):
+        skip_index = [skip_index]
     for cluster in config.clusters:
-        if cluster.MULTICLUSTER["multicluster_index"] == skip_index:
+        if cluster.MULTICLUSTER["multicluster_index"] in skip_index:
             log.warning(f"skipping index = {skip_index}")
             continue
         else:
@@ -811,7 +822,15 @@ def get_openshift_installer(
     version = version or config.DEPLOYMENT["installer_version"]
     bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     bin_dir = os.path.abspath(bin_dir_rel_path)
-    installer_filename = "openshift-install"
+    if (
+        config.ENV_DATA.get("fips")
+        and version_module.get_semantic_ocp_version_from_config()
+        >= version_module.VERSION_4_16
+    ):
+        installer_filename = "openshift-install-fips"
+        os.environ["OPENSHIFT_INSTALL_SKIP_HOSTCRYPT_VALIDATION"] = "True"
+    else:
+        installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     client_binary_path = os.path.join(bin_dir, "oc")
     client_exist = os.path.isfile(client_binary_path)
@@ -834,15 +853,17 @@ def get_openshift_installer(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        tarball = f"{installer_filename}.tar.gz"
-        url = get_openshift_mirror_url(installer_filename, version)
-        download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball} {installer_filename}")
-        delete_file(tarball)
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        cmd = (
+            f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
+            f"--to ./ registry.ci.openshift.org/ocp/release:{version}"
+        )
+        exec_cmd(cmd)
         # return to the previous working directory
         os.chdir(previous_dir)
 
     installer_version = run_cmd(f"{installer_binary_path} version")
+    config.ENV_DATA["installer_path"] = installer_binary_path
     log.info(f"OpenShift Installer version: {installer_version}")
     return installer_binary_path
 
@@ -1161,16 +1182,37 @@ def get_openshift_mirror_url(file_name, version):
         UnsupportedOSType: In case the OS type is not supported
         UnavailableBuildException: In case the build url is not reachable
     """
+    target_arch = ""
+    rhel_version = ""
+    arch = get_architecture_host()
+    log.debug(f"Host architecture: {arch}")
     if platform.system() == "Darwin":
         os_type = "mac"
     elif platform.system() == "Linux":
         os_type = "linux"
+        # form the target architecture and rhel version to download oc
+        if "openshift-client" in file_name:
+            # form the target architecture to download oc
+            if "x86_64" in arch:
+                target_arch = "-amd64"
+            elif "arm" in arch or "aarch" in arch:
+                target_arch = "-arm64"
+            elif "ppc" in arch:
+                target_arch = "-ppc64le"
+
+            glibc_version = get_glibc_version()
+            if version_module.get_semantic_version(
+                glibc_version
+            ) < version_module.get_semantic_version("2.34"):
+                rhel_version = "-rhel8"
+            else:
+                rhel_version = "-rhel9"
     else:
         raise UnsupportedOSType
     url_template = config.DEPLOYMENT.get(
         "ocp_url_template",
         "https://openshift-release-artifacts.apps.ci.l2s4.p1.openshiftapps.com/"
-        "{version}/{file_name}-{os_type}-{version}.tar.gz",
+        f"{version}/{file_name}-{os_type}{target_arch}{rhel_version}-{version}.tar.gz",
     )
     url = url_template.format(
         version=version,
@@ -1749,7 +1791,11 @@ def email_reports(session):
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart("alternative")
+    aborted_message = ""
+    if config.RUN.get("aborted"):
+        aborted_message = "[JOB ABORTED] "
     msg["Subject"] = (
+        f"{aborted_message}"
         f"ocs-ci results for {get_testrun_name()} "
         f"({build_str}"
         f"RUN ID: {config.RUN['run_id']}) "
@@ -2267,6 +2313,25 @@ def get_az_count():
         return 1
 
 
+def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
+    """
+    Wait until the ceph health is NOT OK
+
+    """
+
+    def check_ceph_health_not_ok():
+        """
+        Check if ceph health is NOT OK
+
+        """
+        return run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE) != "HEALTH_OK"
+
+    sampler = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_ceph_health_not_ok
+    )
+    sampler.wait_for_func_status(True)
+
+
 def ceph_health_check(namespace=None, tries=20, delay=30):
     """
     Args:
@@ -2356,6 +2421,7 @@ def run_ceph_health_cmd(namespace):
 
     """
     # Import here to avoid circular loop
+
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
     try:
@@ -2366,6 +2432,54 @@ def run_ceph_health_cmd(namespace):
     return ct_pod.exec_ceph_cmd(
         ceph_cmd="ceph health", format=None, out_yaml_format=False, timeout=120
     )
+
+
+def ceph_health_multi_storagecluster_external_base():
+    """
+    Check ceph health for multi-storagecluster external implementation.
+
+    Returns:
+        bool: True if cluster health is ok.
+
+    Raises:
+        CephHealthException: Incase ceph health is not ok.
+
+    """
+    # Import here to avoid circular loop
+    from ocs_ci.utility.connection import Connection
+    from ocs_ci.deployment.helpers.external_cluster_helpers import (
+        get_external_cluster_client,
+    )
+
+    host, user, password, ssh_key = get_external_cluster_client()
+    connection_to_cephcluster = Connection(
+        host=host, user=user, password=password, private_key=ssh_key
+    )
+    ceph_health_tuple = connection_to_cephcluster.exec_cmd("ceph health")
+    health = ceph_health_tuple[1]
+    if health.strip() == "HEALTH_OK":
+        log.info("Ceph external multi-storagecluster health is HEALTH_OK.")
+        return True
+    else:
+        raise CephHealthException(
+            f"Ceph cluster health for external multi-storagecluster is not OK. Health: {health}"
+        )
+
+
+def ceph_health_check_multi_storagecluster_external(tries=20, delay=30):
+    """
+    Check ceph health for multi-storagecluster external.
+
+    """
+    return retry(
+        (
+            CephHealthException,
+            CommandFailed,
+        ),
+        tries=tries,
+        delay=delay,
+        backoff=1,
+    )(ceph_health_multi_storagecluster_external_base)()
 
 
 def get_rook_repo(branch="master", to_checkout=None):
@@ -2797,6 +2911,10 @@ def censor_values(data_to_censor):
             for pattern in constants.config_keys_patterns_to_censor:
                 if pattern in key.lower():
                     data_to_censor[key] = "*" * 5
+            for expression in constants.config_keys_expressions_to_censor:
+                if key == expression:
+                    data_to_censor[key] = "*" * 5
+
     return data_to_censor
 
 
@@ -3387,6 +3505,34 @@ def convert_bytes_to_unit(bytes_to_convert):
     if constants.BYTES_IN_TB <= float(bytes_to_convert):
         size = float(bytes_to_convert) / constants.BYTES_IN_TB
         return f"{size:.2f}TB"
+
+
+def human_to_bytes_ui(size_str):
+    """
+    Convert human readable size to bytes.
+    Use this function when working with UI pages or when format "MiB", "KiB" with space separation,  is used.
+
+    Args:
+        size_str (str): The size to convert (i.e, "1 GiB" is 1048576 bytes)
+            acceptable units are: "EiB"/"Ei", "PiB"/"Pi" "TiB"/"Ti", "GiB"/"Gi", "MiB"/"Mi", "KiB"/"Ki", "B"/"Bytes"
+
+    Returns:
+        int: The converted size in bytes
+
+    """
+    units = {
+        "E": 2**60,
+        "P": 2**50,
+        "T": 2**40,
+        "G": 2**30,
+        "M": 2**20,
+        "K": 2**10,
+        "B": 1,
+    }
+    size, unit = size_str.split()
+    unit = unit[0]
+    size = float(size)
+    return int(size * units[unit])
 
 
 def prepare_customized_pull_secret(images=None):
@@ -4546,6 +4692,23 @@ def archive_ceph_crashes(toolbox_pod):
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
 
 
+def ceph_crash_info_display(toolbox_pod):
+    """
+    Displays ceph crash information
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    """
+    ceph_crashes = get_ceph_crashes(toolbox_pod)
+    for each_crash in ceph_crashes:
+        log.error(f"ceph crash: {each_crash}")
+        crash_info = toolbox_pod.exec_ceph_cmd(
+            f"ceph crash info {each_crash}", out_yaml_format=False
+        )
+        log.error(crash_info)
+
+
 def add_time_report_to_email(session, soup):
     """
     Takes the time report dictionary and converts it into HTML table
@@ -4649,3 +4812,62 @@ def exec_nb_db_query(query):
         output = output[2:-1]
 
     return output
+
+
+def get_role_arn_from_sub():
+    """
+    Get the RoleARN from the OCS subscription
+
+    Returns:
+        role_arn (str): Role ARN used for ODF deployment
+
+    Raises:
+        ClusterNotInSTSModeException (Exception) if cluster
+        not in STS mode
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if config.DEPLOYMENT.get("sts_enabled"):
+        role_arn = None
+        odf_sub = OCP(
+            kind=constants.SUBSCRIPTION,
+            resource_name=constants.ODF_SUBSCRIPTION,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        for item in odf_sub.get()["spec"]["config"]["env"]:
+            if item["name"] == "ROLEARN":
+                role_arn = item["value"]
+                break
+        return role_arn
+    else:
+        raise ClusterNotInSTSModeException
+
+
+def get_glibc_version():
+    """
+    Gets the GLIBC version.
+
+    Returns:
+        str: GLIBC version
+
+    """
+    cmd = "ldd --version ldd"
+    res = exec_cmd(cmd)
+    out = res.stdout.decode("utf-8")
+    version_match = re.search(r"ldd \(GNU libc\) (\d+\.\d+)", out)
+    if version_match:
+        return version_match.group(1)
+    else:
+        log.warning("GLIBC version number not found")
+
+
+def get_architecture_host():
+    """
+    Gets the architecture of host
+
+    Returns:
+        str: Host architecture
+
+    """
+    return os.uname().machine

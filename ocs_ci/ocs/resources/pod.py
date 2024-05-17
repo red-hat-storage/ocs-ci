@@ -2102,6 +2102,8 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
             constants.NOOBAA_OPERATOR_POD_LABEL,
             constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
         ]
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            nb_pod_labels.remove(constants.NOOBAA_DB_LABEL_47_AND_ABOVE)
         nb_pods_running = list()
         for pod_label in nb_pod_labels:
             pods = get_pods_having_label(pod_label, statuses=[constants.STATUS_RUNNING])
@@ -2256,7 +2258,7 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
         logger.warning("None of the new osd pods reached the desired status")
 
 
-def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"], label=None):
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2264,7 +2266,16 @@ def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
         dict: dictionary of pod name and its corresponding restart count
 
     """
-    list_of_pods = get_all_pods(namespace)
+    if label:
+        selector = label.split("=")[1]
+        selector_label = label.split("=")[0]
+    else:
+        selector = None
+        selector_label = None
+
+    list_of_pods = get_all_pods(
+        namespace=namespace, selector=[selector], selector_label=selector_label
+    )
     restart_dict = {}
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
@@ -3347,6 +3358,23 @@ def exit_osd_maintenance_mode(osd_deployment):
     for deployment in osd_deployment:
         if os.path.isfile(f"backup_{deployment.name}.yaml"):
             os.remove(f"backup_{deployment.name}.yaml")
+
+
+def restart_pods_having_label(label, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Restart the pods having particular label
+
+    Args:
+        label (str): Label of the pod
+        namespace (str): namespace where the pods are running
+
+    """
+    pods_to_restart = [
+        Pod(**pod_data)
+        for pod_data in get_pods_having_label(label, namespace=namespace)
+    ]
+    delete_pods(pods_to_restart, wait=True)
+    logger.info(f"Deleted all the pods with label {label} and in namespace {namespace}")
 
 
 def restart_pods_in_statuses(

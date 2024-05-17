@@ -3,6 +3,7 @@ Tests for Namespace resources and buckets by using OpenShift CRDs only.
 These tests are valid only for OCS version 4.7 and above because in later
 versions are for Namespace bucket creation used CRDs instead of NooBaa RPC calls.
 """
+
 import logging
 from time import sleep
 import uuid
@@ -133,6 +134,19 @@ class TestNamespace(MCGTest):
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"ibmcos": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-5442"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
                         "type": "Multi",
                         "namespacestore_dict": {
                             "aws": [(1, DEFAULT_REGION)],
@@ -187,6 +201,7 @@ class TestNamespace(MCGTest):
             "AWS-OC-Single",
             "Azure-OC-Single",
             "RGW-OC-Single",
+            "IBM-OC-Single",
             "AWS+Azure-OC-Multi",
             "AWS+AWS-OC-Multi",
             "AZURE+AZURE-OC-Multi",

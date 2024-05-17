@@ -7,14 +7,17 @@ import logging
 import tempfile
 import shutil
 import requests
+import time
 
 import semantic_version
+import platform
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
+    UnsupportedPlatformError,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
@@ -157,6 +160,49 @@ class Submariner(object):
                 os.path.expanduser("~/.local/bin/subctl"),
                 os.path.join(config.RUN["bin_dir"], "subctl"),
             )
+        elif self.source == "downstream":
+            self.download_downstream_binary()
+
+    def download_downstream_binary(self):
+        """
+        Download downstream subctl binary
+
+        Raises:
+            UnsupportedPlatformError : If current platform has no supported subctl binary
+        """
+
+        subctl_ver = config.ENV_DATA["subctl_version"]
+        version_str = subctl_ver.split(":")[1]
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        processor = platform.processor()
+        arch = platform.machine()
+        if arch == "x86_64" and processor == "x86_64":
+            binary_pltfrm = "amd64"
+        elif arch == "arm64" and processor == "arm":
+            binary_pltfrm = "arm64"
+        else:
+            raise UnsupportedPlatformError(
+                "Not a supported architecture for subctl binary"
+            )
+        cmd = (
+            f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
+            f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+            f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
+        )
+        run_cmd(cmd)
+        # Wait till image extract happens and subctl dir appears
+        time.sleep(30)
+        decompress = (
+            f"tar -C /tmp/ -xf /tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
+        )
+        run_cmd(decompress)
+        target_dir = os.path.expanduser("./bin")
+        install_cmd = (
+            f"install -m744 /tmp/subctl-{version_str}*/subctl-{version_str}*-linux-{binary_pltfrm} "
+            f"{target_dir} "
+        )
+        run_cmd(install_cmd, shell=True)
+        run_cmd(f"mv {target_dir}/subctl-* {target_dir}/subctl", shell=True)
 
     def submariner_configure_upstream(self):
         """

@@ -1,6 +1,7 @@
 """
 Helper functions file for OCS QE
 """
+
 import base64
 import random
 import datetime
@@ -253,6 +254,7 @@ def create_pod(
     scc=None,
     volumemounts=None,
     pvc_read_only_mode=None,
+    priorityClassName=None,
 ):
     """
     Create a pod
@@ -434,6 +436,9 @@ def create_pod(
             ] = subpath
         else:
             pod_data["spec"]["containers"][0]["volumeMounts"][0]["subPath"] = subpath
+
+    if priorityClassName:
+        pod_data["spec"]["priorityClassName"] = priorityClassName
 
     # overwrite used image (required for disconnected installation)
     update_container_with_mirrored_image(pod_data)
@@ -660,6 +665,14 @@ def default_storage_class(
         else:
             if external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+                storage_class = OCP(kind="storageclass")
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.RBD_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_RBD
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -673,6 +686,14 @@ def default_storage_class(
         else:
             if external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+                storage_class = OCP(kind="storageclass")
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
@@ -3117,21 +3138,53 @@ def default_volumesnapshotclass(interface_type):
     """
     external = config.DEPLOYMENT["external_mode"]
     if interface_type == constants.CEPHBLOCKPOOL:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
-            if external
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
-            if (config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM)
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
-        )
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.RBD_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
+                    if (
+                        config.ENV_DATA["platform"].lower()
+                        in constants.MANAGED_SERVICE_PLATFORMS
+                    )
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+                )
+            )
     elif interface_type == constants.CEPHFILESYSTEM:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            if external
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
-            if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
-            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
-        )
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
+                    if config.ENV_DATA["platform"].lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+                )
+            )
     base_snapshot_class = OCP(
         kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
     )
@@ -3161,7 +3214,7 @@ def get_snapshot_content_obj(snap_obj):
     return snapcontent_obj
 
 
-def wait_for_pv_delete(pv_objs):
+def wait_for_pv_delete(pv_objs, timeout=180):
     """
     Wait for PVs to delete. Delete PVs having ReclaimPolicy 'Retain'
 
@@ -3176,7 +3229,7 @@ def wait_for_pv_delete(pv_objs):
         ):
             wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
             pv_obj.delete()
-        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
 
 
 @retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
@@ -4094,6 +4147,20 @@ def create_reclaim_space_cronjob(
     return ocs_obj
 
 
+def create_priority_class(priority, value):
+    """
+    Function to create priority class on the cluster
+    Returns:
+        bool: Returns priority class obj
+    """
+    priority_class_data = templating.load_yaml(constants.PRIORITY_CLASS_YAML)
+    priority_class_data["value"] = value
+    priority_class_name = priority_class_data["metadata"]["name"] + "-" + priority
+    priority_class_data["metadata"]["name"] = priority_class_name
+    ocs_obj = create_resource(**priority_class_data)
+    return ocs_obj
+
+
 def get_cephfs_subvolumegroup():
     """
     Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
@@ -4519,7 +4586,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     if cli_type == "mcg":
         local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
     elif cli_type == "odf":
-        local_cli_path = constants.CLI_TOOL_LOCAL_PATH
+        local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli")
     local_cli_dir = os.path.dirname(local_cli_path)
     live_deployment = config.DEPLOYMENT["live_deployment"]
     if live_deployment and semantic_version >= version.VERSION_4_13:
@@ -4595,3 +4662,79 @@ def get_architecture_path(cli_type):
     elif system == "Darwin":  # Mac
         path = os.path.join(path, "macosx", image_prefix)
     return path
+
+
+def odf_cli_set_log_level(service, log_level, subsystem):
+    """
+    Set the log level for a Ceph service.
+    Args:
+        service (str): The Ceph service name.
+        log_level (str): The log level to set.
+        subsystem (str): The subsystem for which to set the log level.
+    Returns:
+        str: The output of the command execution.
+    """
+    from pathlib import Path
+
+    if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+        retrieve_cli_binary(cli_type="odf")
+
+    logger.info(
+        f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
+    )
+    cmd = (
+        f"{constants.CLI_TOOL_LOCAL_PATH} --kubeconfig {os.getenv('KUBECONFIG')} "
+        f" set ceph log-level {service} {subsystem} {log_level}"
+    )
+
+    logger.info(cmd)
+    return exec_cmd(cmd, use_shell=True)
+
+
+def get_ceph_log_level(service, subsystem):
+    """
+    Return CEPH log level value.
+
+    Args:
+        service (_type_): _description_
+        subsystem (_type_): _description_
+    """
+
+    logger.info(
+        f"Fetching ceph log level for {service} on {subsystem} Using odf-cli tool."
+    )
+    toolbox = pod.get_ceph_tools_pod()
+    ceph_cmd = f"ceph config get {service}"
+
+    ceph_output = toolbox.exec_ceph_cmd(ceph_cmd)
+
+    ceph_log_level = ceph_output.get(f"debug_{subsystem}", {}).get("value", None)
+
+    memory_value, log_value = ceph_log_level.split("/")
+    return int(log_value)
+
+
+def flatten_multilevel_dict(d):
+    """
+    Recursively extracts the leaves of a multi-level dictionary and returns them as a list.
+
+    Args:
+        d (dict): The multi-level dictionary.
+
+    Returns:
+        list: A list containing the leaves of the dictionary.
+
+    """
+    leaves_list = []
+    for value in d.values():
+        if isinstance(value, dict):
+            leaves_list.extend(flatten_multilevel_dict(value))
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, (dict, list)):
+                    leaves_list.extend(flatten_multilevel_dict({"": item}))
+                else:
+                    leaves_list.append(item)
+        else:
+            leaves_list.append(value)
+    return leaves_list

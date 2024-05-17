@@ -109,7 +109,7 @@ class TestQuayWorkload(E2ETest):
         # Create quay registry
         quay_operator.create_quay_registry()
         log.info("Waiting for quay endpoint to start serving")
-        sleep(120)
+        sleep(180)
         endpoint = quay_operator.get_quay_endpoint()
 
         log.info("Pulling test image")
