@@ -44,9 +44,7 @@ from ocs_ci.ocs.cluster import (
     check_cephcluster_status,
 )
 from ocs_ci.ocs.constants import (
-    MULTICLUSTEROBSERVABILITY_PATH,
     OBSERVABILITYMETRICSCONFIGMAP_PATH,
-    THANOS_PATH,
 )
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -155,6 +153,7 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
+    get_default_storage_class,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
@@ -490,6 +489,7 @@ class Deployment(object):
             dr_conf = self.get_rdr_conf()
             deploy_dr = get_multicluster_dr_deployment()(dr_conf)
             deploy_dr.deploy()
+            deploy_dr.enable
 
     def do_deploy_lvmo(self):
         """
@@ -3404,6 +3404,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         self.rbd = dr_conf.get("rbd_dr_scenario", False)
         # CephFS For future usecase
         self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
+        self.thanos_yaml_file = os.path.join(constants.THANOS_PATH)
+        self.multiclusterobservability_file = os.path.join(
+            constants.MULTICLUSTEROBSERVABILITY_PATH
+        )
 
     def deploy(self):
         """
@@ -3419,6 +3423,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.configure_mirror_peer()
             rbddops.deploy()
         self.deploy_dr_policy()
+        self.enable_acm_observability()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
@@ -3451,6 +3456,18 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         else:
             self.enable_managed_serviceaccount()
 
+    retry(CommandFailed, tries=10, delay=30)
+
+    def check_observability_status(self):
+        """
+        Check observability status
+        Returns (bool): True or False
+
+        """
+        return run_cmd(
+            "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
+        )
+
     @retry(ACMObservabilityNotEnabled, tries=10, delay=5, backoff=5)
     def thanos_secret(self):
         """
@@ -3461,14 +3478,18 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
         secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
         thanos_secret_data = templating.load_yaml(self.thanos_yaml_file)
-        thanos_secret_data["stringData"]["thanos.yaml"][
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
             "bucket"
         ] = self.build_bucket_name()
-        thanos_secret_data["stringData"]["thanos.yaml"][
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
             "endpoint"
         ] = "https://s3.amazonaws.com"
-        thanos_secret_data["stringData"]["thanos.yaml"]["access_key"] = access_key
-        thanos_secret_data["stringData"]["thanos.yaml"]["secret_key"] = secret_key
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
+            "access_key"
+        ] = access_key
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
+            "secret_key"
+        ] = secret_key
         thanos_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="thanos", delete=False
         )
@@ -3477,38 +3498,51 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         logger.info(
             "Creating thanos.yaml needed for ACM observability after passing required params"
         )
-        run_cmd(f"oc create -f {THANOS_PATH}")
+        run_cmd(f"oc create -f {thanos_data_yaml.name}")
 
-        logger.info("Allow some time for ACM Observability to be enabled")
-        time.sleep(120)
-
-        check_observability_status = run_cmd(
-            "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
-        )
-        if check_observability_status:
+        if self.check_observability_status():
             logger.info("ACM observability is successfully enabled")
         else:
-            raise ACMObservabilityNotEnabled(
-                "ACM Observability is not enabled, status is False"
-            )
+            logger.error("ACM observability is not enabled")
 
     def enable_acm_observability(self):
         """
         Function to enable ACM observability for enabling DR monitoring dashboard for Regional DR on the RHACM console.
 
         """
+        config.switch_acm_ctx()
 
-        logger.info("Enable ACM MultiClusterObservability")
-        run_cmd(f"oc create -f {MULTICLUSTEROBSERVABILITY_PATH}")
-
-        logger.info("Whitelist RBD metrics and create configmap")
-        run_cmd(f"oc create -f {OBSERVABILITYMETRICSCONFIGMAP_PATH}")
-
-        logger.info("Enable thanos secret yaml")
-        self.thanos_secret()
+        defaultstorageclass = get_default_storage_class()
 
         logger.info(
-            "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert"
+            "Enabling ACM MultiClusterObservability for DR monitoring dashboard"
+        )
+
+        # load multiclusterobservability.yaml
+        multiclusterobservability_yaml_data = templating.load_yaml(
+            self.multiclusterobservability_file
+        )
+        multiclusterobservability_yaml_data["spec"]["storageConfig"][
+            "storageClass"
+        ] = defaultstorageclass[0]
+        multiclusterobservability_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multiclusterobservability", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            multiclusterobservability_yaml_data,
+            multiclusterobservability_data_yaml.name,
+        )
+
+        run_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
+
+        logger.info("Create thanos secret yaml")
+        self.thanos_secret()
+
+        logger.info("Whitelist RBD metrics by creating configmap")
+        run_cmd(f"oc create -f {OBSERVABILITYMETRICSCONFIGMAP_PATH}")
+
+        logger.info(
+            "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert on the Hub cluster"
         )
         run_cmd(
             "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
