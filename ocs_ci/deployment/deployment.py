@@ -3305,7 +3305,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         resource = backupstorage.get()
         if resource["status"].get("phase") != "Available":
             raise MDRDeploymentException(
-                "Backupstoragelocation resource is no in 'Avaialble' phase"
+                "Backupstoragelocation resource is no in 'Available' phase"
             )
         logger.info("Dataprotection application successful")
 
