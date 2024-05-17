@@ -5,8 +5,8 @@ import time
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
-    post_upgrade,
     ignore_leftovers,
+    post_ocs_upgrade,
     skipif_less_than_five_workers,
 )
 from ocs_ci.framework.testlib import (
@@ -16,7 +16,18 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
+from ocs_ci.ocs.exceptions import ResourceNotFoundError, CommandFailed
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    get_node_objs,
+    drain_nodes,
+    wait_for_nodes_status,
+    schedule_nodes,
+)
 from ocs_ci.ocs.resources.pod import verify_mon_pod_running
+from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +37,78 @@ log = logging.getLogger(__name__)
 @skipif_less_than_five_workers
 @skipif_ocs_version("<4.15")
 class TestFiveMonInCluster(ManageTest):
+
+    mon_count = 5
+    ceph_cluster = CephCluster()
+
+    storagecluster_obj = ocp.OCP(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    def assign_dummy_racks(self):
+        """
+        Assign node labels to given nodes based on given rack lists.
+
+        """
+        overwrite = True
+        if len(self.nodes) % len(self.racks) != 0:
+            msg = "number of nodes is not divisible by number of racks"
+            log.error(msg)
+            raise ValueError(msg)
+        node_h = ocp.OCP(kind="node")
+        for node, rack in zip(self.nodes, self.racks):
+            log.info("labeling node %s with %s=%s", node, constants.RACK_LABEL, rack)
+            oc_cmd = f"label node {node} {constants.RACK_LABEL}={rack}"
+            if overwrite:
+                oc_cmd += " --overwrite"
+            node_h.exec_oc_cmd(command=oc_cmd)
+
+    def are_rack_labels_present(self):
+        """
+        Check that there are no nodes without rack labels.
+
+        Returns:
+            Bool: True if all nodes have a rack label, False otherwise.
+        """
+        node_h = ocp.OCP(kind="node")
+        nodes_labeled = node_h.get(selector=constants.RACK_LABEL)
+        node_names = [n["metadata"]["name"] for n in nodes_labeled["items"]]
+        log.info("nodes with '%s' rack label: %s", constants.RACK_LABEL, node_names)
+        return len(nodes_labeled["items"]) == len(get_worker_nodes())
+
+    def setup(self):
+        """
+        Label each node in different failure domain, Here we make use of rack based failure domains
+
+        """
+        if not self.are_rack_labels_present():
+            self.nodes = get_worker_nodes()
+            self.racks = ["rack{}".format(i) for i in range(0, len(self.nodes))]
+            self.assign_dummy_racks()
+
+    def teardown(self):
+        """
+        Scaledown the mon pods back to three and change failure domain values to three
+
+        """
+        list_mons = self.ceph_cluster.get_mons_from_cluster()
+        if len(list_mons) == self.mon_count:
+            params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 3}}}}'
+            assert self.storagecluster_obj.patch(
+                params=params,
+                format_type="merge",
+            ), log.error("Mon count should not be updated value other than 3 and 5")
+        if self.are_rack_labels_present():
+            self.nodes = get_worker_nodes()
+            self.racks = [
+                "rack{}".format(i % (len(self.nodes) // 2))
+                for i in range(len(self.nodes))
+            ]
+
+            self.assign_dummy_racks()
+
     @post_ocs_upgrade
     def test_scale_mons_in_cluster_to_five(self, threading_lock):
         """
@@ -36,23 +119,18 @@ class TestFiveMonInCluster(ManageTest):
         and will wait for the CephMonLowNumber alert to get cleared
 
         """
-        mon_count = 5
 
         target_msg = "The current number of Ceph monitors can be increased in order to improve cluster resilience."
         target_label = constants.ALERT_CEPHMONLOWCOUNT
 
-        ceph_cluster = CephCluster()
-
-        storagecluster_obj = ocp.OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.STORAGECLUSTER,
-        )
-
-        list_mons = ceph_cluster.get_mons_from_cluster()
-        assert len(list_mons) < mon_count, pytest.skip(
+        list_mons = self.ceph_cluster.get_mons_from_cluster()
+        assert len(list_mons) < self.mon_count, pytest.skip(
             "INVALID: Mon count is already above three."
         )
+
+        # Sleep for 2 minutes so that alert can be generated
+        time.sleep(120)
+
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         alerts_response = api.get(
             "alerts", payload={"silenced": False, "inhibited": False}
@@ -80,26 +158,29 @@ class TestFiveMonInCluster(ManageTest):
         if test_pass:
             params_neg = '{"spec":{"managedResources":{"cephCluster":{"monCount": 4}}}}'
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
-            assert storagecluster_obj.patch(
-                params=params,
-                format_type="merge",
-            ), log.error("Mon count should not be updated value other than 3 and 5")
+            try:
+                assert self.storagecluster_obj.patch(
+                    params=params_neg,
+                    format_type="merge",
+                ), log.error("Mon count should not be updated value other than 3 and 5")
+            except CommandFailed:
+                log.info("Mon count cannot not be updated value other than 3 and 5")
 
-            storagecluster_obj.patch(
-                params=params_neg,
+            self.storagecluster_obj.patch(
+                params=params,
                 format_type="merge",
             )
 
             log.info("Verifying that all five mon pods are in running state")
             assert verify_mon_pod_running(
-                mon_count
+                self.mon_count
             ), "All five mon pods are not up and running state"
 
-            ceph_cluster.cluster_health_check(timeout=60)
+            self.ceph_cluster.cluster_health_check(timeout=60)
 
             measure_end_time = time.time()
 
-            assert len(list_mons) != mon_count, pytest.skip(
+            assert len(list_mons) != self.mon_count, pytest.skip(
                 "INVALID: Mon count is already set to five."
             )
         else:
@@ -109,7 +190,7 @@ class TestFiveMonInCluster(ManageTest):
             )
 
         log.info(
-            f"Verify that CephMonLowNumber alert got cleared post updating monCount to {mon_count}"
+            f"Verify that CephMonLowNumber alert got cleared post updating monCount to {self.mon_count}"
         )
         api.check_alert_cleared(
             label=target_label, measure_end_time=measure_end_time, time_min=300
@@ -123,22 +204,15 @@ class TestFiveMonInCluster(ManageTest):
         updating the monCount to five
 
         """
-        ceph_cluster = CephCluster()
-
-        storagecluster_obj = ocp.OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.STORAGECLUSTER,
-        )
 
         pods = ocp.OCP(
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-        list_mons = ceph_cluster.get_mons_from_cluster()
+        list_mons = self.ceph_cluster.get_mons_from_cluster()
         if len(list_mons) < 5:
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
-            storagecluster_obj.patch(
+            self.storagecluster_obj.patch(
                 params=params,
                 format_type="merge",
             )
@@ -147,7 +221,7 @@ class TestFiveMonInCluster(ManageTest):
                 pods
             ), "All five mon pods are not up and running state"
 
-            ceph_cluster.cluster_health_check(timeout=60)
+            self.ceph_cluster.cluster_health_check(timeout=60)
 
         ocp_nodes = get_node_objs()
         if is_vsphere_ipi_cluster():
@@ -179,23 +253,23 @@ class TestFiveMonInCluster(ManageTest):
         - Mark the node as scheduable
         - Check cluster and Ceph health
         """
-        ceph_cluster = CephCluster()
-
+        """
         storagecluster_obj = ocp.OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )
+        """
 
         pods = ocp.OCP(
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-        #Update monCount to five
-        list_mons = ceph_cluster.get_mons_from_cluster()
+        # Update monCount to five
+        list_mons = self.ceph_cluster.get_mons_from_cluster()
         if len(list_mons) < 5:
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
-            storagecluster_obj.patch(
+            self.storagecluster_obj.patch(
                 params=params,
                 format_type="merge",
             )
@@ -204,12 +278,12 @@ class TestFiveMonInCluster(ManageTest):
                 pods
             ), "All five mon pods are not up and running state"
 
-            ceph_cluster.cluster_health_check(timeout=60)
+            self.ceph_cluster.cluster_health_check(timeout=60)
 
         mon_nodes = []
         mon_pods = pod.get_mon_pods()
-        for pod in mon_pods:
-            mon_nodes.append(pod.get_pod_node((pod).name))
+        for podd in mon_pods:
+            mon_nodes.append(pod.get_pod_node((podd).name))
         assert mon_nodes, "Failed to find a node for the test"
         # check csi-cephfsplugin-provisioner's and csi-rbdplugin-provisioner's
         # are ready, see BZ #2162504
@@ -245,4 +319,3 @@ class TestFiveMonInCluster(ManageTest):
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=150)
-
