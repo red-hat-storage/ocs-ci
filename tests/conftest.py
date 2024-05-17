@@ -6464,7 +6464,7 @@ def create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers(
 @pytest.fixture()
 def dr_workload(request):
     """
-    Setup Busybox workload for RDR setup
+    Setup Busybox workload for DR setup
 
     """
     instances = []
@@ -6526,7 +6526,7 @@ def dr_workload(request):
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
             if pvc_interface != constants.CEPHFILESYSTEM:
                 dr_helpers.wait_for_mirroring_status_ok(
                     replaying_images=total_pvc_count
@@ -6603,6 +6603,9 @@ def cnv_dr_workload(request):
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
+
+        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
 
         return instances
 
