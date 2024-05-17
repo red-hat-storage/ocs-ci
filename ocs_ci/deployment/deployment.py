@@ -489,7 +489,6 @@ class Deployment(object):
             dr_conf = self.get_rdr_conf()
             deploy_dr = get_multicluster_dr_deployment()(dr_conf)
             deploy_dr.deploy()
-            deploy_dr.enable
 
     def do_deploy_lvmo(self):
         """
