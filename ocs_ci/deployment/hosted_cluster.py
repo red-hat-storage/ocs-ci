@@ -1005,9 +1005,14 @@ class HostedODF(HypershiftHostedOCP):
                 cluster_kubeconfig=self.cluster_kubeconfig,
             )
 
+        if hasattr(self, "storage_client_name"):
+            storage_claim_name = self.storage_client_name + "-cephfs"
+        else:
+            storage_claim_name = "storage-client-cephfs"
+
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_exist,
-            resource_name="ocs-storagecluster-cephfs",
+            resource_name=storage_claim_name,
             should_exist=True,
         )
 
@@ -1053,14 +1058,14 @@ class HostedODF(HypershiftHostedOCP):
         for sample in TimeoutSampler(
             timeout=300,
             sleep=60,
-            func=self.storage_class_claim_exists_rbd,
+            func=self.storage_claim_exists_rbd,
         ):
             if sample:
                 return True
         return False
 
     @kubeconfig_exists_decorator
-    def storage_class_claim_exists_rbd(self):
+    def storage_claim_exists_rbd(self):
         """
         Check if storage class claim for RBD exists
 
@@ -1082,9 +1087,15 @@ class HostedODF(HypershiftHostedOCP):
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
                 cluster_kubeconfig=self.cluster_kubeconfig,
             )
+
+        if hasattr(self, "storage_client_name"):
+            storage_claim_name = self.storage_client_name + "-ceph-rbd"
+        else:
+            storage_claim_name = "storage-client-ceph-rbd"
+
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_exist,
-            resource_name="ocs-storagecluster-ceph-rbd",
+            resource_name=storage_claim_name,
             should_exist=True,
         )
 
@@ -1097,7 +1108,7 @@ class HostedODF(HypershiftHostedOCP):
             bool: True if storage class claim for RBD is created, False otherwise
         """
 
-        if self.storage_class_claim_exists_rbd():
+        if self.storage_claim_exists_rbd():
             logger.info("Storage class claim for RBD already exists")
             return True
 
@@ -1118,7 +1129,7 @@ class HostedODF(HypershiftHostedOCP):
             logger.error(f"Error during storage class claim creation: {e}")
             return False
 
-        return self.storage_class_claim_exists_rbd()
+        return self.storage_claim_exists_rbd()
 
     @kubeconfig_exists_decorator
     def storage_class_exists(self, sc_name):
