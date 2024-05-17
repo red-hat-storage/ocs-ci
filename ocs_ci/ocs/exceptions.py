@@ -696,6 +696,22 @@ class UsernameNotFoundException(Exception):
     pass
 
 
+class MultiStorageClusterExternalCephHealth(Exception):
+    pass
+
+
+class StorageSizeNotReflectedException(Exception):
+    pass
+
+
+class ClusterNotInSTSModeException(Exception):
+    pass
+
+
+class APIRequestError(Exception):
+    pass
+
+
 class ACMObservabilityNotEnabled(Exception):
     pass
 
