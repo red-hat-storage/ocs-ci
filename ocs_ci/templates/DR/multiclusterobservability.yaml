@@ -18,5 +18,5 @@ spec:
      name: thanos-object-storage
    receiveStorageSize: 100Gi
    ruleStorageSize: 1Gi
-   storageClass:  thin-csi-odf
+   storageClass:  PLACEHOLDER
    storeStorageSize: 10Gi
