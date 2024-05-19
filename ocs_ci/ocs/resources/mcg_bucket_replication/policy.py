@@ -80,7 +80,7 @@ class AwsLbrPolicy(LbrPolicy):
         return dict
 
 
-class AzureLogBasedReplicationPolicy(LbrPolicy):
+class AzureLbrPolicy(LbrPolicy):
     """
     A class to handle the Azure log-based bucket replication policy JSON structure.
 

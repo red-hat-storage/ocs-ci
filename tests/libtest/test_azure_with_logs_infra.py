@@ -1,7 +1,7 @@
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import libtest
 from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
-    AzureLogBasedReplicationPolicy,
+    AzureLbrPolicy,
 )
 from ocs_ci.ocs.bucket_utils import bucket_read_api
 
@@ -16,7 +16,7 @@ def test_azure_logs_based_repli_setup(bucket_factory, mcg_obj_session):
             "namespacestore_dict": {constants.AZURE_WITH_LOGS_PLATFORM: [(1, None)]},
         },
     }
-    replication_policy = AzureLogBasedReplicationPolicy(
+    replication_policy = AzureLbrPolicy(
         destination_bucket=target_bucket,
         sync_deletions=True,
     )
