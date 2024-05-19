@@ -1491,7 +1491,7 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
         object_key = pattern + "{}".format(i)
         obj_lst.append(object_key)
     command = (
-        f"for i in $(seq 0 {amount-1}); "
+        f"for i in $(seq 0 {amount - 1}); "
         f"do dd if=/dev/urandom of={file_dir}/{pattern}$i bs={bs} count=1 status=none; done"
     )
     io_pod.exec_sh_cmd_on_pod(command=command, sh="sh")
@@ -1799,7 +1799,7 @@ def get_bucket_available_size(mcg_obj, bucket_name):
 
 
 def compare_bucket_object_list(
-    mcg_obj, first_bucket_name, second_bucket_name, timeout=600
+    mcg_obj, first_bucket_name, second_bucket_name, timeout=600, prefix=""
 ):
     """
     Compares the object lists of two given buckets
@@ -1809,6 +1809,7 @@ def compare_bucket_object_list(
         first_bucket_name (str): The name of the first bucket to compare
         second_bucket_name (str): The name of the second bucket to compare
         timeout (int): The maximum time in seconds to wait for the buckets to be identical
+        prefix (str): The prefix to use when listing objects in the buckets
 
     Returns:
         bool: True if both buckets contain the same object names in all objects,
@@ -1817,10 +1818,12 @@ def compare_bucket_object_list(
 
     def _comparison_logic():
         first_bucket_object_set = {
-            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name)
+            obj.key
+            for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name, prefix)
         }
         second_bucket_object_set = {
-            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
+            obj.key
+            for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name, prefix)
         }
         if first_bucket_object_set == second_bucket_object_set:
             logger.info(
@@ -1952,7 +1955,6 @@ def write_random_test_objects_to_s3_path(
 def patch_replication_policy_to_bucket(
     bucket_name, rule_id, destination_bucket_name, prefix=""
 ):
-
     """
     Patches replication policy to a bucket
 
@@ -2004,9 +2006,11 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {
-                "replicationPolicy": json.dumps(replication_policy_dict)
-                if replication_policy_dict
-                else ""
+                "replicationPolicy": (
+                    json.dumps(replication_policy_dict)
+                    if replication_policy_dict
+                    else ""
+                )
             }
         }
     }

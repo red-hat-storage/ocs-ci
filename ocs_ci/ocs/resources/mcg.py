@@ -235,12 +235,23 @@ class MCG:
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
 
-    def s3_list_all_objects_in_bucket(self, bucketname):
+    def s3_list_all_objects_in_bucket(self, bucketname, prefix=""):
         """
+        List all objects in an S3 bucket, optionally filtering by a prefix.
+
+        Args:
+            bucketname (str): The name of the S3 bucket.
+            prefix (str): A prefix to filter the objects by.
+
         Returns:
-            list: A list of all bucket objects
+            list: A list of all bucket objects, optionally filtered by the prefix.
         """
-        return {obj for obj in self.s3_resource.Bucket(bucketname).objects.all()}
+        if prefix:
+            obj_iter = self.s3_resource.Bucket(bucketname).objects.filter(Prefix=prefix)
+        else:
+            obj_iter = self.s3_resource.Bucket(bucketname).objects.all()
+
+        return {obj for obj in obj_iter}
 
     def s3_get_all_buckets(self):
         """

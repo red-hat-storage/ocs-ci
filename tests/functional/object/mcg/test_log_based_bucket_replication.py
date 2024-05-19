@@ -17,6 +17,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import write_random_test_objects_to_bucket
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
@@ -108,12 +109,68 @@ class TestLogBasedBucketReplication(MCGTest):
             timeout=self.DEFAULT_TIMEOUT
         ), f"Replication failed to complete in {self.DEFAULT_TIMEOUT} seconds"
 
+        logger.info("Disabling the deletion sync")
         replication_handler.deletion_sync_enabled = False
         replication_handler.delete_recursively_from_source()
 
         assert not replication_handler.wait_for_sync(
-            timeout=self.DEFAULT_TIMEOUT
-        ), "Deletion sync has completed despite being disabled"
+            timeout=180
+        ), "Deletion sync completed even though the policy was disabled!"
+
+    # @polarion_id("OCS-4938") TODO
+    @tier2
+    def test_deletion_sync_with_prefix(
+        self, platform, log_based_replication_handler_factory, test_directory_setup
+    ):
+        """
+        Test deletion sync with a prefix.
+
+        1. Upload a set of objects to the source bucket with a prefix
+        2. Wait for the objects to be replicated to the target bucket
+        3. Delete all objects from the source bucket with the same prefix
+        4. Wait for the objects to be deleted from the target bucket
+
+        """
+        # Set a policy that sync only a specific prefix between the buckets
+        replication_handler = log_based_replication_handler_factory(platform)
+        replication_handler.policy_prefix_filter = "synced_prefix"
+
+        # Upload objects with the prefix
+        replication_handler.upload_random_objects_to_source(
+            amount=10, prefix="synced_prefix"
+        )
+
+        # Upload objects without the prefix
+        replication_handler.upload_random_objects_to_source(
+            amount=10, prefix="other_prefix"
+        )
+
+        # Wait for the objects with the prefix to be replicated
+        assert replication_handler.wait_for_sync(
+            timeout=self.DEFAULT_TIMEOUT, prefix="synced_prefix"
+        ), f"Replication failed to complete in {self.DEFAULT_TIMEOUT} seconds"
+
+        # Make sure the objects without the prefix were not replicated
+        assert not replication_handler.wait_for_sync(
+            timeout=60, prefix="other_prefix"
+        ), "Replication has completed for the wrong prefix"
+
+        # Upload objects to prefix that isn't synced on the target bucket
+        write_random_test_objects_to_bucket(
+            io_pod=replication_handler.awscli_pod,
+            file_dir=replication_handler.tmp_objs_dir,
+            bucket_to_write=replication_handler.target_bucket,
+            mcg_obj=replication_handler.mcg_obj,
+            prefix="other_prefix",
+            amount=10,
+        )
+        replication_handler.delete_recursively_from_source()
+        assert replication_handler.wait_for_sync(
+            timeout=self.DEFAULT_TIMEOUT, prefix="synced_prefix"
+        ), f"Deletion sync failed to complete in {self.DEFAULT_TIMEOUT} seconds"
+        assert not replication_handler.wait_for_sync(
+            timeout=60, prefix="other_prefix"
+        ), "Deletion sync also deleted objects it shouldn't have"
 
     @tier2
     @polarion_id("OCS-4941")
