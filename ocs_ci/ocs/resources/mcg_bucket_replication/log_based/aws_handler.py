@@ -10,7 +10,7 @@ from ocs_ci.ocs.resources.mcg_bucket_replication.log_based.mockup_bucket_logger 
     MockupBucketLogger,
 )
 from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
-    AwsLogBasedReplicationPolicy,
+    AwsLbrPolicy,
 )
 
 
@@ -57,7 +57,7 @@ class AwsLbrHandler(LbrHandler):
             platform=constants.AWS_PLATFORM,
             region=self.DEFAULT_AWS_REGION,
         )
-        replication_policy = AwsLogBasedReplicationPolicy(
+        replication_policy = AwsLbrPolicy(
             destination_bucket=target_bucket.name,
             sync_deletions=True,
             logs_bucket=mockup_logger.logs_bucket_uls_name,
