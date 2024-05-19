@@ -75,7 +75,7 @@ class AwsLbrHandler(LbrHandler):
         self._target_bucket = target_bucket
         self.mockup_logger = mockup_logger
 
-    def upload_random_objects_to_source(self, amount, prefix=""):
+    def upload_random_objects_to_source(self, amount, prefix=None):
         """
         Upload random objects to the source bucket and upload a matching PUT
         mockup log for each object.
@@ -87,8 +87,9 @@ class AwsLbrHandler(LbrHandler):
         Returns:
             list: A list of the uploaded object keys
         """
-        # TODO: change to support dynamic random objects upload
-        self.mockup_logger.upload_test_objs_and_log(self.source_bucket.name)
+        return self.mockup_logger.upload_test_objs_and_log(
+            self.source_bucket.name, amount, prefix
+        )
 
     def delete_recursively_from_source(self, prefix=""):
         """

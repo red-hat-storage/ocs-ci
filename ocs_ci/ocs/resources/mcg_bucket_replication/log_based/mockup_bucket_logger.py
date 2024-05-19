@@ -1,13 +1,14 @@
-from datetime import datetime
 import logging
 import uuid
-from ocs_ci.helpers.helpers import setup_pod_directories
+from datetime import datetime
 
+from ocs_ci.helpers.helpers import setup_pod_directories
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     list_objects_from_bucket,
     sync_object_directory,
+    write_random_test_objects_to_bucket,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,13 @@ class MockupBucketLogger:
 
         self.awscli_pod = awscli_pod
         self.mcg_obj = mcg_obj
-        self.log_files_dir = setup_pod_directories(awscli_pod, ["bucket_logs_dir"])[0]
+        self.tmp_objs_dir, self.log_files_dir = setup_pod_directories(
+            awscli_pod,
+            [
+                "tmp_objs_dir",
+                "bucket_logs_dir",
+            ],
+        )
 
         logger.info("Creating the AWS logs bucket Namespacestore")
 
@@ -52,54 +59,41 @@ class MockupBucketLogger:
         self.logs_bucket_mcg_name = logs_bucket.name
         self.logs_bucket_uls_name = logs_bucket.bucketclass.namespacestores[0].uls_name
 
-        self._standard_test_obj_list = self.awscli_pod.exec_cmd_on_pod(
-            f"ls -A1 {constants.AWSCLI_TEST_OBJ_DIR}"
-        ).split(" ")
-
-    @property
-    def standard_test_obj_list(self):
-        return self._standard_test_obj_list
-
-    def upload_test_objs_and_log(self, bucket_name):
+    def upload_test_objs_and_log(self, bucket_name, amount=5, prefix=None):
         """
         Uploads files from files_dir to the MCG bucket and write matching
         mockup logs to the logs bucket
 
         Args:
             files_dir(str): Full path to a directory on awscli_pod
+            amount (int): The amount of random objects to upload
+            prefix (str): The prefix under which to upload the objects
+
+        Returns:
+            list: A list of the uploaded object keys
 
         """
 
         logger.info(f"Uploading test objects to {bucket_name}")
 
-        sync_object_directory(
-            self.awscli_pod,
-            constants.AWSCLI_TEST_OBJ_DIR,
-            f"s3://{bucket_name}",
-            self.mcg_obj,
+        written_objs = write_random_test_objects_to_bucket(
+            io_pod=self.awscli_pod,
+            file_dir=self.tmp_objs_dir,
+            bucket_to_write=bucket_name,
+            mcg_obj=self.mcg_obj,
+            prefix=prefix,
+            amount=amount,
         )
+
+        written_objs_full_keys = [f"{prefix}/{obj}" for obj in written_objs]
 
         self._upload_mockup_logs(
-            bucket_name=bucket_name, obj_list=self._standard_test_obj_list, op="PUT"
+            bucket_name=bucket_name,
+            obj_list=written_objs_full_keys,
+            op="PUT",
         )
 
-    def upload_arbitrary_object_and_log(self, bucket_name):
-        """
-        Uploads an arbitrary object to the MCG bucket and upload a matching mockup log
-
-        """
-
-        logger.info(f"Uploading an arbitrary object to {bucket_name}")
-
-        obj_name = self._standard_test_obj_list[0]
-        cmd = f"cp {constants.AWSCLI_TEST_OBJ_DIR}{obj_name} s3://{bucket_name}/{obj_name}"
-
-        self.awscli_pod.exec_cmd_on_pod(
-            craft_s3_command(cmd, mcg_obj=self.mcg_obj),
-            out_yaml_format=False,
-        )
-
-        self._upload_mockup_logs(bucket_name, [obj_name], "PUT")
+        return written_objs
 
     def delete_objs_and_log(self, bucket_name, objs):
         """
