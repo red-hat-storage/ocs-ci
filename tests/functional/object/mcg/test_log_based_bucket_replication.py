@@ -32,7 +32,10 @@ logger = logging.getLogger(__name__)
 @skipif_disconnected_cluster
 @pytest.mark.parametrize(
     "platform",
-    [constants.AWS_PLATFORM],
+    [
+        constants.AWS_PLATFORM,
+        # constants.AZURE_PLATFORM
+    ],
 )
 class TestLogBasedBucketReplication(MCGTest):
     """
