@@ -20,6 +20,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier4b,
     tier4c,
+    tier4a,
 )
 from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK, OSD, ROOK_OPERATOR, MON_DAEMON
 from ocs_ci.helpers.osd_resize import (
@@ -35,12 +36,17 @@ from ocs_ci.ocs.resources.pod import (
     verify_md5sum_on_pod_files,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
-from ocs_ci.ocs.resources.storage_cluster import get_storage_size
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_storage_size,
+    osd_encryption_verification,
+    resize_osd,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
 from ocs_ci.helpers.disruption_helpers import delete_resource_multiple_times
-
+from ocs_ci.framework import config
+from ocs_ci.utility.utils import convert_device_size
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +154,10 @@ class TestResizeOSD(ManageTest):
         )
         logger.info("Verify the md5sum of the pods for integrity check")
         verify_md5sum_on_pod_files(self.pods_for_integrity_check, self.pod_file_name)
+        # Verify OSDs are encrypted.
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
+
         check_ceph_health_after_resize_osd()
 
         logger.info("Try to create more resources and run IO")
@@ -215,4 +225,47 @@ class TestResizeOSD(ManageTest):
         self.prepare_data_before_resize_osd()
         self.new_storage_size = basic_resize_osd(self.old_storage_size)
         delete_resource_multiple_times(resource_name, num_of_iterations)
+        self.verification_steps_post_resize_osd()
+
+    @tier4a
+    @pytest.mark.parametrize(
+        argnames=["workload_storageutilization_rbd"],
+        argvalues=[
+            pytest.param(
+                *[(0.70, True, 120)], marks=pytest.mark.polarion_id("OCS-5785")
+            ),
+        ],
+        indirect=["workload_storageutilization_rbd"],
+    )
+    def test_resize_osd_when_capacity_near_full(self, workload_storageutilization_rbd):
+        """
+        Test resize osd when the cluster capacity is near full. The test will fill up the cluster to 70%
+        of the cluster capacity, and then it will start the osd resize steps.
+
+        """
+        self.prepare_data_before_resize_osd()
+        self.new_storage_size = basic_resize_osd(self.old_storage_size)
+        self.verification_steps_post_resize_osd()
+
+    @tier4a
+    @pytest.mark.last
+    @polarion_id("OCS-5786")
+    def test_resize_osd_for_large_diff(self):
+        """
+        Test resize osd for large differences. The test will increase the osd size to 4Ti.
+        If the current OSD size is less than 1024Gi, we will skip the test, as the purpose of the test
+        is to check resizing the osd for large differences.
+
+        """
+        logger.info(f"The current osd size is {self.old_storage_size}")
+        current_osd_size_in_gb = convert_device_size(self.old_storage_size, "GB", 1024)
+        max_osd_size_in_gb = 1024
+        if current_osd_size_in_gb > max_osd_size_in_gb:
+            pytest.skip(
+                f"The test will not run when the osd size is less than {max_osd_size_in_gb}Gi"
+            )
+
+        self.prepare_data_before_resize_osd()
+        self.new_storage_size = "4Ti"
+        resize_osd(self.new_storage_size)
         self.verification_steps_post_resize_osd()
