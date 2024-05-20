@@ -47,9 +47,19 @@ class TestEphernalPod:
 
         # Test Detele pod and make sure pvc is deleted as well
         log.info("Starting pod deletion validation")
-        log.info(f"LEN_OF_EPHEMERAL_PODS: {len(ephemeral_pod)}")
-        log.info("\n\n\n STARTING POD OBJ")
-        # p_name = ephemeral_pod.get("metadata").get("name")
+        p_name = ephemeral_pod.get("metadata").get("name")
+        log.info(f"P_NAME: {p_name}")
 
-        # delete pod
-        # make sure pvc deleted aswell
+        # Test delete pod
+        log.info("Start Deleting ephemeral pods")
+        EphernalPodFactory.delete_ephmeral_pod(
+            p_name, config.ENV_DATA["cluster_namespace"]
+        )
+
+        # Make sure pvc deleted aswell
+        log.info("Starting PVC delete validation")
+        pvcs = get_all_pvcs(
+            namespace=config.ENV_DATA["cluster_namespace"], selector="test=ephemeral"
+        )
+        log.info(f"PVCS AT END: {pvcs}")
+        assert not pvcs.get("items"), f"PVC {pvc_prefix_name} not deleted"

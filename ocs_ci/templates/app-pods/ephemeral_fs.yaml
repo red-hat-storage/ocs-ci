@@ -27,4 +27,4 @@ spec:
                 storage: 1Gi
             storageClassName: ocs-storagecluster-cephfs
             volumeMode: Filesystem
-        name: scratch-volume
+      name: scratch-volume

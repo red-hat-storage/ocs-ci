@@ -39,14 +39,25 @@ class EphernalPodFactory:
     @staticmethod
     def create_ephmeral_pod(pod_name: str, storage_type: str, **kwargs) -> Pod:
         pod_dict = EphernalPodFactory.create_pod_dict(pod_name, storage_type, **kwargs)
+        pod_dict["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         pod_obj = Pod(**pod_dict)
 
         if not pod_name:
             pod_name = create_unique_resource_name(f"test-{storage_type}", "pod")
 
         pod_dict["metadata"]["name"] = pod_name
-        pod_dict["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         log.info(f"Creating new Pod {pod_name} for test")
         created_resource = pod_obj.create()
         assert created_resource, f"Failed to create Pod {pod_name}"
         return created_resource
+
+    @staticmethod
+    def delete_ephmeral_pod(pod_name: str, namespace: str) -> None:
+        pod_dict = {
+            "metadata": {
+                "name": pod_name,
+                "namespace": namespace,
+            }
+        }
+        pod_obj = Pod(**pod_dict)
+        pod_obj.delete()
