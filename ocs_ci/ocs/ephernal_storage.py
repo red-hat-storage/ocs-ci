@@ -30,7 +30,7 @@ class EphernalPodFactory:
             "containers": [
                 {
                     "name": "my-frontend",
-                    "image": "busybox:1.28",
+                    "image": "quay.io/ocsci/nginx:fio",
                     "volumeMounts": [
                         {"mountPath": "/scratch", "name": "scratch-volume"}
                     ],
@@ -45,7 +45,9 @@ class EphernalPodFactory:
         "name": "scratch-volume",
         "ephemeral": {
             "volumeClaimTemplate": {
-                "metadata": {"labels": {"type": "my-frontend-volume"}},
+                "metadata": {
+                    "labels": {"type": "my-frontend-volume", "test": "ephemeral"},
+                },
                 "spec": {
                     "accessModes": [ACCESS_MODE_RWO],
                     "storageClassName": CEPHBLOCKPOOL_SC,
