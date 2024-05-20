@@ -36,7 +36,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.managed_services import (
     verify_storageclient,
-    verify_storageclient_storageclass_claims,
+    # verify_storageclient_storageclass_claims,
 )
 
 
@@ -280,12 +280,12 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 constants.DEFAULT_BLOCKPOOL
             ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
             assert (
-                verify_cephblockpool_status()
+                self.rados_utils.verify_cephblockpool_status()
             ), "the cephblockpool is not in Ready phase"
 
             # Validate radosnamespace created and in 'Ready' status
             assert (
-                check_phase_of_rados_namespace()
+                self.rados_utils.check_phase_of_rados_namespace()
             ), "The radosnamespace is not in Ready phase"
 
             # Validate storageclassrequests created
