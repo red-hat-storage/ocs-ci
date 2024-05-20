@@ -368,6 +368,7 @@ generic_locators = {
     ),
     "developer_selected": ("//h2[.='Developer']", By.XPATH),
     "administrator_selected": ("//h2[.='Administrator']", By.XPATH),
+    "blockpool_name": ("//a[text()='{}']", By.XPATH),
 }
 
 ocs_operator_locators = {

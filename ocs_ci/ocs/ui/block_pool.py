@@ -7,6 +7,7 @@ from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 
 logger = logging.getLogger(__name__)
 
@@ -457,5 +458,7 @@ class BlockPoolUI(PageNavigator):
         """
         self.navigate_block_pool_page()
         self.page_has_loaded()
-        self.do_click((f"//a[text()='{pool_name}']", By.XPATH))
+        self.do_click(
+            locator=format_locator(self.generic_locators["blockpool_name"], pool_name)
+        )
         return True
