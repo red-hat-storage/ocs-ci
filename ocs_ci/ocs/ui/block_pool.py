@@ -407,34 +407,46 @@ class BlockPoolUI(PageNavigator):
             "Checking if the Block Pool Raw Capacity is same in GUI as obtained from CLI"
         )
         if self.pool_raw_capacity_loaded(pool_name):
-            cmd = "rados df"
+            cmd = f"rados df --pool={pool_name}"
             ct_pod = pod.get_ceph_tools_pod()
-            df_op = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
-            for pools in df_op["pools"]:
-                if pools["name"] == pool_name:
-                    raw_capacity = round(
-                        int(pools["size_kb"]) / 1024, 1
-                    )  # converting it into MiB because we are only running io in MiB in the previous step
+            df_op = ct_pod.exec_cmd_on_pod(command=cmd)
+            logger.info(f"{df_op=}")
+            # splitting the ouptut with spaces
+            # the blockpool used capacity will always be at index 17 and 18
+            # where the index 17 is the value and index 18 is the unit
+            used_capacity_in_CLI, unit = df_op.split()[17:19]
 
             logger.info(
-                f"Raw capacity of {pool_name} is {raw_capacity} MiB as checked by CLI"
+                f"Used raw capacity of {pool_name} is {used_capacity_in_CLI} {unit} as checked by CLI"
             )
 
             bf_obj = BlockAndFile()
             used_raw_capacity_in_UI, _ = bf_obj.get_raw_capacity_card_values()
+            (
+                used_capacity_in_UI,
+                used_capacity_unit_in_UI,
+            ) = used_raw_capacity_in_UI.split()
 
-            if used_raw_capacity_in_UI == f"{str(raw_capacity)} MiB":
-                logger.info("UI values did matched as per CLI for the Raw Capacity")
+            logger.info(
+                f"Used raw capacity of {pool_name} is {used_capacity_in_UI} {used_capacity_unit_in_UI} as checked by UI"
+            )
+
+            # rounding the used capacity values from ui and cli for better matching.
+            if (
+                (round(float(used_capacity_in_CLI)))
+                == round(float(used_capacity_in_UI))
+            ) and (unit == used_capacity_unit_in_UI):
+                logger.info("UI values did match as per CLI for the Raw Capacity")
                 return True
             else:
                 logger.error(
-                    f"UI value (i.e {used_raw_capacity_in_UI}) did not matched as per CLI for the Raw Capacity"
+                    f"UI value (i.e {used_raw_capacity_in_UI}) did not match as per CLI for the Raw Capacity"
                 )
                 return False
 
     def select_blockpool(self, pool_name):
         """
-        Selects and clicks on the blocpool according to the blockpool name passed.
+        Selects and clicks on the blockpool according to the blockpool name passed.
 
         Args:
             pool_name (str): Block pool name that is to be selected.
