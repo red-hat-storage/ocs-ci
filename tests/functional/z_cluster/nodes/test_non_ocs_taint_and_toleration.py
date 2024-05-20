@@ -32,7 +32,6 @@ from ocs_ci.utility import version
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     brown_squad,
-    skipif_ocs_version,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -75,7 +74,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    @skipif_ocs_version(">4.15")
     def test_non_ocs_taint_and_tolerations(self):
         """
         Test runs the following steps
