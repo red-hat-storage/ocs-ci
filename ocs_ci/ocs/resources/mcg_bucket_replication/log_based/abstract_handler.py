@@ -121,6 +121,7 @@ class LbrHandler(ABC):
             bucket_path,
             s3_obj=self.mcg_obj,
             prefix=f"{prefix}/" if prefix else None,
+            recursive=True,
         )
 
         if prefix:

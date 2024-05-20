@@ -19,6 +19,9 @@ class AwsLbrHandler(LbrHandler):
     A class for handling log-based replication between MCG buckets on
     top of AWS Namespacestores.
 
+    Log-based replication from an AWS bucket requires reading AWS bucket
+    logs from an AWS bucket in the same region as the source bucket.
+
     Since the logs can take up to 24 hours to be delivered on AWS, this implementation
     writes a mockup log to the logs bucket for each PUT and DELETE operation
     on the source bucket.

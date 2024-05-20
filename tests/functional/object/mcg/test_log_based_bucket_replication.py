@@ -1,8 +1,9 @@
 import logging
 
+from ocs_ci.helpers.helpers import craft_s3_command
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import mcg, red_squad
+from ocs_ci.framework.pytest_customization.marks import mcg, red_squad, bugzilla
 from ocs_ci.framework.testlib import (
     MCGTest,
     ignore_leftover_label,
@@ -17,7 +18,6 @@ from ocs_ci.framework.testlib import (
     tier4b,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import write_random_test_objects_to_bucket
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
 from ocs_ci.ocs.scale_noobaa_lib import noobaa_running_node_restart
 
@@ -33,12 +33,6 @@ logger = logging.getLogger(__name__)
 class TestLogBasedBucketReplication(MCGTest):
     """
     Test log-based replication with deletion sync.
-
-    TODO:
-    Log-based replication requires reading AWS bucket logs from an AWS bucket in the same region as the source bucket.
-    As these logs may take several hours to become available, this test suite utilizes MockupBucketLogger to upload
-    mockup logs for each I/O operation performed on the source bucket to a dedicated log bucket on AWS.
-
     """
 
     DEFAULT_AWS_REGION = "us-east-2"
@@ -75,11 +69,11 @@ class TestLogBasedBucketReplication(MCGTest):
     )
     def test_deletion_sync(self, platform, log_based_replication_handler_factory):
         """
-        Test log-based replication with deletion sync.
+        Test log-based replication with deletion sync:
 
-        1. Upload a set of objects to the source bucket and wait for the replication to complete
-        2. Delete all objects from the source bucket and wait for the deletion sync to complete
-
+        1. Setup log-based replication with deletion sync between two buckets
+        2. Upload a set of objects to the source bucket and wait for the replication to complete
+        3. Delete all objects from the source bucket and wait for the deletion sync to complete
         """
         replication_handler = log_based_replication_handler_factory(platform)
 
@@ -110,15 +104,14 @@ class TestLogBasedBucketReplication(MCGTest):
         self, platform, log_based_replication_handler_factory
     ):
         """
-        Test that deletion sync can be disabled.
+        Test that deletion sync can be disabled:
 
-        # TODO
-        1. Upload a set of objects to the source bucket
-        2. Wait for the objects to be replicated to the target bucket
-        3. Disable deletion sync
-        4. Delete all objects from the source bucket
-        5. Verify that the objects are not deleted from the target bucket
-
+        1. Setup log-based replication with deletion sync between two buckets
+        2. Upload a set of objects to the source bucket
+        3. Wait for the objects to be replicated to the target bucket
+        4. Disable deletion sync by patching the replication policy
+        5. Delete all objects from the source bucket
+        6. Verify that the objects are not deleted from the target bucket
         """
         replication_handler = log_based_replication_handler_factory(platform)
 
@@ -135,6 +128,7 @@ class TestLogBasedBucketReplication(MCGTest):
             timeout=180
         ), "Deletion sync completed even though the policy was disabled!"
 
+    @bugzilla("2281729")
     @pytest.mark.parametrize(
         argnames=["platform"],
         argvalues=[
@@ -152,53 +146,59 @@ class TestLogBasedBucketReplication(MCGTest):
         self, platform, log_based_replication_handler_factory, test_directory_setup
     ):
         """
-        Test deletion sync with a prefix.
+        Test deletion sync with a prefix:
 
-        1. Upload a set of objects to the source bucket with a prefix
-        2. Wait for the objects to be replicated to the target bucket
-        3. Delete all objects from the source bucket with the same prefix
-        4. Wait for the objects to be deleted from the target bucket
-
+        1. Setup log-based replication with deletion sync between two buckets
+        2. Patch the policy to sync only a specific prefix
+        3. Upload objects to two prefixes - one that should be synced and one that shouldn't
+        4. Wait for the objects under the synced prefix to be replicated
+        5. Make sure that the objects under the other prefix were not replicated
+        6. Copy the objects that were not deleted to the same prefix on the target bucket
+        7. Delete all the objects on both prefixes from the source bucket
+        8. Wait for the objects with the prefix to be deleted from the target bucket
+        9. Make sure the objects without the prefix were not deleted from the target bucket
         """
-        # Set a policy that syncs only a specific prefix between the buckets
+        # 1. Setup log-based replication with deletion sync between two buckets
         replication_handler = log_based_replication_handler_factory(platform)
+        # 2. Patch the policy to sync only a specific prefix
         replication_handler.policy_prefix_filter = "synced_prefix"
 
-        # Upload objects with the prefix
+        # 3. Upload objects to two prefixs - one that should be synced and one that shouldn't
         replication_handler.upload_random_objects_to_source(
             amount=10, prefix="synced_prefix"
         )
-
-        # Upload objects without the prefix
         replication_handler.upload_random_objects_to_source(
             amount=10, prefix="other_prefix"
         )
 
-        # Wait for the objects with the prefix to be replicated
+        # 4. Wait for the objects under the synced prefix to be replicated
         assert replication_handler.wait_for_sync(
             timeout=self.DEFAULT_TIMEOUT, prefix="synced_prefix"
         ), f"Replication failed to complete in {self.DEFAULT_TIMEOUT} seconds"
 
-        # Make sure the objects without the prefix were not replicated
+        # 5. Make sure that the objects under the other prefix were not replicated
         assert not replication_handler.wait_for_sync(
-            timeout=60, prefix="other_prefix"
+            timeout=120, prefix="other_prefix"
         ), "Replication has completed for the wrong prefix"
 
-        # Upload objects to prefix that isn't synced on the target bucket
-        write_random_test_objects_to_bucket(
-            io_pod=replication_handler.awscli_pod,
-            file_dir=replication_handler.tmp_objs_dir,
-            bucket_to_write=replication_handler.target_bucket.name,
-            mcg_obj=replication_handler.mcg_obj,
-            prefix="other_prefix",
-            amount=10,
-        )
+        # 6. Copy the objects that were not deleted to the same prefix on the target bucket
+        cp_cmd = f"cp s3://{replication_handler.source_bucket}/other_prefix"
+        cp_cmd += f" s3://{replication_handler.target_bucket}/synced_prefix --recursive"
+        replication_handler.awscli_pod.exec_cmd_on_pod(craft_s3_command(cp_cmd))
+
+        # 7. Delete all the objects on both prefixes from the source bucket
         replication_handler.delete_recursively_from_source()
+
+        # 8. Wait for the objects with the prefix to be deleted
+        # form the target bucket
         assert replication_handler.wait_for_sync(
             timeout=self.DEFAULT_TIMEOUT, prefix="synced_prefix"
         ), f"Deletion sync failed to complete in {self.DEFAULT_TIMEOUT} seconds"
+
+        # 9. Make sure the objects without the prefix were not deleted
+        # from the target bucket
         assert not replication_handler.wait_for_sync(
-            timeout=60, prefix="other_prefix"
+            timeout=120, prefix="other_prefix"
         ), "Deletion sync also deleted objects it shouldn't have"
 
     @pytest.mark.parametrize(
@@ -218,17 +218,12 @@ class TestLogBasedBucketReplication(MCGTest):
         self, platform, log_based_replication_handler_factory
     ):
         """
-        Test patching deletion sync onto an existing bucket.
+        Test patching deletion sync onto an existing bucket:
 
-        TODO
-        1. Create a source bucket
-        2. Create a target bucket
-        3. Patch the source bucket with a replication policy that includes deletion sync
-        4. Upload a set of objects to the source bucket
-        5. Wait for the objects to be replicated to the target bucket
-        6. Delete all objects from the source bucket
-        7. Wait for the objects to be deleted from the target bucket
-
+        1. Create a source bucket and target bucket
+        2. Patch the source bucket with a log-based replication policy that includes deletion sync
+        3. Upload a set of objects to the source bucket
+        4. Wait for the objects to be replicated to the target bucket
         """
         replication_handler = log_based_replication_handler_factory(
             platform, patch_to_existing_bucket=True
@@ -264,16 +259,15 @@ class TestLogBasedBucketReplication(MCGTest):
         log_based_replication_handler_factory,
     ):
         """
-        Test deletion sync behavior when an object is immediately deleted after being uploaded to the source bucket.
+        Test deletion sync behavior when an object is immediately
+        deleted after being uploaded:
 
-        TODO
-        1. Upload an object to the source bucket
-        2. Delete the object from the source bucket
-        3. Upload a set of objects to the source bucket
-        4. Wait for the objects to be replicated to the target bucket
+        1. Setup log-based replication with deletion sync between two buckets
+        2. Upload an object to the source bucket and then immediately delete it
+        3. Upload more objects to the source bucket
+        4. Wait for the two buckets to sync
         5. Delete all objects from the source bucket
-        6. Wait for the objects to be deleted from the target bucket
-
+        6. Check that the objects are deleted from the target bucket
         """
 
         replication_handler = log_based_replication_handler_factory(platform)
