@@ -145,12 +145,13 @@ class AssistedInstallerCluster(object):
         self.cpu_architecture = cl_config["cpu_architecture"]
         self.high_availability_mode = cl_config["high_availability_mode"]
         self.image_type = infra_config["type"]
-        self.openshift_cluster_id = cl_config["openshift_cluster_id"]
+        self.openshift_cluster_id = cl_config.get("openshift_cluster_id")
         # load records with: 'kind': 'AddHostsCluster'
         self.add_hosts_clusters = [
             cl["id"]
             for cl in self.api.get_clusters()
-            if cl["openshift_cluster_id"] == self.openshift_cluster_id
+            if self.openshift_cluster_id
+            and cl.get("openshift_cluster_id") == self.openshift_cluster_id
             and cl["kind"] == "AddHostsCluster"
         ]
         logger.debug(f"AddHostsClusters: {', '.join(self.add_hosts_clusters)}")
