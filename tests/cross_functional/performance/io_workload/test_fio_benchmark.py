@@ -203,7 +203,7 @@ class TestFIOBenchmark(PASTest):
 
         """
         if io_pattern == "sequential":
-            self.crd_data["spec"]["workload"]["args"]["jobs"] = ["read"]
+            self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write"]
         if io_pattern == "random":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = [
                 "randwrite",
