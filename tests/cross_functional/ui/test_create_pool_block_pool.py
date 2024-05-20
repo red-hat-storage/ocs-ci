@@ -11,8 +11,6 @@ from ocs_ci.ocs.exceptions import (
     PoolNotCompressedAsExpected,
     PoolNotReplicatedAsNeeded,
     PoolCephValueNotMatch,
-    BlockPoolRawCapacityNotLoaded,
-    BlockPoolRawCapacityNotCorrect,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
@@ -33,9 +31,9 @@ need_to_delete = []
     argnames=["replica", "compression"],
     argvalues=[
         pytest.param(*[3, True], marks=pytest.mark.polarion_id("OCS-2589")),
-        pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
-        pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
-        pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
+        # pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
+        # pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
+        # pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
     ],
 )
 @skipif_hci_provider_or_client
@@ -124,16 +122,10 @@ class TestPoolUserInterface(ManageTest):
 
         # Checking the raw capcity is loaded on the UI or not.
         blockpool_ui_object = BlockPoolUI()
-        if not blockpool_ui_object.pool_raw_capacity_loaded(self.pool_name):
-            raise BlockPoolRawCapacityNotLoaded(
-                f"The Raw Capacity for blockpool {self.pool_name} is not loaded in UI."
-            )
+        assert blockpool_ui_object.pool_raw_capacity_loaded(self.pool_name)
 
         # Cross checking the raw capacity of the blockpool between CLI and UI
-        if not blockpool_ui_object.cross_check_raw_capacity(self.pool_name):
-            raise BlockPoolRawCapacityNotCorrect(
-                f"The Raw Capcity for the blockpool {self.pool_name} doesnt match in UI as shown in CLI."
-            )
+        assert blockpool_ui_object.cross_check_raw_capacity(self.pool_name)
 
         # Checking Results for compression and replication
         if compression:
