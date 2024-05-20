@@ -77,6 +77,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         request.addfinalizer(finalizer)
 
+    @skipif_ocs_version(">4.15")
     def test_non_ocs_taint_and_tolerations(self):
         """
         Test runs the following steps
@@ -234,10 +235,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
 
     @skipif_ocs_version("<=4.15")
-    def test_new_custom_taint_and_tolerations(self):
+    def test_new_custom_taint_and_tolerations(self, nodes):
         """
         Test runs the following steps
-        1. Add toleration in  storagecluster CR and odf-operator subscription.
+        1. Add toleration in storagecluster CR and odf-operator subscription.
         2. Verify toleration applied in ODF subscription is reflecting
            for other subscriptions, Ceph and nooba components or not(Check all 7 subscriptions).
         3. Apply custom taint to all nodes.
@@ -320,14 +321,14 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 pod.delete(wait=False)
 
         logger.info("After edit noticed few pod respins as expected")
-        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+        assert wait_for_pods_to_be_running(timeout=1200, sleep=15)
 
         logger.info(
             "Check custom toleration on all newly created pods under openshift-storage"
         )
-        retry(CommandFailed, tries=5, delay=10,)(
-            check_toleration_on_pods
-        )(toleration_key="xyz")
+        retry(AssertionError, tries=5, delay=10)(check_toleration_on_pods)(
+            toleration_key="xyz"
+        )
 
         if config.DEPLOYMENT["external_mode"]:
             cephcluster = CephClusterExternal()

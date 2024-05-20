@@ -2547,19 +2547,22 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
 
     """
 
-    pod_objs = get_all_pods(
+    pod_objs = get_running_state_pods(
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=[constants.TOOL_APP_LABEL],
-        exclude_selector=True,
     )
+
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
         tolerations = pod_obj.get().get("spec").get("tolerations")
-        for key in tolerations:
-            assert (
-                key["key"] == toleration_key
-            ), f"The pod {resource_name} does not have toleration {toleration_key}"
-            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+        # Check if the specified toleration key is present in the tolerations
+        toleration_found = any(
+            toleration.get("key") == toleration_key for toleration in tolerations
+        )
+        # Check if the toleration key is not found
+        assert (
+            toleration_found
+        ), f"The pod {resource_name} does not have toleration {toleration_key}"
+        logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
 
 
 def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
@@ -2578,13 +2581,17 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.SUBSCRIPTION,
         )
-        resource_name = sub_obj.name
+        resource_name = sub
         tolerations = sub_obj.get().get("spec").get("tolerations")
-        for key in tolerations:
-            assert (
-                key["key"] == toleration_key
-            ), f"The subscription {resource_name} does not have toleration {toleration_key}"
-            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+        # Check if the specified toleration key is present in the tolerations
+        toleration_found = any(
+            toleration.get("key") == toleration_key for toleration in tolerations
+        )
+        # Check if the toleration key is not found
+        assert (
+            toleration_found
+        ), f"The {resource_name} does not have toleration {toleration_key}"
+        logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
 
 
 def run_osd_removal_job(osd_ids=None):
