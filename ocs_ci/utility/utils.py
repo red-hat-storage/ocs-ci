@@ -4891,3 +4891,22 @@ def get_latest_release_version():
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
     except CommandFailed:
         return
+
+
+def get_fixture_indirectly(request, fixture_name):
+    """
+    Get the value of a fixture name from the request even if the fixture was not passed in the test
+
+    Args:
+        request (_pytest.fixtures.SubRequest'): The pytest request fixture
+        fixture_name: Fixture for which this request is being performed
+
+    Returns:
+        Any: The fixture value
+
+    """
+    try:
+        fixture_value = request.getfixturevalue(fixture_name)
+        return fixture_value
+    except pytest.FixtureLookupError:
+        pytest.fail(f"The fixture '{fixture_name}' was not found")

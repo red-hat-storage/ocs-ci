@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.bucket_utils import s3_delete_object, s3_get_object, s3_put_object
 from ocs_ci.helpers.pvc_ops import create_pvcs
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check, get_fixture_indirectly
 from ocs_ci.ocs.cluster import (
     CephCluster,
     CephClusterExternal,
@@ -81,7 +81,6 @@ class Sanity:
         logger.info(
             "Creating resources and running IO as a sanity functional validation"
         )
-
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
             pvc_obj = pvc_factory(interface)
             self.pvc_objs.append(pvc_obj)
@@ -183,6 +182,68 @@ class Sanity:
             assert s3_delete_object(
                 mcg_obj, bucket_name, key
             ), f"Failed: Delete object, {key}"
+
+
+class SanityWithInitParams(Sanity):
+    """
+    The Sanity class when passing the parameters in the 'init' method.
+    The purpose of this class is to make the Sanity initialization more simple.
+    I avoided overriding the Sanity class directly because it may fail the existing tests.
+    """
+
+    def __init__(
+        self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory, run_io=True
+    ):
+        """
+        Args:
+            pvc_factory (function): A call to pvc_factory function
+            pod_factory (function): A call to pod_factory function
+            bucket_factory (function): A call to bucket_factory function
+            rgw_bucket_factory (function): A call to rgw_bucket_factory function
+            run_io (bool): True for run IO, False otherwise
+
+        """
+        super(SanityWithInitParams, self).__init__()
+        self.pvc_factory = pvc_factory
+        self.pod_factory = pod_factory
+        self.bucket_factory = bucket_factory
+        self.rgw_bucket_factory = rgw_bucket_factory
+        self.run_io = run_io
+
+    @classmethod
+    def init_default(cls, request):
+        """
+        The Sanity init method using the default parameters. The only param to pass
+        is the pytest request fixture.
+
+        Args:
+            request (_pytest.fixtures.SubRequest'): The pytest request fixture
+
+        """
+        pvc_factory = get_fixture_indirectly(request, "pvc_factory")
+        pod_factory = get_fixture_indirectly(request, "pod_factory")
+        bucket_factory = get_fixture_indirectly(request, "bucket_factory")
+        rgw_bucket_factory = get_fixture_indirectly(request, "rgw_bucket_factory")
+
+        return cls(pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory)
+
+    def create_resources(
+        self,
+        pvc_factory=None,
+        pod_factory=None,
+        bucket_factory=None,
+        rgw_bucket_factory=None,
+        run_io=None,
+    ):
+        pvc_factory = pvc_factory or self.pvc_factory
+        pod_factory = pod_factory or self.pod_factory
+        bucket_factory = bucket_factory or self.bucket_factory
+        rgw_bucket_factory = rgw_bucket_factory or self.rgw_bucket_factory
+        run_io = run_io or self.run_io
+
+        super().create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory, run_io
+        )
 
 
 class SanityExternalCluster(Sanity):
@@ -401,6 +462,8 @@ class SanityProviderMode(Sanity):
         pvc_size=None,
         max_pvc_size=30,
         client_indices=None,
+        tries=1,
+        delay=30,
     ):
         """
         Init the sanity Provider Mode class.
@@ -422,6 +485,9 @@ class SanityProviderMode(Sanity):
                If not specified - if it's a client cluster, it creates scale pods and PVCs only
                on the current client. And if it's a provider it creates scale pods and PVCs on
                all the clients.
+           tries (int): The number of tries to create the resources on the clients
+           delay (int): The delay in seconds between retries
+
         """
         super(SanityProviderMode, self).__init__()
         # A dictionary of a client index per the fio_scale object
@@ -461,8 +527,55 @@ class SanityProviderMode(Sanity):
         logger.info(
             f"The client indexes for creating resources are: {self.client_indices}"
         )
+        self.tries = tries
+        self.delay = delay
 
-    def create_resources_on_clients(self, tries=1, delay=30):
+    @classmethod
+    def init_default(cls, request):
+        """
+        The Sanity init method using the default parameters. The only param to pass
+        is the pytest request fixture.
+
+        Args:
+            request (_pytest.fixtures.SubRequest'): The pytest request fixture
+
+        """
+        create_scale_pods_and_pvcs_using_kube_job_on_hci_clients = (
+            get_fixture_indirectly(
+                request, "create_scale_pods_and_pvcs_using_kube_job_on_hci_clients"
+            )
+        )
+        return cls(create_scale_pods_and_pvcs_using_kube_job_on_hci_clients)
+
+    def create_resources(
+        self,
+        pvc_factory=None,
+        pod_factory=None,
+        bucket_factory=None,
+        rgw_bucket_factory=None,
+        run_io=True,
+    ):
+        """
+        Override the method 'create_resources' with the local class method 'create_resources_on_clients'.
+
+        """
+        self.create_resources_on_clients()
+
+    def delete_resources(self):
+        """
+        Override the method 'delete_resources' with the local class method 'delete_resources_on_clients'.
+
+        """
+        self.delete_resources_on_clients()
+
+    def health_check(self, cluster_check=True, tries=20):
+        """
+        Override the method 'health_check' with the local class method 'health_check_provider_mode'.
+
+        """
+        self.health_check_provider_mode(cluster_check, tries)
+
+    def create_resources_on_clients(self, tries=None, delay=None):
         """
         Try creates resources for client 'tries' times with delay 'delay' between the iterations
         using the method 'base_create_resources_on_hci_clients'. If not specified, the default value of
@@ -478,6 +591,9 @@ class SanityProviderMode(Sanity):
             ocs_ci.ocs.exceptions.CommandFailed: In case of a command failed
 
         """
+        tries = tries or self.tries
+        delay = delay or self.delay
+
         retry(
             (FileNotFoundError, CommandFailed),
             tries=tries,
@@ -548,6 +664,6 @@ class SanityProviderMode(Sanity):
                 run the cluster health check on the client clusters.
 
         """
-        self.health_check(cluster_check=cluster_check, tries=tries)
+        super().health_check(cluster_check=cluster_check, tries=tries)
         if run_client_clusters_health_check and is_hci_provider_cluster():
             client_clusters_health_check()
