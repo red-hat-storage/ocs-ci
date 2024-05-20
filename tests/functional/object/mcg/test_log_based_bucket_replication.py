@@ -61,10 +61,6 @@ class TestLogBasedBucketReplication(MCGTest):
                 constants.AWS_PLATFORM,
                 marks=[tier1, polarion_id("OCS-4936")],
             ),
-            # pytest.param(
-            #     constants.AZURE_PLATFORM,
-            #     marks=[tier1],
-            # ),
         ],
     )
     def test_deletion_sync(self, platform, log_based_replication_handler_factory):
@@ -94,10 +90,6 @@ class TestLogBasedBucketReplication(MCGTest):
                 constants.AWS_PLATFORM,
                 marks=[tier1, polarion_id("OCS-4937")],
             ),
-            # pytest.param(
-            #     constants.AZURE_PLATFORM,
-            #     marks=[tier1],
-            # ),
         ],
     )
     def test_deletion_sync_opt_out(
@@ -136,10 +128,6 @@ class TestLogBasedBucketReplication(MCGTest):
                 constants.AWS_PLATFORM,
                 marks=[tier2],
             ),
-            # pytest.param(
-            #     constants.AZURE_PLATFORM,
-            #     marks=[tier2],
-            # ),
         ],
     )
     def test_deletion_sync_with_prefix(
@@ -208,10 +196,6 @@ class TestLogBasedBucketReplication(MCGTest):
                 constants.AWS_PLATFORM,
                 marks=[tier2, polarion_id("OCS-4941")],
             ),
-            # pytest.param(
-            #     constants.AZURE_PLATFORM,
-            #     marks=[tier2],
-            # ),
         ],
     )
     def test_patch_deletion_sync_to_existing_bucket(
@@ -247,10 +231,6 @@ class TestLogBasedBucketReplication(MCGTest):
                 constants.AWS_PLATFORM,
                 marks=[tier3, polarion_id("OCS-4937")],
             ),
-            # pytest.param(
-            #     constants.AZURE_PLATFORM,
-            #     marks=[tier3],
-            # ),
         ],
     )
     def test_deletion_sync_after_instant_deletion(
