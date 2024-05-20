@@ -10,7 +10,6 @@ log = logging.getLogger(__name__)
 
 
 @tier2
-@bugzilla("2274193")
 class TestNoobaaSecurity(BaseTest):
     """
     Test Noobaa Security
