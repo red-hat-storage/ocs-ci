@@ -620,6 +620,10 @@ PERF_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance.yaml")
 
 PERF_BLOCK_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_block.yaml")
 
+EPHEMERAL_RBD_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "ephemeral_rbd.yaml")
+
+EPHEMERAL_FS_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "ephemeral_fs.yaml")
+
 HSBENCH_OBJ_YAML = os.path.join(TEMPLATE_HSBENCH_DIR, "hsbench_obj.yaml")
 
 WARP_OBJ_YAML = os.path.join(TEMPLATE_WARP_DIR, "warp_obj.yaml")
