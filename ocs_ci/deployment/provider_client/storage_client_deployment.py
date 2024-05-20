@@ -10,9 +10,11 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs.rados_utils import RadosHelper
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
-from ocs_ci.utility.retry import retry
+
+# from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.utils import (
@@ -28,21 +30,22 @@ from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_cluster,
-    check_storage_client_status,
+    # check_storage_client_status,
 )
+from ocs_ci.ocs.resources.storage_client import create_storage_client
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import (
     get_all_storageclass_names,
     verify_block_pool_exists,
-    verify_cephblockpool_status,
-    check_phase_of_rados_namespace,
+    # verify_cephblockpool_status,
+    # check_phase_of_rados_namespace,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.managed_services import (
     verify_storageclient,
-    verify_storageclient_storageclass_claims,
+    # verify_storageclient_storageclass_claims,
 )
 
 
@@ -88,6 +91,7 @@ class StorageClientDeployment(object):
         ]
         self.ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
         self.deployment = Deployment()
+        self.rados_utils = RadosHelper()
 
         # Register a function to be called upon the destruction of the instance
         atexit.register(self.cleanup_function)
@@ -267,12 +271,12 @@ class StorageClientDeployment(object):
                 constants.DEFAULT_BLOCKPOOL
             ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
             assert (
-                verify_cephblockpool_status()
+                self.rados_utils.verify_cephblockpool_status()
             ), "the cephblockpool is not in Ready phase"
 
             # Validate radosnamespace created and in 'Ready' status
             assert (
-                check_phase_of_rados_namespace()
+                self.rados_utils.check_phase_of_rados_namespace()
             ), "The radosnamespace is not in Ready phase"
 
             # Validate storageclassrequests created
@@ -303,7 +307,7 @@ class StorageClientDeployment(object):
             onboarding_token = self.onboarding_token_generation_from_ui()
 
             # Create native storage client
-            self.create_storage_client(
+            create_storage_client(
                 storage_provider_endpoint=storage_provider_endpoint,
                 onboarding_token=onboarding_token,
             )
@@ -549,78 +553,78 @@ class StorageClientDeployment(object):
         )
         return onboarding_token
 
-    @retry(AssertionError, 12, 10, 1)
-    def create_storage_client(
-        self,
-        storage_provider_endpoint=None,
-        onboarding_token=None,
-        expected_storageclient_status="Connected",
-    ):
-        """
-        This method creates storage clients
+    # @retry(AssertionError, 12, 10, 1)
+    # def create_storage_client(
+    #     self,
+    #     storage_provider_endpoint=None,
+    #     onboarding_token=None,
+    #     expected_storageclient_status="Connected",
+    # ):
+    #     """
+    #     This method creates storage clients
 
-        Inputs:
-        storage_provider_endpoint (str): storage provider endpoint details.
-        onboarding_token (str): onboarding token
-        expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
+    #     Inputs:
+    #     storage_provider_endpoint (str): storage provider endpoint details.
+    #     onboarding_token (str): onboarding token
+    #     expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
 
-        """
-        # Pull storage-client yaml data
-        log.info("Pulling storageclient CR data from yaml")
-        storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
-        resource_name = storage_client_data["metadata"]["name"]
-        print(f"the resource name: {resource_name}")
+    #     """
+    #     # Pull storage-client yaml data
+    #     log.info("Pulling storageclient CR data from yaml")
+    #     storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
+    #     resource_name = storage_client_data["metadata"]["name"]
+    #     print(f"the resource name: {resource_name}")
 
-        # Check storageclient is available or not
-        storage_client_obj = ocp.OCP(kind="storageclient")
-        is_available = storage_client_obj.is_exist(
-            resource_name=resource_name,
-        )
+    #     # Check storageclient is available or not
+    #     storage_client_obj = ocp.OCP(kind="storageclient")
+    #     is_available = storage_client_obj.is_exist(
+    #         resource_name=resource_name,
+    #     )
 
-        # Check storageclaims available or not
-        cmd = "oc get storageclassclaim"
-        storage_claims = run_cmd(cmd=cmd)
+    #     # Check storageclaims available or not
+    #     cmd = "oc get storageclassclaim"
+    #     storage_claims = run_cmd(cmd=cmd)
 
-        if not is_available:
-            # Set storage provider endpoint
-            log.info(
-                "Updating storage provider endpoint details: %s",
-                storage_provider_endpoint,
-            )
-            storage_client_data["spec"][
-                "storageProviderEndpoint"
-            ] = storage_provider_endpoint
+    #     if not is_available:
+    #         # Set storage provider endpoint
+    #         log.info(
+    #             "Updating storage provider endpoint details: %s",
+    #             storage_provider_endpoint,
+    #         )
+    #         storage_client_data["spec"][
+    #             "storageProviderEndpoint"
+    #         ] = storage_provider_endpoint
 
-            # Set onboarding token
-            log.info("Updating storage provider endpoint details: %s", onboarding_token)
-            storage_client_data["spec"]["onboardingTicket"] = onboarding_token
-            storage_client_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="storage_client", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                storage_client_data, storage_client_data_yaml.name
-            )
+    #         # Set onboarding token
+    #         log.info("Updating storage provider endpoint details: %s", onboarding_token)
+    #         storage_client_data["spec"]["onboardingTicket"] = onboarding_token
+    #         storage_client_data_yaml = tempfile.NamedTemporaryFile(
+    #             mode="w+", prefix="storage_client", delete=False
+    #         )
+    #         templating.dump_data_to_temp_yaml(
+    #             storage_client_data, storage_client_data_yaml.name
+    #         )
 
-            # Create storageclient CR
-            log.info("Creating storageclient CR")
-            self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
+    #         # Create storageclient CR
+    #         log.info("Creating storageclient CR")
+    #         self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
 
-            # Check storage client is in 'Connected' status
-            storage_client_status = check_storage_client_status()
-            assert (
-                storage_client_status == expected_storageclient_status
-            ), "storage client phase is not as expected"
+    #         # Check storage client is in 'Connected' status
+    #         storage_client_status = check_storage_client_status()
+    #         assert (
+    #             storage_client_status == expected_storageclient_status
+    #         ), "storage client phase is not as expected"
 
-            # Create storage classclaim
-            if storage_client_status == "Connected" and not storage_claims:
-                storage_classclaim_data = templating.load_yaml(
-                    constants.STORAGE_CLASS_CLAIM_YAML
-                )
-                templating.dump_data_to_temp_yaml(
-                    storage_classclaim_data, constants.STORAGE_CLASS_CLAIM_YAML
-                )
-                self.ocp_obj.exec_oc_cmd(
-                    f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}"
-                )
-                time.sleep(30)
-                verify_storageclient_storageclass_claims(resource_name)
+    #         # Create storage classclaim
+    #         if storage_client_status == "Connected" and not storage_claims:
+    #             storage_classclaim_data = templating.load_yaml(
+    #                 constants.STORAGE_CLASS_CLAIM_YAML
+    #             )
+    #             templating.dump_data_to_temp_yaml(
+    #                 storage_classclaim_data, constants.STORAGE_CLASS_CLAIM_YAML
+    #             )
+    #             self.ocp_obj.exec_oc_cmd(
+    #                 f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}"
+    #             )
+    #             time.sleep(30)
+    #             verify_storageclient_storageclass_claims(resource_name)
