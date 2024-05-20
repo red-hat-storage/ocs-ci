@@ -187,9 +187,9 @@ class TestFIOBenchmark(PASTest):
             self.crd_data["spec"]["workload"]["args"][
                 "storagesize"
             ] = f"{int(self.filesize * 1.2)}Gi"
-        self.crd_data["spec"]["workload"]["args"]["servers"] = int(
-            self.total_data_set / self.filesize
-        ) + 3
+        self.crd_data["spec"]["workload"]["args"]["servers"] = (
+            int(self.total_data_set / self.filesize) + 3
+        )
         log.info(f"Total Data set to work on is : {self.total_data_set} GiB")
         log.info("Setting prefill value to False ")
         self.crd_data["spec"]["workload"]["args"]["prefill"] = False
