@@ -3,17 +3,25 @@ import logging
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    tier2,
+    skipif_managed_service,
+    skipif_hci_provider_and_client,
+)
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from tests.fixtures import create_project
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility.utils import run_cmd
+
 
 log = logging.getLogger(__name__)
 
 
 @green_squad
 @tier2
+@skipif_managed_service
+@skipif_hci_provider_and_client
 @pytest.mark.usefixtures(
     create_project.__name__,
 )
