@@ -30,13 +30,6 @@ logger = logging.getLogger(__name__)
 @ignore_leftover_label(constants.MON_APP_LABEL)  # tier4b test requirement
 @skipif_aws_creds_are_missing
 @skipif_disconnected_cluster
-@pytest.mark.parametrize(
-    "platform",
-    [
-        constants.AWS_PLATFORM,
-        # constants.AZURE_PLATFORM
-    ],
-)
 class TestLogBasedBucketReplication(MCGTest):
     """
     Test log-based replication with deletion sync.
@@ -67,8 +60,19 @@ class TestLogBasedBucketReplication(MCGTest):
         ]
         add_env_vars_to_noobaa_core_class(new_env_var_touples)
 
-    @tier1
-    @polarion_id("OCS-4936")
+    @pytest.mark.parametrize(
+        argnames=["platform"],
+        argvalues=[
+            pytest.param(
+                constants.AWS_PLATFORM,
+                marks=[tier1, polarion_id("OCS-4936")],
+            ),
+            # pytest.param(
+            #     constants.AZURE_PLATFORM,
+            #     marks=[tier1],
+            # ),
+        ],
+    )
     def test_deletion_sync(self, platform, log_based_replication_handler_factory):
         """
         Test log-based replication with deletion sync.
@@ -89,8 +93,19 @@ class TestLogBasedBucketReplication(MCGTest):
             timeout=self.DEFAULT_TIMEOUT
         ), f"Deletion sync failed to complete in {self.DEFAULT_TIMEOUT} seconds"
 
-    @tier1
-    @polarion_id("OCS-4937")
+    @pytest.mark.parametrize(
+        argnames=["platform"],
+        argvalues=[
+            pytest.param(
+                constants.AWS_PLATFORM,
+                marks=[tier1, polarion_id("OCS-4937")],
+            ),
+            # pytest.param(
+            #     constants.AZURE_PLATFORM,
+            #     marks=[tier1],
+            # ),
+        ],
+    )
     def test_deletion_sync_opt_out(
         self, platform, log_based_replication_handler_factory
     ):
@@ -120,8 +135,19 @@ class TestLogBasedBucketReplication(MCGTest):
             timeout=180
         ), "Deletion sync completed even though the policy was disabled!"
 
-    # @polarion_id("OCS-4938") TODO
-    @tier2
+    @pytest.mark.parametrize(
+        argnames=["platform"],
+        argvalues=[
+            pytest.param(
+                constants.AWS_PLATFORM,
+                marks=[tier2],
+            ),
+            # pytest.param(
+            #     constants.AZURE_PLATFORM,
+            #     marks=[tier2],
+            # ),
+        ],
+    )
     def test_deletion_sync_with_prefix(
         self, platform, log_based_replication_handler_factory, test_directory_setup
     ):
@@ -134,7 +160,7 @@ class TestLogBasedBucketReplication(MCGTest):
         4. Wait for the objects to be deleted from the target bucket
 
         """
-        # Set a policy that sync only a specific prefix between the buckets
+        # Set a policy that syncs only a specific prefix between the buckets
         replication_handler = log_based_replication_handler_factory(platform)
         replication_handler.policy_prefix_filter = "synced_prefix"
 
@@ -162,7 +188,7 @@ class TestLogBasedBucketReplication(MCGTest):
         write_random_test_objects_to_bucket(
             io_pod=replication_handler.awscli_pod,
             file_dir=replication_handler.tmp_objs_dir,
-            bucket_to_write=replication_handler.target_bucket,
+            bucket_to_write=replication_handler.target_bucket.name,
             mcg_obj=replication_handler.mcg_obj,
             prefix="other_prefix",
             amount=10,
@@ -175,8 +201,19 @@ class TestLogBasedBucketReplication(MCGTest):
             timeout=60, prefix="other_prefix"
         ), "Deletion sync also deleted objects it shouldn't have"
 
-    @tier2
-    @polarion_id("OCS-4941")
+    @pytest.mark.parametrize(
+        argnames=["platform"],
+        argvalues=[
+            pytest.param(
+                constants.AWS_PLATFORM,
+                marks=[tier2, polarion_id("OCS-4941")],
+            ),
+            # pytest.param(
+            #     constants.AZURE_PLATFORM,
+            #     marks=[tier2],
+            # ),
+        ],
+    )
     def test_patch_deletion_sync_to_existing_bucket(
         self, platform, log_based_replication_handler_factory
     ):
@@ -208,8 +245,19 @@ class TestLogBasedBucketReplication(MCGTest):
             timeout=self.DEFAULT_TIMEOUT * 2
         ), f"Deletion sync failed to complete in {self.DEFAULT_TIMEOUT} seconds"
 
-    @tier3
-    @polarion_id("OCS-4940")
+    @pytest.mark.parametrize(
+        argnames=["platform"],
+        argvalues=[
+            pytest.param(
+                constants.AWS_PLATFORM,
+                marks=[tier3, polarion_id("OCS-4937")],
+            ),
+            # pytest.param(
+            #     constants.AZURE_PLATFORM,
+            #     marks=[tier3],
+            # ),
+        ],
+    )
     def test_deletion_sync_after_instant_deletion(
         self,
         platform,
