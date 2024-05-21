@@ -31,7 +31,10 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_managed_service
 @skipif_ocs_version("<4.15")
-@pytest.mark.polarion_id("XXXX")
+@pytest.mark.polarion_id("OCS-5645")
+@pytest.mark.polarion_id("OCS-5646")
+@pytest.mark.polarion_id("OCS-5656")
+@pytest.mark.polarion_id("OCS-5657")
 class TestProfileDefaultValuesCheck(ManageTest):
     def test_validate_cluster_resource_profile(self):
         """
@@ -106,9 +109,9 @@ class TestProfileDefaultValuesCheck(ManageTest):
     @pytest.mark.parametrize(
         argnames=["perf_profile"],
         argvalues=[
-            pytest.param(*["performance"], marks=pytest.mark.polarion_id("OCS-XXXX")),
-            pytest.param(*["lean"], marks=pytest.mark.polarion_id("OCS-XXXX")),
-            pytest.param(*["balanced"], marks=pytest.mark.polarion_id("OCS-XXXX")),
+            pytest.param(*["performance"], marks=pytest.mark.polarion_id("OCS-5647")),
+            pytest.param(*["lean"], marks=pytest.mark.polarion_id("OCS-5643")),
+            pytest.param(*["balanced"], marks=pytest.mark.polarion_id("OCS-5644")),
         ],
     )
     def test_change_cluster_resource_profile(self, perf_profile):
