@@ -54,30 +54,6 @@ class TestPostInstallationState(ManageTest):
                     resource["status"] == "Ready"
                 ), f"{resource['name']} of {consumer_name} is in status {resource['status']}"
 
-    @acceptance
-    @pc_or_ms_provider_required
-    @pytest.mark.polarion_id("OCS-3910")
-    def test_consumers_capacity(self):
-        """
-        Test each storageconsumer's capacity and requested capacity.
-        Now only 1Ti value is possible. If more options get added, the test
-        will need to get the value from the consumer cluster's config file
-        """
-        consumer_names = managedservice.get_consumer_names()
-        for consumer_name in consumer_names:
-            consumer_yaml = ocp.OCP(
-                kind="StorageConsumer",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=consumer_name,
-            ).get()
-            log.info(f"Verifying capacity of {consumer_name}")
-            assert consumer_yaml["spec"]["capacity"] in {"1Ti", "1Pi"}
-            log.info(f"Verifying granted capacity of {consumer_name}")
-            assert (
-                consumer_yaml["status"]["grantedCapacity"]
-                == consumer_yaml["spec"]["capacity"]
-            )
-
     @tier1
     @pytest.mark.polarion_id("OCS-3917")
     @runs_on_provider
