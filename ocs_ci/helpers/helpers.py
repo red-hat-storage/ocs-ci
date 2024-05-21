@@ -4776,3 +4776,22 @@ def is_rbd_default_storage_class(custom_sc=None):
 
     logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
     return False
+def custom_round(number):
+    """Rounds a number down for values ending in exactly ".5".
+
+    Args:
+      number: The number to round.
+
+    Returns:
+      The rounded number (down for values ending in ".5").
+    """
+    # Convert the number to a string to check the decimal part
+    number_str = str(number)
+
+    # Check if the decimal part exists and ends in ".5"
+    if "." in number_str and number_str.endswith(".5"):
+        # Round down if it ends in ".5"
+        return int(number)
+    else:
+        # Use regular rounding for other cases
+        return round(number)

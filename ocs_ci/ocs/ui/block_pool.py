@@ -3,7 +3,7 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from selenium.webdriver.common.by import By
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.helpers.helpers import create_unique_resource_name, custom_round
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
@@ -433,9 +433,12 @@ class BlockPoolUI(PageNavigator):
             )
 
             # rounding the used capacity values from ui and cli for better matching.
+            # created custom round method because the cli is rounding the number after .5 and
+            # python function rounds from .5
+            # ex. cli is doing 157.5 to 157 where as python round function will do 158
             if (
-                (round(float(used_capacity_in_CLI)))
-                == round(float(used_capacity_in_UI))
+                (custom_round(float(used_capacity_in_CLI)))
+                == custom_round(float(used_capacity_in_UI))
             ) and (unit == used_capacity_unit_in_UI):
                 logger.info("UI values did match as per CLI for the Raw Capacity")
                 return True
