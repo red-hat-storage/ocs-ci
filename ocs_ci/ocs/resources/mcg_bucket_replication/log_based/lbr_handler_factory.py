@@ -35,7 +35,7 @@ class LbrHandlerFactory:
                 self.awscli_pod,
                 patch_to_existing_bucket,
             )
-        elif platform == constants.AZURE_PLATFORM:
+        else:
             raise NotImplementedError(
-                "Azure log-based replication is not yet supported."
+                f"Log-based replication is not yet supported on {platform}"
             )

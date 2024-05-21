@@ -117,3 +117,20 @@ class AwsLbrHandler(LbrHandler):
             bucket_name=self.source_bucket.name, obj_list=deleted_obj_keys, op="DELETE"
         )
         return deleted_obj_keys
+
+    def delete_objs_from_source(self, objs):
+        """
+        Delete list of objects from the source bucket.
+
+        Args:
+            objs(list): List of the objects to delete
+
+        Returns:
+            list: A list of the deleted object keys
+        """
+
+        deleted_objs = super().delete_objs_from_source(objs)
+        self.mockup_logger.upload_mockup_logs(
+            bucket_name=self.source_bucket.name, obj_list=deleted_objs, op="DELETE"
+        )
+        return deleted_objs

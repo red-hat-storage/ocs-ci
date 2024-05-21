@@ -27,7 +27,6 @@ from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     patch_replication_policy_to_bucket,
     write_random_test_objects_to_bucket,
-    upload_test_objects_to_source_and_wait_for_replication,
     update_replication_policy,
 )
 from ocs_ci.ocs import ocp
@@ -56,7 +55,6 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_mcg_only
 class TestMCGReplicationWithDisruptions(E2ETest):
-
     """
     The objectives of this test case are:
     1) To verify that namespace buckets can be replicated across MCG clusters
@@ -248,12 +246,12 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 @skipif_vsphere_ipi
 class TestLogBasedReplicationWithDisruptions:
     @retry(Exception, tries=10, delay=5)
-    def delete_objs_in_batch(self, objs_to_delete, mockup_logger, source_bucket):
+    def delete_objs_in_batch(self, objs_to_delete, replication_handler):
         """
         This function deletes objects in a batch
         """
         for obj in objs_to_delete:
-            mockup_logger.delete_objs_and_log(source_bucket.name, [obj])
+            replication_handler.delete_obj_from_source(obj)
             # adding momentary sleep just to slowdown the deletion
             # process
             time.sleep(5)
@@ -263,12 +261,11 @@ class TestLogBasedReplicationWithDisruptions:
     @bugzilla("2266805")
     def test_log_based_replication_with_disruptions(
         self,
-        mcg_obj_session,
-        aws_log_based_replication_setup,
         noobaa_db_backup,
         noobaa_db_recovery_from_backup,
         setup_mcg_bg_features,
         validate_mcg_bg_features,
+        log_based_replication_handler_factory,
     ):
         """
         This is a system test flow to test log based bucket replication
@@ -296,29 +293,33 @@ class TestLogBasedReplicationWithDisruptions:
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
-            skip_any_features=["nsfs", "rgw kafka", "caching"],
+            skip_any_features=[
+                "nsfs",
+                "rgw kafka",
+                "caching",
+            ],
         )
 
-        mockup_logger, source_bucket, target_bucket = aws_log_based_replication_setup()
+        replication_handler = log_based_replication_handler_factory(
+            constants.AWS_PLATFORM
+        )
+        source_bucket = replication_handler.source_bucket
 
         # upload test objects to the bucket and verify replication
-        upload_test_objects_to_source_and_wait_for_replication(
-            mcg_obj_session,
-            source_bucket,
-            target_bucket,
-            mockup_logger,
-            600,
-        )
+        timeout = 600
+        written_objs = replication_handler.upload_random_objects_to_source(10)
+        assert replication_handler.wait_for_sync(
+            timeout=timeout
+        ), f"Standard replication failed to complete in {timeout} seconds"
 
         # Delete objects in the first set in a batch and perform noobaa pod
         # restarts at the same time and make sure deletion sync works
 
-        objs_in_bucket = mockup_logger.standard_test_obj_list
-        objs_to_delete = random.sample(objs_in_bucket, 3)
+        objs_to_delete = random.sample(written_objs, 3)
 
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
-                self.delete_objs_in_batch, objs_to_delete, mockup_logger, source_bucket
+                self.delete_objs_in_batch, objs_to_delete, replication_handler
             )
 
             # Restart noobaa pods
@@ -330,11 +331,8 @@ class TestLogBasedReplicationWithDisruptions:
 
             # Wait for the object deletion worker in the BG to completion
             future.result()
-            assert compare_bucket_object_list(
-                mcg_obj_session,
-                source_bucket.name,
-                target_bucket.name,
-                timeout=600,
+            assert replication_handler.wait_for_sync(
+                timeout=timeout
             ), f"Deletion sync failed to complete for the objects {objs_to_delete} deleted in the first bucket set"
 
         # Take noobaa db backup and remove deletion replication policy for the second bucket set
@@ -346,27 +344,20 @@ class TestLogBasedReplicationWithDisruptions:
 
         _, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
 
-        disable_deletion_sync = source_bucket.replication_policy
-        disable_deletion_sync["rules"][0]["sync_deletions"] = False
-        update_replication_policy(source_bucket.name, disable_deletion_sync)
+        replication_handler.disable_deletion_sync()
+
         logger.info("Deleting all the objects from the second bucket")
-        mockup_logger.delete_all_objects_and_log(source_bucket.name)
-        assert not compare_bucket_object_list(
-            mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=300,
+        replication_handler.delete_recursively_from_source()
+        assert not replication_handler.wait_for_sync(
+            timeout=300
         ), "Deletion sync was done but not expected"
 
         # Do noobaa db recovery and see if the deletion sync works now
         noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
         wait_for_noobaa_pods_running(timeout=420)
 
-        assert compare_bucket_object_list(
-            mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=600,
+        assert replication_handler.wait_for_sync(
+            timeout=300
         ), "Deletion sync was not done but expected"
 
         # Remove replication policy and upload some objects to the bucket
@@ -375,14 +366,10 @@ class TestLogBasedReplicationWithDisruptions:
         update_replication_policy(source_bucket.name, None)
 
         logger.info("Uploading test objects and waiting for replication to complete")
-        mockup_logger.upload_test_objs_and_log(source_bucket.name)
-
-        assert not compare_bucket_object_list(
-            mcg_obj_session,
-            source_bucket.name,
-            target_bucket.name,
-            timeout=300,
-        ), "Standard replication completed even though replication policy is removed"
+        replication_handler.upload_random_objects_to_source(10)
+        assert replication_handler.wait_for_sync(
+            timeout=300
+        ), "Standard replication failed to complete even though replication policy is removed"
 
         validate_mcg_bg_features(
             feature_setup_map,

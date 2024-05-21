@@ -75,13 +75,14 @@ class LbrHandler(ABC):
             policy["rules"][0]["filter"]["prefix"] = prefix
             update_replication_policy(self.source_bucket.name, policy)
 
-    def upload_random_objects_to_source(self, amount, prefix=""):
+    def upload_random_objects_to_source(self, amount, prefix="", obj_size="1M"):
         """
         Upload random objects to the source bucket.
 
         Args:
             amount(int): The amount of random objects to upload
             prefix(str): The prefix under which to upload the objects
+            obj_size(str): The size of the objects to upload
         Returns:
             list: A list of the uploaded object keys
         """
@@ -94,6 +95,7 @@ class LbrHandler(ABC):
             mcg_obj=self.mcg_obj,
             prefix=prefix,
             amount=amount,
+            bs=obj_size,
         )
 
         if prefix:
@@ -133,6 +135,35 @@ class LbrHandler(ABC):
 
         return deleted_objs_keys
 
+    def delete_objs_from_source(self, objs_to_delete):
+        """
+        Delete list of objects from the source bucket.
+
+        Args:
+            objs_to_delete(str | list): Object key(s) to delete
+
+        Returns:
+            list: A list of the deleted object keys
+        """
+        logger.info(f"Deleting the {objs_to_delete} from the bucket")
+
+        objs_to_delete = set(objs_to_delete)
+        bucket_name = self.source_bucket.name
+
+        obj_list = list_objects_from_bucket(
+            self.awscli_pod,
+            f"s3://{bucket_name}",
+            s3_obj=self.mcg_obj,
+        )
+
+        deleted_objs = []
+        if objs_to_delete.issubset(obj_list):
+            for obj in objs_to_delete:
+                s3cmd = craft_s3_command(f"rm s3://{bucket_name}/{obj}", self.mcg_obj)
+                deleted_objs.append(obj)
+                self.awscli_pod.exec_cmd_on_pod(s3cmd)
+        return deleted_objs
+
     def wait_for_sync(self, timeout=600, prefix=""):
         """
         Wait for the target bucket to sync with the source bucket.
@@ -152,3 +183,9 @@ class LbrHandler(ABC):
             timeout=timeout,
             prefix=prefix,
         )
+
+    def disable_deletion_sync(self):
+        """
+        Disable the deletion sync on the source bucket.
+        """
+        self.deletion_sync_enabled = False

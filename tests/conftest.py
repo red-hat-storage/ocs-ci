@@ -19,9 +19,6 @@ from botocore.exceptions import ClientError
 from ocs_ci.ocs.resources.mcg_bucket_replication.log_based.lbr_handler_factory import (
     LbrHandlerFactory,
 )
-from ocs_ci.ocs.resources.mcg_bucket_replication.log_based.mockup_bucket_logger import (
-    MockupBucketLogger,
-)
 import pytest
 from collections import namedtuple
 
@@ -63,9 +60,6 @@ from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
-from ocs_ci.ocs.resources.mcg_bucket_replication.policy import (
-    AwsLbrPolicy,
-)
 from ocs_ci.ocs.scale_lib import FioPodScale
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -7488,65 +7482,6 @@ def reduce_replication_delay_setup(add_env_vars_to_noobaa_core_class):
             (constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
         ]
         add_env_vars_to_noobaa_core_class(new_env_var_tuples)
-
-    return factory
-
-
-@pytest.fixture()
-def aws_log_based_replication_setup(
-    awscli_pod_session, mcg_obj_session, bucket_factory, reduce_replication_delay_setup
-):
-    """
-    A fixture to set up standard log-based replication with deletion sync.
-
-    Args:
-        awscli_pod_session(Pod): A pod running the AWS CLI
-        mcg_obj_session(MCG): An MCG object
-        bucket_factory: A bucket factory fixture
-
-    Returns:
-        MockupBucketLogger: A MockupBucketLogger object
-        Bucket: The source bucket
-        Bucket: The target bucket
-
-    """
-
-    reduce_replication_delay_setup()
-
-    def factory(bucketclass_dict=None):
-        log.info("Starting log-based replication setup")
-        if bucketclass_dict is None:
-            bucketclass_dict = {
-                "interface": "OC",
-                "namespace_policy_dict": {
-                    "type": "Single",
-                    "namespacestore_dict": {
-                        constants.AWS_PLATFORM: [(1, constants.DEFAULT_AWS_REGION)]
-                    },
-                },
-            }
-        target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
-
-        mockup_logger = MockupBucketLogger(
-            awscli_pod=awscli_pod_session,
-            mcg_obj=mcg_obj_session,
-            bucket_factory=bucket_factory,
-            platform=constants.AWS_PLATFORM,
-            region=constants.DEFAULT_AWS_REGION,
-        )
-        replication_policy = AwsLbrPolicy(
-            destination_bucket=target_bucket.name,
-            sync_deletions=True,
-            logs_bucket=mockup_logger.logs_bucket_uls_name,
-        )
-
-        source_bucket = bucket_factory(
-            1, bucketclass=bucketclass_dict, replication_policy=replication_policy
-        )[0]
-
-        log.info("log-based replication setup complete")
-
-        return mockup_logger, source_bucket, target_bucket
 
     return factory
 
