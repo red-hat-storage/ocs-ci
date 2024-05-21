@@ -21,7 +21,7 @@ setup(
         "docopt==0.6.2",
         "gevent==23.9.1",
         "reportportal-client==3.2.3",
-        "requests==2.31.0",
+        "requests==2.32.0",
         "paramiko==3.4.0",
         "pyyaml>=4.2b1",
         "jinja2==3.1.3",
