@@ -106,7 +106,7 @@ class TestPostInstallationState(ManageTest):
                         == consumer_name
                     ):
                         found_client = (
-                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
+                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.storagerequest']}-"
                             f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
                         )
                         log.info(
