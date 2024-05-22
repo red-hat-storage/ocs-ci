@@ -13,7 +13,7 @@ import yaml
 import requests
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -257,3 +257,37 @@ def create_openshift_install_log_file(cluster_path, console_url):
             ]
         )
     logger.info("Created '.openshift_install.log' file")
+
+
+def get_ocp_release_image_from_running_cluster():
+    """
+    Return the OCP release image from ClusterVersion
+
+    Returns:
+         str: The OCP release image from ClusterVersion
+
+    """
+
+    ocp_cluster = ocp.OCP(
+        kind="",
+        resource_name="clusterversion",
+    )
+    return ocp_cluster.get()["items"][0]["status"]["desired"]["image"]
+
+
+def get_coredns_container_image(release_image, pull_secret_path):
+    """
+    Obtain the CoreDNS container image from the OCP release image.
+
+    Args:
+        release_image (str): Release image from the openshift installer
+        pull_secret_path (str): Path to the pull secret
+
+    Returns:
+        str: CoreDNS container image
+
+    """
+    logger.info("Obtaining the CoreDNS container image from the OCP release image")
+    cmd = f"oc adm release info --image-for='coredns' {release_image} -a {pull_secret_path}"
+    result = exec_cmd(cmd)
+    return result.stdout.decode().strip()
