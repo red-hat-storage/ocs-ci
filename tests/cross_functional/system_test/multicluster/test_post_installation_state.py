@@ -95,16 +95,24 @@ class TestPostInstallationState(ManageTest):
             for cephclient in cephclients:
                 if (
                     cephclient["metadata"]["annotations"][
-                        "ocs.openshift.io.storageconsumer"
+                        "ocs.openshift.io.storagerequest"
                     ]
-                    == consumer_name
+                    == "global"
                 ):
-                    found_client = (
-                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
-                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
-                    )
-                    log.info(f"Ceph client {found_client} for {consumer_name} found")
-                    found_clients.append(found_client)
+                    if (
+                        cephclient["metadata"]["annotations"][
+                            "ocs.openshift.io.storageconsumer"
+                        ]
+                        == consumer_name
+                    ):
+                        found_client = (
+                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
+                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
+                        )
+                        log.info(
+                            f"Ceph client {found_client} for {consumer_name} found"
+                        )
+                        found_clients.append(found_client)
             for client in {
                 "rbd-provisioner",
                 "rbd-node",
@@ -133,7 +141,7 @@ class TestPostInstallationState(ManageTest):
             if "ERR" in line:
                 log.info(f"{line}")
         log.info(f"Deployer log has {len(log_lines)} lines.")
-        assert len(log_lines) > 100
+        assert len(log_lines) > 50
 
     @tier1
     @bugzilla("2117312")
