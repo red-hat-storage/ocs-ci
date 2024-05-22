@@ -47,8 +47,8 @@ def check_alert_list(
         target_alerts = [
             alert
             for alert in target_alerts
-            if alert["message"] == msg
-            and alert["severity_level"] == severity
+            if alert["annotations"]["message"] == msg
+            and alert["annotations"]["severity_level"] == severity
             and alert["state"] == state
         ]
         assert_msg = (
