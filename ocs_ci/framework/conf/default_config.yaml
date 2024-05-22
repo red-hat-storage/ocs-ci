@@ -117,6 +117,7 @@ DEPLOYMENT:
   aws_cred_path: "~/.aws/credentials"
   # STS in CCO manual mode
   sts_enabled: false
+  # Access buckets with DNS subdomain style (Virtual host style) for RGW
 
 
 
