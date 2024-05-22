@@ -6,8 +6,8 @@ import time
 from datetime import datetime
 
 from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_file
+from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import download_pull_secret
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -82,13 +82,21 @@ class HyperShiftBase:
         """
         return os.path.isfile(self.hcp_binary_path)
 
+    def hypershift_binary_exists(self):
+        """
+        Check if hypershift binary exists
+        Returns:
+            bool: True if hypershift binary exists, False otherwise
+        """
+        return os.path.isfile(self.hypershift_binary_path)
+
     def install_hcp_and_hypershift_from_git(self):
         """
         Install hcp binary from git
         """
-        if self.hcp_binary_exists():
+        if self.hcp_binary_exists() and self.hypershift_binary_exists():
             logger.info(
-                f"hcp binary already exists {self.hcp_binary_path}, skipping download."
+                f"hcp and hypershift binary exist {self.hcp_binary_path}, skipping download."
             )
             return
 
@@ -105,8 +113,14 @@ class HyperShiftBase:
 
         exec_cmd(f"cd {temp_dir} && make hypershift product-cli", shell=True)
 
-        exec_cmd(f"mv {temp_dir}/bin/hypershift {self.hypershift_binary_path}")
-        exec_cmd(f"mv {temp_dir}/bin/hcp {self.hcp_binary_path}")
+        shutil.move(
+            os.path.join(temp_dir, "bin", "hypershift"), self.hypershift_binary_path
+        )
+        shutil.move(os.path.join(temp_dir, "bin", "hcp"), self.hcp_binary_path)
+
+        if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
+            raise Exception("Failed to download hcp binary from git")
+
         hcp_version = exec_cmd("hcp --version").stdout.decode("utf-8").strip()
         logger.info(f"hcp binary version: {hcp_version}")
 
@@ -136,7 +150,7 @@ class HyperShiftBase:
         """
         Download hcp binary to bin_dir
         """
-        if os.path.isfile(self.hcp_binary_path):
+        if self.hcp_binary_exists():
             logger.info(
                 f"hcp binary already exists {self.hcp_binary_path}, skipping download."
             )
@@ -184,11 +198,18 @@ class HyperShiftBase:
         Delete hcp binary
         """
         logger.info(f"deleting hcp binary {self.hcp_binary_path}")
-        exec_cmd(f"rm -f {self.hcp_binary_path}")
+
+        try:
+            os.remove(self.hcp_binary_path)
+        except FileNotFoundError:
+            logger.warning(f"The file {self.hcp_binary_path} does not exist.")
+
         logger.info(f"deleting hypershift binary {self.hypershift_binary_path}")
-        exec_cmd(f"rm -f {self.hypershift_binary_path}")
-        # if hcp downloaded with podman download_hcp_binary_with_podman() method - delete the container and image
-        self.delete_hcp_podman_container()
+
+        try:
+            os.remove(self.hypershift_binary_path)
+        except FileNotFoundError:
+            logger.warning(f"The file {self.hypershift_binary_path} does not exist.")
 
     def delete_hcp_podman_container(self):
         """
@@ -217,13 +238,10 @@ class HyperShiftBase:
 
         Args:
             name (str): Name of the cluster
-            nodepool_replicas (int): Number of nodes in the cluster; if ENV_DATA['nodepool_replicas'] is set,
-            it will be used as a primary value
-            memory (str): Memory size of the cluster, minimum 12Gi; will use from ENV_DATA if
-            ENV_DATA['memory_per_hosted_cluster'] is set
-            cpu_cores (str): CPU cores of the cluster, minimum 6; will use from ENV_DATA if
-            ENV_DATA['cpu_cores_per_hosted_cluster'] is set
-            ocp_version (str): OCP version of the cluster, if not specified, will use the version from Hosting Platform
+            nodepool_replicas (int): Number of nodes in the cluster
+            memory (str): Memory size of the cluster, minimum 12Gi
+            cpu_cores (str): CPU cores of the cluster, minimum 6
+            ocp_version (str): OCP version of the cluster
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
 
         Returns:
@@ -231,21 +249,9 @@ class HyperShiftBase:
         """
         logger.debug("create_kubevirt_OCP_cluster method is called")
 
-        nodepool_replicas_config = config.ENV_DATA.get("nodepool_replicas")
-        if nodepool_replicas_config:
-            nodepool_replicas = nodepool_replicas_config
-
         if name in get_hosted_cluster_names():
             logger.info(f"HyperShift hosted cluster {name} already exists")
             return name
-
-        if config.default_cluster_ctx.ENV_DATA.get("cpu_cores_per_hosted_cluster"):
-            cpu_cores = config.default_cluster_ctx.ENV_DATA.get(
-                "cpu_cores_per_hosted_cluster"
-            )
-
-        if config.ENV_DATA.get("memory_per_hosted_cluster"):
-            memory = config.ENV_DATA.get("memory_per_hosted_cluster")
 
         self.save_mirrors_list_to_file()
         pull_secret_path = download_pull_secret()
@@ -266,7 +272,7 @@ class HyperShiftBase:
         logger.info(
             f"Creating HyperShift hosted cluster with specs: name:{name}, "
             f"nodepool_replicas:{nodepool_replicas}, memory_size:{memory}, cpu_cores:{cpu_cores}, "
-            f"ocp image:'{index_image}', root_volume_size:{root_volume_size}"
+            f"ocp image:'{index_image}', root_volume_size:{root_volume_size}, release_image:{index_image}"
         )
 
         create_hcp_cluster_cmd = (
@@ -442,26 +448,26 @@ class HyperShiftBase:
         cmd = f"oc get --namespace clusters hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
-    def download_hosted_cluster_kubeconfig(self, name: str, auth_path: str):
+    def download_hosted_cluster_kubeconfig(self, name: str, hosted_cluster_path: str):
         """
         Download HyperShift hosted cluster kubeconfig
         Args:
             name (str): name of the cluster
-            auth_path (str): path to download kubeconfig
+            hosted_cluster_path (str): path to create auth_path folder and download kubeconfig there
         Returns:
             str: path to the downloaded kubeconfig, None if failed
         """
 
-        path_abs = os.path.expanduser(auth_path)
+        path_abs = os.path.expanduser(hosted_cluster_path)
+        auth_path = os.path.join(path_abs, "auth_path")
+        os.makedirs(auth_path, exist_ok=True)
         kubeconfig_path = os.path.join(path_abs, "kubeconfig")
-
-        os.makedirs(path_abs, exist_ok=True)
 
         if os.path.isfile(kubeconfig_path):
             logger.info(
                 f"Kubeconfig file for HyperShift hosted cluster {name} already exists at {path_abs}, removing it"
             )
-            exec_cmd(f"rm -f {kubeconfig_path}")
+            os.remove(kubeconfig_path)
 
         # touch the file
         time.sleep(0.5)
@@ -487,10 +493,7 @@ class HyperShiftBase:
             )
             return
 
-        if (
-            not os.path.isfile(kubeconfig_path)
-            or not os.stat(kubeconfig_path).st_size > 0
-        ):
+        if not os.stat(kubeconfig_path).st_size > 0:
             logger.error(
                 f"Failed to download kubeconfig for HyperShift hosted cluster {name}"
             )
@@ -513,10 +516,7 @@ class HyperShiftBase:
         Save ICSP mirrors list to a file
 
         """
-        if (
-            not os.path.getsize(self.icsp_mirrors_path)
-            and not os.path.getsize(self.icsp_mirrors_path) == 0
-        ):
+        if os.path.getsize(self.icsp_mirrors_path) > 0:
             logger.info(
                 f"ICSP mirrors list already exists at '{self.icsp_mirrors_path}'"
             )

@@ -301,17 +301,18 @@ higher priority).
             * `private_gw` - GW for the private interface
             * `root_disk_id` - ID of the root disk
             * `root_disk_sn` - Serial number of the root disk
-* `clusters` - section for hosted clusters
-  * `<cluster name>` - name of the cluster
-    * `<cluster path>` - path to the cluster directory to store credentials files, such as kubeconfig
-* `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
-* `memory_per_hosted_cluster` - amount of memory per hosted cluster
-* `nodepool_replicas` - number of replicas of nodepool for each cluster
-* `hosted_odf_registry` - registry for hosted ODF
-* `hosted_odf_version` - version of ODF to be deployed on hosted clusters
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
 * `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
+* `clusters` - section for hosted clusters
+    * `<cluster name>` - name of the cluster
+      * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
+      * `ocp_version` - OCP version of the hosted cluster (e.g. "4.15.13")
+      * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
+      * `memory_per_hosted_cluster` - amount of memory per hosted cluster
+      * `nodepool_replicas` - number of replicas of nodepool for each cluster
+      * `hosted_odf_registry` - registry for hosted ODF
+      * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
 
 #### UPGRADE
 

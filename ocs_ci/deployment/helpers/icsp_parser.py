@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class ImageContentSourcePolicy:
+    """
+    ImageContentSourcePolicy object to parse the ImageContentSourcePolicy CR in dict format to a file
+    Main purpose is to use parse_ICSP_json_to_mirrors_file and create a file with mirrors and their sources in format
+    required for the 'hcp' or 'hypershift' binaries
+    """
+
     def __init__(self, apiVersion=None, items=None, kind=None, metadata=None, **kwargs):
         self.apiVersion = apiVersion if apiVersion is not None else ""
         self.items = [ImageContentItem(**item) for item in items]
@@ -22,6 +28,10 @@ class ImageContentSourcePolicy:
 
 
 class ImageContentItem:
+    """
+    ImageContentItem object to parse the ImageContentSourcePolicy CR in dict format to a file
+    """
+
     def __init__(self, apiVersion=None, kind=None, metadata=None, spec=None, **kwargs):
         self.apiVersion = apiVersion if apiVersion is not None else ""
         self.kind = kind if kind is not None else ""
@@ -33,6 +43,10 @@ class ImageContentItem:
 
 
 class ImageContentMetadata:
+    """
+    ImageContentMetadata object to parse the ImageContentSourcePolicy CR in dict format to a file
+    """
+
     def __init__(
         self,
         annotations=None,
@@ -57,6 +71,10 @@ class ImageContentMetadata:
 
 
 class ImageContentSpec:
+    """
+    ImageContentSpec object to parse the ImageContentSourcePolicy CR in dict format to a file
+    """
+
     def __init__(self, repositoryDigestMirrors, **kwargs):
         self.repositoryDigestMirrors = [
             RepositoryDigestMirror(**mirror) for mirror in repositoryDigestMirrors
@@ -67,6 +85,10 @@ class ImageContentSpec:
 
 
 class RepositoryDigestMirror:
+    """
+    RepositoryDigestMirror object to parse the ImageContentSourcePolicy CR in dict format to a file
+    """
+
     def __init__(self, mirrors=None, source=None, **kwargs):
         self.mirrors = mirrors if mirrors is not None else []
         self.source = source if source is not None else ""

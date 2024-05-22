@@ -4875,10 +4875,10 @@ def get_architecture_host():
 
 def get_latest_release_version():
     """
-    Get the latest release version from the release page
+    Fetch the latest supported release version of OpenShift from its official mirror site.
 
     Returns:
-        str: The latest release version
+        str: The latest release version. Example: As of 22 May 2024 the function returns string "4.15.14"
 
     """
     cmd = (

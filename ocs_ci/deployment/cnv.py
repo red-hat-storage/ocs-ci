@@ -226,10 +226,11 @@ class CNVInstaller(object):
         useEmulation.
 
         """
-        if config.ENV_DATA["platform"].lower() in [
-            "baremetal",
-            "hci_baremetal",
-        ] and config.DEPLOYMENT.get("local_storage"):
+        if config.ENV_DATA[
+            "platform"
+        ].lower() in constants.BAREMETAL_PLATFORMS and config.DEPLOYMENT.get(
+            "local_storage"
+        ):
             logger.info("Skipping enabling software emulation")
         else:
             logger.info("Enabling software emulation on the cluster")

@@ -367,6 +367,11 @@ class MetalLBInstaller:
 
             ip_addresses_with_mask = [ip + "/32" for ip in self.addresses_reserved]
             ipaddresspool_data.get("spec").update({"addresses": ip_addresses_with_mask})
+        else:
+            logger.info(
+                "config.ENV_DATA['ip_address_pool'] is not specified and selected platform doesn't support "
+                "dynamic allocation (or it is not implemented)"
+            )
 
         ipaddresspool_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="ipaddresspool_file", delete=False

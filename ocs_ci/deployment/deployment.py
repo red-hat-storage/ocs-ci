@@ -17,6 +17,7 @@ import yaml
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 import boto3
 
+from ocs_ci.deployment.hosted_cluster import HostedClients
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -584,6 +585,8 @@ class Deployment(object):
         self.do_deploy_fusion()
         if config.DEPLOYMENT.get("cnv_deployment"):
             CNVInstaller().deploy_cnv()
+        if config.ENV_DATA.get("clusters"):
+            HostedClients().do_deploy()
 
     def get_rdr_conf(self):
         """
