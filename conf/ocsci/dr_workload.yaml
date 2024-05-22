@@ -83,4 +83,16 @@ ENV_DATA:
       dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
     },
   ]
+  dr_workload_discovered_apps_rbd: [
+    { name: "busybox-dict-1", workload_dir: "rdr/busybox/app-busybox-1/resources/deployment",
+      pod_count: 20, pvc_count: 20, kubeojbect_capture_interval: "5m",
+      dr_workload_app_pod_selector_key: "workloadpattern",
+      dr_workload_app_pod_selector_value: "simple_io",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "busybox_app1",
+      workload_namespace: "busybox-dict-1",
+      dr_workload_app_placement_name: "busybox-dict-1"
+    }
+  ]
+
   # dr_policy_name: PLACEHOLDER

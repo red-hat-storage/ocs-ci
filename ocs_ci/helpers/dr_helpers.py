@@ -41,7 +41,9 @@ from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 logger = logging.getLogger(__name__)
 
 
-def get_current_primary_cluster_name(namespace, workload_type=constants.SUBSCRIPTION):
+def get_current_primary_cluster_name(
+    namespace, workload_type=constants.SUBSCRIPTION, discovered_apps=False
+):
     """
     Get current primary cluster name based on workload namespace
 
@@ -56,6 +58,8 @@ def get_current_primary_cluster_name(namespace, workload_type=constants.SUBSCRIP
     restore_index = config.cur_index
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    if discovered_apps:
+        namespace = constants.DR_OPS_NAMESAPCE
     drpc_data = DRPC(namespace=namespace).get()
     if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_data["spec"]["failoverCluster"]
@@ -65,7 +69,9 @@ def get_current_primary_cluster_name(namespace, workload_type=constants.SUBSCRIP
     return cluster_name
 
 
-def get_current_secondary_cluster_name(namespace, workload_type=constants.SUBSCRIPTION):
+def get_current_secondary_cluster_name(
+    namespace, workload_type=constants.SUBSCRIPTION, discovered_apps=False
+):
     """
     Get current secondary cluster name based on workload namespace
 
@@ -80,6 +86,8 @@ def get_current_secondary_cluster_name(namespace, workload_type=constants.SUBSCR
     restore_index = config.cur_index
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    if discovered_apps:
+        namespace = constants.DR_OPS_NAMESAPCE
     primary_cluster_name = get_current_primary_cluster_name(namespace)
     drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
     config.switch_ctx(restore_index)
@@ -122,7 +130,9 @@ def set_current_secondary_cluster_context(
     config.switch_to_cluster_by_name(cluster_name)
 
 
-def get_scheduling_interval(namespace, workload_type=constants.SUBSCRIPTION):
+def get_scheduling_interval(
+    namespace, workload_type=constants.SUBSCRIPTION, discovered_apps=False
+):
     """
     Get scheduling interval for the workload in the given namespace
 
@@ -137,6 +147,8 @@ def get_scheduling_interval(namespace, workload_type=constants.SUBSCRIPTION):
     restore_index = config.cur_index
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    if discovered_apps:
+        namespace = constants.DR_OPS_NAMESAPCE
     drpolicy_obj = DRPC(namespace=namespace).drpolicy_obj
     interval_value = int(drpolicy_obj.get()["spec"]["schedulingInterval"][:-1])
     config.switch_ctx(restore_index)
@@ -149,6 +161,8 @@ def failover(
     workload_type=constants.SUBSCRIPTION,
     workload_placement_name=None,
     switch_ctx=None,
+    discovered_apps=False,
+    old_primary=None,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -159,6 +173,8 @@ def failover(
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
         switch_ctx (int): The cluster index by the cluster name
+        discovered_apps (bool): True when cluster is failing over DiscoveredApps
+        old_primary (str): Name of cluster where worklaod were running
 
     """
     restore_index = config.cur_index
@@ -171,9 +187,12 @@ def failover(
             resource_name=f"{workload_placement_name}-drpc",
             switch_ctx=switch_ctx,
         )
+    elif discovered_apps:
+        failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}","preferredCluster":"{old_primary}"}}}}'
+        namespace = constants.DR_OPS_NAMESAPCE
+        drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:
         drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
-
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Failover action with failoverCluster:{failover_cluster}")
     assert drpc_obj.patch(
@@ -183,7 +202,11 @@ def failover(
     logger.info(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
-    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER)
+    relocate_condition = constants.STATUS_FAILEDOVER
+    if discovered_apps:
+        relocate_condition = constants.STATUS_RELOCATING
+    drpc_obj.wait_for_phase(relocate_condition)
+
     config.switch_ctx(restore_index)
 
 
@@ -193,6 +216,8 @@ def relocate(
     workload_type=constants.SUBSCRIPTION,
     workload_placement_name=None,
     switch_ctx=None,
+    discovered_apps=False,
+    old_primary=None,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -203,6 +228,8 @@ def relocate(
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
         switch_ctx (int): The cluster index by the cluster name
+        discovered_apps (bool): True when cluster is failing over DiscoveredApps
+        old_primary (str): Name of cluster where worklaod were running
 
     """
     restore_index = config.cur_index
@@ -215,6 +242,10 @@ def relocate(
             resource_name=f"{workload_placement_name}-drpc",
             switch_ctx=switch_ctx,
         )
+    elif discovered_apps:
+        relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","failoverCluster":"{old_primary}","preferredCluster":"{preferred_cluster}"}}}}'
+        namespace = constants.DR_OPS_NAMESAPCE
+        drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:
         drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
     drpc_obj.wait_for_peer_ready_status()
@@ -487,7 +518,9 @@ def check_vrg_state(state, namespace):
         return False
 
 
-def wait_for_replication_resources_creation(vr_count, namespace, timeout):
+def wait_for_replication_resources_creation(
+    vr_count, namespace, timeout, discovered_apps=False
+):
     """
     Wait for replication resources to be created
 
@@ -496,11 +529,17 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
         namespace (str): the namespace of the VR or ReplicationSource resources
         timeout (int): time in seconds to wait for VR or ReplicationSource resources to be created
             or reach expected state
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+
     Raises:
         TimeoutExpiredError: In case replication resources not created
 
     """
     logger.info("Waiting for VRG to be created")
+    if discovered_apps:
+        workload_namespace = namespace
+        namespace = constants.DR_OPS_NAMESAPCE
+
     sample = TimeoutSampler(
         timeout=timeout, sleep=5, func=check_vrg_existence, namespace=namespace
     )
@@ -516,7 +555,8 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
     else:
         resource_kind = constants.VOLUME_REPLICATION
         count_function = get_vr_count
-
+    if discovered_apps:
+        namespace = workload_namespace
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         logger.info(f"Waiting for {vr_count} {resource_kind}s to be created")
         sample = TimeoutSampler(
@@ -543,6 +583,8 @@ def wait_for_replication_resources_creation(vr_count, namespace, timeout):
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
 
+    if discovered_apps:
+        namespace = constants.DR_OPS_NAMESAPCE
     logger.info("Waiting for VRG to reach primary state")
     sample = TimeoutSampler(
         timeout=timeout,
@@ -631,7 +673,12 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
 
 
 def wait_for_all_resources_creation(
-    pvc_count, pod_count, namespace, timeout=900, skip_replication_resources=False
+    pvc_count,
+    pod_count,
+    namespace,
+    timeout=900,
+    skip_replication_resources=False,
+    discovered_apps=False,
 ):
     """
     Wait for workload and replication resources to be created
@@ -642,6 +689,8 @@ def wait_for_all_resources_creation(
         namespace (str): the namespace of the workload
         timeout (int): time in seconds to wait for resource creation
         skip_replication_resources (bool): if true vr status wont't be check
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+
 
     """
     logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
@@ -660,9 +709,10 @@ def wait_for_all_resources_creation(
         timeout=timeout,
         sleep=5,
     )
-
     if not skip_replication_resources:
-        wait_for_replication_resources_creation(pvc_count, namespace, timeout)
+        wait_for_replication_resources_creation(
+            pvc_count, namespace, timeout, discovered_apps
+        )
 
 
 def wait_for_all_resources_deletion(
@@ -1493,3 +1543,28 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
     # Configure DRClusters for fencing automation
     configure_drcluster_for_fencing()
+
+
+def do_discovered_apps_cleanup(
+    drpc_name, old_primary, workload_namespace, workload_dir
+):
+    """
+    Function to clean up Resources
+
+    Args:
+        drpc_name (str): Name of DRPC
+        old_primary (str): Name of old primary where cleanup will happen
+        workload_namespace (str): Workload namespace
+        workload_dir (str): Dir location of workload
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE, resource_name=drpc_name)
+    drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    config.switch_to_cluster_by_name(old_primary)
+    workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
+    run_cmd(f"oc delete -k {workload_path} -n {workload_namespace} --wait=false")
+    wait_for_all_resources_deletion(namespace=workload_namespace)
+    config.switch_acm_ctx()
+    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+    config.switch_ctx(restore_index)
