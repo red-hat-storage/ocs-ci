@@ -1,7 +1,4 @@
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.mcg_bucket_replication.log_based.aws_handler import (
-    AwsLbrHandler,
-)
 
 
 class LbrHandlerFactory:
@@ -27,6 +24,10 @@ class LbrHandlerFactory:
         Returns:
             LbrHandler: An instance of a log-based replication handler.
         """
+        # Importing here to avoid circular import issues
+        from ocs_ci.ocs.resources.mcg_bucket_replication.log_based.aws_handler import (
+            AwsLbrHandler,
+        )
 
         if platform == constants.AWS_PLATFORM:
             return AwsLbrHandler(
