@@ -135,6 +135,9 @@ from ocs_ci.utility import (
     users,
     version,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import (
+    configure_virtual_host_style_acess_for_rgw,
+)
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
@@ -9117,3 +9120,13 @@ def set_encryption_at_teardown(request):
 
     # Add the teardown function to the request's finalizer
     request.addfinalizer(teardown)
+
+
+@pytest.fixture(scope="session")
+def virtual_host_style_acess_for_rgw_session():
+    """
+    Session scoped fixture to configure Virtual host style access for RGW
+
+    """
+    # Access buckets with DNS subdomain style (Virtual host style) for RGW
+    configure_virtual_host_style_acess_for_rgw()

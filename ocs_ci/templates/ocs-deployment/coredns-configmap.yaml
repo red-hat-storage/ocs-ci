@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odf-dns
+  namespace: openshift-storage
+data:
+  Corefile: |
+    .:5353 {
+        errors
+        health {
+            lameduck 20s
+        }
+        log . {
+             class all
+        }
+        ready
+        file /etc/coredns/odf data.local in-addr.arpa ip6.arpa {
+            reload 30s
+        }
+        prometheus 127.0.0.1:9153
+        forward . /etc/resolv.conf {
+            policy sequential
+        }
+        cache 900
+        reload
+    }
+  odf: |
+    @ 3600 IN SOA ns.data.local. admin.data.local. (
+      2021041600 ; Serial
+      3600       ; Refresh
+      600        ; Retry
+      604800     ; Expire
+      600 )      ; Negative Cache TTL
+
+    s3      60 IN CNAME s3.openshift-storage.svc.cluster.local.
+    *.s3    60 IN CNAME s3.openshift-storage.svc.cluster.local.
+    rgw     60 IN CNAME rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local.
+    *.rgw   60 IN CNAME rook-ceph-rgw-ocs-storagecluster-cephobjectstore.openshift-storage.svc.cluster.local.

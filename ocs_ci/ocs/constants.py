@@ -1074,6 +1074,13 @@ NODE_NETWORK_CONFIGURATION_POLICY_IPV6 = os.path.join(
 NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
 VSPHERE_MULTUS_INTERFACE = "ens224"
 
+# CoreDNS configuration
+COREDNS_CONFIGMAP_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "coredns-configmap.yaml")
+COREDNS_DEPLOYMENT_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "coredns-deployment.yaml"
+)
+COREDNS_SERVICE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "coredns-service.yaml")
+
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"

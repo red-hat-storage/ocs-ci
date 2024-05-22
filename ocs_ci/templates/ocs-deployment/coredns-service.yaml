@@ -1,0 +1,24 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: odf-dns
+  namespace: openshift-storage
+  labels:
+    app: odf-dns
+spec:
+  type: ClusterIP
+  selector:
+    app: odf-dns
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+    targetPort: dns
+  - name: dns-tcp
+    port: 53
+    protocol: TCP
+    targetPort: dns-tcp
