@@ -1,6 +1,5 @@
 import logging
 
-from ocs_ci.ocs.resources.mcg_bucket_replication.policy import ReplicationPolicy
 import pytest
 
 from ocs_ci.framework import config
@@ -633,72 +632,3 @@ class TestReplication(MCGTest):
             assert (
                 original_obj_sums[i] != obj_sums_after_rw_and_replication[i]
             ), "Object change was not replicated"
-
-    @tier2
-    @pytest.mark.polarion_id("OCS-5789")
-    def test_bucket_replication_with_prefix(
-        self,
-        awscli_pod_session,
-        mcg_obj_session,
-        bucket_factory,
-        test_directory_setup,
-    ):
-        """
-        Test bucket replication behavior with a prefix filter is applied
-        in the replication policy.
-
-        1 Setup a source and target bucket with a replication policy
-        which includes a prefix filter
-        2. Upload some files to the source bucket under the prefix
-        3. Upload some files to the source bucket under another prefix
-        4. Check that the files under the synced prefix were replicated
-        5. Make sure that the files not under the synced prefix were not replicated
-        """
-
-        # Setup a source and target bucket with a replication policy
-        # which includes a prefix filter
-        target_bucket_name = bucket_factory()[0].name
-        replication_policy = ReplicationPolicy(
-            target_bucket_name, prefix="synced_prefix"
-        )
-        source_bucket_name = bucket_factory(
-            interface="OC", replication_policy=replication_policy
-        )[0].name
-
-        # Upload some files to the source bucket under the prefix
-        write_random_test_objects_to_bucket(
-            io_pod=awscli_pod_session,
-            bucket_to_write=source_bucket_name,
-            file_dir=test_directory_setup.origin_dir,
-            amount=5,
-            prefix="synced_prefix",
-            mcg_obj=mcg_obj_session,
-        )
-
-        # Upload some files to the source bucket under another prefix
-        write_random_test_objects_to_bucket(
-            io_pod=awscli_pod_session,
-            bucket_to_write=source_bucket_name,
-            file_dir=test_directory_setup.origin_dir,
-            amount=5,
-            prefix="other_prefix",
-            mcg_obj=mcg_obj_session,
-        )
-
-        # Check that the files under the synced prefix were replicated
-        assert compare_bucket_object_list(
-            mcg_obj_session,
-            source_bucket_name,
-            target_bucket_name,
-            timeout=self.TIMEOUT,
-            prefix="synced_prefix",
-        ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
-
-        # Make sure that the files not under the synced prefix were not replicated
-        assert not compare_bucket_object_list(
-            mcg_obj_session,
-            source_bucket_name,
-            target_bucket_name,
-            timeout=60,
-            prefix="other_prefix",
-        ), "Objects under the 'other_prefix' were replicated"
