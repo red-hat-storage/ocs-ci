@@ -71,8 +71,8 @@ class TestGracefulNodesShutdown(E2ETest):
         project_factory,
         pv_encryption_kms_setup_factory,
         storageclass_factory,
-        pvc_factory,
         pod_factory,
+        pvc_factory,
         pvc_clone_factory,
         snapshot_factory,
     ):
@@ -85,6 +85,7 @@ class TestGracefulNodesShutdown(E2ETest):
 
         def teardown():
             logger.info("cleanup the environment")
+
             # cleanup logging workload
             sub = OCP(
                 kind=constants.SUBSCRIPTION,
@@ -149,8 +150,8 @@ class TestGracefulNodesShutdown(E2ETest):
 
     def setup_non_encrypted_pvc(
         self,
-        pvc_factory,
         pod_factory,
+        pvc_factory,
         pvc_clone_factory,
         snapshot_factory,
     ):
@@ -169,6 +170,7 @@ class TestGracefulNodesShutdown(E2ETest):
             origin md5sum(hex) : md5sum of data present in file
             snap_obj: The object of snapshot created from pvc.
         """
+
         logger.info("Adding non encrypted pvc")
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -203,8 +205,8 @@ class TestGracefulNodesShutdown(E2ETest):
         pv_encryption_kms_setup_factory=None,
         storageclass_factory=None,
         interface=constants.CEPHFILESYSTEM,
-        pvc_factory=None,
         pod_factory=None,
+        pvc_factory=None,
         pvc_clone_factory=None,
         snapshot_factory=None,
     ):
@@ -266,7 +268,9 @@ class TestGracefulNodesShutdown(E2ETest):
 
         return pvc_obj, pod_obj, file_name, origin_md5sum, encrypt_snap_obj
 
-    def validate_snapshot_restore(self, snapshot_restore_factory, pod_factory):
+    def validate_snapshot_restore(
+        self, pod_factory, snapshot_restore_factory, teardown_factory
+    ):
         """
         Verifies the snapshot restore works fine as well as PVC expansion
         is possible on the restored snapshot
@@ -274,7 +278,7 @@ class TestGracefulNodesShutdown(E2ETest):
         self.restore_pvc_objs = list()
         logger.info("Creating snapshot restore for non-encrypted pvcs after reboot")
         ne_restored_pvc = snapshot_restore_factory(
-            snapshot_obj=self.snap_obj,
+            self.snap_obj,
             storageclass=self.ne_pvc_obj.storageclass.name,
             volume_mode=self.snap_obj.parent_volume_mode,
             timeout=180,
@@ -283,7 +287,7 @@ class TestGracefulNodesShutdown(E2ETest):
 
         logger.info("Creating snapshot restore for encrypted rbd pvcs after reboot")
         eb_restored_pvc = snapshot_restore_factory(
-            snapshot_obj=self.eb_snap_obj,
+            self.eb_snap_obj,
             storageclass=self.eb_pvc_obj.storageclass.name,
             volume_mode=self.eb_snap_obj.parent_volume_mode,
             timeout=180,
@@ -291,7 +295,7 @@ class TestGracefulNodesShutdown(E2ETest):
         self.restore_pvc_objs.append(eb_restored_pvc)
         logger.info("Creating snapshot restore for encrypted fs pvcs after reboot")
         efs_restored_pvc = snapshot_restore_factory(
-            snapshot_obj=self.efs_snap_obj,
+            self.efs_snap_obj,
             storageclass=self.efs_pvc_obj.storageclass.name,
             volume_mode=self.efs_snap_obj.parent_volume_mode,
             timeout=180,
@@ -305,6 +309,7 @@ class TestGracefulNodesShutdown(E2ETest):
                 status=constants.STATUS_RUNNING,
             )
             logger.info(f"Attaching the PVC {pvc_obj.name} to pod " f"{pod_obj.name}")
+            teardown_factory(pod_obj)
 
     def validate_pvc_expansion(self, pvc_size_new):
         """
@@ -407,6 +412,7 @@ class TestGracefulNodesShutdown(E2ETest):
         validate_mcg_bg_features,
         snapshot_restore_factory,
         pod_factory,
+        teardown_factory,
     ):
         """
         Steps:
@@ -441,9 +447,7 @@ class TestGracefulNodesShutdown(E2ETest):
             " Noobaa caching,Object expiration,"
             "MCG NSFS,RGW kafka notification"
         )
-        setup_mcg_bg_features(
-            skip_any_features=["caching", "nsfs", "rgw kafka", "replication"]
-        )
+        setup_mcg_bg_features(skip_any_features=["caching", "nsfs", "rgw kafka"])
 
         # check OSD status after graceful node shutdown
         worker_nodes = get_nodes(node_type="worker")
@@ -493,10 +497,12 @@ class TestGracefulNodesShutdown(E2ETest):
             raise ex
 
         self.validate_data_integrity()
+
         self.validate_snapshot_restore(
-            snapshot_restore_factory, pod_factory=pod_factory
+            pod_factory, snapshot_restore_factory, teardown_factory
         )
         self.validate_pvc_expansion(pvc_size_new=10)
+
         validate_mcg_bg_features(
             skip_any_features=["caching", "rgw kafka", "nsfs", "replication"]
         )
