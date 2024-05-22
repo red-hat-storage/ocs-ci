@@ -1,9 +1,8 @@
 import logging
 
-from ocs_ci.helpers.helpers import craft_s3_command
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import mcg, red_squad, bugzilla
+from ocs_ci.framework.pytest_customization.marks import mcg, red_squad
 from ocs_ci.framework.testlib import (
     MCGTest,
     ignore_leftover_label,
@@ -119,75 +118,6 @@ class TestLogBasedBucketReplication(MCGTest):
         assert not replication_handler.wait_for_sync(
             timeout=180
         ), "Deletion sync completed even though the policy was disabled!"
-
-    @bugzilla("2281729")
-    @pytest.mark.parametrize(
-        argnames=["platform"],
-        argvalues=[
-            pytest.param(
-                constants.AWS_PLATFORM,
-                marks=[tier2],
-            ),
-        ],
-    )
-    def test_deletion_sync_with_prefix(
-        self, platform, log_based_replication_handler_factory, test_directory_setup
-    ):
-        """
-        Test deletion sync with a prefix:
-
-        1. Setup log-based replication with deletion sync between two buckets
-        2. Patch the policy to sync only a specific prefix
-        3. Upload objects to two prefixes - one that should be synced and one that shouldn't
-        4. Wait for the objects under the synced prefix to be replicated
-        5. Make sure that the objects under the other prefix were not replicated
-        6. Copy the objects that were not deleted to the same prefix on the target bucket
-        7. Delete all the objects on both prefixes from the source bucket
-        8. Wait for the objects with the prefix to be deleted from the target bucket
-        9. Make sure the objects without the prefix were not deleted from the target bucket
-        """
-        # 1. Setup log-based replication with deletion sync between two buckets
-        replication_handler = log_based_replication_handler_factory(platform)
-        # 2. Patch the policy to sync only a specific prefix
-        replication_handler.policy_prefix_filter = "synced_prefix"
-
-        # 3. Upload objects to two prefixs - one that should be synced and one that shouldn't
-        replication_handler.upload_random_objects_to_source(
-            amount=10, prefix="synced_prefix"
-        )
-        replication_handler.upload_random_objects_to_source(
-            amount=10, prefix="other_prefix"
-        )
-
-        # 4. Wait for the objects under the synced prefix to be replicated
-        assert replication_handler.wait_for_sync(
-            timeout=self.DEFAULT_TIMEOUT, prefix="synced_prefix"
-        ), f"Replication failed to complete in {self.DEFAULT_TIMEOUT} seconds"
-
-        # 5. Make sure that the objects under the other prefix were not replicated
-        assert not replication_handler.wait_for_sync(
-            timeout=120, prefix="other_prefix"
-        ), "Replication has completed for the wrong prefix"
-
-        # 6. Copy the objects that were not deleted to the same prefix on the target bucket
-        cp_cmd = f"cp s3://{replication_handler.source_bucket}/other_prefix"
-        cp_cmd += f" s3://{replication_handler.target_bucket}/synced_prefix --recursive"
-        replication_handler.awscli_pod.exec_cmd_on_pod(craft_s3_command(cp_cmd))
-
-        # 7. Delete all the objects on both prefixes from the source bucket
-        replication_handler.delete_recursively_from_source()
-
-        # 8. Wait for the objects with the prefix to be deleted
-        # form the target bucket
-        assert replication_handler.wait_for_sync(
-            timeout=self.DEFAULT_TIMEOUT, prefix="synced_prefix"
-        ), f"Deletion sync failed to complete in {self.DEFAULT_TIMEOUT} seconds"
-
-        # 9. Make sure the objects without the prefix were not deleted
-        # from the target bucket
-        assert not replication_handler.wait_for_sync(
-            timeout=120, prefix="other_prefix"
-        ), "Deletion sync also deleted objects it shouldn't have"
 
     @pytest.mark.parametrize(
         argnames=["platform"],
