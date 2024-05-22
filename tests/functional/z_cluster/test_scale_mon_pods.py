@@ -5,7 +5,6 @@ import time
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
-    ignore_leftovers,
     post_ocs_upgrade,
     skipif_less_than_five_workers,
 )
@@ -109,6 +108,10 @@ class TestFiveMonInCluster(ManageTest):
             self.assign_dummy_racks()
 
     @post_ocs_upgrade
+    @pytest.mark.polarion_id("OCS-5664")
+    @pytest.mark.polarion_id("OCS-5665")
+    @pytest.mark.polarion_id("OCS-5667")
+    @pytest.mark.polarion_id("OCS-5668")
     def test_scale_mons_in_cluster_to_five(self, threading_lock):
         """
 
