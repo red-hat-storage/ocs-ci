@@ -3,6 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
+from time import sleep
 from ocs_ci.helpers import helpers
 
 from ocs_ci.framework.testlib import (
@@ -20,10 +21,6 @@ from ocs_ci.helpers.helpers import (
     create_pods,
     get_snapshot_content_obj,
 )
-from ocs_ci.ocs.exceptions import (
-    ResourceNotFoundError,
-)
-from ocs_ci.utility import kms
 
 log = logging.getLogger(__name__)
 
@@ -58,27 +55,25 @@ else:
 @skipif_managed_service
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
-class TestEncryptedPvcSnapshotRestore(ManageTest):
+class TestUnencryptedPvcSnapshotRestore(ManageTest):
     """
-    Test we can not restore an encrypted snapshot to an un-encrypted PVC
+    Test we can not restore an unencrypted snapshot to an encrypted PVC
 
     Steps:
         1:- Create project
         2:- Create an encryption enabled storageclass for RBD
         3:- Create a storageclass for RBD without encryption
         4:- Create ceph-csi-kms-token in the tenant namespace
-        5:- Create PVC with encrypted storageclass and Pods
-        6:- Verify if the key is created in Vault
-        7:- Verify whether encrypted device is present inside the pod
-        8:- Find initial md5sum
-        9:- Run IO
-        10:- Wait for IO completion
-        11:- Verify md5sum has changed after IO
-        12:- Create snapshot for the PVC
-        13:- Verify snapshots are ready and verify if encryption key is created in vault
-        14:- Restoring snapshots to create new PVCs using unencrypted storageclass
-        15:- Confirm that the restored PVCs are in Pending status and validate error log
-        16:- Deletion of Pods, PVCs and Snapshots
+        5:- Create PVC with unencrypted storageclass and Pods
+        6:- Find initial md5sum
+        7:- Run IO
+        8:- Wait for IO completion
+        9:- Verify md5sum has changed after IO
+        10:- Create snapshot for the PVC
+        11:- Verify snapshots are ready
+        12:- Restoring snapshots to create new PVCs using encrypted storageclass
+        13:- Confirm that the restored PVCs are in Pending status and validate error log
+        14:- Deletion of Pods, PVCs and Snapshots
 
     """
 
@@ -128,7 +123,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
         self.pvc_objs = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.proj_obj,
-            storageclass=self.sc_obj_with_encryption,
+            storageclass=self.sc_obj_without_encryption,
             size=self.pvc_size,
             access_modes=[
                 f"{constants.ACCESS_MODE_RWX}-Block",
@@ -147,48 +142,20 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
-        # Verify if the key is created in Vault
-        self.vol_handles = []
-        for pvc_obj in self.pvc_objs:
-            pv_obj = pvc_obj.backed_pv_obj
-            vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
-            self.vol_handles.append(vol_handle)
-            if kms_provider == constants.VAULT_KMS_PROVIDER:
-                if kms.is_key_present_in_path(
-                    key=vol_handle, path=self.kms.vault_backend_path
-                ):
-                    log.info(f"Vault: Found key for {pvc_obj.name}")
-                else:
-                    raise ResourceNotFoundError(
-                        f"Vault: Key not found for {pvc_obj.name}"
-                    )
-
-    def test_encrypted_pvc_snapshot_restore(
+    def test_unencrypted_pvc_snapshot_restore(
         self,
-        kms_provider,
         snapshot_factory,
         snapshot_restore_factory,
     ):
         """
-        Test to restore snapshots of encrypted RBD Block VolumeMode PVCs to an un-encrypted PVC
+        Test to restore snapshots of unencrypted RBD Block VolumeMode PVCs to an encrypted PVC
 
         """
 
         log.info(
-            "Check for encrypted device, find initial md5sum value and run IO on all pods"
+            "Check for unencrypted device, find initial md5sum value and run IO on all pods"
         )
-        for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
-
-            # Verify whether encrypted device is present inside the pod
-            if pod_obj.exec_sh_cmd_on_pod(
-                command=f"lsblk | grep {vol_handle} | grep crypt"
-            ):
-                log.info(f"Encrypted device found in {pod_obj.name}")
-            else:
-                raise ResourceNotFoundError(
-                    f"Encrypted device not found in {pod_obj.name}"
-                )
-
+        for pod_obj in self.pod_objs:
             # Find initial md5sum
             pod_obj.md5sum_before_io = cal_md5sum(
                 pod_obj=pod_obj,
@@ -203,12 +170,11 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
                 io_direction="write",
                 runtime=60,
             )
-        log.info("IO started on all pods")
+            log.info("IO started on all pods")
 
-        # Wait for IO completion
-        for pod_obj in self.pod_objs:
+            # Wait for IO completion
             pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
+            log.info("IO completed on all pods")
 
         snap_objs, snap_handles = ([] for i in range(2))
 
@@ -231,7 +197,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
             snap_objs.append(snap_obj)
             log.info("Snapshots created")
 
-        # Verify snapshots are ready and verify if encryption key is created in vault
+        # Verify snapshots are ready
         log.info("Verify snapshots are ready")
         for snap_obj in snap_objs:
             snap_obj.ocp.wait_for_resource(
@@ -242,16 +208,8 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
             )
             snapshot_content = get_snapshot_content_obj(snap_obj=snap_obj)
             snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
-            if kms_provider == constants.VAULT_KMS_PROVIDER:
-                if kms.is_key_present_in_path(
-                    key=snap_handle, path=self.kms.vault_backend_path
-                ):
-                    log.info(f"Vault: Found key for snapshot {snap_obj.name}")
-                else:
-                    raise ResourceNotFoundError(
-                        f"Vault: Key not found for snapshot {snap_obj.name}"
-                    )
             snap_handles.append(snap_handle)
+        sleep(60)
 
         # Restoring snapshots to create new PVCs
         log.info("Creating new PVCs from snapshots")
@@ -261,7 +219,7 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
             log.info(f"Creating a PVC from snapshot {snap_obj.name}")
             restore_pvc_obj = snapshot_restore_factory(
                 snapshot_obj=snap_obj,
-                storageclass=self.sc_obj_without_encryption.name,
+                storageclass=self.sc_obj_with_encryption.name,
                 size=f"{self.pvc_size}Gi",
                 volume_mode=snap_obj.parent_volume_mode,
                 access_mode=snap_obj.parent_access_mode,
@@ -271,10 +229,10 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
 
             log.info(
                 f"Created PVC {restore_pvc_obj.name} from snapshot {snap_obj.name}."
-                f"Used the storage class {self.sc_obj_without_encryption}"
+                f"Used the storage class {self.sc_obj_with_encryption}"
             )
             restore_pvc_obj.md5sum = snap_obj.md5sum
-            failure_str = "cannot create unencrypted volume from encrypted volume"
+            failure_str = "cannot create encrypted volume from unencrypted volume"
             # Confirm that the restored PVCs are in Pending status
             for restore_pvc_obj in restore_pvcs:
                 helpers.wait_for_resource_state(
@@ -285,16 +243,16 @@ class TestEncryptedPvcSnapshotRestore(ManageTest):
                 restore_pvc_obj.reload()
                 if failure_str in restore_pvc_obj.describe():
                     log.info(
-                        f"cannot create unencrypted volume from encrypted volume {snap_obj.name}"
+                        f"cannot create encrypted volume from unencrypted volume {snap_obj.name}"
                     )
                 else:
                     log.warning(
-                        f"able to create unencrypted volume from encrypted volume {snap_obj.name}"
+                        f"Able to create encrypted volume from unencrypted volume {snap_obj.name}"
                     )
         log.info("Verified: Restored PVCs are in Pending state.")
 
         # Deletion of Pods, PVCs and Snapshots
-        log.info(f"Deleting pod")
+        log.info("Deleting pod")
         for pod_obj in self.pod_objs:
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(
