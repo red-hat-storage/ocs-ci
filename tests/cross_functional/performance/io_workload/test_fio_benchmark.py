@@ -194,7 +194,7 @@ class TestFIOBenchmark(PASTest):
         log.info("Setting prefill value to False ")
         self.crd_data["spec"]["workload"]["args"]["prefill"] = False
 
-    def setting_io_pattern(self, io_pattern):
+    def setting_io_pattern(self, io_pattern, op):
         """
         Setting the test jobs according to the io pattern - random / sequential
 
@@ -205,10 +205,7 @@ class TestFIOBenchmark(PASTest):
         if io_pattern == "sequential":
             self.crd_data["spec"]["workload"]["args"]["jobs"] = ["read"]
         if io_pattern == "random":
-            self.crd_data["spec"]["workload"]["args"]["jobs"] = [
-                "randwrite",
-                "randread",
-            ]
+            self.crd_data["spec"]["workload"]["args"]["jobs"] = [op]
 
     def init_full_results(self, full_results):
         """
@@ -378,27 +375,27 @@ class TestFIOBenchmark(PASTest):
                     self.es = None
 
     @pytest.mark.parametrize(
-        argnames=["interface", "io_pattern"],
+        argnames=["interface", "io_pattern", "op"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, "sequential"],
-                marks=pytest.mark.polarion_id("OCS-844"),
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, "sequential"],
-                marks=pytest.mark.polarion_id("OCS-845"),
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, "random"],
+                *[constants.CEPHBLOCKPOOL, "random", "randread"],
                 marks=pytest.mark.polarion_id("OCS-846"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, "random"],
+                *[constants.CEPHFILESYSTEM, "random", "randwrite"],
+                marks=pytest.mark.polarion_id("OCS-847"),
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "random", "randwrite"],
+                marks=pytest.mark.polarion_id("OCS-846"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "random", "randread"],
                 marks=pytest.mark.polarion_id("OCS-847"),
             ),
         ],
     )
-    def test_fio_workload_simple(self, interface, io_pattern):
+    def test_fio_workload_simple(self, interface, io_pattern, op):
         """
         This is a basic fio perf test - non-compressed volumes
 
@@ -437,7 +434,7 @@ class TestFIOBenchmark(PASTest):
 
         self.get_env_info()
 
-        self.setting_io_pattern(io_pattern)
+        self.setting_io_pattern(io_pattern, op)
 
         self.run()
 
