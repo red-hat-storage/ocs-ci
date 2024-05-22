@@ -20,6 +20,7 @@ from ocs_ci.ocs.cluster import (
     check_pool_compression_replica_ceph_level,
 )
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -139,3 +140,6 @@ class TestPoolUserInterface(ManageTest):
             raise PoolNotReplicatedAsNeeded(
                 f"Pool {self.pool_name} not replicated to size {replica}"
             )
+
+        # checking ceph health
+        assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
