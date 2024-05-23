@@ -700,12 +700,9 @@ GATHER_COMMANDS_OTHERS_4_7 = [
     "prometheus-operator.yaml",
     "prometheus-k8s.yaml",
     "prometheus-k8s-scheduler-resources.yaml",
-    "prometheus-adapter.yaml",
     "prometheus-operator.yaml",
     "prometheus-k8s.yaml",
     "prometheus-k8s-scheduler-resources.yaml",
-    "prometheus-adapter.yaml",
-    "prometheus-adapter-view.yaml",
 ]
 
 GATHER_COMMANDS_OTHERS_4_10 = [
