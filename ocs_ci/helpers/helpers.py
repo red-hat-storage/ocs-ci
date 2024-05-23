@@ -5203,6 +5203,7 @@ def update_volsync_channel():
     Update Volsync Channel
 
     """
+    logger.info("Update Volsync Channel.")
     from ocs_ci.ocs.acm.acm import RunWithConfigContext, RunWithAcmConfigContext
 
     if config.ENV_DATA.get("acm_hub_unreleased") is not True:
