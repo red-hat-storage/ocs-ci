@@ -378,7 +378,7 @@ class TestFIOBenchmark(PASTest):
         argnames=["interface", "io_pattern", "op"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL, "random", "randread"],
+                *[constants.CEPHFILESYSTEM, "sequential", "read"],
                 marks=pytest.mark.polarion_id("OCS-846"),
             ),
             pytest.param(
