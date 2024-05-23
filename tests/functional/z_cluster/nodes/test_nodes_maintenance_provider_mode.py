@@ -53,7 +53,9 @@ def check_drain_and_unschedule_node(ocp_node):
     )
 
     wait_time_before_reschedule = 30
-    logger.info(f"Wait {wait_time_before_reschedule} before rescheduling the node")
+    logger.info(
+        f"Wait {wait_time_before_reschedule} seconds before rescheduling the node"
+    )
     time.sleep(wait_time_before_reschedule)
 
     schedule_nodes([ocp_node.name])

@@ -57,7 +57,10 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
-from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_pods_to_be_running
+from ocs_ci.ocs.resources.pod import (
+    get_mds_pods,
+    wait_for_pods_to_be_in_statuses,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
@@ -3235,7 +3238,14 @@ def client_cluster_health_check():
         )
 
     logger.info("Wait for the pods to be running")
-    res = wait_for_pods_to_be_running(timeout=300, sleep=20)
+    expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+    exclude_pod_name_prefixes = ["rook-ceph-tools"]
+    res = wait_for_pods_to_be_in_statuses(
+        expected_statuses=expected_statuses,
+        exclude_pod_name_prefixes=exclude_pod_name_prefixes,
+        timeout=300,
+        sleep=20,
+    )
     if not res:
         raise ResourceWrongStatusException("Not all the pods in running state")
 
