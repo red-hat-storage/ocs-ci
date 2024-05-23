@@ -251,7 +251,7 @@ class TestLogBasedReplicationWithDisruptions:
         This function deletes objects in a batch
         """
         for obj in objs_to_delete:
-            replication_handler.delete_obj_from_source(obj)
+            replication_handler.delete_objs_from_source(obj)
             # adding momentary sleep just to slowdown the deletion
             # process
             time.sleep(5)
