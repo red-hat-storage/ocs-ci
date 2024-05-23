@@ -718,7 +718,6 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "noobaa-core-0-core.log",
     "noobaa-core-0-pod-describe.txt",
     "noobaa-db-pg-0-db.log",
-    "noobaa-db-pg-0-initialize-database.log",
     "noobaa-db-pg-0-init.log",
     "noobaa-db-pg-0-pod-describe.txt",
     "noobaa-endpoint-scc-describe.txt",
