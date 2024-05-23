@@ -189,7 +189,7 @@ class TestFIOBenchmark(PASTest):
             ] = f"{int(self.filesize * 1.2)}Gi"
         self.crd_data["spec"]["workload"]["args"]["servers"] = (
             int(self.total_data_set / self.filesize)
-        ) + 3
+        ) 
         log.info(f"Total Data set to work on is : {self.total_data_set} GiB")
         log.info("Setting prefill value to False ")
         self.crd_data["spec"]["workload"]["args"]["prefill"] = False
@@ -378,7 +378,7 @@ class TestFIOBenchmark(PASTest):
         argnames=["interface", "io_pattern", "op"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHFILESYSTEM, "sequential", "read"],
+                *[constants.CEPHFILESYSTEM, "random", "randread"],
                 marks=pytest.mark.polarion_id("OCS-846"),
             ),
             pytest.param(
