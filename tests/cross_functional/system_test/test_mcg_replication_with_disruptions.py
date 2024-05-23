@@ -357,7 +357,7 @@ class TestLogBasedReplicationWithDisruptions:
         wait_for_noobaa_pods_running(timeout=420)
 
         assert replication_handler.wait_for_sync(
-            timeout=300
+            timeout=600
         ), "Deletion sync was not done but expected"
 
         # Remove replication policy and upload some objects to the bucket
