@@ -7,7 +7,7 @@ import logging
 import tempfile
 import shutil
 import requests
-import time
+import subprocess
 
 import semantic_version
 import platform
@@ -190,19 +190,23 @@ class Submariner(object):
             f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
         )
         run_cmd(cmd)
-        # Wait till image extract happens and subctl dir appears
-        time.sleep(30)
         decompress = (
             f"tar -C /tmp/ -xf /tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
         )
-        run_cmd(decompress)
-        target_dir = os.path.expanduser("./bin")
+        p = subprocess.run(decompress, stdout=subprocess.PIPE, shell=True)
+        if p.returncode:
+            logger.error("Failed to untar subctl")
+            raise CommandFailed
+        else:
+            logger.info(p.stdout)
+        target_dir = config.RUN["bin_dir"]
         install_cmd = (
             f"install -m744 /tmp/subctl-{version_str}*/subctl-{version_str}*-linux-{binary_pltfrm} "
             f"{target_dir} "
         )
         run_cmd(install_cmd, shell=True)
         run_cmd(f"mv {target_dir}/subctl-* {target_dir}/subctl", shell=True)
+        os.environ["PATH"] = os.environ["PATH"] + ":" + os.path.abspath(f"{target_dir}")
 
     def submariner_configure_upstream(self):
         """
