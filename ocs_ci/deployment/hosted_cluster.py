@@ -25,9 +25,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
-from ocs_ci.ocs.resources.packagemanifest import (
-    PackageManifest,
-)
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
@@ -1005,13 +1002,13 @@ class HostedODF(HypershiftHostedOCP):
 
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
 
-        default_channel = PackageManifest(
-            resource_name=constants.OCS_CLIENT_OPERATOR,
-            cluster_kubeconfig=self.cluster_kubeconfig,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        ).get_default_channel()
+        # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
+        odf_version = get_semantic_version(
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"),
+            only_major_minor=True,
+        )
 
-        subscription_data["spec"]["channel"] = default_channel
+        subscription_data["spec"]["channel"] = f"stable-{str(odf_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription", delete=False
