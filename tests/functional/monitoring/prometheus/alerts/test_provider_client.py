@@ -59,7 +59,7 @@ def test_change_client_ocs_version_and_stop_heartbeat(
                 f"Storage Client ({client_name}) heartbeat missed for more than 300 (s) "
                 f"in namespace:cluster {cluster_namespace}:{cluster_name}."
             ),
-            "severity": "error",
+            "severity": "critical",
         },
         {
             "label": constants.ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION,
@@ -67,7 +67,7 @@ def test_change_client_ocs_version_and_stop_heartbeat(
                 f"Storage Client Operator ({client_name}) differs by more than 1 minor "
                 f"version in namespace:cluster {cluster_namespace}:{cluster_name}."
             ),
-            "severity": "error",
+            "severity": "critical",
         },
     ]
     states = ["firing"]
