@@ -437,9 +437,8 @@ class HostedODF(HypershiftHostedOCP):
             "client_namespace", "openshift-storage-client"
         )
         self.timeout_check_resources_exist_sec = 6
-        self.timeput_wait_csvs_min = 20
-        self.timeout_wait_csvs = 20
-        self.timeout_wait_pod = 20
+        self.timeout_wait_csvs_minutes = 20
+        self.timeout_wait_pod_minutes = 20
         self.storage_client_name = None
 
     @kubeconfig_exists_decorator
@@ -626,7 +625,7 @@ class HostedODF(HypershiftHostedOCP):
 
         try:
             sample = TimeoutSampler(
-                timeout=self.timeout_wait_csvs * 60,
+                timeout=self.timeout_wait_csvs_minutes * 60,
                 sleep=15,
                 func=check_all_csvs_are_succeeded,
                 namespace=self.namespace_client,
@@ -646,7 +645,7 @@ class HostedODF(HypershiftHostedOCP):
             pods_are_running = wait_for_pods_to_be_in_statuses_concurrently(
                 app_selectors_to_resource_count_list=app_selectors_to_resource_count_list,
                 namespace=self.namespace_client,
-                timeout=self.timeout_wait_pod * 60,
+                timeout=self.timeout_wait_pod_minutes * 60,
                 cluster_kubeconfig=self.cluster_kubeconfig,
             )
         except Exception as e:
@@ -1259,7 +1258,7 @@ class HostedODF(HypershiftHostedOCP):
             bool: True if ODF CSV is installed, False otherwise
         """
         sample = TimeoutSampler(
-            timeout=self.timeput_wait_csvs_min * 60,
+            timeout=self.timeout_wait_csvs_minutes * 60,
             sleep=15,
             func=check_all_csvs_are_succeeded,
             namespace=self.namespace_client,

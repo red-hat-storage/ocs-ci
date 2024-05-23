@@ -43,7 +43,7 @@ class MetalLBInstaller:
         self.catalog_source_name = None
         self.hostnames = []
         self.timeout_check_resources_existence = 6
-        self.timeput_wait_csvs_min = 5
+        self.timeout_wait_csvs_minutes = 20
 
     def create_metallb_namespace(self):
         """
@@ -651,7 +651,7 @@ class MetalLBInstaller:
             bool: True if MetalLB CSV is installed, False otherwise
         """
         for sample in TimeoutSampler(
-            timeout=self.timeput_wait_csvs_min * 60,
+            timeout=self.timeout_wait_csvs_minutes * 60,
             sleep=15,
             func=check_all_csvs_are_succeeded,
             namespace=self.namespace_lb,
