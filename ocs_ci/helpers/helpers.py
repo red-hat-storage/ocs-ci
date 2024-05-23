@@ -605,30 +605,39 @@ def create_ceph_block_pool(
     return cbp_obj
 
 
-def create_ceph_file_system(pool_name=None):
+def create_ceph_file_system(
+    cephfs_name=None, label=None, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
     """
     Create a Ceph file system
-    ** This method should not be used anymore **
-    ** This method is for internal testing only **
 
     Args:
-        pool_name (str): The pool name to create
+        cephfs_name (str): The ceph FS name to create
+        label (dict): The label to give to pool
+        namespace (str): The name space in which the ceph FS has to be created
 
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
-    cfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
-    cfs_data["metadata"]["name"] = (
-        pool_name if pool_name else create_unique_resource_name("test", "cfs")
+    cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
+    cephfs_data["metadata"]["name"] = (
+        cephfs_name if cephfs_name else create_unique_resource_name("test", "cfs")
     )
-    cfs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    cfs_data = create_resource(**cfs_data)
-    cfs_data.reload()
+    cephfs_data["metadata"]["namespace"] = namespace
+    if label:
+        cephfs_data["metadata"]["labels"] = label
+
+    try:
+        cephfs_data = create_resource(**cephfs_data)
+        cephfs_data.reload()
+    except Exception as e:
+        logger.error(e)
+        raise e
 
     assert validate_cephfilesystem(
-        cfs_data.name
-    ), f"File system {cfs_data.name} does not exist"
-    return cfs_data
+        cephfs_data.name
+    ), f"File system {cephfs_data.name} does not exist"
+    return cephfs_data
 
 
 def default_storage_class(
