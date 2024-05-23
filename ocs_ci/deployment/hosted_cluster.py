@@ -173,7 +173,7 @@ class HostedClients(HyperShiftBase):
         ), "ODF client was not deployed on all hosted OCP clusters"
         assert all(
             client_setup
-        ), "Storage client was not setup on all hosted ODF clusters"
+        ), "Storage client was not set up on all hosted ODF clusters"
 
     def config_has_hosted_odf_image(self, cluster_name):
         """
@@ -603,12 +603,12 @@ class HostedODF(HypershiftHostedOCP):
 
         cephfs_storage_class_name = f"{self.storage_client_name}-cephfs"
         if not self.storage_class_exists(cephfs_storage_class_name):
-            logger.error("cephfs storage class does not exist")
+            logger.error(f"cephfs storage class does not exist on cluster {self.name}")
             return False
 
-        rbd_storage_class_name = f"{self.storage_client_name}-rbd"
+        rbd_storage_class_name = f"{self.storage_client_name}-ceph-rbd"
         if not self.storage_class_exists(rbd_storage_class_name):
-            logger.error("rbd storage class does not exist")
+            logger.error(f"rbd storage class does not exist on cluster {self.name}")
             return False
 
         return True
