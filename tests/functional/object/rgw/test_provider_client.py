@@ -43,6 +43,7 @@ def test_write_file_to_bucket_on_client(
     # downloads them to the pod
     bucketname = rgw_bucket_factory(1, "rgw-oc")[0].name
     full_object_path = f"s3://{bucketname}"
+    credentials = rgw_obj.get_credentials()
 
     config.switch_ctx(client_cluster)
     log.info(f"Switched to client cluster with index {client_cluster}")
@@ -51,7 +52,6 @@ def test_write_file_to_bucket_on_client(
     ).split(" ")
     # create s3_creds structure with s3_endpoint so that s3_internal_endpoint is not used
     # TODO(fbalak): remove ssl=False option and provide correct certificate
-    credentials = rgw_obj.get_credentials()
     s3_creds = {
         "access_key_id": credentials[2],
         "access_key": credentials[1],
