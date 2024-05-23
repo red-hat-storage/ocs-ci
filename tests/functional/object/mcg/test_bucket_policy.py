@@ -879,7 +879,7 @@ class TestS3BucketPolicy(MCGTest):
                 )
 
     @pytest.mark.polarion_id("OCS-5767")
-    @tier1
+    @tier2
     def test_bucket_policy_elements_NotPrincipal(self, mcg_obj, bucket_factory):
         """
         Test bucket policy element of NotPrincipal and Effect: Deny
@@ -930,7 +930,7 @@ class TestS3BucketPolicy(MCGTest):
             pytest.param(
                 *["Allow"], marks=[tier1, pytest.mark.polarion_id("OCS-5768")]
             ),
-            pytest.param(*["Deny"], marks=[tier1, pytest.mark.polarion_id("OCS-5769")]),
+            pytest.param(*["Deny"], marks=[tier2, pytest.mark.polarion_id("OCS-5769")]),
         ],
     )
     def test_bucket_policy_elements_NotAction(self, mcg_obj, bucket_factory, effect):
@@ -1027,7 +1027,7 @@ class TestS3BucketPolicy(MCGTest):
         delete_bucket_policy_verify(obc_obj, obc_obj.bucket_name)
 
     @pytest.mark.polarion_id("OCS-5770")
-    @tier1
+    @tier2
     def test_bucket_policy_elements_NotResource(self, mcg_obj, bucket_factory):
         """
         Test bucket policy element of NotResource with Effect: Deny
