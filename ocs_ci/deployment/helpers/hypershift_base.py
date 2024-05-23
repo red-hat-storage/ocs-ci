@@ -50,7 +50,12 @@ def kubeconfig_exists_decorator(func):
 
     def wrapper(self, *args, **kwargs):
         if not os.path.exists(self.cluster_kubeconfig):
-            logger.error(f"no kubeconfig found for cluster {self.name}")
+            error_out = f"no kubeconfig found for cluster {self.name}."
+            if hasattr(self, "cluster_kubeconfig"):
+                error_out += f" Searched location is {str(self.cluster_kubeconfig)}."
+            else:
+                error_out += f" 'cluster_kubeconfig' instance attribute is not set within class {type(self)}."
+            logger.error(error_out)
             return  # Skip executing the decorated method
         return func(self, *args, **kwargs)
 
@@ -461,7 +466,7 @@ class HyperShiftBase:
         path_abs = os.path.expanduser(hosted_cluster_path)
         auth_path = os.path.join(path_abs, "auth_path")
         os.makedirs(auth_path, exist_ok=True)
-        kubeconfig_path = os.path.join(path_abs, "kubeconfig")
+        kubeconfig_path = os.path.join(auth_path, "kubeconfig")
 
         if os.path.isfile(kubeconfig_path):
             logger.info(

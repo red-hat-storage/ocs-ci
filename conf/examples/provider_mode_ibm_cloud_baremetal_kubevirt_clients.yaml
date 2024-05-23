@@ -26,6 +26,7 @@ ENV_DATA:
       hosted_odf_registry: "quay.io/rhceph-dev/ocs-registry" # this is an example, please provide the desired registry
       hosted_odf_version: "4.16.0-99" # this is an example, please provide the desired version
       setup_storage_client: true # if true, the Storage Client will be created and verification will be performed
+      nodepool_replicas: 3 # number of worker nodes created for Hosted cluster
     hcp415-bm3-f:
       hosted_cluster_path: "~/clusters/hcp416-bm3-f/openshift-cluster-dir" # path to store auth_path dir or cluster related files
       ocp_version:  "4.15.10" # this is an example, please provide the desired OCP version
@@ -34,3 +35,4 @@ ENV_DATA:
       hosted_odf_registry: "quay.io/rhceph-dev/ocs-registry" # this is an example, please provide the desired registry
       hosted_odf_version: "4.16.0-106" # this is an example, please provide the desired version
       setup_storage_client: true # if true, the Storage Client will be created and verification will be performed
+      nodepool_replicas: 2 # number of worker nodes created for Hosted cluster
