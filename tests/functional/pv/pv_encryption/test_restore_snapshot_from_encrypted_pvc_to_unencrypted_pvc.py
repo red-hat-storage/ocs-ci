@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
 )
 from ocs_ci.utility import kms
+from ocs_ci.framework.pytest_customization.marks import green_squad
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ else:
     ]
 
 
+@green_squad
 @pytest.mark.parametrize(
     argnames=argnames,
     argvalues=argvalues,

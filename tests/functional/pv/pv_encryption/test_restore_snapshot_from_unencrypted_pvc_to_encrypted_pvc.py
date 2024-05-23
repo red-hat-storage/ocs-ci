@@ -21,6 +21,7 @@ from ocs_ci.helpers.helpers import (
     create_pods,
     get_snapshot_content_obj,
 )
+from ocs_ci.framework.pytest_customization.marks import green_squad
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ else:
     ]
 
 
+@green_squad
 @pytest.mark.parametrize(
     argnames=argnames,
     argvalues=argvalues,
