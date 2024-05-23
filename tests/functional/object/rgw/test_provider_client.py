@@ -41,7 +41,7 @@ def test_write_file_to_bucket_on_client(
     awscli_pod, client_cluster = awscli_pod_client_session
     # Retrieve a list of all objects on the test-objects bucket and
     # downloads them to the pod
-    bucketname = rgw_bucket_factory()[0].name
+    bucketname = rgw_bucket_factory(1, "rgw-oc")[0].name
     full_object_path = f"s3://{bucketname}"
 
     config.switch_ctx(client_cluster)
