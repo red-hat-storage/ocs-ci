@@ -53,8 +53,8 @@ def test_write_file_to_bucket_on_client(
     # create s3_creds structure with s3_endpoint so that s3_internal_endpoint is not used
     # TODO(fbalak): remove ssl=False option and provide correct certificate
     s3_creds = {
-        "access_key_id": credentials[2],
-        "access_key": credentials[1],
+        "access_key_id": credentials[1],
+        "access_key": credentials[2],
         "endpoint": credentials[0],
         "ssl": False,
     }
