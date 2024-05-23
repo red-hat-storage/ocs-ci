@@ -9,6 +9,8 @@
 DEPLOYMENT:
   cnv_deployment: true
   metallb_operator: true
+  cnv_latest_stable: true
+  local_storage: true
 ENV_DATA:
   platform: "hci_baremetal"
   cluster_type: "provider" # it is necessary to run the Hosted clusters deployment on the Provider cluster
