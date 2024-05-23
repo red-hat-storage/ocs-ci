@@ -397,8 +397,6 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     "packageserver-service-system:auth-delegator.yaml",
     "pods",
     "pods_-owide",
-    "prometheus-adapter-view.yaml",
-    "prometheus-adapter.yaml",
     "prometheus-k8s.yaml",
     "prometheus-k8s.yaml",
     "prometheus-operator.yaml",
