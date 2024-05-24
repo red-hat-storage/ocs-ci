@@ -34,6 +34,7 @@ from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
+from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
@@ -7586,3 +7587,53 @@ def update_current_active_test_marks_global(request):
     """
     marks = [mark.name for mark in request.node.iter_markers()]
     ocs_ci.framework.pytest_customization.marks.current_test_marks = marks
+
+
+@pytest.fixture(scope="function")
+def benchmark_workload_storageutilization(request):
+    """
+    This fixture is for cluster storage utilization using the benchmark operator.
+
+    """
+    benchmark_obj = None
+
+    def factory(
+        target_percentage,
+        jobs="read",
+        read_runtime=30,
+        bs="4096KiB",
+        storageclass=constants.DEFAULT_STORAGECLASS_RBD,
+        timeout_completed=2400,
+    ):
+        """
+        Setup of benchmark fio
+
+        Args:
+            target_percentage (int): The number of percentage to fill up the cluster
+            jobs (str): fio job types to run, for example the readwrite option
+            read_runtime (int): Amount of time in seconds to run read workloads
+            bs (str): the Block size that need to used for the prefill
+            storageclass (str): StorageClass to use for PVC per server pod
+            timeout_completed (int): timeout client pod move to completed state
+
+        """
+        nonlocal benchmark_obj
+
+        size = get_file_size(target_percentage)
+        benchmark_obj = BenchmarkOperatorFIO()
+        benchmark_obj.setup_benchmark_fio(
+            total_size=size,
+            jobs=jobs,
+            read_runtime=read_runtime,
+            bs=bs,
+            storageclass=storageclass,
+            timeout_completed=timeout_completed,
+        )
+        benchmark_obj.run_fio_benchmark_operator(is_completed=True)
+
+    def finalizer():
+        if benchmark_obj is not None:
+            benchmark_obj.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory

@@ -4908,3 +4908,43 @@ def get_latest_release_version():
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
     except CommandFailed:
         return
+
+
+def sum_of_two_storage_sizes(storage_size1, storage_size2, convert_size=1024):
+    """
+    Calculate the sum of two storage sizes given as strings.
+    Valid units: "Mi", "Gi", "Ti", "MB", "GB", "TB".
+
+    Args:
+        storage_size1 (str): The first storage size, e.g., "800Mi", "100Gi", "2Ti".
+        storage_size2 (str): The second storage size, e.g., "700Mi", "500Gi", "300Gi".
+        convert_size (int): Set convert by 1000 or 1024. The default value is 1024.
+
+    Returns:
+        str: The sum of the two storage sizes as a string, e.g., "1500Mi", "600Gi", "2300Gi".
+
+    Raises:
+        ValueError: If the units of the storage sizes are not match the Valid units
+
+    """
+    valid_units = {"Mi", "Gi", "Ti", "MB", "GB", "TB"}
+    unit1 = storage_size1[-2:]
+    unit2 = storage_size2[-2:]
+    if unit1 not in valid_units or unit2 not in valid_units:
+        raise ValueError(f"Storage sizes must have valid units: {valid_units}")
+
+    storage_size1 = storage_size1.replace("B", "i")
+    storage_size2 = storage_size2.replace("B", "i")
+
+    if "Mi" in f"{storage_size1}{storage_size2}":
+        unit, units_to_convert = "Mi", "MB"
+    elif "Gi" in f"{storage_size1}{storage_size2}":
+        unit, units_to_convert = "Gi", "GB"
+    else:
+        unit, units_to_convert = "Ti", "TB"
+
+    size1 = convert_device_size(storage_size1, units_to_convert, convert_size)
+    size2 = convert_device_size(storage_size2, units_to_convert, convert_size)
+    size = size1 + size2
+    new_storage_size = f"{size}{unit}"
+    return new_storage_size
