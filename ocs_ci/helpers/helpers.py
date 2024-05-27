@@ -4727,7 +4727,6 @@ def flatten_multilevel_dict(d):
     return leaves_list
 
 
-<<<<<<< HEAD
 def is_rbd_default_storage_class(custom_sc=None):
     """
     Check if RDB is a default storageclass for the cluster

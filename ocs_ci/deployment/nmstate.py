@@ -133,3 +133,15 @@ class NMStateInstaller(object):
                 logger.info(f"NMState pod {nmstate_pod_name} in running state")
                 count_running_nmstate_pods += 1
         return count_running_nmstate_pods >= count
+
+    def running_nmstate(self):
+        """
+        Install NMState operator and create an instance
+
+        """
+        self.create_nmstate_operator_namespace()
+        self.create_nmstate_operatorgroup()
+        self.create_nmstate_subscription()
+        self.verify_nmstate_csv_status()
+        self.create_nmstate_instance()
+        self.verify_nmstate_pods_running()

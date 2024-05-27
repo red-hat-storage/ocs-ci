@@ -1012,6 +1012,42 @@ class Deployment(object):
 
         # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
+            from ocs_ci.deployment.nmstate import NMStateInstaller
+
+            logger.info("Install NMState operator and create an instance")
+            nmstate_obj = NMStateInstaller()
+            nmstate_obj.running_nmstate()
+            logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
+            network_workers = config.ENV_DATA["worker_node_network_configuration"]
+            for worker_network_configuration in network_workers:
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY
+                )
+                node_network_configuration_policy["spec"]["nodeSelector"][
+                    "kubernetes.io/hostname"
+                ] = worker_network_configuration[1]
+                node_network_configuration_policy["metadata"][
+                    "name"
+                ] = worker_network_configuration[0]
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[2]
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
+                    3
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                    "config"
+                ][0]["destination"] = worker_network_configuration[4]
+                public_net_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="multus_public", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    node_network_configuration_policy, public_net_yaml.name
+                )
+                run_cmd(f"oc create -f {public_net_yaml.name}")
+
             create_public_net = config.ENV_DATA["multus_create_public_net"]
             create_cluster_net = config.ENV_DATA["multus_create_cluster_net"]
             interfaces = set()
