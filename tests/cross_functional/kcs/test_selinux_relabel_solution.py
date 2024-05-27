@@ -205,9 +205,9 @@ class TestSelinuxrelabel(E2ETest):
         # Get random files
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         num_of_files = random.randint(3, 9)
-        ocp_obj = ocp.OCP(kind=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = ocp.OCP(kind=config.ENV_DATA["cluster_namespace"])
         random_files = ocp_obj.exec_oc_cmd(
-            f"exec -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -it {pod_obj.name} -- /bin/bash"
+            f'exec -n {config.ENV_DATA["cluster_namespace"]} -it {pod_obj.name} -- /bin/bash'
             f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
             timeout=300,
         )
