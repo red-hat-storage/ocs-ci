@@ -129,13 +129,12 @@ def process_ocsci_conf(arguments):
         action="store",
         choices=[
             "4.99",
-            "4.10",
-            "4.11",
             "4.12",
             "4.13",
             "4.14",
             "4.15",
             "4.16",
+            "4.17",
         ],
     )
     parser.add_argument("--ocs-registry-image")

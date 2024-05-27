@@ -31,10 +31,12 @@ from ocs_ci.ocs.constants import (
     HCI_CLIENT,
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
+    BAREMETAL_PLATFORMS,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
+
 
 # tier marks
 
@@ -524,6 +526,10 @@ skipif_flexy_deployment = pytest.mark.skipif(
     reason="This test doesn't work correctly on OCP cluster deployed via Flexy",
 )
 
+skipif_noobaa_external_pgsql = pytest.mark.skipif(
+    config.ENV_DATA.get("noobaa_external_pgsql") is True,
+    reason="This test will not run correctly in external DB deployed cluster.",
+)
 metrics_for_external_mode_required = pytest.mark.skipif(
     version.get_semantic_ocs_version_from_config() < version.VERSION_4_6
     and config.DEPLOYMENT.get("external_mode") is True,
@@ -621,3 +627,15 @@ def get_current_test_marks():
 
     """
     return current_test_marks
+
+
+baremetal_deployment_required = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() not in BAREMETAL_PLATFORMS)
+    or (not vsphere_platform_required),
+    reason="Test required baremetal or vsphere deployment.",
+)
+
+ui_deployment_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("ui_deployment"),
+    reason="UI Deployment required to run the test.",
+)

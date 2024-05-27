@@ -235,6 +235,7 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
+        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
 
         logger.info("Creating GitOps Operator Subscription")
         gitops_subscription_yaml_data = templating.load_yaml(
@@ -284,16 +285,11 @@ class Deployment(object):
         if config.multicluster:
             # Gitops operator is needed on all clusters for appset type workload deployment using pull model
             for cluster_index in range(config.nclusters):
-                config.switch_ctx(cluster_index)
-                self.deploy_gitops_operator()
+                self.deploy_gitops_operator(switch_ctx=cluster_index)
 
             # Switching back context to ACM as below configs are specific to hub cluster
-            config.switch_acm_ctx()
-
-            acm_indexes = get_all_acm_indexes()
-            for acm_ctx in acm_indexes:
-                self.deploy_gitops_operator(switch_ctx=acm_ctx)
             config.switch_ctx(get_active_acm_index())
+
             logger.info("Creating GitOps CLuster Resource")
             run_cmd(f"oc create -f {constants.GITOPS_CLUSTER_YAML}")
 

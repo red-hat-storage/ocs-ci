@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework.testlib import (
-    tier1,
+    tier4a,
     skipif_ocs_version,
     BaseTest,
     post_upgrade,
@@ -15,7 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier4a
 @skipif_ocs_version("<4.15")
 @post_upgrade
 @post_ocs_upgrade

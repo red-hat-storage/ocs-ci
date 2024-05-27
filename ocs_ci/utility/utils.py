@@ -2324,7 +2324,9 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
         Check if ceph health is NOT OK
 
         """
-        return run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE) != "HEALTH_OK"
+
+        status = run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        return str(status).strip() != "HEALTH_OK"
 
     sampler = TimeoutSampler(
         timeout=timeout, sleep=sleep, func=check_ceph_health_not_ok

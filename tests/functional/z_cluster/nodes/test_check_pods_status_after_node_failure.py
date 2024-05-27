@@ -33,6 +33,7 @@ from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_mon_pod_id,
     check_pods_after_node_replacement,
+    get_pod_objs,
 )
 from ocs_ci.ocs.cluster import is_managed_service_cluster
 
@@ -58,9 +59,27 @@ def get_rook_ceph_pod_names_not_in_node(node_name):
     return rook_ceph_pod_names_not_in_node
 
 
+def get_rook_ceph_pod_names_in_node(node_name):
+    """
+    Get all the rook ceph pod names that are running on the node
+
+    Args:
+        node_name (str): The node name
+
+    Returns:
+        list: List of the rook ceph pod names that are running on the node 'node_name'
+
+    """
+    rook_ceph_pods = get_pod_objs(get_rook_ceph_pod_names())
+    rook_ceph_pods_in_node = get_node_pods(node_name, rook_ceph_pods)
+    rook_ceph_pod_names_in_node = [p.name for p in rook_ceph_pods_in_node]
+
+    return rook_ceph_pod_names_in_node
+
+
 def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
     """
-    Wait for change in the rook ceph pod statuses
+    Wait for change in the rook ceph pod statuses running on the node
 
     Args:
         node_name (str): The node name
@@ -71,9 +90,9 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
         bool: True, if the rook ceph pods statuses have changed. False, otherwise
 
     """
-    rook_ceph_pod_names_not_in_node = get_rook_ceph_pod_names_not_in_node(node_name)
+    rook_ceph_pod_names_in_node = get_rook_ceph_pod_names_in_node(node_name)
     is_rook_ceph_pods_status_changed = wait_for_change_in_pods_statuses(
-        rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=sleep
+        rook_ceph_pod_names_in_node, timeout=timeout, sleep=sleep
     )
     return is_rook_ceph_pods_status_changed
 
@@ -149,17 +168,17 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         wait_for_nodes_status(node_names=[node_name], status=constants.NODE_NOT_READY)
         log.info(f"The node '{node_name}' reached '{constants.NODE_NOT_READY}' status")
 
-        log.info("Wait for a change in the rook ceph pod statuses...")
-        timeout = 480
+        log.info("Wait for a change in the node rook ceph pod statuses...")
+        timeout = 300
         is_rook_ceph_pods_status_changed = wait_for_change_in_rook_ceph_pods(
             node_name, timeout=timeout
         )
         assert (
             is_rook_ceph_pods_status_changed
-        ), f"Rook Ceph pods status didn't change after {timeout} seconds"
+        ), f"The node rook ceph pods status didn't change after {timeout} seconds"
 
         log.info("Check the rook ceph pods are in 'Running' or 'Completed' state")
-        previous_timeout = 480
+        previous_timeout = timeout
         timeout = 600
         are_pods_running = wait_for_pods_to_be_running(
             pod_names=rook_ceph_pod_names_not_in_node, timeout=timeout, sleep=30

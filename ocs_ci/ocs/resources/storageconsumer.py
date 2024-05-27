@@ -77,6 +77,8 @@ class StorageConsumer:
             + "'",
             "--subresource",
             "status",
+            "--namespace",
+            config.cluster_ctx.ENV_DATA["cluster_namespace"],
         ]
         exec_cmd(" ".join(cmd))
 
