@@ -263,8 +263,10 @@ def create_custom_machineset(
             if aws_zone == f"{region}{zone}":
                 ocp_version = version.get_semantic_ocp_version_from_config()
                 sg_name = f"{cls_id}-node"
+                subnet_name = f"{cls_id}-subnet-private-{aws_zone}"
                 if ocp_version < version.VERSION_4_16:
                     sg_name = f"{cls_id}-worker-sg"
+                    subnet_name = f"{cls_id}-private-{aws_zone}"
                 machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML)
 
                 # Update machineset_yaml with required values.
@@ -310,7 +312,7 @@ def create_custom_machineset(
                 ][0]["filters"][0]["values"][0] = sg_name
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "subnet"
-                ]["filters"][0]["values"][0] = f"{cls_id}-private-{aws_zone}"
+                ]["filters"][0]["values"][0] = subnet_name
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "tags"
                 ][0]["name"] = f"kubernetes.io/cluster/{cls_id}"
