@@ -20,6 +20,8 @@ from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
     verify_faas_resources,
+    verify_storageclient,
+    verify_storageconsumers,
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
@@ -235,14 +237,26 @@ def ocs_install_verification(
     )
     resources_dict = {
         nb_db_label: 1,
-        constants.OCS_OPERATOR_LABEL: 1,
-        constants.OPERATOR_LABEL: 1,
         constants.NOOBAA_OPERATOR_POD_LABEL: 1,
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
     if config.ENV_DATA.get("noobaa_external_pgsql"):
         del resources_dict[nb_db_label]
+
+    if client_cluster:
+        resources_dict.update(
+            {
+                constants.OCS_CLIENT_OPERATOR_LABEL: 1,
+            }
+        )
+    else:
+        resources_dict.update(
+            {
+                constants.OCS_OPERATOR_LABEL: 1,
+                constants.OPERATOR_LABEL: 1,
+            }
+        )
 
     if provider_cluster:
         resources_dict.update(
@@ -309,8 +323,10 @@ def ocs_install_verification(
                 not config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
                 or managed_service
                 or disable_rgw
+                or hci_cluster
             ):
                 continue
+
         if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
             continue
         if "mds" in label and disable_cephfs:
@@ -773,6 +789,16 @@ def ocs_install_verification(
         and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
     ):
         validate_serviceexport()
+    if provider_cluster:
+        verify_provider_resources()
+        verify_storageconsumers()
+    if client_cluster:
+        verify_storageclassclaims()
+        verify_storageclient(
+            storageclient_name=constants.STORAGECLIENT,
+            namespace=constants.OCS_CLIENT_NAMESPACE,
+            verify_sc=False,
+        )
 
     # check that noobaa root secrets are not public
     if not (client_cluster or managed_service):
@@ -2038,17 +2064,21 @@ def verify_provider_resources():
 
     # Verify that cephcluster is Ready and hostNetworking is True
     cephcluster = OCP(
-        kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
+        kind="CephCluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_CLUSTER_NAME,
     )
+    cephcluster._has_phase = True
     log.info("Waiting for Cephcluster to be Ready")
     cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=600)
-    cephcluster_yaml = cephcluster.get().get("items")[0]
+    cephcluster_yaml = cephcluster.get()
     log.info("Verifying that cephcluster's hostNetworking is True")
     assert cephcluster_yaml["spec"]["network"][
         "hostNetwork"
     ], f"hostNetwork is {cephcluster_yaml['spec']['network']['hostNetwork']}"
 
-    assert verify_worker_nodes_security_groups()
+    if config.ENV_DATA.get("platform") in constants.MANAGED_SERVICE_PLATFORMS:
+        assert verify_worker_nodes_security_groups()
 
 
 def verify_consumer_resources():
@@ -2082,23 +2112,27 @@ def verify_consumer_resources():
 
     # Verify the default Storageclassclaims
     if ocs_version >= version.VERSION_4_11:
-        storage_class_claim = OCP(
-            kind=constants.STORAGECLASSCLAIM,
-            namespace=config.ENV_DATA["cluster_namespace"],
+        verify_storageclassclaims()
+
+
+def verify_storageclassclaims():
+    storage_class_claim = OCP(
+        kind=constants.STORAGECLASSCLAIM,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for sc_claim in [
+        constants.DEFAULT_STORAGECLASS_RBD,
+        constants.DEFAULT_STORAGECLASS_CEPHFS,
+    ]:
+        sc_claim_phase = storage_class_claim.get_resource(
+            resource_name=sc_claim, column="PHASE"
         )
-        for sc_claim in [
-            constants.DEFAULT_STORAGECLASS_RBD,
-            constants.DEFAULT_STORAGECLASS_CEPHFS,
-        ]:
-            sc_claim_phase = storage_class_claim.get_resource(
-                resource_name=sc_claim, column="PHASE"
-            )
-            assert sc_claim_phase == constants.STATUS_READY, (
-                f"The phase of the storageclassclaim {sc_claim} is {sc_claim_phase}. "
-                f"Expected phase is '{constants.STATUS_READY}'"
-            )
-            log.info(f"Storageclassclaim {sc_claim} is {constants.STATUS_READY}")
-        log.info("Verified the status of the default storageclassclaims")
+        assert sc_claim_phase == constants.STATUS_READY, (
+            f"The phase of the storageclassclaim {sc_claim} is {sc_claim_phase}. "
+            f"Expected phase is '{constants.STATUS_READY}'"
+        )
+        log.info(f"Storageclassclaim {sc_claim} is {constants.STATUS_READY}")
+    log.info("Verified the status of the default storageclassclaims")
 
 
 def verify_managed_service_networkpolicy():
