@@ -22,7 +22,7 @@ from itertools import cycle
 from subprocess import PIPE, run
 from uuid import uuid4
 
-
+from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
@@ -49,7 +49,6 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
-    create_directory_path,
     exec_cmd,
     get_ocs_build_number,
 )
@@ -4597,19 +4596,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     else:
         image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-
-    # create DATA_DIR if it doesn't exist
-    if not os.path.exists(constants.DATA_DIR):
-        create_directory_path(constants.DATA_DIR)
-
-    if not os.path.isfile(pull_secret_path):
-        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
-        exec_cmd(
-            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
-            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
-            shell=True,
-        )
+    pull_secret_path = download_pull_secret()
     exec_cmd(
         f"oc image extract --registry-config {pull_secret_path} "
         f"{image} --confirm "

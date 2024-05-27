@@ -3,6 +3,7 @@ Pod related functionalities and context info
 
 Each pod in the openshift cluster will have a corresponding pod object
 """
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import logging
 import os
@@ -661,6 +662,7 @@ def get_all_pods(
     exclude_selector=False,
     wait=False,
     field_selector=None,
+    cluster_kubeconfig="",
 ):
     """
     Get all pods in a namespace.
@@ -674,15 +676,19 @@ def get_all_pods(
         exclude_selector (bool): If list of the resource selector not to search with
         field_selector (str): Selector (field query) to filter on, supports
             '=', '==', and '!='. (e.g. status.phase=Running)
+        wait (bool): True if you want to wait for the pods to be Running
+        cluster_kubeconfig (str): Path to the kubeconfig file for the cluster
 
     Returns:
         list: List of Pod objects
 
     """
+
     ocp_pod_obj = OCP(
         kind=constants.POD,
         namespace=namespace,
         field_selector=field_selector,
+        cluster_kubeconfig=cluster_kubeconfig,
     )
     # In case of >4 worker nodes node failures automatic failover of pods to
     # other nodes will happen.
@@ -2295,6 +2301,7 @@ def check_pods_in_running_state(
     pod_names=None,
     raise_pod_not_found_error=False,
     skip_for_status=None,
+    cluster_kubeconfig="",
 ):
     """
     Checks whether the pods in a given namespace are in Running state or not.
@@ -2311,6 +2318,7 @@ def check_pods_in_running_state(
         skip_for_status(list): List of pod status that should be skipped. If the status of a pod is in the given list,
             the check for 'Running' status of that particular pod will be skipped.
             eg: ["Pending", "Completed"]
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
@@ -2318,11 +2326,15 @@ def check_pods_in_running_state(
     ret_val = True
 
     if pod_names:
-        list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
+        list_of_pods = get_pod_objs(
+            pod_names, raise_pod_not_found_error, cluster_kubeconfig=cluster_kubeconfig
+        )
     else:
-        list_of_pods = get_all_pods(namespace)
+        list_of_pods = get_all_pods(namespace, cluster_kubeconfig=cluster_kubeconfig)
 
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
+    )
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
         if (
@@ -2411,6 +2423,7 @@ def wait_for_pods_to_be_running(
     raise_pod_not_found_error=False,
     timeout=200,
     sleep=10,
+    cluster_kubeconfig="",
 ):
     """
     Wait for all the pods in a specific namespace to be running.
@@ -2425,6 +2438,7 @@ def wait_for_pods_to_be_running(
             the rest of the pod names. The default value is False
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
 
     Returns:
          bool: True, if all pods in Running state. False, otherwise
@@ -2438,6 +2452,7 @@ def wait_for_pods_to_be_running(
             namespace=namespace,
             pod_names=pod_names,
             raise_pod_not_found_error=raise_pod_not_found_error,
+            cluster_kubeconfig=cluster_kubeconfig,
         ):
             # Check if all the pods in running state
             if pods_running:
@@ -2932,6 +2947,7 @@ def get_pod_objs(
     pod_names,
     raise_pod_not_found_error=False,
     namespace=config.ENV_DATA["cluster_namespace"],
+    cluster_kubeconfig="",
 ):
     """
     Get the pod objects of the specified pod names
@@ -2942,6 +2958,7 @@ def get_pod_objs(
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             returns the pod objects of the rest of the pod names. The default value is False
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
 
     Returns:
         list: The pod objects of the specified pod names
@@ -2953,7 +2970,7 @@ def get_pod_objs(
     """
     # Convert it to set to reduce complexity
     pod_names_set = set(pod_names)
-    pods = get_all_pods(namespace=namespace)
+    pods = get_all_pods(namespace=namespace, cluster_kubeconfig=cluster_kubeconfig)
     pod_objs_found = [p for p in pods if p.name in pod_names_set]
 
     if len(pod_names) > len(pod_objs_found):
@@ -3201,6 +3218,55 @@ def wait_for_pods_to_be_in_statuses(
         exclude_pod_name_prefixes=exclude_pod_name_prefixes,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def wait_for_pods_to_be_in_statuses_concurrently(
+    app_selectors_to_resource_count_list,
+    namespace,
+    timeout=1200,
+    status=constants.STATUS_RUNNING,
+    cluster_kubeconfig="",
+):
+    """
+    Verify pods are running in the namespace using app selectors. This method is using concurrent futures to
+    speed up execution and will be blocking until all pods are running or timeout is reached
+
+    Args:
+        app_selectors_to_resource_count_list:
+        namespace: namespace of the pods expected to run
+        timeout: time to wait for the pods to be running in seconds
+        status: status of the pods to wait for
+        cluster_kubeconfig: The kubeconfig file to use for the oc command
+
+    Returns:
+        bool: True if all pods are running, False otherwise
+    """
+    pod = OCP(
+        kind=constants.POD, namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
+    )
+    results = dict()
+
+    def check_pod_status(app_selector, resource_count):
+        results[app_selector] = pod.wait_for_resource(
+            condition=status,
+            selector=app_selector,
+            resource_count=resource_count,
+            timeout=timeout,
+        )
+
+    with ThreadPoolExecutor(
+        max_workers=len(app_selectors_to_resource_count_list)
+    ) as executor:
+        futures = []
+        for item in app_selectors_to_resource_count_list:
+            for app_selector, resource_count in item.items():
+                futures.append(
+                    executor.submit(check_pod_status, app_selector, resource_count)
+                )
+
+        [future.result() for future in futures]
+
+    return all(value for value in results.values())
 
 
 def get_pod_ip(pod_obj):

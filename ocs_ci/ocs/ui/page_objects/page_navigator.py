@@ -431,3 +431,20 @@ class PageNavigator(BaseUI):
             logger.info("Administrator user was already selected")
         else:
             logger.error("Unknown user role selected by default")
+
+    def nav_to_storageclients_page(self):
+        """
+        Navigate to Storage Clients Page
+
+        Returns:
+            StorageClients: Storage Clients page object
+        """
+        from ocs_ci.ocs.ui.page_objects.storage_clients import StorageClients
+
+        logger.info("Navigate to Storage Client Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=120, sleep_time=10)
+        self.do_click(
+            locator=self.page_nav["storageclients_page"], enable_screenshot=False
+        )
+        return StorageClients()

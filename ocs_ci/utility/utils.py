@@ -4873,3 +4873,21 @@ def get_architecture_host():
 
     """
     return os.uname().machine
+
+
+def get_latest_release_version():
+    """
+    Fetch the latest supported release version of OpenShift from its official mirror site.
+
+    Returns:
+        str: The latest release version. Example: As of 22 May 2024 the function returns string "4.15.14"
+
+    """
+    cmd = (
+        "curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/release.txt | "
+        "awk '/^Name:/ {print $2}'"
+    )
+    try:
+        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+    except CommandFailed:
+        return

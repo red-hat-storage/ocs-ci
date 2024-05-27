@@ -25,11 +25,13 @@ TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_DEPLOYMENT_DIR_OCP = os.path.join(TEMPLATE_DIR, "ocp-deployment")
 TEMPLATE_DEPLOYMENT_DIR_CERT_MANAGER = os.path.join(TEMPLATE_DIR, "cert-manager")
 TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
+TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -91,6 +93,9 @@ CHRONY_TEMPLATE = os.path.join(
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 BUSYBOX_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "busybox.yaml")
+NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE = os.path.join(
+    TEMPLATE_DIR, "ocs-deployment", "provider-mode", "network_policy_provider_mode.yaml"
+)
 AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
     "ocp-deployment", "ai-host-network-config.yaml.j2"
 )
@@ -185,9 +190,11 @@ RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
 STORAGECLASSCLAIM = "StorageClassClaim"
+STORAGECLAIM = "StorageClaim"
 STORAGECONSUMER = "StorageConsumer"
 MACHINEHEALTHCHECK = "machinehealthcheck"
 STORAGECLIENT = "StorageClient"
+STORAGECLIENTS = "storageclients.ocs.openshift.io"
 MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
@@ -197,12 +204,18 @@ WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
 REPLICATION_SOURCE = "ReplicationSource"
 REPLICATIONDESTINATION = "ReplicationDestination"
+IP_ADDRESS_POOL = "IPAddressPool"
+L2_ADVERTISEMENT = "L2Advertisement"
+METALLB_INSTANCE = "MetalLB"
+NETWORK_POLICY = "NetworkPolicy"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
 ROLE = "Role"
 ROLEBINDING = "Rolebinding"
 SUBSCRIPTION = "Subscription"
+SUBSCRIPTION_COREOS = "subscriptions.operators.coreos.com"
+SUBSCRIPTION_CLUSTER_MANAGEMENT = "subscriptions.apps.open-cluster-management.io"
 NAMESPACES = "Namespaces"
 CLUSTER_LOGGING = "ClusterLogging"
 OPERATOR_GROUP = "OperatorGroup"
@@ -226,6 +239,7 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
+OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
 MANAGED_FUSION_NAMESPACE = "managed-fusion"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
@@ -259,6 +273,32 @@ NON_MS_CLUSTER_TYPE = "non_ms"
 # HCI cluster types
 HCI_CLIENT = "hci_client"
 HCI_PROVIDER = "provider"
+
+# provider mode constants
+PROVIDER_MODE_OCS_DEPLOYMENT_PATH = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "provider-mode"
+)
+PROVIDER_MODE_CATALOGSOURCE = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs-catalogsource.yaml"
+)
+PROVIDER_MODE_OPERATORGROUP = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "operator_group.yaml"
+)
+PROVIDER_MODE_SUBSCRIPTION = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_client_operator_subscription.yaml"
+)
+PROVIDER_MODE_STORAGE_CLIENT = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_client.yaml"
+)
+PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_cephfs.yaml"
+)
+PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
+)
+OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
+OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
+STORAGE_CLIENT_NAME = "storage-client"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
@@ -343,7 +383,10 @@ CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
 HYPERCONVERGED = "HyperConverged"
 KUBEVIRT_HCO_PREFIX = "kubevirt-hyperconverged-operator"
 KUBEVIRT_HYPERCONVERGED = "kubevirt-hyperconverged"
-CNV_SELECTOR = "operators.coreos.com/kubevirt-hyperconverged.openshift-cnv"
+CNV_OPERATORNAME = "kubevirt-hyperconverged.openshift-cnv"
+CNV_SELECTOR = f"operators.coreos.com/{CNV_OPERATORNAME}"
+HCP_REGISTRY = "quay.io/hypershift/hypershift-operator"
+HCP_REPOSITORY = "https://github.com/openshift/hypershift.git"
 
 # CNV VM constants
 VIRTUAL_MACHINE = "VirtualMachine"
@@ -809,6 +852,32 @@ CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
     TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
 )
 
+METALLB = "metallb-operator"
+METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
+METALLB_WEBHOOK_PREFIX = "metallb-operator-webhook-server"
+METALLB_DEFAULT_NAMESPACE = "metallb-system"
+METALLB_KIND = "MetalLB"
+METALLB_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "operator-group.yaml"
+)
+METALLB_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "subscription.yaml"
+)
+METALLB_INSTANCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "metallb-instance.yaml"
+)
+METALLB_IPADDRESSPOOL_PATH = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "ipaddresspool.yaml"
+)
+METALLB_L2_ADVERTISEMENT_PATH = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_METALLB, "l2advertisement.yaml"
+)
+
+# optional operators
+QE_APP_REGISTRY_SOURCE = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_OCP, "qe-app-registry-catalog-source.yaml"
+)
+
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")
 MULTUS_CLUSTER_NET_YAML = os.path.join(
@@ -1112,6 +1181,7 @@ GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
 IBM_POWER_PLATFORM = "powervs"
+IBM_CLOUD_BAREMETAL_PLATFORM = "ibm_cloud_baremetal"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
 IBMCLOUD_PLATFORM = "ibm_cloud"
@@ -1409,6 +1479,7 @@ MANAGED_ALERTMANAGER_SECRET = "alertmanager-managed-ocs-alertmanager-generated"
 MANAGED_ONBOARDING_SECRET = "onboarding-ticket-key"
 MANAGED_PROVIDER_SERVER_SECRET = "ocs-provider-server"
 MANAGED_MON_SECRET = "rook-ceph-mon"
+ONBOARDING_PRIVATE_KEY = "onboarding-private-key"
 
 # JSON Schema
 OSD_TREE_ROOT = {
@@ -1698,6 +1769,7 @@ FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
     FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
 REGISTRY_SVC = "registry.ci.openshift.org/ocp/release"
+QUAY_REGISTRY_SVC = "quay.io/openshift-release-dev/ocp-release"
 FLEXY_USER_LOCAL_UID = 101000
 
 OCP_RELEASE_IMAGE_MIRROR_PATH = "ocp/release"
@@ -2306,6 +2378,7 @@ ACM_MANAGEDCLUSTER = "managedclusters.cluster.open-cluster-management.io"
 ACM_LOCAL_CLUSTER = "local-cluster"
 ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
+ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"

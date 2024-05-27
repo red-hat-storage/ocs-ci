@@ -35,6 +35,8 @@ def get_semantic_version(
     elif only_major_minor:
         version.patch = None
         version.prerelease = None
+        version.build = None
+        version.partial = None
     elif ignore_pre_release:
         version.prerelease = None
     return version

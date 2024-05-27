@@ -1,6 +1,7 @@
 """
 This module provides base class for OCP deployment.
 """
+
 import logging
 import os
 import json
@@ -14,9 +15,32 @@ from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import utils, templating, system, version
 from ocs_ci.utility.deployment import get_ocp_release_image
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
-
+from ocs_ci.utility.utils import create_directory_path, exec_cmd
 
 logger = logging.getLogger(__name__)
+
+
+def download_pull_secret():
+    """
+    Download the pull secret from the cluster and store it locally.
+
+    Returns:
+        str: pull secret path
+    """
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    # create DATA_DIR if it doesn't exist
+    if not os.path.exists(constants.DATA_DIR):
+        create_directory_path(constants.DATA_DIR)
+    if not os.path.isfile(pull_secret_path):
+        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
+        exec_cmd(
+            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
+            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
+            shell=True,
+        )
+    else:
+        logger.info(f"Pull secret already exists at {pull_secret_path}")
+    return pull_secret_path
 
 
 class OCPDeployment:

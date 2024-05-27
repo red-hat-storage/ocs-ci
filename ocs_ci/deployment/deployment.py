@@ -63,6 +63,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import get_worker_nodes, verify_all_nodes_created
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import machineconfig
 from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
@@ -579,6 +580,11 @@ class Deployment(object):
         self.do_deploy_fusion()
         if config.DEPLOYMENT.get("cnv_deployment"):
             CNVInstaller().deploy_cnv()
+        if config.ENV_DATA.get("clusters"):
+            # imported locally due to a circular dependency
+            from ocs_ci.deployment.hosted_cluster import HostedClients
+
+            HostedClients().do_deploy()
 
     def get_rdr_conf(self):
         """
@@ -2013,14 +2019,33 @@ class Deployment(object):
             f"--request-timeout=120s"
         )
 
+    def acm_operator_installed(self):
+        """
+        Check if ACM HUB is already installed
+        Returns:
+             bool: True if ACM HUB operator is installed, False otherwise
+        """
+        ocp_obj = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        return ocp_obj.check_resource_existence(
+            timeout=6,
+            should_exist=True,
+            resource_name=constants.ACM_HUB_OPERATOR_NAME_WITH_NS,
+        )
+
     def deploy_acm_hub(self):
         """
         Handle ACM HUB deployment
         """
+        if self.acm_operator_installed():
+            logger.info("ACM Operator is already installed")
+            self.deploy_multicluster_hub()
+            return
+
         if config.ENV_DATA.get("acm_hub_unreleased"):
             self.deploy_acm_hub_unreleased()
         else:
             self.deploy_acm_hub_released()
+            self.deploy_multicluster_hub()
 
     def deploy_acm_hub_unreleased(self):
         """
@@ -2153,11 +2178,34 @@ class Deployment(object):
         csv = CSV(resource_name=csv_name, namespace=constants.ACM_HUB_NAMESPACE)
         csv.wait_for_phase("Succeeded", timeout=720)
         logger.info("ACM HUB Operator Deployment Succeeded")
+
+    def deploy_multicluster_hub(self):
+        """
+        Handle Multicluster HUB creation
+        Returns:
+            bool: True if ACM HUB is installed, False otherwise
+        """
         logger.info("Creating MultiCluster Hub")
-        run_cmd(
+
+        # check if MCH is already installed
+        if OCP(
+            kind=constants.ACM_MULTICLUSTER_HUB, namespace=constants.ACM_HUB_NAMESPACE
+        ).check_resource_existence(
+            should_exist=True,
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            timeout=6,
+        ):
+            logger.info("MultiClusterHub already installed")
+            return True
+
+        exec_cmd(
             f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
-        validate_acm_hub_install()
+        try:
+            validate_acm_hub_install()
+        except Exception as ex:
+            logger.error(f"Failed to install MultiClusterHub. Exception is: {ex}")
+            return False
 
 
 def create_external_pgsql_secret():
