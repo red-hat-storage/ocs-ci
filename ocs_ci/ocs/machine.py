@@ -4,6 +4,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -260,6 +261,10 @@ def create_custom_machineset(
                 .get("id")
             )
             if aws_zone == f"{region}{zone}":
+                ocp_version = version.get_semantic_ocp_version_from_config()
+                sg_name = f"{cls_id}-node"
+                if ocp_version < version.VERSION_4_16:
+                    sg_name = f"{cls_id}-worker-sg"
                 machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML)
 
                 # Update machineset_yaml with required values.
@@ -302,7 +307,7 @@ def create_custom_machineset(
                 ]["region"] = region
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "securityGroups"
-                ][0]["filters"][0]["values"][0] = f"{cls_id}-worker-sg"
+                ][0]["filters"][0]["values"][0] = sg_name
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "subnet"
                 ]["filters"][0]["values"][0] = f"{cls_id}-private-{aws_zone}"
