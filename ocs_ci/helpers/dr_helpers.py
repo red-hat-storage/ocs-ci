@@ -188,7 +188,10 @@ def failover(
             switch_ctx=switch_ctx,
         )
     elif discovered_apps:
-        failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}","preferredCluster":"{old_primary}"}}}}'
+        failover_params = \
+            (f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}",'
+             f'"failoverCluster":"{failover_cluster}",'
+             f'"preferredCluster":"{old_primary}"}}}}')
         namespace = constants.DR_OPS_NAMESAPCE
         drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:
@@ -243,7 +246,10 @@ def relocate(
             switch_ctx=switch_ctx,
         )
     elif discovered_apps:
-        relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","failoverCluster":"{old_primary}","preferredCluster":"{preferred_cluster}"}}}}'
+        relocate_params = \
+            (f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}",'
+             f'"failoverCluster":"{old_primary}",'
+             f'"preferredCluster":"{preferred_cluster}"}}}}')
         namespace = constants.DR_OPS_NAMESAPCE
         drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
     else:

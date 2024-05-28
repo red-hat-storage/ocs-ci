@@ -1102,9 +1102,6 @@ class Busybox_DiscoveredApps(DRWorkload):
 
         """
         self._deploy_prereqs()
-        import pdb
-
-        # pdb.set_trace()
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             self.create_namespace()
