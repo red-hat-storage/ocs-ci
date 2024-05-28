@@ -268,7 +268,7 @@ class MustGather(object):
             "/ceph_logs/journal_" exist in /mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log
 
         Returns:
-            (list): the paths do not exist in mg dir
+            list: the paths do not exist in mg dir
 
         """
         paths_exist = []
@@ -290,7 +290,7 @@ class MustGather(object):
             "/ceph_logs/journal_" exist in /mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log
 
         Returns:
-            (list): the paths exist in mg dir
+            list: the paths exist in mg dir
 
         """
         paths_not_exist = []
