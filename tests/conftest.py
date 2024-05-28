@@ -6565,7 +6565,7 @@ def dr_workload(request):
     def factory(
         num_of_subscription=1,
         num_of_appset=0,
-        appset_model="pull",
+        appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
     ):
@@ -6573,11 +6573,11 @@ def dr_workload(request):
         Args:
             num_of_subscription (int): Number of Subscription type workload to be created
             num_of_appset (int): Number of ApplicationSet type workload to be created
+            appset_model (str): GitOps ApplicationSet deployment model. Valid values include "pull" or "push".
+                ODF 4.16 onwards, "pull" model is the default if not user-provided.
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             switch_ctx (int): The cluster index by the cluster name
-            appset_model (str): Appset Gitops deployment now supports "pull" model starting ACM 2.10 which is now the
-                default selection in addition to "push" model.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -6591,6 +6591,10 @@ def dr_workload(request):
         workload_key = "dr_workload_subscription"
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_subscription_cephfs"
+
+        if num_of_appset > 0 and appset_model is None:
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            appset_model = "pull" if ocs_version >= version.VERSION_4_16 else "push"
 
         for index in range(num_of_subscription):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
