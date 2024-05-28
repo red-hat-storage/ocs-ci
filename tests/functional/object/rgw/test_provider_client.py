@@ -43,7 +43,7 @@ def test_write_file_to_bucket_on_client(
     # downloads them to the pod
     bucketname = rgw_bucket_factory(1, "rgw-oc")[0].name
     full_object_path = f"s3://{bucketname}"
-    credentials = rgw_obj.get_credentials()
+    credentials = rgw_obj.get_credentials(secret_name=bucketname)
 
     config.switch_ctx(client_cluster)
     log.info(f"Switched to client cluster with index {client_cluster}")
