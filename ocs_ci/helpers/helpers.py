@@ -2847,6 +2847,27 @@ def modify_deployment_replica_count(
     return ocp_obj.patch(resource_name=deployment_name, params=params)
 
 
+def modify_deploymentconfig_replica_count(
+    deploymentconfig_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Function to modify deploymentconfig replica count,
+    i.e to scale up or down deploymentconfig
+
+    Args:
+        deploymentcofig_name (str): Name of deployment
+        replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deployment exists
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
+
+
 def modify_job_parallelism_count(
     job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
 ):

@@ -8,7 +8,10 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import check_selinux_relabeling
+from ocs_ci.helpers.helpers import (
+    check_selinux_relabeling,
+    modify_deploymentconfig_replica_count,
+)
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.exceptions import PodNotCreated, CommandFailed
@@ -301,17 +304,30 @@ class TestSelinuxrelabel(E2ETest):
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
 
         # Delete pod so that fix will be applied for new pod
-        for _ in range(2):
-            self.pod_obj = self.get_app_pod_obj()
-            self.pod_obj.delete(wait=True)
-            time.sleep(waiting_time)
-            self.pod_obj = self.get_app_pod_obj()
-            assert wait_for_pods_to_be_running(
-                pod_names=[self.pod_obj.name], timeout=600, sleep=15
-            ), f"Pod {self.pod_obj.name} didn't reach to running state"
+        POD_OBJ = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        assert modify_deploymentconfig_replica_count(
+            deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=0
+        ), "Failed to scale down deploymentconfig to 0"
+        POD_OBJ.wait_for_delete(resource_name=self.pod_obj.name, timeout=600)
+
+        assert modify_deploymentconfig_replica_count(
+            deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=1
+        ), "Failed to scale down deploymentconfig to 1"
+
+        self.pod_obj = self.get_app_pod_obj()
+
+        POD_OBJ.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=self.pod_obj.name,
+            resource_count=1,
+            timeout=600,
+            sleep=5,
+        )
 
         # Check SeLinux Relabeling is set to false
-        retry((AssertionError), tries=5, delay=10,)(
+        retry(AssertionError, tries=5, delay=10,)(
             check_selinux_relabeling
         )(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
