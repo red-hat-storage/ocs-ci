@@ -2006,6 +2006,13 @@ class AWS(object):
         else:
             logger.info(f"No objects found in bucket {bucket}")
 
+        versioning = self.s3_client.get_bucket_versioning(Bucket=bucket)
+        s3_resource = boto3.resource("s3")
+        if versioning.get("Status") == "Enabled":
+            version_objs = s3_resource.Bucket(bucket).object_versions.all()
+            for version_obj in version_objs:
+                version_obj.delete()
+
     def delete_bucket(self, bucket):
         """
         Delete the bucket
