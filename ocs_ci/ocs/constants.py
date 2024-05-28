@@ -975,6 +975,20 @@ KMIP_CSI_KMS_CONNECTION_DETAILS = os.path.join(
 KMIP_OCS_KMS_SECRET = os.path.join(KMIP_KMS_TEMPLATES, "thales-kmip-ocs-secret.yaml")
 KMIP_CSI_KMS_SECRET = os.path.join(TEMPLATE_CSI_RBD_DIR, "thales-kmip-csi-secret.yaml")
 
+# Azure KV KMS yamls
+AZURE_KV_PROVIDER_NAME = "azure-kv"
+AZURE_KV_CSI_CONNECTION_DETAILS = "csi-kms-connection-details"
+AZURE_KV_CONNECTION_DETAILS_RESOURCE = "ocs-kms-connection-details"
+AZURE_KV_TEMPLATES = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "azurekv")
+AZURE_OCS_KMS_CONNECTION_DETAILS = os.path.join(
+    AZURE_KV_TEMPLATES, "ocs-kms-connection-details.yaml"
+)
+AZURE_CSI_KMS_CONNECTION_DETAILS = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "csi-kms-connection-details-azurekv.yaml"
+)
+AZURE_CLIENT_SECRETS = os.path.join(AZURE_KV_TEMPLATES, "azure-client-secrets.yaml")
+
+
 # Multicluster related yamls
 ODF_MULTICLUSTER_ORCHESTRATOR = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "odf_multicluster_orchestrator.yaml"

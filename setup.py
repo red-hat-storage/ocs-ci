@@ -97,6 +97,7 @@ setup(
         "googleapis-common-protos==1.59.0",
         "urllib3==1.26.18",
         "psycopg2-binary==2.9.9",
+        "azure-keyvault-secrets==4.8.0",
     ],
     entry_points={
         "console_scripts": [
