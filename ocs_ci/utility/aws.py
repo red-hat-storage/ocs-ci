@@ -1994,24 +1994,30 @@ class AWS(object):
             bucket (str): Name of the bucket to delete objects
 
         """
-        # List all objects within the bucket
-        response = self.s3_client.list_objects_v2(Bucket=bucket)
+        try:
+            # List all objects within the bucket
+            response = self.s3_client.list_objects_v2(Bucket=bucket)
 
-        # Delete each object within the bucket
-        if "Contents" in response:
-            for obj in response["Contents"]:
-                object_key = obj["Key"]
-                self.s3_client.delete_object(Bucket=bucket, Key=object_key)
-                logger.info(f"Deleted object: {object_key}")
-        else:
-            logger.info(f"No objects found in bucket {bucket}")
+            # Delete each object within the bucket
+            if "Contents" in response:
+                for obj in response["Contents"]:
+                    object_key = obj["Key"]
+                    self.s3_client.delete_object(Bucket=bucket, Key=object_key)
+                    logger.info(f"Deleted object: {object_key}")
+            else:
+                logger.info(f"No objects found in bucket {bucket}")
 
-        versioning = self.s3_client.get_bucket_versioning(Bucket=bucket)
-        s3_resource = boto3.resource("s3")
-        if versioning.get("Status") == "Enabled":
-            version_objs = s3_resource.Bucket(bucket).object_versions.all()
-            for version_obj in version_objs:
-                version_obj.delete()
+            # Delete each version objects
+            versioning = self.s3_client.get_bucket_versioning(Bucket=bucket)
+            s3_resource = boto3.resource("s3")
+            if versioning.get("Status") == "Enabled":
+                version_objs = s3_resource.Bucket(bucket).object_versions.all()
+                for version_obj in version_objs:
+                    version_obj.delete()
+        except Exception as e:
+            logger.info(f"Cant delete objects {e}")
+            return False
+        return True
 
     def delete_bucket(self, bucket):
         """
@@ -2022,11 +2028,12 @@ class AWS(object):
 
         """
         logger.info(f"Deleting bucket {bucket}")
-        self.delete_objects_in_bucket(bucket=bucket)
+        delete_objects_res = self.delete_objects_in_bucket(bucket=bucket)
 
         # Delete the empty bucket
-        self.s3_client.delete_bucket(Bucket=bucket)
-        logger.info(f"Deleted bucket {bucket}")
+        if delete_objects_res:
+            self.s3_client.delete_bucket(Bucket=bucket)
+            logger.info(f"Deleted bucket {bucket}")
 
     def delete_buckets(self, buckets):
         """
