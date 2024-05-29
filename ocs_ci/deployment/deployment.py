@@ -1513,6 +1513,17 @@ class Deployment(object):
             cluster_data["spec"]["multiCloudGateway"] = {
                 "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
             }
+        # To be able to verify: https://bugzilla.redhat.com/show_bug.cgi?id=2276694
+        wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
+            "wait_timeout_for_healthy_osd_in_minutes"
+        )
+        if wait_timeout_for_healthy_osd_in_minutes:
+            cluster_data.setdefault("spec", {}).setdefault(
+                "managedResources", {}
+            ).setdefault("cephCluster", {})
+            cluster_data["spec"]["managedResources"]["cephCluster"][
+                "waitTimeoutForHealthyOSDInMinutes"
+            ] = wait_timeout_for_healthy_osd_in_minutes
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False

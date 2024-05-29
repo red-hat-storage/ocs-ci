@@ -313,6 +313,7 @@ higher priority).
       * `nodepool_replicas` - number of replicas of nodepool for each cluster
       * `hosted_odf_registry` - registry for hosted ODF
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+* `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 
 #### UPGRADE
 
