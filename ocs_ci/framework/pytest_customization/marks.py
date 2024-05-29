@@ -639,3 +639,16 @@ ui_deployment_required = pytest.mark.skipif(
     not config.DEPLOYMENT.get("ui_deployment"),
     reason="UI Deployment required to run the test.",
 )
+
+
+# Marks to identify encryption at rest is configured.
+encryption_at_rest_required = pytest.mark.skipif(
+    not config.ENV_DATA.get("encryption_at_rest"),
+    reason="This test requires encryption at rest to be enabled.",
+)
+
+# Mark to identify encryption is configured with KMS.
+skipif_kms_deployment = pytest.mark.skipif(
+    config.DEPLOYMENT.get("kms_deployment") is True,
+    reason="This test is not supported for KMS deployment.",
+)
