@@ -426,6 +426,63 @@ class Deployment(object):
         else:
             logger.warning("OCS deployment will be skipped")
 
+    def do_deploy_oadp(self):
+        """
+        Deploy OADP Operator
+
+        """
+        if config.ENV_DATA.get("skip_dr_deployment", False):
+            return
+        if config.multicluster:
+            managed_clusters = get_non_acm_cluster_config()
+            for cluster in managed_clusters:
+                index = cluster.MULTICLUSTER["multicluster_index"]
+                config.switch_ctx(index)
+                logger.info("Creating Namespace")
+                # creating Namespace and operator group for cert-manager
+                logger.info("Creating namespace and operator group for Openshift-oadp")
+                run_cmd(f"oc create -f {constants.OADP_NS_YAML}")
+                logger.info("Creating OADP Operator Subscription")
+                oadp_subscription_yaml_data = templating.load_yaml(
+                    constants.OADP_SUBSCRIPTION_YAML
+                )
+                package_manifest = PackageManifest(
+                    resource_name=constants.OADP_OPERATOR_NAME,
+                )
+                oadp_default_channel = package_manifest.get_default_channel()
+                oadp_subscription_yaml_data["spec"][
+                    "startingCSV"
+                ] = package_manifest.get_current_csv(
+                    channel=oadp_default_channel,
+                    csv_pattern=constants.OADP_OPERATOR_NAME,
+                )
+                oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
+                oadp_subscription_manifest = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="oadp_subscription_manifest", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    oadp_subscription_yaml_data, oadp_subscription_manifest.name
+                )
+                run_cmd(f"oc create -f {oadp_subscription_manifest.name}")
+                self.wait_for_subscription(
+                    constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
+                )
+                logger.info(
+                    "Sleeping for 90 seconds after subscribing to OADP Operator"
+                )
+                time.sleep(90)
+                oadp_subscriptions = ocp.OCP(
+                    kind=constants.SUBSCRIPTION_WITH_ACM,
+                    resource_name=constants.OADP_OPERATOR_NAME,
+                    namespace=constants.OADP_NAMESPACE,
+                ).get()
+                oadp_csv_name = oadp_subscriptions["spec"]["startingCSV"]
+                csv = CSV(
+                    resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
+                )
+                csv.wait_for_phase("Succeeded", timeout=720)
+                logger.info("OADP Operator Deployment Succeeded")
+
     def do_deploy_rdr(self):
         """
         Call Regional DR deploy
@@ -576,6 +633,7 @@ class Deployment(object):
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_ocs()
+        self.do_deploy_oadp()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         if config.DEPLOYMENT.get("cnv_deployment"):
