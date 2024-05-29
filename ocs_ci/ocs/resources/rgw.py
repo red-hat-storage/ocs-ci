@@ -41,7 +41,7 @@ class RGW(object):
         if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
             self.s3_endpoint, self.key_id, self.secret_key = self.get_credentials()
 
-            self.aws_s3_resource = boto3.resource(
+            self.s3_resource = boto3.resource(
                 "s3",
                 endpoint_url=self.s3_endpoint,
                 aws_access_key_id=self.key_id,
