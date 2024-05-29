@@ -558,8 +558,8 @@ class ValidationUI(PageNavigator):
         """
         if self.ocp_version_semantic >= version.VERSION_4_9:
             self.navigate_installed_operators_page()
-            logger.info("Search and select openshift-storage namespace")
-            self.select_namespace(project_name="openshift-storage")
+            logger.info("Search and select storage cluster namespace")
+            self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
             logger.info(
                 "Click on Storage System under Provided APIs on Installed Operators Page"
             )
