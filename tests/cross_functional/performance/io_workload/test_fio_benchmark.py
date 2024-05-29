@@ -391,7 +391,23 @@ class TestFIOBenchmark(PASTest):
                 marks=pytest.mark.polarion_id("OCS-846"),
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM, "random", "randread"],
+                *[constants.CEPHBLOCKPOOL, "random", "randread"],
+                marks=pytest.mark.polarion_id("OCS-847"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "sequential", "read"],
+                marks=pytest.mark.polarion_id("OCS-846"),
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "sequential", "write"],
+                marks=pytest.mark.polarion_id("OCS-847"),
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, "sequential", "read"],
+                marks=pytest.mark.polarion_id("OCS-846"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, "sequential", "write"],
                 marks=pytest.mark.polarion_id("OCS-847"),
             ),
         ],
