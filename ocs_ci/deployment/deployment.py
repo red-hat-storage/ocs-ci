@@ -3077,8 +3077,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return self.bucket_name
 
-    retry(CommandFailed, tries=10, delay=30)
-
+    @retry(CommandFailed, tries=10, delay=30)
     def check_observability_status(self):
         """
         Check observability status
