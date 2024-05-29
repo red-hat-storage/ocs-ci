@@ -992,6 +992,7 @@ def verify_provider_after_client_onboarding():
     storageconsumers = storageconsumer_obj.get().get("items")
     assert len(storagerequests) == 2 * len(
         storageconsumers
-    ), "There should be 2 storagerequests for each storageconsumer"
+    ), "There should be 2 storagerequests for each storageconsumer."
+    f"Storagerequests: {storagerequests}. Storageconsumers: {storageconsumers}"
     for storagerequest in storagerequests:
         assert storagerequest.get("status").get("phase") == constants.STATUS_READY
