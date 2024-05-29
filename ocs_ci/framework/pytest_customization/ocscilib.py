@@ -341,6 +341,15 @@ def pytest_addoption(parser):
         default=False,
         help="Disable environment checks for test cases.",
     )
+    parser.addoption(
+        "--resource-checker",
+        dest="resource_checker",
+        action="store_true",
+        default=False,
+        help=(
+            "Resource checker checks for the left over resources which are added while running the test cases."
+        ),
+    )
 
 
 def pytest_configure(config):
@@ -634,6 +643,8 @@ def process_cluster_cli_params(config):
         )
     disable_environment_checker = get_cli_param(config, "disable_environment_checker")
     ocsci_config.RUN["disable_environment_checker"] = disable_environment_checker
+    resource_checker = get_cli_param(config, "resource_checker")
+    ocsci_config.RUN["resource_checker"] = resource_checker
 
 
 def pytest_collection_modifyitems(session, config, items):

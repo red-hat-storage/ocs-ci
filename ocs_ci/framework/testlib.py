@@ -5,6 +5,7 @@ from ocs_ci.ocs.constants import MCG_TESTS_MIN_NB_ENDPOINT_COUNT, MAX_NB_ENDPOIN
 
 
 @pytest.mark.usefixtures("environment_checker")  # noqa: F405
+@pytest.mark.usefixtures("resource_checker")
 class BaseTest:
     """
     Base test class for our testing.
