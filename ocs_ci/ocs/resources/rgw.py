@@ -105,6 +105,23 @@ class RGW(object):
         ).decode("utf-8")
         return endpoint, access_key, secret_key
 
+    def update_s3_creds(self, access_key, secret_key):
+        """
+        Set the S3 credentials and s3_resource stored in RGW object.
+
+        Args:
+            access_key (str): access key credential
+            secret_key (str): secret key credential
+        """
+        self.key_id = access_key
+        self.secret_key = secret_key
+        self.s3_resource = boto3.resource(
+            "s3",
+            endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.key_id,
+            aws_secret_access_key=self.secret_key,
+        )
+
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
         Args:

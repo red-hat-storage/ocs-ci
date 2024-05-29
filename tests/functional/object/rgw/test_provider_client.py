@@ -48,6 +48,7 @@ def test_write_file_to_bucket_on_client(
         access_key_field="AWS_ACCESS_KEY_ID",
         secret_key_field="AWS_SECRET_ACCESS_KEY",
     )
+    rgw_obj.update_s3_creds(credentials[1], credentials[2])
 
     config.switch_ctx(client_cluster)
     log.info(f"Switched to client cluster with index {client_cluster}")
