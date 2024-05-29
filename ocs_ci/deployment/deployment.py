@@ -43,9 +43,6 @@ from ocs_ci.ocs.cluster import (
     get_lvm_full_version,
     check_cephcluster_status,
 )
-from ocs_ci.ocs.constants import (
-    OBSERVABILITYMETRICSCONFIGMAP_PATH,
-)
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     ChannelNotFound,
@@ -3537,7 +3534,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         self.thanos_secret()
 
         logger.info("Whitelist RBD metrics by creating configmap")
-        run_cmd(f"oc create -f {OBSERVABILITYMETRICSCONFIGMAP_PATH}")
+        run_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
 
         logger.info(
             "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert on the Hub cluster"
