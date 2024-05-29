@@ -52,7 +52,12 @@ class RGW(object):
                 f"Platform {config.ENV_DATA['platform']} doesn't support RGW"
             )
 
-    def get_credentials(self, secret_name=constants.NOOBAA_OBJECTSTOREUSER_SECRET):
+    def get_credentials(
+        self,
+        secret_name=constants.NOOBAA_OBJECTSTOREUSER_SECRET,
+        access_key_field="AccessKey",
+        secret_key_field="SecretKey",
+    ):
         """
         Get Endpoint, Access key and Secret key from OCS secret. Endpoint is
         taken from rgw exposed service. Use rgw_endpoint fixture in test to get
@@ -61,6 +66,10 @@ class RGW(object):
         Args:
             secret_name (str): Name of secret to be used
                 for getting RGW credentials
+            access_key_field (str): Name of a field of provided secret in
+                which is stored access key credential
+            secret_key_field (str): Name of a field of provided secret in
+                which is stored secret key credential
 
         Returns:
             tuple: Endpoint, Access key, Secret key
@@ -89,10 +98,10 @@ class RGW(object):
 
         creds_secret_obj = secret_ocp_obj.get(secret_name)
         access_key = base64.b64decode(
-            creds_secret_obj.get("data").get("AccessKey")
+            creds_secret_obj.get("data").get(access_key_field)
         ).decode("utf-8")
         secret_key = base64.b64decode(
-            creds_secret_obj.get("data").get("SecretKey")
+            creds_secret_obj.get("data").get(secret_key_field)
         ).decode("utf-8")
         return endpoint, access_key, secret_key
 
