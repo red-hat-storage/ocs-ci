@@ -772,6 +772,22 @@ def pytest_runtest_makereport(item, call):
         ) as file:
             file.write(f"{test_name}\n")
 
+    if rep.passed and rep.when == "call":
+        test_name = item.nodeid
+        # Write the passed information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA["cluster_path"]}/passed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.skipped:
+        test_name = item.nodeid
+        # Write the skipped information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA["cluster_path"]}/skipped_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
 
 def set_log_level(config):
     """
