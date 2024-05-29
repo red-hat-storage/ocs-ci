@@ -794,15 +794,18 @@ def ocs_install_verification(
         ]:
             provisioner_deployment = deployment_kind.get(selector=label).get("items")[0]
             owner_references = provisioner_deployment.metadata.get("ownerReferences")
-            assert (
-                len(owner_references) == 1
-            ), f"Found more than 1 or none owner reference for {constants.DEPLOYMENT} {provisioner_deployment.metadata.name}"
-            assert (
-                owner_references[0].get("kind") == constants.DEPLOYMENT
-            ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_deployment.metadata.name} is not of kind {constants.DEPLOYMENT}"
-            assert (
-                owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR
-            ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_deployment.metadata.name} is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
+            assert len(owner_references) == 1, (
+                f"Found more than 1 or none owner reference for {constants.DEPLOYMENT} "
+                f"{provisioner_deployment.metadata.name}"
+            )
+            assert owner_references[0].get("kind") == constants.DEPLOYMENT, (
+                f"Owner reference of {constants.DEPLOYMENT} {provisioner_deployment.metadata.name} "
+                f"is not of kind {constants.DEPLOYMENT}"
+            )
+            assert owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR, (
+                f"Owner reference of {constants.DEPLOYMENT} {provisioner_deployment.metadata.name} "
+                f"is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
+            )
         log.info("Verified the ownerReferences CSI provisioner deployemts")
         for label in [constants.CSI_CEPHFSPLUGIN_LABEL, constants.CSI_RBDPLUGIN_LABEL]:
             plugin_daemonset = daemonset_kind.get(selector=label).get("items")[0]
@@ -810,12 +813,14 @@ def ocs_install_verification(
             assert (
                 len(owner_references) == 1
             ), f"Found more than 1 or none owner reference for {constants.DAEMONSET} {plugin_daemonset.metadata.name}"
-            assert (
-                owner_references[0].get("kind") == constants.DEPLOYMENT
-            ), f"Owner reference of {constants.DAEMONSET} {plugin_daemonset.metadata.name} is not of kind {constants.DEPLOYMENT}"
-            assert (
-                owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR
-            ), f"Owner reference of {constants.DAEMONSET} {plugin_daemonset.metadata.name} is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
+            assert owner_references[0].get("kind") == constants.DEPLOYMENT, (
+                f"Owner reference of {constants.DAEMONSET} {plugin_daemonset.metadata.name} "
+                f"is not of kind {constants.DEPLOYMENT}"
+            )
+            assert owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR, (
+                f"Owner reference of {constants.DAEMONSET} {plugin_daemonset.metadata.name} "
+                f"is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
+            )
         log.info("Verified the ownerReferences CSI plugin daemonsets")
 
 
