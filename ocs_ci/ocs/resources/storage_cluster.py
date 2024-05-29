@@ -781,6 +781,43 @@ def ocs_install_verification(
         ), "Seems like MCG root secrets are public, please check"
         log.info("Noobaa root secrets are not public")
 
+    # Verify the owner of CSI deployments and daemonsets if not provider mode
+    storage_cluster_obj = get_storage_cluster()
+    if not storage_cluster_obj.get()["items"][0]["spec"].get(
+        "allowRemoteStorageConsumers", False
+    ):
+        deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+        daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
+        for label in [
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        ]:
+            provisioner_deployment = deployment_kind.get(selector=label).get("items")[0]
+            owner_references = provisioner_deployment.metadata.get("ownerReferences")
+            assert (
+                len(owner_references) == 1
+            ), f"Found more than 1 or none owner reference for {constants.DEPLOYMENT} {provisioner_deployment.metadata.name}"
+            assert (
+                owner_references[0].get("kind") == constants.DEPLOYMENT
+            ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_deployment.metadata.name} is not of kind {constants.DEPLOYMENT}"
+            assert (
+                owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR
+            ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_deployment.metadata.name} is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
+        log.info("Verified the ownerReferences CSI provisioner deployemts")
+        for label in [constants.CSI_CEPHFSPLUGIN_LABEL, constants.CSI_RBDPLUGIN_LABEL]:
+            plugin_daemonset = daemonset_kind.get(selector=label).get("items")[0]
+            owner_references = plugin_daemonset.metadata.get("ownerReferences")
+            assert (
+                len(owner_references) == 1
+            ), f"Found more than 1 or none owner reference for {constants.DAEMONSET} {plugin_daemonset.metadata.name}"
+            assert (
+                owner_references[0].get("kind") == constants.DEPLOYMENT
+            ), f"Owner reference of {constants.DAEMONSET} {plugin_daemonset.metadata.name} is not of kind {constants.DEPLOYMENT}"
+            assert (
+                owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR
+            ), f"Owner reference of {constants.DAEMONSET} {plugin_daemonset.metadata.name} is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
+        log.info("Verified the ownerReferences CSI plugin daemonsets")
+
 
 def mcg_only_install_verification(ocs_registry_image=None):
     """
