@@ -768,7 +768,7 @@ def pytest_runtest_makereport(item, call):
         test_name = item.nodeid
         # Write the failure information to a file
         with open(
-            f'{ocsci_config.ENV_DATA["cluster_path"]}/failed_testcases.txt', "a"
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/failed_testcases.txt', "a"
         ) as file:
             file.write(f"{test_name}\n")
 
@@ -776,7 +776,7 @@ def pytest_runtest_makereport(item, call):
         test_name = item.nodeid
         # Write the passed information to a file
         with open(
-            f'{ocsci_config.ENV_DATA["cluster_path"]}/passed_testcases.txt', "a"
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/passed_testcases.txt', "a"
         ) as file:
             file.write(f"{test_name}\n")
 
@@ -784,7 +784,7 @@ def pytest_runtest_makereport(item, call):
         test_name = item.nodeid
         # Write the skipped information to a file
         with open(
-            f'{ocsci_config.ENV_DATA["cluster_path"]}/skipped_testcases.txt', "a"
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/skipped_testcases.txt', "a"
         ) as file:
             file.write(f"{test_name}\n")
 

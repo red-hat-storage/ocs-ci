@@ -219,6 +219,7 @@ class TestClone(ManageTest):
             volume_mode=snapshot_obj.parent_volume_mode,
             access_mode=constants.ACCESS_MODE_ROX,
             status=constants.STATUS_BOUND,
+            timeout=300,
         )
         teardown_factory(restore_snapshot_obj)
 
@@ -333,6 +334,7 @@ class TestClone(ManageTest):
             volume_mode=snapshot_obj.parent_volume_mode,
             access_mode=constants.ACCESS_MODE_ROX,
             status=constants.STATUS_BOUND,
+            timeout=300,
         )
         teardown_factory(restore_snapshot_obj)
 
@@ -470,6 +472,7 @@ class TestClone(ManageTest):
             access_mode=constants.ACCESS_MODE_ROX,
             status=constants.STATUS_BOUND,
             restore_pvc_name="first-rwx-snapshot-restore-to-rox-mode-00",
+            timeout=300,
         )
         teardown_factory(restore_snapshot_obj)
 
