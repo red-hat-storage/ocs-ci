@@ -3455,8 +3455,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         else:
             self.enable_managed_serviceaccount()
 
-    retry(CommandFailed, tries=10, delay=30)
-
+    @retry(CommandFailed, tries=10, delay=30)
     def check_observability_status(self):
         """
         Check observability status
