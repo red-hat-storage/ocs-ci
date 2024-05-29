@@ -1,6 +1,6 @@
 # This config file is allow data to reflect on the DR monitoring dashboard
 # by whitelisting ceph_rbd_* metrics
-# Additionally we whitelist a few odf_* metrics but those are optional
+# Additionally we whitelist a few odf_* metrics but those are optional.
 
 ---
 apiVersion: v1
