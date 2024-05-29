@@ -350,6 +350,11 @@ def pytest_addoption(parser):
             "Resource checker checks for the left over resources which are added while running the test cases."
         ),
     )
+    parser.addoption(
+        "--kubeconfig",
+        dest="kubeconfig",
+        help=("Kubeconfig location which will be loaded as environmental variable"),
+    )
 
 
 def pytest_configure(config):
@@ -645,6 +650,8 @@ def process_cluster_cli_params(config):
     ocsci_config.RUN["disable_environment_checker"] = disable_environment_checker
     resource_checker = get_cli_param(config, "resource_checker")
     ocsci_config.RUN["resource_checker"] = resource_checker
+    custom_kubeconfig_location = get_cli_param(config, "kubeconfig")
+    ocsci_config.RUN["custom_kubeconfig_location"] = custom_kubeconfig_location
 
 
 def pytest_collection_modifyitems(session, config, items):

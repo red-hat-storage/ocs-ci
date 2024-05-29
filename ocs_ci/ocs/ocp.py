@@ -566,9 +566,11 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        exec_output = run_cmd(
-            f"oc new-project {project_name}", threading_lock=self.threading_lock
-        )
+        if config.RUN["custom_kubeconfig_location"]:
+            cmd = f'oc --kubeconfig {config.RUN["custom_kubeconfig_location"]} new-project {project_name}'
+        else:
+            cmd = f"oc new-project {project_name}"
+        exec_output = run_cmd(cmd, threading_lock=self.threading_lock)
         if any(
             pattern in exec_output
             for pattern in [

@@ -637,6 +637,14 @@ def exec_cmd(
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
+    if config.RUN.get("custom_kubeconfig_location") and cmd[0] == "oc":
+        if "--kubeconfig" in cmd:
+            cmd.pop(2)
+            cmd.pop(1)
+        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
+        cmd = list_insert_at_position(
+            cmd, 2, [config.RUN["custom_kubeconfig_location"]]
+        )
     if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
         kubepath = cluster_config.RUN["kubeconfig"]
         kube_index = 1
