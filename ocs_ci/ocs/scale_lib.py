@@ -124,8 +124,12 @@ class FioPodScale(object):
             raise UnexpectedBehaviour("Kube_job batch count should be lesser than 1200")
 
         logger.info(f"Start creating {pvc_count} PVC of 2 types RBD-RWO & FS-RWX")
-        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
-        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+        if is_hci_cluster():
+            cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CLIENT_CEPHFS
+            rbd_sc_obj = constants.DEFAULT_STORAGECLASS_CLIENT_RBD
+        else:
+            cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
+            rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, cephfs_pvc_dict_list = ([], [])
