@@ -264,7 +264,7 @@ class Deployment(object):
             constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
         )
         logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
-        time.sleep(90)
+        time.sleep(180)
         subscriptions = ocp.OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             resource_name=constants.GITOPS_OPERATOR_NAME,
