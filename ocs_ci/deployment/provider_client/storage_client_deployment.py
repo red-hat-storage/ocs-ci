@@ -1,6 +1,5 @@
 """
-This module provides installation of ODF in provider mode and storage-client creation
-on the hosting cluster.
+This module provides installation of ODF and native storage-client creation in provider mode
 """
 import atexit
 import logging
@@ -14,8 +13,6 @@ from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.rados_utils import RadosHelper
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
-
-# from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.utils import (
@@ -46,7 +43,7 @@ from ocs_ci.helpers.managed_services import (
 log = logging.getLogger(__name__)
 
 
-class StorageClientDeployment(object):
+class ODFAndNativeStorageClientDeploymentOnProvider(object):
     def __init__(self):
         log.info("Initializing webdriver and login to webconsole")
         # Call a function during initialization

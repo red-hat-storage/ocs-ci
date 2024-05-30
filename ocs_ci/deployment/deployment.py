@@ -586,10 +586,10 @@ class Deployment(object):
         """
         # deploy provider-client deployment
         from ocs_ci.deployment.provider_client.storage_client_deployment import (
-            StorageClientDeployment,
+            ODFAndNativeStorageClientDeploymentOnProvider,
         )
 
-        storage_client_deployment_obj = StorageClientDeployment()
+        storage_client_deployment_obj = ODFAndNativeStorageClientDeploymentOnProvider()
 
         # Provider-client deployment if odf_provider_mode_deployment: True
         if (

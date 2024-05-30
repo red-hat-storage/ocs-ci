@@ -2728,21 +2728,3 @@ def resize_osd(new_osd_size, check_size=True):
         format_type="json",
     )
     return res
-
-
-def check_storage_client_status(namespace=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE):
-    """
-    Check storageclient status
-
-    Inputs:
-        namespace(str): Namespace where the storage client is created
-
-    Returns:
-        storageclient_status(str): storageclient phase
-
-    """
-    cmd = (
-        f"oc get storageclient -n {namespace} " "-o=jsonpath='{.items[*].status.phase}'"
-    )
-    storageclient_status = run_cmd(cmd=cmd)
-    return storageclient_status

@@ -1292,7 +1292,7 @@ def clean_disk(worker, namespace=constants.BM_DEBUG_NODE_NS):
 
     for lsblk_device in lsblk_devices:
         if lsblk_device["name"] in selected_disks_to_ignore_cleanup:
-            print(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
+            logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
             pass
         else:
             logger.info(f"Cleaning up {lsblk_device['name']}")
