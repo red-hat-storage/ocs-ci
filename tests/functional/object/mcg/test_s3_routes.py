@@ -100,7 +100,7 @@ class TestS3Routes:
     def test_s3_routes_reconcile(self, revert_routes):
         """
         Tests:
-            1. Validates S3 route is not reconciled after changing insecureEdgeTerminationPolicy.
+            1. Validates S3 route is reconciled after setting denyHTTP to true in the storage cluster.
             2. Validates rgw route is not recreated after enabling disableRoute in the storage cluster.
         """
 
