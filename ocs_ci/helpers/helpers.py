@@ -2832,6 +2832,27 @@ def modify_deployment_replica_count(
     return ocp_obj.patch(resource_name=deployment_name, params=params)
 
 
+def modify_deploymentconfig_replica_count(
+    deploymentconfig_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Function to modify deploymentconfig replica count,
+    i.e to scale up or down deploymentconfig
+
+    Args:
+        deploymentcofig_name (str): Name of deploymentconfig
+        replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deploymentconfig exists
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
+
+
 def modify_job_parallelism_count(
     job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
 ):
@@ -4343,3 +4364,24 @@ def verify_storagecluster_nodetopology():
     for node_obj in ocs_node_objs:
         ocs_node_names.append(node_obj.name)
     return ocs_node_names.sort() == nodes_storage_cluster.sort()
+
+
+def check_selinux_relabeling(pod_obj):
+    """
+    Check SeLinux Relabeling is set to false.
+
+    Args:
+        pod_obj (Pod object): App pod
+
+    """
+    # Get the node on which pod is running
+    node_name = pod.get_pod_node(pod_obj=pod_obj).name
+
+    # Check SeLinux Relabeling is set to false
+    logger.info("checking for crictl logs")
+    oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+    cmd1 = "crictl inspect $(crictl ps --name perf -q)"
+    output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
+    key = '"selinuxRelabel": false'
+    assert key in output, f"{key} is not present in inspect logs"
+    logger.info(f"{key} is present in inspect logs of application pod running node")
