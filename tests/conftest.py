@@ -1809,56 +1809,6 @@ def environment_checker(request):
         log.debug("Skipping environment checker")
         return
 
-    if ocsci_config.ENV_DATA["platform"] in {
-        constants.FUSIONAAS_PLATFORM,
-        constants.HCI_BAREMETAL,
-        constants.HCI_VSPHERE,
-    }:
-        log.error(
-            "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
-            "This needs to be updated"
-        )
-    else:
-        exclude_labels = get_exclude_labels(request)
-        request.addfinalizer(
-            partial(get_status_after_execution, exclude_labels=exclude_labels)
-        )
-        get_status_before_execution(exclude_labels=exclude_labels)
-
-
-@pytest.fixture(scope="class")
-def resource_checker(request):
-    if not ocsci_config.RUN["resource_checker"]:
-        log.debug("Skipping resource checker")
-        return
-
-    create_resource_dct()
-    if ocsci_config.ENV_DATA["platform"] in {
-        constants.FUSIONAAS_PLATFORM,
-        constants.HCI_BAREMETAL,
-        constants.HCI_VSPHERE,
-    }:
-        log.error(
-            "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
-            "This needs to be updated"
-        )
-    else:
-        exclude_labels = get_exclude_labels(request)
-        request.addfinalizer(
-            lambda: get_environment_status_after_execution(
-                exclude_labels=exclude_labels
-            )
-        )
-
-
-def get_exclude_labels(request):
-    """
-    Gets the labels which should be excluded for left over checks
-
-    Returns:
-        list: List of exclude labels
-
-    """
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
@@ -1873,8 +1823,58 @@ def get_exclude_labels(request):
             return
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
+    if ocsci_config.ENV_DATA["platform"] in {
+        constants.FUSIONAAS_PLATFORM,
+        constants.HCI_BAREMETAL,
+        constants.HCI_VSPHERE,
+    }:
+        log.error(
+            "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
+            "This needs to be updated"
+        )
+    else:
+        request.addfinalizer(
+            partial(get_status_after_execution, exclude_labels=exclude_labels)
+        )
+        get_status_before_execution(exclude_labels=exclude_labels)
 
-    return exclude_labels
+
+@pytest.fixture(scope="class")
+def resource_checker(request):
+    if not ocsci_config.RUN["resource_checker"]:
+        log.debug("Skipping resource checker")
+        return
+
+    create_resource_dct()
+    node = request.node
+    # List of marks for which we will ignore the leftover checker
+    marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
+    # app labels of resources to be excluded for leftover check
+    exclude_labels = [
+        constants.must_gather_pod_label,
+        constants.S3CLI_APP_LABEL,
+        constants.MUST_GATHER_HELPER_LABEL,
+    ]
+    for mark in node.iter_markers():
+        if mark in marks_to_ignore:
+            return
+        if mark.name == ignore_leftover_label.name:
+            exclude_labels.extend(list(mark.args))
+    if ocsci_config.ENV_DATA["platform"] in {
+        constants.FUSIONAAS_PLATFORM,
+        constants.HCI_BAREMETAL,
+        constants.HCI_VSPHERE,
+    }:
+        log.error(
+            "Resource checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
+            "This needs to be updated"
+        )
+    else:
+        request.addfinalizer(
+            lambda: get_environment_status_after_execution(
+                exclude_labels=exclude_labels
+            )
+        )
 
 
 @pytest.fixture(scope="session")

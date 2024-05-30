@@ -154,6 +154,19 @@ def process_ocsci_conf(arguments):
 
     args, unknown = parser.parse_known_args(args=arguments)
     load_config(args.ocsci_conf)
+    if unknown:
+        for each_arg in unknown:
+            if each_arg.startswith("--cluster-path"):
+                if "=" in each_arg:
+                    framework.config.ENV_DATA["cluster_path"] = each_arg.split("=", 1)[
+                        1
+                    ]
+                else:
+                    cluster_path_position = unknown.index("--cluster-path")
+                    framework.config.ENV_DATA["cluster_path"] = unknown[
+                        cluster_path_position + 1
+                    ]
+                break
     ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
     ocp_version = args.ocp_version or framework.config.ENV_DATA.get("ocp_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")
