@@ -4,7 +4,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
-    acceptance,
     green_squad,
 )
 from ocs_ci.ocs import constants
@@ -16,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
-@acceptance
 @ignore_leftovers
 @green_squad
 class TestSubvolumesCommand(ManageTest):
