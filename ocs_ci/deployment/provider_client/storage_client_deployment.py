@@ -4,6 +4,7 @@ on the hosting cluster.
 """
 import atexit
 import logging
+import pytest
 import tempfile
 import time
 
@@ -28,10 +29,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility import templating, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import clean_disk
-from ocs_ci.ocs.resources.storage_cluster import (
-    verify_storage_cluster,
-    # check_storage_client_status,
-)
+from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.resources.storage_client import create_storage_client
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
@@ -39,26 +37,41 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import (
     get_all_storageclass_names,
     verify_block_pool_exists,
-    # verify_cephblockpool_status,
-    # check_phase_of_rados_namespace,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.managed_services import (
     verify_storageclient,
-    # verify_storageclient_storageclass_claims,
 )
-
 
 log = logging.getLogger(__name__)
 
 
 class StorageClientDeployment(object):
     def __init__(self):
-        print("Initializing webdriver and login to webconsole")
+        log.info("Initializing webdriver and login to webconsole")
         # Call a function during initialization
         self.initial_function()
 
-        print("Intialization")
+        # Register a function to be called upon the destruction of the instance
+        atexit.register(self.cleanup_function)
+
+    def initial_function(self):
+        log.info("initial_function called during initialization.")
+        login_ui()
+
+    def cleanup_function(self):
+        log.info("cleanup_function called at exit.")
+        # Remove debug namespace
+        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+        # Close browser
+        close_browser()
+
+    @pytest.fixture(scope="class", autouse=True)
+    def setup(self):
+        """
+        Setup method for the class
+
+        """
         self.validation_ui_obj = ValidationUI()
         self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
         self.ns_obj.new_project(
@@ -92,20 +105,6 @@ class StorageClientDeployment(object):
         self.ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
         self.deployment = Deployment()
         self.rados_utils = RadosHelper()
-
-        # Register a function to be called upon the destruction of the instance
-        atexit.register(self.cleanup_function)
-
-    def initial_function(self):
-        print("initial_function called during initialization.")
-        login_ui()
-
-    def cleanup_function(self):
-        print("cleanup_function called at exit.")
-        # Remove debug namespace
-        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
-        # Close browser
-        close_browser()
 
     def provider_and_native_client_installation(
         self,
@@ -552,79 +551,3 @@ class StorageClientDeployment(object):
             self.validation_ui_obj.verify_onboarding_token_generation_from_ui()
         )
         return onboarding_token
-
-    # @retry(AssertionError, 12, 10, 1)
-    # def create_storage_client(
-    #     self,
-    #     storage_provider_endpoint=None,
-    #     onboarding_token=None,
-    #     expected_storageclient_status="Connected",
-    # ):
-    #     """
-    #     This method creates storage clients
-
-    #     Inputs:
-    #     storage_provider_endpoint (str): storage provider endpoint details.
-    #     onboarding_token (str): onboarding token
-    #     expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
-
-    #     """
-    #     # Pull storage-client yaml data
-    #     log.info("Pulling storageclient CR data from yaml")
-    #     storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
-    #     resource_name = storage_client_data["metadata"]["name"]
-    #     print(f"the resource name: {resource_name}")
-
-    #     # Check storageclient is available or not
-    #     storage_client_obj = ocp.OCP(kind="storageclient")
-    #     is_available = storage_client_obj.is_exist(
-    #         resource_name=resource_name,
-    #     )
-
-    #     # Check storageclaims available or not
-    #     cmd = "oc get storageclassclaim"
-    #     storage_claims = run_cmd(cmd=cmd)
-
-    #     if not is_available:
-    #         # Set storage provider endpoint
-    #         log.info(
-    #             "Updating storage provider endpoint details: %s",
-    #             storage_provider_endpoint,
-    #         )
-    #         storage_client_data["spec"][
-    #             "storageProviderEndpoint"
-    #         ] = storage_provider_endpoint
-
-    #         # Set onboarding token
-    #         log.info("Updating storage provider endpoint details: %s", onboarding_token)
-    #         storage_client_data["spec"]["onboardingTicket"] = onboarding_token
-    #         storage_client_data_yaml = tempfile.NamedTemporaryFile(
-    #             mode="w+", prefix="storage_client", delete=False
-    #         )
-    #         templating.dump_data_to_temp_yaml(
-    #             storage_client_data, storage_client_data_yaml.name
-    #         )
-
-    #         # Create storageclient CR
-    #         log.info("Creating storageclient CR")
-    #         self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
-
-    #         # Check storage client is in 'Connected' status
-    #         storage_client_status = check_storage_client_status()
-    #         assert (
-    #             storage_client_status == expected_storageclient_status
-    #         ), "storage client phase is not as expected"
-
-    #         # Create storage classclaim
-    #         if storage_client_status == "Connected" and not storage_claims:
-    #             storage_classclaim_data = templating.load_yaml(
-    #                 constants.STORAGE_CLASS_CLAIM_YAML
-    #             )
-    #             templating.dump_data_to_temp_yaml(
-    #                 storage_classclaim_data, constants.STORAGE_CLASS_CLAIM_YAML
-    #             )
-    #             self.ocp_obj.exec_oc_cmd(
-    #                 f"apply -f {constants.STORAGE_CLASS_CLAIM_YAML}"
-    #             )
-    #             time.sleep(30)
-    #             verify_storageclient_storageclass_claims(resource_name)
