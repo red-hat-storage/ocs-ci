@@ -706,10 +706,7 @@ class ClusterNotInSTSModeException(Exception):
 
 class APIRequestError(Exception):
     pass
-<<<<<<< HEAD
 
 
 class ProviderModeNotFoundException(Exception):
     pass
-=======
->>>>>>> c4241be1 (Removing exceptions and adding assertions)
