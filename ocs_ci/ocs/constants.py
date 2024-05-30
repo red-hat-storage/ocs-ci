@@ -792,8 +792,7 @@ SUBSCRIPTION_CERT_MANAGER_YAML = os.path.join(
 STORAGE_CLUSTER_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml")
 
 STORAGE_SYSTEM_ODF_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR,
-    "storagesysocs_ci/templates/nmstate-deployment/tem_odf.yaml",
+    TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf.yaml"
 )
 STORAGE_SYSTEM_ODF_EXTERNAL = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storagesystem_odf_external.yaml"
