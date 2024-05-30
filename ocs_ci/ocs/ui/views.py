@@ -162,7 +162,7 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "choose_openshift-storage_project": (
-        "//span[text()='openshift-storage']",
+        "//span[text()='" + config.ENV_DATA["cluster_namespace"] + "']",
         By.XPATH,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
