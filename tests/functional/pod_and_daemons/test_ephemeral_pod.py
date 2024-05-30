@@ -3,30 +3,28 @@ import pytest
 from logging import getLogger
 
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
-from ocs_ci.ocs.ephernal_storage import EphernalPodFactory
+from ocs_ci.ocs.ephernal_storage import EphemeralPodFactory
 from ocs_ci.ocs.constants import (
     CEPHFS_INTERFACE,
     RBD_INTERFACE,
 )
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
-    brown_squad,
-)
+from ocs_ci.framework.pytest_customization.marks import tier1, brown_squad, polarion_id
 
 log = getLogger(__name__)
 
 
 @tier1
 @brown_squad
-class TestEphernalPod:
+@polarion_id("OCS-5792")
+class TestEphemeralPod:
     @pytest.mark.parametrize(
         argnames=["interface"], argvalues=[[CEPHFS_INTERFACE], [RBD_INTERFACE]]
     )
-    def test_ephernal_pod_creation(self, interface) -> None:
+    def test_ephemeral_pod_creation(self, interface) -> None:
         pod_name = None
         storage_type = interface
-        ephemeral_pod = EphernalPodFactory.create_ephmeral_pod(pod_name, storage_type)
+        ephemeral_pod = EphemeralPodFactory.create_ephemeral_pod(pod_name, storage_type)
         log.info(f"Pods Created: {ephemeral_pod}")
 
         # Test PVC Creation
@@ -49,10 +47,8 @@ class TestEphernalPod:
         log.info("Starting pod deletion validation")
         p_name = ephemeral_pod.get("metadata").get("name")
         log.info(f"P_NAME: {p_name}")
-
-        # Test delete pod
         log.info("Start Deleting ephemeral pods")
-        EphernalPodFactory.delete_ephmeral_pod(
+        EphemeralPodFactory.delete_ephemeral_pod(
             p_name, config.ENV_DATA["cluster_namespace"]
         )
 
