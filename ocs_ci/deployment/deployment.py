@@ -253,8 +253,8 @@ class Deployment(object):
         self.wait_for_subscription(
             constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
         )
-        logger.info("Sleeping for 120 seconds after subscribing to GitOps Operator")
-        time.sleep(120)
+        logger.info("Sleeping for 180 seconds after subscribing to GitOps Operator")
+        time.sleep(180)
         subscriptions = ocp.OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             resource_name=constants.GITOPS_OPERATOR_NAME,
