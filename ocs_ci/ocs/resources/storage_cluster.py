@@ -788,11 +788,11 @@ def ocs_install_verification(
     ):
         deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
         daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
-        for label in [
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        for provisioner_name in [
+            "csi-cephfsplugin-provisioner",
+            "csi-rbdplugin-provisioner",
         ]:
-            provisioner_deployment = deployment_kind.get(selector=label).get("items")[0]
+            provisioner_deployment = deployment_kind.get(resource_name=provisioner_name)
             owner_references = provisioner_deployment.metadata.get("ownerReferences")
             assert len(owner_references) == 1, (
                 f"Found more than 1 or none owner reference for {constants.DEPLOYMENT} "
@@ -807,8 +807,8 @@ def ocs_install_verification(
                 f"is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
             )
         log.info("Verified the ownerReferences CSI provisioner deployemts")
-        for label in [constants.CSI_CEPHFSPLUGIN_LABEL, constants.CSI_RBDPLUGIN_LABEL]:
-            plugin_daemonset = daemonset_kind.get(selector=label).get("items")[0]
+        for plugin_name in ["csi-cephfsplugin", "csi-rbdplugin"]:
+            plugin_daemonset = daemonset_kind.get(resource_name=plugin_name)
             owner_references = plugin_daemonset.metadata.get("ownerReferences")
             assert (
                 len(owner_references) == 1
