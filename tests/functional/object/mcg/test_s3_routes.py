@@ -29,7 +29,6 @@ RECONCILE_WAIT = 60
 @red_squad
 @runs_on_provider
 class TestS3Routes:
-
     """
     Tests related to ODF S3 routes
     """
@@ -93,6 +92,7 @@ class TestS3Routes:
     @tier3
     @bugzilla("2067079")
     @bugzilla("2063691")
+    @bugzilla("2283797")
     @skipif_external_mode
     @pytest.mark.polarion_id("OCS-4648")
     @skipif_ocs_version("<4.11")
@@ -103,20 +103,31 @@ class TestS3Routes:
             1. Validates S3 route is not reconciled after changing insecureEdgeTerminationPolicy.
             2. Validates rgw route is not recreated after enabling disableRoute in the storage cluster.
         """
-        # S3 route
+
+        # Set spec.multiCloudGateway.denyHTTP to true on ocs-storagecluster
+        storagecluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+        )
+        lb_param = (
+            '[{"op": "add", "path": "/spec/multiCloudGateway/denyHTTP", "value": true}]'
+        )
+        logger.info("Patching noobaa resource to enable disableLoadBalancerService")
+        storagecluster_obj.patch(params=lb_param, format_type="json")
+
+        sleep(RECONCILE_WAIT)
+
+        # Check that the s3 route has been reconciled
         nb_s3_route_obj = ocp.OCP(
             kind=constants.ROUTE,
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="s3",
         )
-        s3_route_param = '{"spec":{"tls":{"insecureEdgeTerminationPolicy":"Redirect","termination":"reencrypt"}}}'
-        nb_s3_route_obj.patch(params=s3_route_param, format_type="merge")
-        sleep(RECONCILE_WAIT)
-        nb_s3_route_obj.reload_data()
-        logger.info("Validating updated s3 route persists")
+        logger.info("Validating the s3 route has been reconciled as expected")
         assert (
             nb_s3_route_obj.data["spec"]["tls"]["insecureEdgeTerminationPolicy"]
-            == "Redirect"
+            == "None"
         ), "Failed, s3 route is not updated, it has been reverted back to original"
 
         # RGW route
