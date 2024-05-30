@@ -10,7 +10,10 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.ocs.rados_utils import RadosHelper
+from ocs_ci.ocs.rados_utils import (
+    verify_cephblockpool_status,
+    check_phase_of_rados_namespace,
+)
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -101,7 +104,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         ]
         self.ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
         self.deployment = Deployment()
-        self.rados_utils = RadosHelper()
 
     def provider_and_native_client_installation(
         self,
@@ -255,9 +257,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             self.deployment.wait_for_csv(
                 self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
             )
-            log.info(
-                f"Sleeping for 30 seconds after {self.ocs_client_operator} created"
-            )
 
             # Validate storageclaims are Ready and associated storageclasses are created
             verify_storageclient()
@@ -267,12 +266,12 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 constants.DEFAULT_BLOCKPOOL
             ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
             assert (
-                self.rados_utils.verify_cephblockpool_status()
+                verify_cephblockpool_status()
             ), "the cephblockpool is not in Ready phase"
 
             # Validate radosnamespace created and in 'Ready' status
             assert (
-                self.rados_utils.check_phase_of_rados_namespace()
+                check_phase_of_rados_namespace()
             ), "The radosnamespace is not in Ready phase"
 
             # Validate storageclassrequests created
@@ -381,14 +380,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         run_cmd(f"oc create -f {constants.OLM_YAML}")
         self.deployment.subscribe_ocs()
 
-        # Wait until odf is installed
-        odf_operator = defaults.ODF_OPERATOR_NAME
-        self.deployment.wait_for_subscription(
-            odf_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        self.deployment.wait_for_csv(odf_operator, config.ENV_DATA["cluster_namespace"])
-        log.info(f"Sleeping for 30 seconds after {odf_operator} created")
-        time.sleep(30)
         ocs_version = version.get_semantic_ocs_version_from_config()
         log.info(f"Installed odf version: {ocs_version}")
         self.validation_ui_obj.refresh_web_console()

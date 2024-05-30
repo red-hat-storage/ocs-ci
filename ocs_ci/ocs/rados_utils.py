@@ -277,80 +277,82 @@ class RadosHelper:
 
         return mgr_object
 
-    def verify_cephblockpool_status(
-        self,
-        pool_name=constants.DEFAULT_BLOCKPOOL,
-        namespace=None,
-        required_phase=constants.STATUS_READY,
-    ):
-        """
-        Verify the phase of cephblockpool
 
-        Args:
-            pool_name (str): The name of the Ceph block pool
-            namespace(str): cluster namespace
-            required_phase(str): required phase of the cephblockpool
+def verify_cephblockpool_status(
+    pool_name=constants.DEFAULT_BLOCKPOOL,
+    namespace=None,
+    required_phase=constants.STATUS_READY,
+):
+    """
+    Verify the phase of cephblockpool
 
-        Returns:
-            status: True if the Ceph block pool is in Ready status, False otherwise
-        """
-        if not namespace:
-            namespace = config.ENV_DATA["cluster_namespace"]
-        cmd = (
-            f"oc get {constants.CEPHBLOCKPOOL} {pool_name} -n {namespace} "
+    Args:
+        pool_name (str): The name of the Ceph block pool
+        namespace(str): cluster namespace
+        required_phase(str): required phase of the cephblockpool
+
+    Returns:
+        status: True if the Ceph block pool is in Ready status, False otherwise
+    """
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    cmd = (
+        f"oc get {constants.CEPHBLOCKPOOL} {pool_name} -n {namespace} "
+        "-o=jsonpath='{.status.phase}'"
+    )
+
+    phase = retry((CommandFailed), tries=20, delay=10,)(
+        run_cmd
+    )(cmd=cmd)
+
+    logger.info(f"{pool_name} is in {phase} phase")
+    logger.info(f"Required phase is {required_phase}")
+    return phase == required_phase
+
+
+def fetch_rados_namespaces(namespace=None):
+    """
+    Verify if rados namespace exists
+
+    Args:
+        namespace(str): cluster namespace
+
+    Returns:
+        bool: True if the radosnamespace exists, False otherwise
+    """
+    logger.info("Fetch radosnamespaces exist")
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    rados_ns_obj = ocp.OCP(kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=namespace)
+    result = rados_ns_obj.get()
+    sample = result["items"]
+    rados_ns_list = [item.get("metadata").get("name") for item in sample]
+    return rados_ns_list
+
+
+def check_phase_of_rados_namespace(
+    namespace=None, required_phase=constants.STATUS_READY
+):
+    """
+    Verify if rados namespace exists
+
+    Args:
+        namespace(str): cluster namespace
+        required_phase(str): required phase of the rados namespace
+
+    Returns:
+        bool: True if the radosnamespace exists, False otherwise
+    """
+    logger.info("Verifying if radosnamespace is in desired phase")
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    for rados_namespace in fetch_rados_namespaces(namespace=namespace):
+        check_radosns_phase_cmd = (
+            f"oc get {constants.CEPHBLOCKPOOLRADOSNS} {rados_namespace} -n {namespace} "
             "-o=jsonpath='{.status.phase}'"
         )
-
-        phase = retry((CommandFailed), tries=20, delay=10,)(
-            run_cmd
-        )(cmd=cmd)
-
-        logger.info(f"{pool_name} is in {phase} phase")
-        logger.info(f"Required phase is {required_phase}")
+        phase = run_cmd(cmd=check_radosns_phase_cmd)
         return phase == required_phase
-
-    def fetch_rados_namespaces(self, namespace=None):
-        """
-        Verify if rados namespace exists
-
-        Args:
-            namespace(str): cluster namespace
-
-        Returns:
-            bool: True if the radosnamespace exists, False otherwise
-        """
-        logger.info("Fetch radosnamespaces exist")
-        if not namespace:
-            namespace = config.ENV_DATA["cluster_namespace"]
-        rados_ns_obj = ocp.OCP(kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=namespace)
-        result = rados_ns_obj.get()
-        sample = result["items"]
-        rados_ns_list = [item.get("metadata").get("name") for item in sample]
-        return rados_ns_list
-
-    def check_phase_of_rados_namespace(
-        self, namespace=None, required_phase=constants.STATUS_READY
-    ):
-        """
-        Verify if rados namespace exists
-
-        Args:
-            namespace(str): cluster namespace
-            required_phase(str): required phase of the rados namespace
-
-        Returns:
-            bool: True if the radosnamespace exists, False otherwise
-        """
-        logger.info("Verifying if radosnamespace is in desired phase")
-        if not namespace:
-            namespace = config.ENV_DATA["cluster_namespace"]
-        for rados_namespace in self.fetch_rados_namespaces(namespace=namespace):
-            check_radosns_phase_cmd = (
-                f"oc get {constants.CEPHBLOCKPOOLRADOSNS} {rados_namespace} -n {namespace} "
-                "-o=jsonpath='{.status.phase}'"
-            )
-            phase = run_cmd(cmd=check_radosns_phase_cmd)
-            return phase == required_phase
 
 
 def corrupt_pg(osd_deployment, pool_name, pool_object):
