@@ -635,7 +635,7 @@ def create_ceph_file_system(
         raise e
 
     assert validate_cephfilesystem(
-        cephfs_data.name
+        cephfs_data.name, namespace
     ), f"File system {cephfs_data.name} does not exist"
     return cephfs_data
 
@@ -1050,7 +1050,7 @@ def get_cephfs_data_pool_name():
     return out[0]["data_pools"][0]
 
 
-def validate_cephfilesystem(fs_name):
+def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Verify CephFileSystem exists at Ceph and OCP
 
@@ -1061,9 +1061,7 @@ def validate_cephfilesystem(fs_name):
         bool: True if CephFileSystem is created at Ceph and OCP side else
            will return False with valid msg i.e Failure cause
     """
-    cfs = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
     ocp_validate = False
