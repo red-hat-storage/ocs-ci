@@ -304,21 +304,19 @@ class TestSelinuxrelabel(E2ETest):
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
 
         # Delete pod so that fix will be applied for new pod
-        POD_OBJ = ocp.OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        )
         assert modify_deploymentconfig_replica_count(
             deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=0
         ), "Failed to scale down deploymentconfig to 0"
-        POD_OBJ.wait_for_delete(resource_name=self.pod_obj.name, timeout=600)
+        self.pod_obj.delete(wait=True)
 
         assert modify_deploymentconfig_replica_count(
             deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=1
         ), "Failed to scale down deploymentconfig to 1"
 
         self.pod_obj = self.get_app_pod_obj()
-
-        POD_OBJ.wait_for_resource(
+        ocp.OCP(
+            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        ).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=self.pod_obj.name,
             resource_count=1,

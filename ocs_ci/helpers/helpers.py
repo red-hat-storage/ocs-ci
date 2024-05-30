@@ -2855,9 +2855,9 @@ def modify_deploymentconfig_replica_count(
     i.e to scale up or down deploymentconfig
 
     Args:
-        deploymentcofig_name (str): Name of deployment
+        deploymentcofig_name (str): Name of deploymentconfig
         replica_count (int): replica count to be changed to
-        namespace (str): namespace where the deployment exists
+        namespace (str): namespace where the deploymentconfig exists
 
     Returns:
         bool: True in case if changes are applied. False otherwise
