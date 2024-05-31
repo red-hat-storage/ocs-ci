@@ -627,7 +627,7 @@ class ValidationUI(PageNavigator):
         logger.info("Navigating to Installed Operator Page")
         self.navigate_installed_operators_page()
 
-        self.select_namespace(project_name="openshift-storage")
+        self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
 
         logger.info("Searching for Openshift Data Foundation Operator")
         odf_operator_presence = self.wait_until_expected_text_is_found(
