@@ -22,7 +22,7 @@ spec:
         - 16KiB
         - 4KiB
       numjobs:
-        - 4
+        - 2
       iodepth: 16
       read_runtime: 300
       write_runtime: 300
