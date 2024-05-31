@@ -1,7 +1,6 @@
 """
 StorageCluster related functionalities
 """
-
 import copy
 import ipaddress
 import logging
@@ -2729,51 +2728,3 @@ def resize_osd(new_osd_size, check_size=True):
         format_type="json",
     )
     return res
-
-
-def get_network_attachment_definitions(
-    nad_name, namespace=config.ENV_DATA["cluster_namespace"]
-):
-    """
-    Get network_attachment_definitions obj
-
-    Args:
-        nad_name (str) : network_attachment_definition name
-        namespace (str): Namespace of the resource
-
-    Returns:
-        network_attachment_definitions (obj) : network_attachment_definitions object
-
-    """
-    return OCP(
-        kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
-        namespace=namespace,
-        resource_name=nad_name,
-    )
-
-
-def add_route_nad_obj(
-    nad_name,
-    namespace=config.ENV_DATA["cluster_namespace"],
-    route_dst="192.168.252.0/24",
-):
-    """
-    Add route section to network_attachment_definitions object
-
-    Args:
-        nad_name: network_attachment_definition name
-        namespace: Namespace of the resource
-
-    """
-    nad_obj = get_network_attachment_definitions(nad_name=nad_name, namespace=namespace)
-    nad_config_str = nad_obj.data["spec"]["config"]
-    nad_config_dict = json.loads(nad_config_str)
-    nad_config_dict["ipam"]["routes"] = [{"dst": route_dst}]
-    nad_config_dict_string = json.dumps(nad_config_dict)
-    params = f"""[{{ "op": "replace", "path": "/spec/config",
-                "value": {str(nad_config_dict_string)}}}]"""
-    nad_obj.patch(
-        resource_name=nad_name,
-        params=params.strip("\n"),
-        format_type="json",
-    )
