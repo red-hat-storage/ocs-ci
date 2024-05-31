@@ -214,6 +214,8 @@ L2_ADVERTISEMENT = "L2Advertisement"
 METALLB_INSTANCE = "MetalLB"
 NETWORK_POLICY = "NetworkPolicy"
 INGRESSCONTROLLER = "ingresscontroller"
+PROVISIONING = "Provisioning"
+AGENT_SERVICE_CONFIG = "AgentServiceConfig"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"

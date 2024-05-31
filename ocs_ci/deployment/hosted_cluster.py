@@ -26,7 +26,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import (
-    wait_for_pods_to_be_in_statuses_concurrently,
+    wait_for_pods_to_be_in_statuses_concurrently, wait_for_pods_to_be_running, get_pods_having_label,
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.managedservice import generate_onboarding_token
@@ -368,6 +368,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             config.ENV_DATA["clusters"].get(self.name).get("nodepool_replicas")
         )
 
+
         return self.create_kubevirt_ocp_cluster(
             name=self.name,
             nodepool_replicas=nodepool_replicas,
@@ -427,6 +428,54 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
                     raise AssertionError(
                         f"Failed to install Hypershift on the cluster: {e}"
                     )
+
+        # Enable central infrastructure management service for agent
+        if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
+            provisioning_obj = OCP(**OCP(kind=constants.PROVISIONING).get()[0])
+            if not provisioning_obj.data["spec"].get("watchAllNamespaces") is "true":
+                provisioning_obj.patch(
+                    resource_name=provisioning_obj.resource_name,
+                    params='{"spec":{"watchAllNamespaces": true }}',
+                    format_type="merge"
+                )
+                assert provisioning_obj.get()["spec"].get("watchAllNamespaces") == "true", (
+                    "Cannot proceed with hosted cluster creation using agent."
+                )
+
+            if not OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True):
+                create_agent_service_config()
+
+
+def create_agent_service_config():
+    """
+    Create AgentServiceConfig resource
+
+    """
+    template_yaml = os.path.join(
+        constants.TEMPLATE_DIR, "hosted-cluster", "agent_service_config.yaml"
+    )
+    agent_service_config_data = templating.load_yaml(template_yaml)
+    # TODO: Add custom OS image details
+    helpers.create_resource(**agent_service_config_data)
+
+    # Verify new pods that should be created
+    pod_obj = OCP(kind=constants.POD, namespace="multicluster-engine")
+    for pod_label in ["app=assisted-service", "app=assisted-image-service"]:
+        pod_obj.get(selector=pod_label, retry=600, wait=20, silent=True, field_selector="status.phase=Running")
+        # for pod_data in TimeoutSampler(
+        #     timeout=600,
+        #     sleep=20,
+        #     func=get_pods_having_label,
+        #     label=pod_label,
+        #     namespace="multicluster-engine",
+        # ):
+        #     if len(pod_data):pass
+        # wait_for_pods_to_be_running(
+        #     namespace="multicluster-engine",
+        #     pod_names=[pod_items[0]["metadata"]["name"]],
+        #     timeout=180,
+        #     sleep=10,
+        # )
 
 
 class HostedODF(HypershiftHostedOCP):
