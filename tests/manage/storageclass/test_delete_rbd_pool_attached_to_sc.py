@@ -99,7 +99,7 @@ class TestDeleteRbdPool(ManageTest):
                 *[
                     2,
                     "aggressive",
-                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
                 ],
                 marks=pytest.mark.polarion_id("OCS-5134"),
