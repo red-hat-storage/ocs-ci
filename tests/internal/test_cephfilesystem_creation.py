@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.helpers.helpers import (
     create_ceph_file_system,
@@ -22,6 +23,7 @@ class TestCephFileSystemCreation(ManageTest):
 
     @tier2
     @green_squad
+    @pytest.mark.polarion_id("OCS-5793")
     def test_Cephfilesystem_creation(self):
         """
         Trying to create more cephfilesystem using the same name.
