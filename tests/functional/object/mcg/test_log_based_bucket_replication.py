@@ -204,13 +204,15 @@ class TestLogBasedBucketReplication(MCGTest):
     @tier4b
     @skipif_vsphere_ipi
     @pytest.mark.parametrize(
-        argnames=["target_pod_name"],
+        argnames=["platform", "target_pod_name"],
         argvalues=[
             pytest.param(
+                constants.AWS_PLATFORM,
                 "noobaa-db",
                 marks=pytest.mark.polarion_id("OCS-4938"),
             ),
             pytest.param(
+                constants.AWS_PLATFORM,
                 "noobaa-core",
                 marks=pytest.mark.polarion_id("OCS-4939"),
             ),
