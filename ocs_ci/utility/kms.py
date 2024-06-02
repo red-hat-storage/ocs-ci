@@ -2070,6 +2070,9 @@ class AzureKV(KMS):
     def remove_kmsid(self):
         """
         Removing azure kmsid from the configmap `csi-kms-connection-details`.
+
+        Returns:
+            bool: True if KMS ID is successfully removed, otherwise False.
         """
         if not self.is_azure_kv_connection_exists():
             logger.info(
@@ -2083,7 +2086,7 @@ class AzureKV(KMS):
             namespace=self.namespace,
         )
 
-        if len(get_encryption_kmsid()) == 1:
+        if len(get_encryption_kmsid()) <= 1:
             # removing configmap csi-kms-connection-details.
             csi_kms_configmap.delete()
         else:
@@ -2096,6 +2099,9 @@ class AzureKV(KMS):
     def verify_pv_secrets_present_in_azure_kv(self, vol_handle):
         """
         Verify Azure KV has the secrets for given volume handle.
+
+        Returns:
+            bool: True if PV secrets are found in the Azure KV, otherwise False.
         """
         secrets = self.azure_kv_secrets()
         if vol_handle in secrets:
