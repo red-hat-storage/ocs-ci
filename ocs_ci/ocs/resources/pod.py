@@ -3724,3 +3724,26 @@ def verify_md5sum_on_pod_files(pods_for_integrity_check, pod_file_name):
             f"matches with the original md5sum"
         )
     logger.info("Data integrity check passed on all pods")
+
+
+def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    This method fetches the restart count of rgw pod
+
+    Arg:
+        namespace(str): namespace where rgw pd is running. default value is,
+        config.ENV_DATA["cluster_namespace"]
+
+    Return:
+        rgw_pod_restart_count: restart count for rgw pod
+
+    """
+    list_of_rgw_pods = get_rgw_pods(namespace=namespace)
+    rgw_pod_obj = list_of_rgw_pods[0]
+    restart_count_for_rgw_pod = get_pod_restarts_count(
+        list_of_pods=list_of_rgw_pods,
+        namespace=namespace,
+    )
+    rgw_pod_restart_count = restart_count_for_rgw_pod[rgw_pod_obj.name]
+    logger.info(f"restart count for rgw pod is: {rgw_pod_restart_count}")
+    return rgw_pod_restart_count

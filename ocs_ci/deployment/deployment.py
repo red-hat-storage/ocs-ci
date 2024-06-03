@@ -597,6 +597,7 @@ class Deployment(object):
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
             storage_client_deployment_obj.provider_and_native_client_installation()
+            storage_client_deployment_obj.verify_provider_mode_deployment()
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """

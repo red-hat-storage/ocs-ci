@@ -254,7 +254,6 @@ def verify_storageclient(
         verify_sc (bool): True to verify the storageclassclaims and storageclasses associated with the storageclient.
 
     """
-    ocs_version = version.get_semantic_ocs_version_from_config()
     storageclient_obj = OCP(
         kind=constants.STORAGECLIENT,
         namespace=namespace or config.ENV_DATA["cluster_namespace"],
@@ -266,19 +265,13 @@ def verify_storageclient(
     )
     storageclient_name = storageclient["metadata"]["name"]
 
-    if ocs_version >= version.VERSION_4_16:
-        assert (
-            storageclient["spec"]["storageProviderEndpoint"]
-            == "ocs-provider-server:50051"
-        )
-    else:
-        provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
-        endpoint_actual = get_storage_provider_endpoint(provider_name)
-        assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
-            f"The value of storageProviderEndpoint is not correct in storageclient {storageclient['metadata']['name']}."
-            f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
-            f"Value in the provider cluster {provider_name} is {endpoint_actual}"
-        )
+    provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
+    endpoint_actual = get_storage_provider_endpoint(provider_name)
+    assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
+        f"The value of storageProviderEndpoint is not correct in storageclient {storageclient['metadata']['name']}."
+        f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
+        f"Value in the provider cluster {provider_name} is {endpoint_actual}"
+    )
     log.info(
         f"Verified the storageProviderEndpoint value in the storageclient {storageclient_name}"
     )

@@ -3,12 +3,19 @@ Storage client related functions
 """
 import logging
 import tempfile
+import time
 
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.utils import enable_console_plugin
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.helpers.managed_services import (
+    verify_storageclient_storageclass_claims,
+)
 
 log = logging.getLogger(__name__)
 
@@ -28,72 +35,85 @@ class StorageClient:
         self.ocp_version = version.get_semantic_ocp_version_from_config()
         self.ocs_version = version.get_semantic_ocs_version_from_config()
 
-    def check_storage_client_status(
-        self, namespace=config.ENV_DATA["cluster_namespace"], storageclient_name=None
+    def odf_installation_on_client(
+        self,
+        catalog_yaml=False,
+        enable_console=False,
+        subscription_yaml=constants.STORAGE_CLIENT_SUBSCRIPTION_YAML,
+        channel_to_client_subscription=config.ENV_DATA.get(
+            "channel_to_client_subscription"
+        ),
+        client_subcription_image=config.DEPLOYMENT.get("ocs_registry_image", ""),
     ):
         """
-        Check storageclient status
+        This method creates odf subscription on clients
 
         Inputs:
-            namespace(str): Namespace where the storage client is created
-            storageclient_name(str): name of the storageclient
+        catalog_yaml (bool): If enabled then constants.OCS_CATALOGSOURCE_YAML
+        will be created.
 
-        Returns:
-            storageclient_status(str): storageclient phase
+        enable_console (bool): If enabled then odf-client-console will be enabled
+
+        subscription_yaml: subscription yaml which needs to be created.
+        default value, constants.STORAGE_CLIENT_SUBSCRIPTION_YAML
+
+        channel(str): ENV_DATA:
+            channel_to_client_subscription: "4.16"
+
+        client_subcription_image(str): image details for client subscription
 
         """
-        cmd = (
-            f"oc get storageclient {storageclient_name} -n {namespace} "
-            "-o=jsonpath='{.items[*].status.phase}'"
+        # Check namespace for storage-client is available or not
+        is_available = self.ns_obj.is_exist(
+            resource_name=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
         )
-        storageclient_status = self.ocp_obj.exec_oc_cmd(
-            command=cmd, out_yaml_format=False
-        )
-        return storageclient_status
+        if not is_available:
+            if catalog_yaml:
+                # Note: Need to parameterize the image in future
+                catalog_data = templating.load_yaml(constants.OCS_CATALOGSOURCE_YAML)
+                log.info(
+                    f"Updating image details for client subscription: {client_subcription_image}"
+                )
+                catalog_data["spec"]["image"] = client_subcription_image
+                catalog_data_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="catalog_data", delete=False
+                )
+                templating.dump_data_to_temp_yaml(catalog_data, catalog_data_yaml.name)
+                self.ocp_obj.exec_oc_cmd(f"apply -f {catalog_data_yaml.name}")
 
-    def fetch_provider_endpoint(self):
-        """
-        This method fetches storage provider endpoint
+                catalog_source = CatalogSource(
+                    resource_name=constants.OCS_CATALOG_SOURCE_NAME,
+                    namespace=constants.MARKETPLACE_NAMESPACE,
+                )
+                # Wait for catalog source is ready
+                catalog_source.wait_for_state("READY")
 
-        Returns:
-        storage_provider_endpoint(str): storage provider endpoint details
+            # Create ODF subscription for storage-client
+            client_subscription_data = templating.load_yaml(subscription_yaml)
 
-        """
-        storage_provider_endpoint = self.ocp_obj.exec_oc_cmd(
-            (
-                f"get storageclusters.ocs.openshift.io -n {config.ENV_DATA['cluster_namespace']}"
-                + " -o jsonpath={'.items[*].status.storageProviderEndpoint'}"
-            ),
-            out_yaml_format=False,
-        )
-        log.info(f"storage provider endpoint is: {storage_provider_endpoint}")
-        return storage_provider_endpoint
+            log.info(f"Updating channel details: {channel_to_client_subscription}")
+            client_subscription_data["spec"]["channel"] = channel_to_client_subscription
+            client_subscription_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="client_subscription", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                client_subscription_data, client_subscription_data_yaml.name
+            )
+            self.ocp_obj.exec_oc_cmd(f"apply -f {client_subscription_data_yaml.name}")
+            self.deployment.wait_for_subscription(
+                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+            )
+            self.deployment.wait_for_csv(
+                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+            )
+            log.info(
+                f"Sleeping for 30 seconds after {self.ocs_client_operator} created"
+            )
+            time.sleep(30)
 
-    def verify_storagerequest_exists(
-        self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
-    ):
-        """
-        Fetch storagerequests for storageclient
-
-        Args:
-            storageclient_name (str): Name of the storageclient to be verified.
-            namespace (str): Namespace where the storageclient is present.
-                Default value will be taken from ENV_DATA["cluster_namespace"]
-
-        Returns:
-            storagerequest_exists (bool): returns true if the storagerequest exists
-
-        """
-        cmd = f"oc get storagerequests -n {namespace} " "-o=jsonpath='{.items[*]}'"
-        storage_requests = self.ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=True)
-
-        log.info(f"The list of storagerequests: {storage_requests}")
-        return (
-            f"ocs.openshift.io/storagerequest-name: {storageclient_name}-cephfs"
-            in storage_requests
-            and f"ocs.openshift.io/storagerequest-name: {storageclient_name}-chep-rbd"
-            in storage_requests
-        )
+            if enable_console:
+                enable_console_plugin(value="[odf-client-console]")
+                self.validation_ui_obj.refresh_web_console()
 
     def create_storage_client(
         self,
@@ -144,33 +164,46 @@ class StorageClient:
             log.info("Creating storageclient CR")
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
 
-    @retry(AssertionError, 12, 10, 1)
-    def verify_storageclient_status(
-        self,
-        storageclient_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        expected_storageclient_status="Connected",
+    def fetch_storage_client_status(
+        self, namespace=config.ENV_DATA["cluster_namespace"], storageclient_name=None
     ):
         """
-        Args:
-            storageclient_name (str): Name of the storageclient to be verified.
-            namespace (str): Namespace where the storageclient is present.
-                Default value will be taken from ENV_DATA["cluster_namespace"]
-            expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
+        Fetch storageclient status
+
+        Inputs:
+            namespace(str): Namespace where the storage client is created
+            storageclient_name(str): name of the storageclient
 
         Returns:
-            storagerequest_phase (bool): returns true if the
-                    storagerequest_phase == expected_storageclient_status
+            storageclient_status(str): storageclient phase
 
         """
-
-        # Check storage client is in 'Connected' status
-        storage_client_status = self.check_storage_client_status(
-            storageclient_name, namespace=namespace
+        cmd = (
+            f"oc get storageclient {storageclient_name} -n {namespace} "
+            "-o=jsonpath='{.items[*].status.phase}'"
         )
-        assert (
-            storage_client_status == expected_storageclient_status
-        ), "storage client phase is not as expected"
+        storageclient_status = self.ocp_obj.exec_oc_cmd(
+            command=cmd, out_yaml_format=False
+        )
+        return storageclient_status
+
+    def fetch_provider_endpoint(self):
+        """
+        This method fetches storage provider endpoint
+
+        Returns:
+        storage_provider_endpoint(str): storage provider endpoint details
+
+        """
+        storage_provider_endpoint = self.ocp_obj.exec_oc_cmd(
+            (
+                f"get storageclusters.ocs.openshift.io -n {config.ENV_DATA['cluster_namespace']}"
+                + " -o jsonpath={'.items[*].status.storageProviderEndpoint'}"
+            ),
+            out_yaml_format=False,
+        )
+        log.info(f"storage provider endpoint is: {storage_provider_endpoint}")
+        return storage_provider_endpoint
 
     def create_storageclaim(
         self,
@@ -249,3 +282,191 @@ class StorageClient:
                 storage_classclaim_data, storage_classclaim_data_yaml.name
             )
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_classclaim_data_yaml.name}")
+
+    def verify_storagerequest_exists(
+        self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
+    ):
+        """
+        Fetch storagerequests for storageclient
+
+        Args:
+            storageclient_name (str): Name of the storageclient to be verified.
+            namespace (str): Namespace where the storageclient is present.
+                Default value will be taken from ENV_DATA["cluster_namespace"]
+
+        Returns:
+            storagerequest_exists (bool): returns true if the storagerequest exists
+
+        """
+        cmd = f"oc get storagerequests -n {namespace} " "-o=jsonpath='{.items[*]}'"
+        storage_requests = self.ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=True)
+
+        log.info(f"The list of storagerequests: {storage_requests}")
+        return (
+            f"ocs.openshift.io/storagerequest-name: {storageclient_name}-cephfs"
+            in storage_requests
+            and f"ocs.openshift.io/storagerequest-name: {storageclient_name}-chep-rbd"
+            in storage_requests
+        )
+
+    @retry(AssertionError, 12, 10, 1)
+    def verify_storageclient_status(
+        self,
+        storageclient_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        expected_storageclient_status="Connected",
+    ):
+        """
+        Args:
+            storageclient_name (str): Name of the storageclient to be verified.
+            namespace (str): Namespace where the storageclient is present.
+                Default value will be taken from ENV_DATA["cluster_namespace"]
+            expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
+
+        Returns:
+            storagerequest_phase (bool): returns true if the
+                    storagerequest_phase == expected_storageclient_status
+
+        """
+
+        # Check storage client is in 'Connected' status
+        storage_client_status = self.fetch_storage_client_status(
+            storageclient_name, namespace=namespace
+        )
+        assert (
+            storage_client_status == expected_storageclient_status
+        ), "storage client phase is not as expected"
+
+    def create_network_policy(
+        self, namespace_to_create_storage_client=None, resource_name=None
+    ):
+        """
+        This method creates network policy for the namespace where storage-client will be created
+
+        Inputs:
+        namespace_to_create_storage_client (str): Namespace where the storage client will be created
+
+        """
+        # Pull network-policy yaml data
+        log.info("Pulling NetworkPolicy CR data from yaml")
+        network_policy_data = templating.load_yaml(constants.NETWORK_POLICY_YAML)
+
+        resource_name = network_policy_data["metadata"]["name"]
+
+        # Check network policy for the namespace_to_create_storage_client is available or not
+        network_policy_obj = ocp.OCP(
+            kind="NetworkPolicy", namespace=namespace_to_create_storage_client
+        )
+
+        is_available = network_policy_obj.is_exist(
+            resource_name=resource_name,
+        )
+
+        if not is_available:
+            # Set namespace value to the namespace where storageclient will be created
+            log.info(
+                "Updating namespace where to create storage client: %s",
+                namespace_to_create_storage_client,
+            )
+            network_policy_data["metadata"][
+                "namespace"
+            ] = namespace_to_create_storage_client
+
+            # Create network policy
+            network_policy_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="network_policy", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                network_policy_data, network_policy_data_yaml.name
+            )
+            log.info("Creating NetworkPolicy CR")
+            out = self.ocp_obj.exec_oc_cmd(f"apply -f {network_policy_data_yaml.name}")
+            log.info(f"output: {out}")
+            log.info(
+                f"Sleeping for 30 seconds after {network_policy_data_yaml.name} created"
+            )
+
+            assert network_policy_obj.check_resource_existence(
+                should_exist=True, timeout=300, resource_name=resource_name
+            ), log.error(
+                f"Networkpolicy does not exist for {namespace_to_create_storage_client} namespace"
+            )
+
+        else:
+            log.info(
+                f"Networkpolicy already exists for {namespace_to_create_storage_client} namespace"
+            )
+
+    def create_native_storage_client(
+        self,
+        namespace_to_create_storage_client=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
+    ):
+        """
+        This method creates native storage client
+
+        Args:
+            namespace_to_create_storage_client(str): namespace where the storageclient will be created
+
+        """
+        # Fetch storage provider endpoint details
+        storage_provider_endpoint = self.fetch_provider_endpoint()
+
+        # Create Network Policy
+        self.create_network_policy(
+            namespace_to_create_storage_client=namespace_to_create_storage_client
+        )
+
+        # Generate onboarding token from UI
+        validation_ui_obj = ValidationUI()
+        storage_client_obj = validation_ui_obj.verify_storage_clients_page()
+        onboarding_token = storage_client_obj.generate_client_onboarding_ticket()
+
+        # Create ODF subscription for storage-client
+        self.odf_installation_on_client()
+        self.create_storage_client(
+            storage_provider_endpoint=storage_provider_endpoint,
+            onboarding_token=onboarding_token,
+        )
+
+        if self.ocs_version < 4.16:
+            self.create_storageclaim(
+                storageclaim_name="ocs-storagecluster-ceph-rbd",
+                type="blockpool",
+                storage_client_name="ocs-storagecluster",
+                namespace_of_storageclient=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
+            )
+            self.create_storageclaim(
+                storageclaim_name="ocs-storagecluster-cephfs",
+                type="sharedfilesystem",
+                storage_client_name="ocs-storagecluster",
+                namespace_of_storageclient=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
+            )
+
+    def verify_native_storageclient(self):
+        """
+        This method verifies that native client is created successfully,
+        in 'Connected' status.
+        storageclaims, associated storageclasses and storagerequests are created successfully.
+
+        """
+        if self.ocs_version >= 4.16:
+            namespace = config.ENV_DATA["cluster_namespace"]
+        else:
+            namespace = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+
+        storageclient_obj = ocp.OCP(
+            kind=constants.STORAGECLIENT,
+            namespace=namespace,
+        )
+        # Verify storageclient is in Connected status
+        assert self.verify_storageclient_status(namespace=namespace)
+
+        # Validate storageclaims are Ready and associated storageclasses are created
+        storageclient = storageclient_obj.get()["items"][0]
+        storageclient_name = storageclient["metadata"]["name"]
+        verify_storageclient_storageclass_claims(storageclient_name)
+
+        # Validate storagerequests are created successfully
+        self.verify_storagerequest_exists(
+            storageclient_name=storageclient_name, namespace=namespace
+        )
