@@ -86,6 +86,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace, discovered_apps=True
         )
+        logger.info("Running Relocate Steps")
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
@@ -93,7 +94,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
             namespace=rdr_workload.workload_namespace,
-            workload_placement_name=rdr_workload.appset_placement_name,
+            workload_placement_name=rdr_workload.discovered_apps_placement_name,
             discovered_apps=True,
             old_primary=primary_cluster_name_after_failover,
         )
