@@ -206,11 +206,8 @@ def failover(
     logger.info(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
-    relocate_condition = constants.STATUS_FAILEDOVER
-    if discovered_apps:
-        relocate_condition = constants.STATUS_RELOCATING
-    drpc_obj.wait_for_phase(relocate_condition)
 
+    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER)
     config.switch_ctx(restore_index)
 
 
@@ -265,7 +262,10 @@ def relocate(
     logger.info(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_RELOCATED} phase"
     )
-    drpc_obj.wait_for_phase(constants.STATUS_RELOCATED)
+    relocate_condition = constants.STATUS_RELOCATED
+    if discovered_apps:
+        relocate_condition = constants.STATUS_RELOCATING
+    drpc_obj.wait_for_phase(relocate_condition)
     config.switch_ctx(restore_index)
 
 
