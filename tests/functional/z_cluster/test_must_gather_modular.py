@@ -32,7 +32,7 @@ class TestMustGather(ManageTest):
             pytest.param(
                 *[True, True, False, True, False, False],
                 marks=[
-                    pytest.mark.polarion_id("OCS-XXX"),
+                    pytest.mark.polarion_id("OCS-5797"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
@@ -41,7 +41,7 @@ class TestMustGather(ManageTest):
             pytest.param(
                 *[True, True, True, False, True, False],
                 marks=[
-                    pytest.mark.polarion_id("OCS-XXX"),
+                    pytest.mark.polarion_id("OCS-5797"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
