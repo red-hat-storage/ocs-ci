@@ -145,7 +145,7 @@ class StorageClients:
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
 
     @retry(AssertionError, 12, 10, 1)
-    def verify_storageclient(
+    def verify_storageclient_status(
         self,
         storageclient_name,
         namespace=config.ENV_DATA["cluster_namespace"],
@@ -153,14 +153,14 @@ class StorageClients:
     ):
         """
         Args:
-        storageclient_name (str): Name of the storageclient to be verified.
-        namespace (str): Namespace where the storageclient is present.
-            Default value will be taken from ENV_DATA["cluster_namespace"]
-        expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
+            storageclient_name (str): Name of the storageclient to be verified.
+            namespace (str): Namespace where the storageclient is present.
+                Default value will be taken from ENV_DATA["cluster_namespace"]
+            expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
 
         Returns:
-        storagerequest_phase (bool): returns true if the
-                storagerequest_phase == expected_storageclient_status
+            storagerequest_phase (bool): returns true if the
+                    storagerequest_phase == expected_storageclient_status
 
         """
 
