@@ -5676,7 +5676,9 @@ def nsfs_interface_fixture(request, service_account_factory):
         volumes["persistentVolumeClaim"]["claimName"] = pvc_name
 
         # Set a privileged service account for the NSFS deployment
-        sa_acc = service_account_factory()
+        sa_acc = service_account_factory(
+            project=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
         add_scc_policy(sa_acc)
         nsfs_deployment_data["spec"]["template"]["spec"][
             "serviceAccountName"
