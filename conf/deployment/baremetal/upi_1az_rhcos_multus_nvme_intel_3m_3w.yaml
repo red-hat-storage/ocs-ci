@@ -13,11 +13,6 @@ ENV_DATA:
   is_multus_enabled: true
   multus_public_net_interface: 'enp1s0f1'
   multus_cluster_net_interface: 'enp1s0f1'
-  worker_node_network_configuration: [
-    ["ceph-public-net-shim-argo005","argo005.ceph.redhat.com","192.168.252.1","24","192.168.20.0/24"],
-    ["ceph-public-net-shim-argo006","argo006.ceph.redhat.com","192.168.252.2","24","192.168.20.0/24"],
-    ["ceph-public-net-shim-argo007","argo007.ceph.redhat.com","192.168.252.3","24","192.168.20.0/24"],
-  ]
 REPORTING:
   polarion:
     deployment_id: 'OCS-2510'

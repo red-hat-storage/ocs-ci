@@ -1018,28 +1018,35 @@ class Deployment(object):
             nmstate_obj = NMStateInstaller()
             nmstate_obj.running_nmstate()
             logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
-            network_workers = config.ENV_DATA["worker_node_network_configuration"]
-            for worker_network_configuration in network_workers:
+            worker_node_names = get_worker_nodes()
+            for worker_node_name in worker_node_names:
+                worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+                    worker_node_name
+                ]
                 node_network_configuration_policy = templating.load_yaml(
                     constants.NODE_NETWORK_CONFIGURATION_POLICY
                 )
                 node_network_configuration_policy["spec"]["nodeSelector"][
                     "kubernetes.io/hostname"
-                ] = worker_network_configuration[1]
-                node_network_configuration_policy["metadata"][
-                    "name"
-                ] = worker_network_configuration[0]
+                ] = worker_network_configuration[
+                    "node_network_configuration_policy_name"
+                ]
+                node_network_configuration_policy["metadata"]["name"] = worker_node_name
                 node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
                     0
-                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[2]
+                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
+                    "node_network_configuration_policy_ip"
+                ]
                 node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
                     0
                 ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
-                    3
+                    "node_network_configuration_policy_prefix_length"
                 ]
                 node_network_configuration_policy["spec"]["desiredState"]["routes"][
                     "config"
-                ][0]["destination"] = worker_network_configuration[4]
+                ][0]["destination"] = worker_network_configuration[
+                    "node_network_configuration_policy_destination_route"
+                ]
                 public_net_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="multus_public", delete=False
                 )
