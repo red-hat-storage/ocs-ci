@@ -8,11 +8,16 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import (
+    check_selinux_relabeling,
+    modify_deploymentconfig_replica_count,
+)
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.exceptions import PodNotCreated, CommandFailed
 from ocs_ci.ocs.resources import pod as res_pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.framework.pytest_customization.marks import (
@@ -26,6 +31,7 @@ log = logging.getLogger(__name__)
 
 
 @magenta_squad
+@tier1
 class TestSelinuxrelabel(E2ETest):
     def create_deploymentconfig_pod(self, **kwargs):
         """
@@ -189,13 +195,36 @@ class TestSelinuxrelabel(E2ETest):
 
         return None
 
+    def get_random_files(self, pod_obj):
+        """
+        Get random files list.
+
+        Args:
+            pod_obj (Pod object): App pod
+
+        Returns:
+            list : list of random files
+
+        """
+        # Get random files
+        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
+        num_of_files = random.randint(3, 9)
+        ocp_obj = ocp.OCP(kind=config.ENV_DATA["cluster_namespace"])
+        random_files = ocp_obj.exec_oc_cmd(
+            f'exec -n {config.ENV_DATA["cluster_namespace"]} -it {pod_obj.name} -- /bin/bash'
+            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
+            timeout=300,
+        )
+        random_files = random_files.split()
+        log.info(f"files are {random_files}")
+        return random_files
+
     def teardown(self):
         """
         Cleanup the test environment
         """
         res_pod.delete_deploymentconfig_pods(self.pod_obj)
 
-    @tier1
     @bugzilla("1988284")
     @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
@@ -242,21 +271,12 @@ class TestSelinuxrelabel(E2ETest):
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
         # Leave pod for some time to run since file creation time is longer
-        waiting_time = 120
+        waiting_time = 200
         log.info(f"Waiting for {waiting_time} seconds")
-        time.sleep(120)
+        time.sleep(waiting_time)
 
         # Get the md5sum of some random files
-        data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
-        num_of_files = random.randint(3, 9)
-        pod = ocp.OCP(kind="pod", namespace=config.ENV_DATA["cluster_namespace"])
-        random_files = pod.exec_oc_cmd(
-            f"exec -it {self.pod_obj.name} -- /bin/bash"
-            f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
-            timeout=300,
-        )
-        random_files = random_files.split()
-        log.info(f"files are {random_files}")
+        random_files = self.get_random_files(self.pod_obj)
         initial_md5sum = []
         for file_path in random_files:
             md5sum = res_pod.cal_md5sum(
@@ -284,24 +304,30 @@ class TestSelinuxrelabel(E2ETest):
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
 
         # Delete pod so that fix will be applied for new pod
-        self.pod_obj = self.get_app_pod_obj()
+        assert modify_deploymentconfig_replica_count(
+            deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=0
+        ), "Failed to scale down deploymentconfig to 0"
         self.pod_obj.delete(wait=True)
-        self.pod_obj = self.get_app_pod_obj()
-        assert wait_for_pods_to_be_running(
-            pod_names=[self.pod_obj.name], timeout=600, sleep=15
-        ), f"Pod {self.pod_obj.name} didn't reach to running state"
 
-        # Get the node of cephfs pod
+        assert modify_deploymentconfig_replica_count(
+            deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=1
+        ), "Failed to scale down deploymentconfig to 1"
+
         self.pod_obj = self.get_app_pod_obj()
-        node_name = res_pod.get_pod_node(pod_obj=self.pod_obj).name
+        ocp.OCP(
+            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        ).wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=self.pod_obj.name,
+            resource_count=1,
+            timeout=600,
+            sleep=5,
+        )
 
         # Check SeLinux Relabeling is set to false
-        oc_cmd = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
-        cmd1 = "crictl inspect $(crictl ps --name perf -q)"
-        output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[cmd1])
-        key = '"selinuxRelabel": false'
-        assert key in output, f"{key} is not present in inspect logs"
-        log.info(f"{key} is present in inspect logs of application pod running node")
+        retry(AssertionError, tries=5, delay=10,)(
+            check_selinux_relabeling
+        )(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
 
         # Restart pod after applying fix
