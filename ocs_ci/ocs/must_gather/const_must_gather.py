@@ -12,6 +12,7 @@ OCS4.5 Link:
 https://github.com/openshift/ocs-operator/blob/de48c9c00f8964f0f8813d7b3ddd25f7bc318449/must-gather/collection-scripts/
 
 """
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
@@ -1009,4 +1010,3 @@ NOOBAA_ONLY = [
     "/noobaa/logs/openshift-storage",
 ]
 DR_ONLY = ["/namespaces/openshift-dr-system/"]
-PROVIDER_ONLY = [""]

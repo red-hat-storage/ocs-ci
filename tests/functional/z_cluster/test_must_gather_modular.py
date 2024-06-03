@@ -8,8 +8,6 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
-    hci_provider_and_client_required,
-    turquoise_squad,
 )
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather import const_must_gather
@@ -29,11 +27,10 @@ class TestMustGather(ManageTest):
             "clusterscoped",
             "noobaa",
             "dr",
-            "provider",
         ],
         argvalues=[
             pytest.param(
-                *[True, True, False, True, False, False, False],
+                *[True, True, False, True, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-XXX"),
                     skipif_external_mode,
@@ -42,32 +39,18 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[True, True, True, True, False, False, False],
+                *[True, True, True, False, True, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-XXX"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                ],
-            ),
-            pytest.param(
-                *[False, False, False, False, False, False, True],
-                marks=[
-                    pytest.mark.polarion_id("OCS-XXX"),
-                    hci_provider_and_client_required,
-                ],
-            ),
-            pytest.param(
-                *[False, False, False, False, False, True, False],
-                marks=[
-                    pytest.mark.polarion_id("OCS-XXX"),
-                    turquoise_squad,
                 ],
             ),
         ],
     )
     def test_must_gather_modular(
-        self, ceph, ceph_logs, namespaced, clusterscoped, noobaa, dr, provider
+        self, ceph, ceph_logs, namespaced, clusterscoped, noobaa, dr
     ):
         """
         Tests OCS must gather with flags
@@ -92,7 +75,6 @@ class TestMustGather(ManageTest):
             (clusterscoped, const_must_gather.CLUSTERSCOPED_ONLY, "-cs "),
             (noobaa, const_must_gather.NOOBAA_ONLY, "-n "),
             (dr, const_must_gather.DR_ONLY, "-d "),
-            (provider, const_must_gather.PROVIDER_ONLY, "-p "),
         ]
 
         for flag, paths, param_value in options:
