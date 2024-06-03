@@ -1,10 +1,8 @@
 import os
-import time
 import logging
 
 import boto3
 import pytest
-
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
@@ -18,6 +16,8 @@ from ocs_ci.helpers.e2e_helpers import (
     validate_mcg_nsfs_feature,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
@@ -27,8 +27,8 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     wait_for_cache,
     write_random_test_objects_to_bucket,
-    s3_list_objects_v1,
     retrieve_verification_mode,
+    s3_list_objects_v2,
 )
 
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
@@ -141,17 +141,22 @@ def noobaa_db_backup_and_recovery_locally(
             kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
         )
         secrets = [
-            "noobaa-root-master-key",
             "noobaa-admin",
             "noobaa-operator",
             "noobaa-db",
             "noobaa-server",
             "noobaa-endpoints",
         ]
-        if is_kms_enabled():
-            secrets = [
-                secret for secret in secrets if secret != "noobaa-root-master-key"
-            ]
+        if (
+            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14
+            and not is_kms_enabled()
+        ):
+            secrets.extend(
+                ["noobaa-root-master-key-backend", "noobaa-root-master-key-volume"]
+            )
+        elif not is_kms_enabled():
+            secrets.append("noobaa-root-master-key")
+
         secrets_yaml = [
             ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
         ]
@@ -245,15 +250,27 @@ def noobaa_db_backup_and_recovery_locally(
         logger.info("Restarted noobaa-db pod!")
 
         # Make sure the testloss bucket doesn't exists and test bucket consists all the data
-        time.sleep(10)
-        try:
-            s3_list_objects_v1(s3_obj=mcg_obj_session, bucketname=testloss_bucket.name)
-        except Exception as e:
-            logger.info(e)
+        @retry(Exception, tries=10, delay=5)
+        def check_for_buckets_content(bucket):
+            try:
+                response = s3_list_objects_v2(
+                    s3_obj=mcg_obj_session, bucketname=bucket.name
+                )
+                logger.info(response)
+                return response
+            except Exception as err:
+                if "The specified bucket does not exist" in err.args[0]:
+                    return err.args[0]
+                else:
+                    raise
 
-        logger.info(
-            s3_list_objects_v1(s3_obj=mcg_obj_session, bucketname=test_bucket.name)
-        )
+        assert "The specified bucket does not exist" in check_for_buckets_content(
+            testloss_bucket
+        ), "Test loss bucket exists even though it shouldn't be present in the recovered db"
+
+        assert (
+            check_for_buckets_content(test_bucket)["KeyCount"] == 1
+        ), "test bucket doesnt consists of data post db recovery"
 
     def finalizer():
 
