@@ -30,7 +30,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
-from ocs_ci.ocs.resources.storage_client import StorageClients
+from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
@@ -104,7 +104,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         ]
         self.ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
         self.deployment = Deployment()
-        self.storage_clients = StorageClients()
+        self.storage_clients = StorageClient()
 
     def provider_and_native_client_installation(
         self,

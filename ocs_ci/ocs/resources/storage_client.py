@@ -13,7 +13,7 @@ from ocs_ci.utility.retry import retry
 log = logging.getLogger(__name__)
 
 
-class StorageClients:
+class StorageClient:
     """
     This class contains the functions for Storage Client page
 
