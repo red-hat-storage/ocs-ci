@@ -1,10 +1,8 @@
 ---
 apiVersion: ocs.openshift.io/v1alpha1
-kind: StorageClassClaim
+kind: StorageClaim
 metadata:
   name: PLACEHOLDER
 spec:
-  storageClient:
-    name: PLACEHOLDER
-    namespace: PLACEHOLDER
+  storageClient: PLACEHOLDER
   type: PLACEHOLDER

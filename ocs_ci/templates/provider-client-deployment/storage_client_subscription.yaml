@@ -19,7 +19,7 @@ metadata:
     name: ocs-client-operator
     namespace: openshift-storage-client
 spec:
-    channel: stable-4.15
+    channel: PLACEHOLDER
     installPlanApproval: Automatic
     name: ocs-client-operator
     source: redhat-operators

@@ -30,7 +30,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
-from ocs_ci.ocs.resources.storage_client import create_storage_client
+from ocs_ci.ocs.resources.storage_client import StorageClients
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
@@ -104,6 +104,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         ]
         self.ocs_client_operator = defaults.OCS_CLIENT_OPERATOR_NAME
         self.deployment = Deployment()
+        self.storage_clients = StorageClients()
 
     def provider_and_native_client_installation(
         self,
@@ -286,14 +287,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             self.odf_installation_on_client()
 
             # Fetch storage provider endpoint details
-            storage_provider_endpoint = self.ocp_obj.exec_oc_cmd(
-                (
-                    f"get storageclusters.ocs.openshift.io -n {config.ENV_DATA['cluster_namespace']}"
-                    + " -o jsonpath={'.items[*].status.storageProviderEndpoint'}"
-                ),
-                out_yaml_format=False,
-            )
-            log.info(f"storage provider endpoint is: {storage_provider_endpoint}")
+            storage_provider_endpoint = self.storage_clients.fetch_provider_endpoint()
 
             # Create Network Policy
             self.create_network_policy(
@@ -302,7 +296,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             onboarding_token = self.onboarding_token_generation_from_ui()
 
             # Create native storage client
-            create_storage_client(
+            self.storage_clients.create_storage_client(
                 storage_provider_endpoint=storage_provider_endpoint,
                 onboarding_token=onboarding_token,
             )
@@ -394,6 +388,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         catalog_yaml=False,
         enable_console=False,
         subscription_yaml=constants.STORAGE_CLIENT_SUBSCRIPTION_YAML,
+        channel_to_client_subscription=config.ENV_DATA.get(
+            "channel_to_client_subscription"
+        ),
+        client_subcription_image=config.DEPLOYMENT.get("ocs_registry_image", ""),
     ):
         """
         This method creates odf subscription on clients
@@ -407,6 +405,11 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         subscription_yaml: subscription yaml which needs to be created.
         default value, constants.STORAGE_CLIENT_SUBSCRIPTION_YAML
 
+        channel(str): ENV_DATA:
+            channel_to_client_subscription: "4.16"
+
+        client_subcription_image(str): image details for client subscription
+
         """
         # Check namespace for storage-client is available or not
         is_available = self.ns_obj.is_exist(
@@ -416,10 +419,15 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             if catalog_yaml:
                 # Note: Need to parameterize the image in future
                 catalog_data = templating.load_yaml(constants.OCS_CATALOGSOURCE_YAML)
-                templating.dump_data_to_temp_yaml(
-                    catalog_data, constants.OCS_CATALOGSOURCE_YAML
+                log.info(
+                    f"Updating image details for client subscription: {client_subcription_image}"
                 )
-                self.ocp_obj.exec_oc_cmd(f"apply -f {constants.OCS_CATALOGSOURCE_YAML}")
+                catalog_data["spec"]["image"] = client_subcription_image
+                catalog_data_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="catalog_data", delete=False
+                )
+                templating.dump_data_to_temp_yaml(catalog_data, catalog_data_yaml.name)
+                self.ocp_obj.exec_oc_cmd(f"apply -f {catalog_data_yaml.name}")
 
                 catalog_source = CatalogSource(
                     resource_name=constants.OCS_CATALOG_SOURCE_NAME,
@@ -430,10 +438,16 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
             # Create ODF subscription for storage-client
             client_subscription_data = templating.load_yaml(subscription_yaml)
-            templating.dump_data_to_temp_yaml(
-                client_subscription_data, subscription_yaml
+
+            log.info(f"Updating channel details: {channel_to_client_subscription}")
+            client_subscription_data["spec"]["channel"] = channel_to_client_subscription
+            client_subscription_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="client_subscription", delete=False
             )
-            self.ocp_obj.exec_oc_cmd(f"apply -f {subscription_yaml}")
+            templating.dump_data_to_temp_yaml(
+                client_subscription_data, client_subscription_data_yaml.name
+            )
+            self.ocp_obj.exec_oc_cmd(f"apply -f {client_subscription_data_yaml.name}")
             self.deployment.wait_for_subscription(
                 self.ocs_client_operator, constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
             )
@@ -508,34 +522,3 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             log.info(
                 f"Networkpolicy already exists for {namespace_to_create_storage_client} namespace"
             )
-
-    def onboarding_token_generation_from_ui(
-        self,
-    ):
-        """
-        This method generates onboarding token from UI
-
-        Steps:
-        1:- Check private and public keys are available
-        2:- Check Storage-Clients pages available
-
-        Returns:
-        onboarding_token(str): client onboarding token
-
-        """
-        secret_ocp_obj = ocp.OCP(
-            kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        for secret_name in {
-            constants.ONBOARDING_PRIVATE_KEY,
-            constants.MANAGED_ONBOARDING_SECRET,
-        }:
-            assert secret_ocp_obj.is_exist(
-                resource_name=secret_name,
-            ), f"{secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
-
-        # verify storage-client page is available
-        onboarding_token = (
-            self.validation_ui_obj.verify_onboarding_token_generation_from_ui()
-        )
-        return onboarding_token

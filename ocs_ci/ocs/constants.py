@@ -919,6 +919,9 @@ STORAGE_PROFILE_YAML = os.path.join(
 STORAGE_CLASS_CLAIM_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_class_claims.yaml"
 )
+STORAGE_CLASS_CLAIM_UPDATED_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_class_claims_updated.yaml"
+)
 PROVIDER_SUBSCRIPTION_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "provider_subscription.yaml"
 )

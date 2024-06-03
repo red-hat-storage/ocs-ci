@@ -8,7 +8,7 @@ metadata:
     ocs-operator-internal: "true"
 spec:
   displayName: Openshift Container Storage
-  image: quay.io/rhceph-dev/ocs-registry:4.15-latest
+  image: PLACEHOLDER
   publisher: Red Hat
   sourceType: grpc
   priority: 100
