@@ -88,6 +88,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     setup_ceph_debug,
     get_osd_count,
     StorageCluster,
+    validate_serviceexport,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -421,6 +422,7 @@ class Deployment(object):
                             .get("multiClusterService")
                             .get("enabled")
                         ), "Failed to update StorageCluster globalnet"
+                        validate_serviceexport()
                         ocs_install_verification(
                             timeout=2000, ocs_registry_image=ocs_registry_image
                         )
