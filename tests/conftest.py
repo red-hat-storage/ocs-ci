@@ -5681,7 +5681,7 @@ def nsfs_interface_fixture(request, service_account_factory):
             namespace=ocsci_config.ENV_DATA["cluster_namespace"],
         )
         sa_acc = service_account_factory(project=proj_obj)
-        add_scc_policy(sa_acc)
+        add_scc_policy(sa_acc, namespace=ocsci_config.ENV_DATA["cluster_namespace"])
         nsfs_deployment_data["spec"]["template"]["spec"][
             "serviceAccountName"
         ] = sa_acc.name
