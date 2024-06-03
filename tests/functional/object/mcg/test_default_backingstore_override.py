@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     mcg,
     skipif_disconnected_cluster,
+    skipif_proxy_cluster,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @ignore_leftovers  # needed for the upgrade TCs
 @skipif_disconnected_cluster
+@skipif_proxy_cluster
 class TestDefaultBackingstoreOverride(MCGTest):
     """
     Test overriding the default noobaa backingstore
