@@ -1028,10 +1028,12 @@ class Deployment(object):
                 )
                 node_network_configuration_policy["spec"]["nodeSelector"][
                     "kubernetes.io/hostname"
+                ] = worker_node_name
+                node_network_configuration_policy["metadata"][
+                    "name"
                 ] = worker_network_configuration[
                     "node_network_configuration_policy_name"
                 ]
-                node_network_configuration_policy["metadata"]["name"] = worker_node_name
                 node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
                     0
                 ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
