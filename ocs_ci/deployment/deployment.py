@@ -636,8 +636,8 @@ class Deployment(object):
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_gitops_deploy()
-        self.do_deploy_ocs()
         self.do_deploy_oadp()
+        self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         if config.DEPLOYMENT.get("cnv_deployment"):
@@ -3062,8 +3062,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             rbddops = RBDDRDeployOps()
             self.configure_mirror_peer()
             rbddops.deploy()
-        self.deploy_dr_policy()
         self.enable_acm_observability()
+        self.deploy_dr_policy()
 
     def build_bucket_name(self, acm_indexes: list):
         """
