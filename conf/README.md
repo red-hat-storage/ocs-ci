@@ -401,6 +401,15 @@ Configuration specific to ui testing with selenium
 * `screenshot` - A Screenshot in Selenium Webdriver is used for bug analysis.
 * `ignore_ssl` - Ignore the ssl certificate
 
+#### MULTUS
+
+Configuration multus
+
+* `node_network_configuration_policy_name` - The NodeNetworkConfigurationPolicy CR name
+* `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
+* `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
+* `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
+
 #### COMPONENTS
 
 Configurations specific to disable/enable OCS components
