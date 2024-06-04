@@ -133,7 +133,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         self.ocp_obj.exec_oc_cmd(command=patch_cmd)
 
         # Enable nested virtualization on nodes
-        machine_config_data = templating.load_yaml(constants.MACHINE_CONFIG_YAML)
+        machine_config_data = templating.load_yaml(
+            constants.MACHINE_CONFIG_YAML, multi_document=True
+        )
         templating.dump_data_to_temp_yaml(
             machine_config_data, constants.MACHINE_CONFIG_YAML
         )

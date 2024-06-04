@@ -89,7 +89,9 @@ class StorageClient:
                 catalog_source.wait_for_state("READY")
 
             # Create ODF subscription for storage-client
-            client_subscription_data = templating.load_yaml(subscription_yaml)
+            client_subscription_data = templating.load_yaml(
+                subscription_yaml, multi_document=True
+            )
 
             log.info(f"Updating channel details: {channel_to_client_subscription}")
             client_subscription_data["spec"]["channel"] = channel_to_client_subscription
