@@ -211,10 +211,10 @@ class MultiClusterOrchestratorUpgrade(DRUpgrade):
         super().__init__(resource_name=defaults.MCO_OPERATOR_NAME)
         self.operator_name = defaults.MCO_OPERATOR_NAME
         self.subscription_name = constants.MCO_SUBSCRIPTION
+        self.pod_name_pattern = "odfmo-controller-manager"
 
     def run_upgrade(self):
         # Collect some pre-upgrade data for comparision after the upgrade
-        self.pod_name_pattern = "odfmo-controller-manager"
         self.collect_data()
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
@@ -242,9 +242,9 @@ class DRHubUpgrade(DRUpgrade):
         self.subscription_name = constants.DR_HUB_OPERATOR_SUBSCRIPTION.replace(
             "PLACEHOLDER", config.ENV_DATA["ocs_version"]
         )
+        self.pod_name_pattern = "ramen-hub-operator"
 
     def run_upgrade(self):
-        self.pod_name_pattern = "ramen-hub-operator"
         self.collect_data()
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
@@ -275,9 +275,9 @@ class DRClusterOperatorUpgrade(DRUpgrade):
         self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION.replace(
             "PLACEHOLDER", config.ENV_DATA["ocs_version"]
         )
+        self.pod_name_pattern = "ramen-dr-cluster-operator"
 
     def run_upgrade(self):
-        self.pod_name_pattern = "ramen-dr-cluster-operator"
         self.collect_data()
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
