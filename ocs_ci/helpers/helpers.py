@@ -4790,7 +4790,7 @@ def odf_cli_set_recover_profile(recovery_profile):
     Set the recovery profile for a Ceph service.
 
     Args:
-        recovery_profile (str): The recovery profile name (balanced or high_client_ops or high_recovery_ops)
+        recovery_profile (str): The recovery profile name (balanced or high_client_ops or high_recovery_ops )
     """
     from pathlib import Path
 
