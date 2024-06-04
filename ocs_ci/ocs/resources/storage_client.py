@@ -166,9 +166,7 @@ class StorageClient:
             log.info("Creating storageclient CR")
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_client_data_yaml.name}")
 
-    def fetch_storage_client_status(
-        self, namespace=config.ENV_DATA["cluster_namespace"], storageclient_name=None
-    ):
+    def fetch_storage_client_status(self, namespace=None, storageclient_name=None):
         """
         Fetch storageclient status
 
@@ -180,9 +178,12 @@ class StorageClient:
             storageclient_status(str): storageclient phase
 
         """
+        if not namespace:
+            namespace = config.ENV_DATA["cluster_namespace"]
+
         cmd = (
-            f"oc get storageclient {storageclient_name} -n {namespace} "
-            "-o=jsonpath='{.items[*].status.phase}'"
+            f"get storageclient {storageclient_name} -n {namespace} "
+            "-o=jsonpath='{.status.phase}'"
         )
         storageclient_status = self.ocp_obj.exec_oc_cmd(
             command=cmd, out_yaml_format=False
@@ -300,7 +301,7 @@ class StorageClient:
             storagerequest_exists (bool): returns true if the storagerequest exists
 
         """
-        cmd = f"oc get storagerequests -n {namespace} " "-o=jsonpath='{.items[*]}'"
+        cmd = f"get storagerequests -n {namespace} " "-o=jsonpath='{.items[*]}'"
         storage_requests = self.ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=True)
 
         log.info(f"The list of storagerequests: {storage_requests}")
@@ -315,7 +316,7 @@ class StorageClient:
     def verify_storageclient_status(
         self,
         storageclient_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
+        namespace=None,
         expected_storageclient_status="Connected",
     ):
         """
@@ -330,10 +331,12 @@ class StorageClient:
                     storagerequest_phase == expected_storageclient_status
 
         """
+        if not namespace:
+            namespace = config.ENV_DATA["cluster_namespace"]
 
         # Check storage client is in 'Connected' status
         storage_client_status = self.fetch_storage_client_status(
-            storageclient_name, namespace=namespace
+            storageclient_name=storageclient_name, namespace=namespace
         )
         assert (
             storage_client_status == expected_storageclient_status
@@ -430,7 +433,7 @@ class StorageClient:
             onboarding_token=onboarding_token,
         )
 
-        if self.ocs_version < 4.16:
+        if self.ocs_version < version.VERSION_4_16:
             self.create_storageclaim(
                 storageclaim_name="ocs-storagecluster-ceph-rbd",
                 type="blockpool",
@@ -451,7 +454,7 @@ class StorageClient:
         storageclaims, associated storageclasses and storagerequests are created successfully.
 
         """
-        if self.ocs_version >= 4.16:
+        if self.ocs_version >= version.VERSION_4_16:
             namespace = config.ENV_DATA["cluster_namespace"]
         else:
             namespace = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
@@ -460,12 +463,15 @@ class StorageClient:
             kind=constants.STORAGECLIENT,
             namespace=namespace,
         )
-        # Verify storageclient is in Connected status
-        assert self.verify_storageclient_status(namespace=namespace)
-
-        # Validate storageclaims are Ready and associated storageclasses are created
         storageclient = storageclient_obj.get()["items"][0]
         storageclient_name = storageclient["metadata"]["name"]
+
+        # Verify storageclient is in Connected status
+        self.verify_storageclient_status(
+            storageclient_name=storageclient_name, namespace=namespace
+        )
+
+        # Validate storageclaims are Ready and associated storageclasses are created
         verify_storageclient_storageclass_claims(storageclient_name)
 
         # Validate storagerequests are created successfully

@@ -299,15 +299,17 @@ def get_storageclassclaims_of_storageclient(storageclient_name):
          List: OCS objects of kind Storageclassclaim
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     sc_claims = get_all_storageclassclaims()
-    return [
-        sc_claim
-        for sc_claim in sc_claims
-        if sc_claim.data["spec"]["storageClient"]["name"] == storageclient_name
-    ]
+    for sc_claim in sc_claims:
+        if ocs_version >= version.VERSION_4_16:
+            sc_claim.data["spec"]["storageClient"] == storageclient_name
+        else:
+            sc_claim.data["spec"]["storageClient"]["name"] == storageclient_name
+    return sc_claim
 
 
-def get_all_storageclassclaims():
+def get_all_storageclassclaims(namespace=None):
     """
     Get all storageclassclaims
 
@@ -315,16 +317,14 @@ def get_all_storageclassclaims():
          List: OCS objects of kind Storageclassclaim
 
     """
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_16:
-        sc_claim_obj = OCP(
-            kind=constants.STORAGECLAIM, namespace=config.ENV_DATA["cluster_namespace"]
-        )
+        sc_claim_obj = OCP(kind=constants.STORAGECLAIM, namespace=namespace)
     else:
-        sc_claim_obj = OCP(
-            kind=constants.STORAGECLASSCLAIM,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
+        sc_claim_obj = OCP(kind=constants.STORAGECLASSCLAIM, namespace=namespace)
     sc_claims_data = sc_claim_obj.get()["items"]
     return [OCS(**claim_data) for claim_data in sc_claims_data]
 
@@ -338,6 +338,7 @@ def verify_storageclient_storageclass_claims(storageclient):
 
     """
     sc_claim_objs = get_storageclassclaims_of_storageclient(storageclient)
+    log.info(f"storageclaims: {sc_claim_objs}")
 
     # Wait for the storageclassclaims to be in Ready state
     for sc_claim in sc_claim_objs:
