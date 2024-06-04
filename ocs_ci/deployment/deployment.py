@@ -3500,7 +3500,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         if self.check_observability_status():
             logger.info("ACM observability is successfully enabled")
         else:
-            logger.error("ACM observability is not enabled")
+            logger.error("ACM observability could not be enabled")
 
     def enable_acm_observability(self):
         """
