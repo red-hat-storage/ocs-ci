@@ -53,21 +53,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
     def initial_function(self):
         log.info("initial_function called during initialization.")
         login_ui()
-
-    @pytest.hookimpl(trylast=True)
-    def cleanup_function(self):
-        log.info("cleanup_function called at exit.")
-        # Remove debug namespace
-        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
-        # Close browser
-        close_browser()
-
-    @pytest.fixture(scope="class", autouse=True)
-    def setup(self):
-        """
-        Setup method for the class
-
-        """
         self.validation_ui_obj = ValidationUI()
         self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
         self.ns_obj.new_project(
@@ -106,6 +91,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
         self.deployment = Deployment()
         self.storage_clients = StorageClient()
+
+    @pytest.hookimpl(trylast=True)
+    def cleanup_function(self):
+        log.info("cleanup_function called at exit.")
+        # Remove debug namespace
+        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
+        # Close browser
+        close_browser()
 
     def provider_and_native_client_installation(
         self,
