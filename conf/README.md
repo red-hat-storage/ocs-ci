@@ -301,6 +301,10 @@ higher priority).
             * `private_gw` - GW for the private interface
             * `root_disk_id` - ID of the root disk
             * `root_disk_sn` - Serial number of the root disk
+            * `node_network_configuration_policy_name` - The NodeNetworkConfigurationPolicy CR name
+            * `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
 * `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
@@ -400,15 +404,6 @@ Configuration specific to ui testing with selenium
 * `headless` - Browser simulation program that does not have a user interface.
 * `screenshot` - A Screenshot in Selenium Webdriver is used for bug analysis.
 * `ignore_ssl` - Ignore the ssl certificate
-
-#### MULTUS
-
-Configuration multus
-
-* `node_network_configuration_policy_name` - The NodeNetworkConfigurationPolicy CR name
-* `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
-* `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
-* `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
 
 #### COMPONENTS
 
