@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
     dr_cluster_operator_upgrade,
     acm_upgrade,
 )
+from ocs_ci.framework import config
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
@@ -26,6 +27,13 @@ from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_z_stream_upgrade
 
 log = logging.getLogger(__name__)
+
+
+operator_map = {
+    "mco": MultiClusterOrchestratorUpgrade,
+    "drhub": DRHubUpgrade,
+    "drcluster": DRClusterOperatorUpgrade,
+}
 
 
 @pytest.fixture()
@@ -86,6 +94,15 @@ def test_upgrade(zone_rank, role_rank, config_index):
     """
 
     run_ocs_upgrade()
+    if config.multicluster and config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
+        # Perform validation for MCO, dr hub operator and dr cluster operator here
+        # in case of z stream because we wouldn't call those tests in the case of
+        # z stream
+        if is_z_stream_upgrade():
+            for operator, op_upgrade_cls in operator_map.items():
+                temp = op_upgrade_cls()
+                log.info(f"Validating upgrade for {operator}")
+                temp.validate_upgrade()
 
 
 @purple_squad
