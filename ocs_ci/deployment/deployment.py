@@ -669,8 +669,8 @@ class Deployment(object):
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_gitops_deploy()
-        self.do_deploy_ocs()
         self.do_deploy_oadp()
+        self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         self.do_deploy_odf_provider_mode()
@@ -3420,8 +3420,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             rbddops = RBDDRDeployOps()
             self.configure_mirror_peer()
             rbddops.deploy()
-        self.deploy_dr_policy()
         self.enable_acm_observability()
+        self.deploy_dr_policy()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
