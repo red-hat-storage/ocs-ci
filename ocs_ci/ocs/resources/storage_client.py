@@ -14,7 +14,7 @@ from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.helpers.managed_services import (
-    verify_storageclient_storageclass_claims,
+    get_all_storageclassclaims,
 )
 
 log = logging.getLogger(__name__)
@@ -286,6 +286,38 @@ class StorageClient:
             )
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_classclaim_data_yaml.name}")
 
+    def verify_storage_claim_status(
+        self,
+        storageclient_name=None,
+        namespace=None,
+        expected_status=constants.STATUS_READY,
+    ):
+        """
+        This method checks that the storageclaims are in expected status for a storageclient
+
+        Args:
+            storageclient_name (str): Name of the storageclient to be verified.
+            namespace (str): Namespace where the storageclient is present.
+            expected_status(str): Expected status of the storageclaim
+
+        """
+        if not namespace:
+            namespace = config.ENV_DATA["cluster_namespace"]
+        sc_claims = get_all_storageclassclaims()
+        log.info(f"storage claims are {sc_claims}")
+        for sc_claim in sc_claims:
+            if self.ocs_version >= version.VERSION_4_16:
+                if sc_claim.data["spec"]["storageClient"] == storageclient_name:
+                    assert (
+                        sc_claim.data["status"]["phase"] == expected_status
+                    ), "storageclaim is not in expected status"
+            else:
+                if sc_claim.data["spec"]["storageClient"]["name"] == storageclient_name:
+                    assert (
+                        sc_claim.data["status"]["phase"] == expected_status
+                    ), "storageclaim is not in expected status"
+        log.info(sc_claim)
+
     def verify_storagerequest_exists(
         self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
     ):
@@ -295,7 +327,6 @@ class StorageClient:
         Args:
             storageclient_name (str): Name of the storageclient to be verified.
             namespace (str): Namespace where the storageclient is present.
-                Default value will be taken from ENV_DATA["cluster_namespace"]
 
         Returns:
             storagerequest_exists (bool): returns true if the storagerequest exists
@@ -472,7 +503,7 @@ class StorageClient:
         )
 
         # Validate storageclaims are Ready and associated storageclasses are created
-        verify_storageclient_storageclass_claims(storageclient_name)
+        self.verify_storage_claim_status(storageclient_name)
 
         # Validate storagerequests are created successfully
         self.verify_storagerequest_exists(
