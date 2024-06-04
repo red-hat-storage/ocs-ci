@@ -286,7 +286,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             create_catalog_source()
 
         log.info("Creating namespace and operator group.")
-        olm_data = templating.load_yaml(constants.OLM_YAML)
+        olm_data = templating.load_yaml(constants.OLM_YAML, multi_document=True)
         templating.dump_data_to_temp_yaml(olm_data, constants.OLM_YAML)
         run_cmd(f"oc create -f {constants.OLM_YAML}")
         self.deployment.subscribe_ocs()
