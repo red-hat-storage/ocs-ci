@@ -39,7 +39,7 @@ class StorageClient:
         self,
         catalog_yaml=False,
         enable_console=False,
-        subscription_yaml=constants.STORAGE_CLIENT_SUBSCRIPTION_YAML,
+        subscription_yaml=constants.NATIVE_STORAGE_CLIENT_YAML,
         channel_to_client_subscription=config.ENV_DATA.get(
             "channel_to_client_subscription"
         ),
@@ -55,7 +55,7 @@ class StorageClient:
         enable_console (bool): If enabled then odf-client-console will be enabled
 
         subscription_yaml: subscription yaml which needs to be created.
-        default value, constants.STORAGE_CLIENT_SUBSCRIPTION_YAML
+        default value, constants.NATIVE_STORAGE_CLIENT_YAML
 
         channel(str): ENV_DATA:
             channel_to_client_subscription: "4.16"
@@ -384,7 +384,9 @@ class StorageClient:
         """
         # Pull network-policy yaml data
         log.info("Pulling NetworkPolicy CR data from yaml")
-        network_policy_data = templating.load_yaml(constants.NETWORK_POLICY_YAML)
+        network_policy_data = templating.load_yaml(
+            constants.NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE
+        )
 
         resource_name = network_policy_data["metadata"]["name"]
 

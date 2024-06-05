@@ -303,6 +303,33 @@ PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
 PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
 )
+
+MACHINE_CONFIG_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH,
+    "machineconfig_to_enable_nested_virtualization.yaml",
+)
+OCS_STORAGE_CLUSTER_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
+)
+OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
+)
+STORAGE_PROFILE_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_profiles.yaml"
+)
+STORAGE_CLASS_CLAIM_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claims.yaml"
+)
+STORAGE_CLASS_CLAIM_UPDATED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claims_updated.yaml"
+)
+STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_client_subscription.yaml"
+)
+NATIVE_STORAGE_CLIENT_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
+)
+
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
 STORAGE_CLIENT_NAME = "storage-client"
@@ -902,41 +929,6 @@ MULTUS_CLUSTER_NET_YAML = os.path.join(
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
-
-# Provider-Client yamls
-MACHINE_CONFIG_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "machineconfig_to_enable_nested_virtualization.yaml"
-)
-OCS_STORAGE_CLUSTER_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "ocs_storagecluster.yaml"
-)
-OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "ocs_storagecluster_updated.yaml"
-)
-STORAGE_PROFILE_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_profiles.yaml"
-)
-STORAGE_CLASS_CLAIM_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_class_claims.yaml"
-)
-STORAGE_CLASS_CLAIM_UPDATED_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_class_claims_updated.yaml"
-)
-PROVIDER_SUBSCRIPTION_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "provider_subscription.yaml"
-)
-STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_client_subscription.yaml"
-)
-NETWORK_POLICY_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "network_policy.yaml"
-)
-STORAGE_CLIENT_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_client.yaml"
-)
-OCS_CATALOGSOURCE_YAML = os.path.join(
-    PROVIDER_CLIENT_DEPLOYMENT_DIR, "ocs-catalogsource.yaml"
-)
 
 
 # Openshift-logging clusterlogging operator deployment yamls
