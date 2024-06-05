@@ -265,7 +265,7 @@ class MustGather(object):
 
         Args:
             paths (list): list of paths in mg directory
-                for example /ceph_logs/journal_ exist in /mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log
+                for example ``/ceph_logs/journal_`` exist in ``/mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log``
 
         Returns:
             list: the paths do not exist in mg dir
@@ -287,7 +287,7 @@ class MustGather(object):
 
         Args:
             paths (list): list of paths in mg directory
-              for example /ceph_logs/journal_ exist in /mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log
+              for example ``/ceph_logs/journal_`` exist in ``/mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log``
 
         Returns:
             list: the paths exist in mg dir
