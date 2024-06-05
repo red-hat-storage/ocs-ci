@@ -2604,6 +2604,7 @@ class RBDDRDeployOps(object):
     def deploy(self):
         self.configure_rbd()
 
+    @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
         st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
         query_mirroring = (
