@@ -32,6 +32,7 @@ TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
 TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
+TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -887,11 +888,30 @@ QE_APP_REGISTRY_SOURCE = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "qe-app-registry-catalog-source.yaml"
 )
 
+# NMState deployment
+NMSTATE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "namespace.yaml")
+NMSTATE_OPERATORGROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "operatorgroup.yaml"
+)
+NMSTATE_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "subscription.yaml"
+)
+NMSTATE_INSTANCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "nmstate_instance.yaml"
+)
+NMSTATE_NAMESPACE = "openshift-nmstate"
+NMSTATE_CSV_NAME = "kubernetes-nmstate-operator"
+
 # Multus Networks
 MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-net.yaml")
 MULTUS_CLUSTER_NET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net.yaml"
 )
+NODE_NETWORK_CONFIGURATION_POLICY = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy.yaml"
+)
+NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
+
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
