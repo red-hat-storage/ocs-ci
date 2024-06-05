@@ -12,6 +12,7 @@ OCS4.5 Link:
 https://github.com/openshift/ocs-operator/blob/de48c9c00f8964f0f8813d7b3ddd25f7bc318449/must-gather/collection-scripts/
 
 """
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 
@@ -396,8 +397,6 @@ GATHER_COMMANDS_OTHERS_4_6 = [
     "packageserver-service-system:auth-delegator.yaml",
     "pods",
     "pods_-owide",
-    "prometheus-adapter-view.yaml",
-    "prometheus-adapter.yaml",
     "prometheus-k8s.yaml",
     "prometheus-k8s.yaml",
     "prometheus-operator.yaml",
@@ -701,12 +700,9 @@ GATHER_COMMANDS_OTHERS_4_7 = [
     "prometheus-operator.yaml",
     "prometheus-k8s.yaml",
     "prometheus-k8s-scheduler-resources.yaml",
-    "prometheus-adapter.yaml",
     "prometheus-operator.yaml",
     "prometheus-k8s.yaml",
     "prometheus-k8s-scheduler-resources.yaml",
-    "prometheus-adapter.yaml",
-    "prometheus-adapter-view.yaml",
 ]
 
 GATHER_COMMANDS_OTHERS_4_10 = [
@@ -717,7 +713,6 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "noobaa-core-0-core.log",
     "noobaa-core-0-pod-describe.txt",
     "noobaa-db-pg-0-db.log",
-    "noobaa-db-pg-0-initialize-database.log",
     "noobaa-db-pg-0-init.log",
     "noobaa-db-pg-0-pod-describe.txt",
     "noobaa-endpoint-scc-describe.txt",
@@ -959,6 +954,33 @@ GATHER_COMMANDS_VERSION = {
         ),
     },
     4.15: {
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    4.16: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": list(
