@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from zipfile import ZipFile
@@ -29,6 +30,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_put_object,
     s3_head_object,
     rm_object_recursive,
+    write_random_test_objects_to_bucket,
 )
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -465,37 +467,57 @@ class TestBucketIO(MCGTest):
     @bugzilla("2264480")
     @pytest.mark.polarion_id("OCS-5773")
     def test_nb_db_activity_logs_on_io(
-        self, bucket_factory, awscli_pod_session, mcg_obj
+        self,
+        bucket_factory,
+        awscli_pod_session,
+        mcg_obj,
+        change_the_noobaa_log_level,
+        test_directory_setup,
     ):
 
         """
         This test checks if the activity logs are being logged
         in the activitylogs table for every object upload and
-        deletion when noobaa log is set to default
+        deletion when noobaa log is set to default. As no activity
+        logs are expected for creation/deletion at defualt log level.
 
         """
+        logger.info("Making sure noobaa log is at default_level...")
+        change_the_noobaa_log_level(level="default_level")
 
         bucket = bucket_factory()[0]
-        full_objectpath = f"s3://{bucket.name}"
         logger.info("successfully created bucket")
 
-        sync_object_directory(
-            awscli_pod_session, AWSCLI_TEST_OBJ_DIR, full_objectpath, mcg_obj
-        )
-        logger.info("uploaded objects to the bucket")
+        obj_uploaded = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            bucket.name,
+            test_directory_setup.origin_dir,
+            amount=1,
+            mcg_obj=mcg_obj,
+        )[0]
+        logger.info(f"uploaded object {obj_uploaded} to the bucket")
 
         rm_object_recursive(awscli_pod_session, bucket.name, mcg_obj)
         logger.info("deleted all the objects from the bucket")
 
-        nb_activitylogs = exec_nb_db_query("SELECT data ->> 'event' FROM activitylogs;")
-        logger.info("successfully fetched noobaa db activitylogs data")
+        tries = 0
+        while tries <= 10:
+            logger.info("Checking the logs for 10 minutes if any ")
+            nb_activitylogs = [
+                line
+                for line in exec_nb_db_query("SELECT data FROM activitylogs;")
+                if obj_uploaded in line
+            ]
+            logger.info("successfully fetched noobaa db activitylogs data")
 
-        assert "obj.uploaded" not in str(
-            nb_activitylogs
-        ), "Object upload event is being logged in activitylogs table"
-        assert "obj.deleted" not in str(
-            nb_activitylogs
-        ), "Object deletion event is being logged in activitylogs table"
-        logger.info(
-            "No object upload/deletion info is being updated in the activitylogs table"
-        )
+            assert "obj.uploaded" not in str(
+                nb_activitylogs
+            ), "Object upload event is being logged in activitylogs table"
+            assert "obj.deleted" not in str(
+                nb_activitylogs
+            ), "Object deletion event is being logged in activitylogs table"
+            logger.info(
+                "No object upload/deletion info is being updated in the activitylogs table"
+            )
+            time.sleep(60)
+            tries += 1
