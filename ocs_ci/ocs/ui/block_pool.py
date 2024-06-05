@@ -3,7 +3,7 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from selenium.webdriver.common.by import By
-from ocs_ci.helpers.helpers import create_unique_resource_name, custom_round
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import PoolStateIsUnknow
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
@@ -437,8 +437,8 @@ class BlockPoolUI(PageNavigator):
             # python function rounds from .5
             # ex. cli is doing 157.5 to 157 where as python round function will do 158
             if (
-                (custom_round(float(used_capacity_in_CLI)))
-                == custom_round(float(used_capacity_in_UI))
+                (self.custom_round(float(used_capacity_in_CLI)))
+                == self.custom_round(float(used_capacity_in_UI))
             ) and (unit == used_capacity_unit_in_UI):
                 logger.info("UI values did match as per CLI for the Raw Capacity")
                 return True
@@ -465,3 +465,23 @@ class BlockPoolUI(PageNavigator):
             locator=format_locator(self.generic_locators["blockpool_name"], pool_name)
         )
         return True
+
+    def custom_round(self, number):
+        """Rounds a number down for values ending in exactly ".5".
+
+        Args:
+        number: The number to round.
+
+        Returns:
+        The rounded number (down for values ending in ".5").
+        """
+        # Convert the number to a string to check the decimal part
+        number_str = str(number)
+
+        # Check if the decimal part exists and ends in ".5"
+        if "." in number_str and number_str.endswith(".5"):
+            # Round down if it ends in ".5"
+            return int(number)
+        else:
+            # Use regular rounding for other cases
+            return round(number)

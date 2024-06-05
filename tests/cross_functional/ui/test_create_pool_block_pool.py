@@ -122,10 +122,14 @@ class TestPoolUserInterface(ManageTest):
 
         # Checking the raw capcity is loaded on the UI or not.
         blockpool_ui_object = BlockPoolUI()
-        assert blockpool_ui_object.pool_raw_capacity_loaded(self.pool_name)
+        assert blockpool_ui_object.pool_raw_capacity_loaded(
+            self.pool_name
+        ), "Block pool raw capacity is not visible on UI"
 
         # Cross checking the raw capacity of the blockpool between CLI and UI
-        assert blockpool_ui_object.cross_check_raw_capacity(self.pool_name)
+        assert blockpool_ui_object.cross_check_raw_capacity(
+            self.pool_name
+        ), "Block pool raw capacity did not matched with UI"
 
         # Checking Results for compression and replication
         if compression:
