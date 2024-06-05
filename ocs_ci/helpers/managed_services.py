@@ -311,10 +311,11 @@ def get_storageclassclaims_of_storageclient(storageclient_name):
 
 def get_all_storageclassclaims(namespace=None):
     """
-    Get all storageclassclaims
+    Get all storageclassclaims/storageclaims
+    <storageclassclaim changed to storageclaim from ODF 4.16 >
 
     Returns:
-         List: OCS objects of kind Storageclassclaim
+         List: OCS objects of kind Storageclassclaim/storageclaim
 
     """
     if not namespace:

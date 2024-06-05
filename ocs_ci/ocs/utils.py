@@ -1465,6 +1465,10 @@ def reboot_node(ceph_node, timeout=300):
 def enable_console_plugin(value="[odf-console]"):
     """
     Enables console plugin for ODF
+
+    Arg:
+        value(str): the odf console to enable
+
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
     if (

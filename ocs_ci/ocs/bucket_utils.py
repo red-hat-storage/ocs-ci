@@ -22,6 +22,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     run_cmd,
     exec_nb_db_query,
+    exec_cmd,
 )
 from ocs_ci.helpers.helpers import create_resource
 from ocs_ci.utility import version
@@ -1044,13 +1045,18 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.status.phase}'"
     )
-    phase = run_cmd(cmd=cmd)
-    assert phase == constants.STATUS_READY
+    retcode, backingstore_phase, stderr = exec_cmd(cmd=cmd)
+    if retcode != 0:
+        logger.error(f"Failed to fetch backingstore details\n{stderr}")
+
+    assert backingstore_phase == constants.STATUS_READY
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.spec.type}'"
     )
-    backingstore_type = run_cmd(cmd=cmd)
+    retcode, backingstore_type, stderr = exec_cmd(cmd=cmd)
+    if retcode != 0:
+        logger.error(f"Failed to fetch backingstore type\n{stderr}")
     return backingstore_type
 
 
