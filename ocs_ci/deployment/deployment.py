@@ -1855,6 +1855,19 @@ class Deployment(object):
                     )
                 )
 
+        wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
+            "wait_timeout_for_healthy_osd_in_minutes"
+        )
+        # This is a W/A because of the issue mentioned in
+        # https://github.com/red-hat-storage/ocs-ci/issues/9901
+        if wait_timeout_for_healthy_osd_in_minutes:
+            run_cmd(
+                f"oc patch storagecluster ocs-storagecluster -n {self.namespace}  --type merge -p '"
+                '{"spec": {"managedResources": {"cephCluster": '
+                f'{{"waitTimeoutForHealthyOSDInMinutes": {wait_timeout_for_healthy_osd_in_minutes}'
+                "}}}}'"
+            )
+
         # Change monitoring backend to OCS
         if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
             "persistent-monitoring"
