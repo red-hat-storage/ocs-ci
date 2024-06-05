@@ -782,10 +782,7 @@ def ocs_install_verification(
         log.info("Noobaa root secrets are not public")
 
     # Verify the owner of CSI deployments and daemonsets if not provider mode
-    storage_cluster_obj = get_storage_cluster()
-    if not storage_cluster_obj.get()["items"][0]["spec"].get(
-        "allowRemoteStorageConsumers", False
-    ):
+    if not (managed_service or hci_cluster):
         deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
         daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
         for provisioner_name in [
