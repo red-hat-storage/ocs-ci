@@ -304,7 +304,6 @@ class StorageClient:
         if not namespace:
             namespace = config.ENV_DATA["cluster_namespace"]
         sc_claims = get_all_storageclassclaims()
-        log.info(f"storage claims are {sc_claims}")
         for sc_claim in sc_claims:
             if self.ocs_version >= version.VERSION_4_16:
                 if sc_claim.data["spec"]["storageClient"] == storageclient_name:
@@ -333,7 +332,7 @@ class StorageClient:
 
         """
         cmd = f"get storagerequests -n {namespace} " "-o=jsonpath='{.items[*]}'"
-        storage_requests = self.ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=True)
+        storage_requests = self.ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
         log.info(f"The list of storagerequests: {storage_requests}")
         return (
@@ -494,8 +493,9 @@ class StorageClient:
             kind=constants.STORAGECLIENT,
             namespace=namespace,
         )
-        storageclient = storageclient_obj.get()["items"][0]
-        storageclient_name = storageclient["metadata"]["name"]
+        storageclient_data = storageclient_obj.get()["items"]
+        log.info(f"storageclient data, {storageclient_data[0]}")
+        storageclient_name = storageclient_data[0]["metadata"]["name"]
 
         # Verify storageclient is in Connected status
         self.verify_storageclient_status(

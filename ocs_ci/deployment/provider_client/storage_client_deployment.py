@@ -1,8 +1,8 @@
 """
 This module provides installation of ODF and native storage-client creation in provider mode
 """
+import atexit
 import logging
-import pytest
 import time
 
 
@@ -48,16 +48,23 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         self.initial_function()
 
         # Register a function to be called upon the destruction of the instance
-        # atexit.register(self.cleanup_function)
+        atexit.register(self.cleanup_function)
 
     def initial_function(self):
         log.info("initial_function called during initialization.")
         login_ui()
         self.validation_ui_obj = ValidationUI()
         self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
-        self.ns_obj.new_project(
-            project_name=constants.BM_DEBUG_NODE_NS, policy=constants.PSA_PRIVILEGED
+
+        # Check constants.BM_DEBUG_NODE_NS is available or not
+        is_available = self.ns_obj.is_exist(
+            resource_name=constants.BM_DEBUG_NODE_NS,
         )
+
+        if not is_available:
+            self.ns_obj.new_project(
+                project_name=constants.BM_DEBUG_NODE_NS, policy=constants.PSA_PRIVILEGED
+            )
         self.ocp_obj = ocp.OCP()
         self.storage_cluster_obj = ocp.OCP(
             kind="Storagecluster", namespace=config.ENV_DATA["cluster_namespace"]
@@ -92,7 +99,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         self.deployment = Deployment()
         self.storage_clients = StorageClient()
 
-    @pytest.hookimpl(trylast=True)
     def cleanup_function(self):
         log.info("cleanup_function called at exit.")
         # Remove debug namespace

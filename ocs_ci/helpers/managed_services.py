@@ -326,6 +326,7 @@ def get_all_storageclassclaims(namespace=None):
     else:
         sc_claim_obj = OCP(kind=constants.STORAGECLASSCLAIM, namespace=namespace)
     sc_claims_data = sc_claim_obj.get()["items"]
+    log.info(f"storage claims: {sc_claims_data}")
     return [OCS(**claim_data) for claim_data in sc_claims_data]
 
 
