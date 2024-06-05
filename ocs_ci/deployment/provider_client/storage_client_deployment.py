@@ -1,7 +1,6 @@
 """
 This module provides installation of ODF and native storage-client creation in provider mode
 """
-import atexit
 import logging
 import time
 
@@ -15,7 +14,6 @@ from ocs_ci.ocs.rados_utils import (
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
@@ -43,28 +41,13 @@ log = logging.getLogger(__name__)
 
 class ODFAndNativeStorageClientDeploymentOnProvider(object):
     def __init__(self):
-        log.info("Initializing webdriver and login to webconsole")
         # Call a function during initialization
         self.initial_function()
 
-        # Register a function to be called upon the destruction of the instance
-        atexit.register(self.cleanup_function)
-
     def initial_function(self):
         log.info("initial_function called during initialization.")
-        login_ui()
         self.validation_ui_obj = ValidationUI()
         self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
-
-        # Check constants.BM_DEBUG_NODE_NS is available or not
-        is_available = self.ns_obj.is_exist(
-            resource_name=constants.BM_DEBUG_NODE_NS,
-        )
-
-        if not is_available:
-            self.ns_obj.new_project(
-                project_name=constants.BM_DEBUG_NODE_NS, policy=constants.PSA_PRIVILEGED
-            )
         self.ocp_obj = ocp.OCP()
         self.storage_cluster_obj = ocp.OCP(
             kind="Storagecluster", namespace=config.ENV_DATA["cluster_namespace"]
@@ -98,13 +81,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
         self.deployment = Deployment()
         self.storage_clients = StorageClient()
-
-    def cleanup_function(self):
-        log.info("cleanup_function called at exit.")
-        # Remove debug namespace
-        self.ns_obj.delete_project(project_name=constants.BM_DEBUG_NODE_NS)
-        # Close browser
-        close_browser()
 
     def provider_and_native_client_installation(
         self,

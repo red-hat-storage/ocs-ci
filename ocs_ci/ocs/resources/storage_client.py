@@ -63,6 +63,7 @@ class StorageClient:
         client_subcription_image(str): image details for client subscription
 
         """
+        validation_ui_obj = ValidationUI()
         # Check namespace for storage-client is available or not
         is_available = self.ns_obj.is_exist(
             resource_name=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
@@ -115,7 +116,7 @@ class StorageClient:
 
             if enable_console:
                 enable_console_plugin(value="[odf-client-console]")
-                self.validation_ui_obj.refresh_web_console()
+                validation_ui_obj.refresh_web_console()
 
     def create_storage_client(
         self,
