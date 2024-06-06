@@ -923,10 +923,9 @@ def verify_storage_cluster():
     log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
     if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
         timeout = 1000
-    elif (
-        storage_cluster.data["spec"]["resourceProfile"]
-        != storage_cluster.data["status"]["lastAppliedResourceProfile"]
-    ):
+    elif storage_cluster.data["spec"].get("resourceProfile") != storage_cluster.data[
+        "status"
+    ].get("lastAppliedResourceProfile"):
         timeout = 1200
     else:
         timeout = 600
