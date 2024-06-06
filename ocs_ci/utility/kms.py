@@ -3,6 +3,7 @@ This module contains KMS related class and methods
 currently supported KMSs: Vault and HPCS
 
 """
+
 import logging
 import os
 
@@ -1929,11 +1930,18 @@ class AzureKV(KMS):
             logger.info(
                 f"Adding Azure connection to existing ConfigMap {constants.AZURE_KV_CSI_CONNECTION_DETAILS}"
             )
-            param = (
-                f'[{{"op": "add", "path": "/data/{self.azure_kms_connection_name}", '
-                f'"value": "{json.dumps(azure_conn)}"}}]'
+
+            param = json.dumps(
+                [
+                    {
+                        "op": "add",
+                        "path": f"/data/{self.azure_kms_connection_name}",
+                        "value": json.dumps(azure_conn),
+                    }
+                ]
             )
-            csi_kms_configmap.patch(params=param, format_type="merge")
+
+            csi_kms_configmap.patch(params=param, format_type="json")
 
         # verifying ConfigMap is created or not.
         self.is_azure_kv_connection_exists()
@@ -2058,6 +2066,50 @@ class AzureKV(KMS):
 
         logger.info("All OSD keys are present in the Azure KV ")
         return True
+
+    def remove_kmsid(self):
+        """
+        Removing azure kmsid from the configmap `csi-kms-connection-details`.
+
+        Returns:
+            bool: True if KMS ID is successfully removed, otherwise False.
+        """
+        if not self.is_azure_kv_connection_exists():
+            logger.info(
+                f"There is no KMS connection {self.azure_kms_connection_name} available in the configmap"
+            )
+            return False
+
+        csi_kms_configmap = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+            namespace=self.namespace,
+        )
+
+        if len(get_encryption_kmsid()) <= 1:
+            # removing configmap csi-kms-connection-details.
+            csi_kms_configmap.delete()
+        else:
+            params = json.dumps(
+                [{"op": "remove", "path": f"/data/{self.azure_kms_connection_name}"}]
+            )
+            csi_kms_configmap.patch(params=params, format_type="json")
+        return True
+
+    def verify_pv_secrets_present_in_azure_kv(self, vol_handle):
+        """
+        Verify Azure KV has the secrets for given volume handle.
+
+        Returns:
+            bool: True if PV secrets are found in the Azure KV, otherwise False.
+        """
+        secrets = self.azure_kv_secrets()
+        if vol_handle in secrets:
+            logger.info(f"PV sceret for {vol_handle} is found in the Azure KV.")
+            return True
+
+        logger.info(f"PV secret for {vol_handle} not found in the Azure KV.")
+        return False
 
 
 kms_map = {"vault": Vault, "hpcs": HPCS, "kmip": KMIP, "azure-kv": AzureKV}
