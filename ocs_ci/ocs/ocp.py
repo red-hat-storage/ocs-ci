@@ -240,6 +240,7 @@ class OCP(object):
             self.exec_oc_cmd(command=debug_cmd, out_yaml_format=False, timeout=timeout)
         )
         if err_msg in out:
+            log.info(f"The output: {out}")
             raise CommandFailed
         else:
             return out

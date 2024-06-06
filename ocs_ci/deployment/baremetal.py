@@ -1282,6 +1282,7 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
             selected_disks_to_ignore_cleanup.append(
                 str(disk_to_ignore_cleanup["kname"])
             )
+
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
         cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
