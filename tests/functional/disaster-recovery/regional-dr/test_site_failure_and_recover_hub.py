@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import tier4a, turquoise_squad
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import validate_cluster_import
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.helpers.dr_helpers import (
     failover,
     restore_backup,
@@ -17,12 +17,14 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_creation,
     verify_drpolicy_cli,
     verify_restore_is_completed,
+    wait_for_all_resources_deletion,
+    relocate,
+    get_scheduling_interval,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_active_acm_index
-from ocs_ci.utility.utils import TimeoutSampler
-
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +46,18 @@ class TestSiteFailureAndRecoverHub:
             num_of_subscription=1, num_of_appset=1, switch_ctx=get_passive_acm_index()
         )
         logger.info(type(rdr_workload))
+        primary_cluster_name = get_current_primary_cluster_name(
+            rdr_workload[0].workload_namespace
+        )
         secondary_cluster_name = get_current_secondary_cluster_name(
             rdr_workload[0].workload_namespace
         )
+        scheduling_interval = get_scheduling_interval(
+            rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
+        )
         # Create backup-schedule on active hub
         create_backup_schedule()
+        two_times_scheduling_interval = 2 * scheduling_interval  # Time in minutes
         wait_time = 300
         logger.info(f"Wait {wait_time} until backup is taken ")
         time.sleep(wait_time)
@@ -75,7 +84,7 @@ class TestSiteFailureAndRecoverHub:
             active_primary_cluster_node_objs
         )
         logger.info("All nodes of primary managed cluster are powered off")
-        time.sleep(120)
+        time.sleep(180)
         nodes_multicluster[active_hub_index].stop_nodes(active_hub_cluster_node_objs)
         logger.info(
             "All nodes of active hub cluster are powered off, "
@@ -154,3 +163,64 @@ class TestSiteFailureAndRecoverHub:
                 wl.workload_pod_count,
                 wl.workload_namespace,
             )
+
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        logger.info("Recover managed cluster which went down during site-failure")
+        nodes_multicluster[active_primary_index].start_nodes(
+            active_primary_cluster_node_objs
+        )
+        wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
+        logger.info("Wait for 180 seconds for pods to stabilize")
+        time.sleep(180)
+        logger.info("Wait for all the pods in openshift-storage to be in running state")
+        assert wait_for_pods_to_be_running(
+            timeout=720
+        ), "Not all the pods reached running state"
+        logger.info("Checking for Ceph Health OK")
+        ceph_health_check()
+
+        logger.info("Wait for approx. an hour to surpass 1hr eviction period timeout")
+        time.sleep(3600)
+        # Verify application are deleted from old cluster
+        for wl in rdr_workload:
+            wait_for_all_resources_deletion(wl.workload_namespace)
+
+        logger.info(f"Waiting for {two_times_scheduling_interval} minutes to run IOs")
+        time.sleep(two_times_scheduling_interval * 60)
+
+        relocate_results = []
+        with ThreadPoolExecutor() as executor:
+            for wl in rdr_workload:
+                relocate_results.append(
+                    executor.submit(
+                        relocate,
+                        preferred_cluster=primary_cluster_name,
+                        namespace=wl.workload_namespace,
+                        workload_type=wl.workload_type,
+                        workload_placement_name=(
+                            rdr_workload.appset_placement_name
+                            if wl.workload_type != constants.SUBSCRIPTION
+                            else None
+                        ),
+                        switch_ctx=get_passive_acm_index(),
+                    )
+                )
+                time.sleep(60)
+
+        # Wait for relocate results
+        for rl in relocate_results:
+            rl.result()
+
+        # Verify resources creation on preferredCluster
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        for wl in rdr_workload:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+            )
+
+        # Verify resources deletion from previous primary or current secondary cluster
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        for wl in rdr_workload:
+            wait_for_all_resources_deletion(wl.workload_namespace)
