@@ -13,7 +13,8 @@ from ocs_ci.ocs.rados_utils import (
 )
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
+
+# from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
@@ -46,7 +47,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
     def initial_function(self):
         log.info("initial_function called during initialization.")
-        self.validation_ui_obj = ValidationUI()
+        # self.validation_ui_obj = ValidationUI()
         self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
         self.ocp_obj = ocp.OCP()
         self.storage_cluster_obj = ocp.OCP(
@@ -275,12 +276,12 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
         ocs_version = version.get_semantic_ocs_version_from_config()
         log.info(f"Installed odf version: {ocs_version}")
-        self.validation_ui_obj.refresh_web_console()
+        # self.validation_ui_obj.refresh_web_console()
 
         # Enable odf-console:
         enable_console_plugin()
         time.sleep(30)
-        self.validation_ui_obj.refresh_web_console()
+        # self.validation_ui_obj.refresh_web_console()
 
     def verify_provider_mode_deployment(self):
         """
