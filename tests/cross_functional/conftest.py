@@ -922,7 +922,7 @@ def setup_mcg_expiration_feature_buckets(
         """
         type = dict()
         type["data"] = bucket_types["data"]
-        reduce_expiration_interval(interval=2)
+        reduce_expiration_interval(interval=1)
         logger.info("Changed noobaa lifecycle interval to 2 minutes")
 
         expiration_rule = {
@@ -1145,7 +1145,6 @@ def validate_mcg_bg_features(
                 event,
                 run_in_bg=run_in_bg,
                 object_amount=object_amount,
-                prefix="",
             )
             futures_obj.append(validate_expiration)
 
