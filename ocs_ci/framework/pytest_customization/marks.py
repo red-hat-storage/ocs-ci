@@ -358,7 +358,7 @@ hci_provider_and_client_required = pytest.mark.skipif(
 )
 dr_setup_required = pytest.mark.skipif(
     not (
-        config.default_cluster_ctx.MULTICLUSTER["multicluster_mode"].lower()
+        config.default_cluster_ctx.MULTICLUSTER.get("multicluster_mode")
         in (RDR_MODE, MDR_MODE)
     ),
     reason="Test runs ONLY on DR setup",
