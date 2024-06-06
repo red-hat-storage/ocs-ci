@@ -16,8 +16,6 @@ from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     random_object_round_trip_verification,
-    compare_directory,
-    sync_object_directory,
     s3_put_object,
     s3_get_object,
     s3_list_objects_v1,
@@ -30,6 +28,7 @@ from ocs_ci.ocs.resources import pod
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_storage_pods
+from tests.conftest import revert_noobaa_endpoint_scc_class
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +38,7 @@ logger = logging.getLogger(__name__)
 @skipif_mcg_only
 @ignore_leftovers
 @skipif_ocs_version("<4.10")
+@pytest.mark.usefixtures(revert_noobaa_endpoint_scc_class.__name__)
 class TestNSFSSystem(MCGTest):
     """
     NSFS system test
@@ -150,7 +150,8 @@ class TestNSFSSystem(MCGTest):
                 pattern=nsfs_obj_pattern,
                 s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
-                result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_pod_path=nsfs_obj.mounted_bucket_path,
+                cleanup=True,
             )
         pods_to_respin = [
             pod.Pod(
@@ -183,36 +184,33 @@ class TestNSFSSystem(MCGTest):
                 f"Downloading the objects and validating the integrity on {nsfs_obj.bucket_name} "
                 f"post pod re-spins"
             )
-            sync_object_directory(
-                podobj=awscli_pod_session,
-                src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                signed_request_creds=nsfs_obj.s3_creds,
-            )
-            compare_directory(
-                awscli_pod=awscli_pod_session,
-                original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+            random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=nsfs_obj.bucket_name,
+                upload_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
+                download_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}",
                 amount=5,
                 pattern=nsfs_obj_pattern,
+                s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
+                result_pod_path=nsfs_obj.mounted_bucket_path,
+                cleanup=True,
             )
+
         logger.info("Partially bringing the ceph cluster down")
         scale_ceph(replica=0)
         for nsfs_obj in nsfs_objs:
-            sync_object_directory(
-                podobj=awscli_pod_session,
-                src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                signed_request_creds=nsfs_obj.s3_creds,
-            )
-            compare_directory(
-                awscli_pod=awscli_pod_session,
-                original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+            random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=nsfs_obj.bucket_name,
+                upload_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
+                download_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}",
                 amount=5,
                 pattern=nsfs_obj_pattern,
+                s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
+                result_pod_path=nsfs_obj.mounted_bucket_path,
+                cleanup=True,
             )
         logger.info(
             "Scaling the ceph cluster back to normal and validating all storage pods"
@@ -228,19 +226,17 @@ class TestNSFSSystem(MCGTest):
                 f"Downloading the objects and validating the integrity on {nsfs_obj.bucket_name} "
                 f"post noobaa-db recovery"
             )
-            sync_object_directory(
-                podobj=awscli_pod_session,
-                src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                signed_request_creds=nsfs_obj.s3_creds,
-            )
-            compare_directory(
-                awscli_pod=awscli_pod_session,
-                original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+            random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=nsfs_obj.bucket_name,
+                upload_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
+                download_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}",
                 amount=5,
                 pattern=nsfs_obj_pattern,
+                s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
+                result_pod_path=nsfs_obj.mounted_bucket_path,
+                cleanup=True,
             )
 
 
