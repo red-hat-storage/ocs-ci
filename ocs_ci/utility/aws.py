@@ -2015,7 +2015,7 @@ class AWS(object):
                 for version_obj in version_objs:
                     version_obj.delete()
         except Exception as e:
-            logger.info(f"Cant delete objects {e}")
+            logger.info(f"Failed to delete objects {e}")
             return False
         return True
 
