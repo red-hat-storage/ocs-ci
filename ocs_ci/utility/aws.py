@@ -1908,13 +1908,7 @@ def get_data_volumes(deviceset_pvs):
     aws = AWS()
 
     volume_ids = [
-        "vol-"
-        + pv.get()
-        .get("spec")
-        .get("awsElasticBlockStore")
-        .get("volumeID")
-        .partition("vol-")[-1]
-        for pv in deviceset_pvs
+        pv.get().get("spec").get("csi").get("volumeHandle") for pv in deviceset_pvs
     ]
     return [aws.ec2_resource.Volume(vol_id) for vol_id in volume_ids]
 
@@ -2167,7 +2161,7 @@ def create_and_attach_ebs_volumes(
                     instance_id=worker["id"],
                     name=f"{worker['name']}_extra_volume_{number}",
                     size=size,
-                    device=f"/dev/{device_names[number-1]}",
+                    device=f"/dev/{device_names[number - 1]}",
                 )
 
 
