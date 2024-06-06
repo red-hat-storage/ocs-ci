@@ -170,17 +170,39 @@ class TestSiteFailureAndRecoverHub:
             active_primary_cluster_node_objs
         )
         wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
-        logger.info("Wait for 180 seconds for pods to stabilize")
-        time.sleep(180)
-        logger.info("Wait for all the pods in openshift-storage to be in running state")
-        assert wait_for_pods_to_be_running(
-            timeout=720
-        ), "Not all the pods reached running state"
-        logger.info("Checking for Ceph Health OK")
-        ceph_health_check()
+        logger.info(
+            "Check if recovered managed cluster is successfully imported on the new hub"
+        )
+        for sample in TimeoutSampler(
+            timeout=900,
+            sleep=60,
+            func=validate_cluster_import,
+            cluster_name=primary_cluster_name,
+            switch_ctx=get_passive_acm_index(),
+        ):
+            if sample:
+                logger.info(
+                    f"Cluster: {primary_cluster_name} successfully imported post hub recovery"
+                )
+                # Validate klusterlet addons are running on managed cluster
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                wait_for_pods_to_be_running(
+                    namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
+                )
+                break
+            else:
+                logger.error(
+                    f"Import of cluster: {primary_cluster_name} failed post hub recovery"
+                )
+                raise UnexpectedBehaviour(
+                    f"Import of cluster: {primary_cluster_name} failed post hub recovery"
+                )
 
         logger.info("Wait for approx. an hour to surpass 1hr eviction period timeout")
         time.sleep(3600)
+        logger.info("Checking for Ceph Health OK")
+        ceph_health_check()
+
         # Verify application are deleted from old cluster
         for wl in rdr_workload:
             wait_for_all_resources_deletion(wl.workload_namespace)
