@@ -32,6 +32,8 @@ from ocs_ci.ocs.constants import (
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
+    RDR_MODE,
+    MDR_MODE,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -353,6 +355,13 @@ hci_provider_and_client_required = pytest.mark.skipif(
         and config.hci_client_exist()
     ),
     reason="Test runs ONLY on Fusion HCI provider and client clusters",
+)
+dr_setup_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.MULTICLUSTER["multicluster_mode"].lower()
+        in (RDR_MODE, MDR_MODE)
+    ),
+    reason="Test runs ONLY on DR setup",
 )
 kms_config_required = pytest.mark.skipif(
     (
