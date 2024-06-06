@@ -1251,7 +1251,7 @@ class BAREMETALAI(BAREMETALBASE):
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk(worker, namespace=constants.BM_DEBUG_NODE_NS):
+def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
     """
     Perform disk cleanup
 

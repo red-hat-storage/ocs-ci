@@ -66,16 +66,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             kind=constants.SCHEDULERS_CONFIG,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-
-        # Check constants.BM_DEBUG_NODE_NS is available or not
-        is_available = self.ns_obj.is_exist(
-            resource_name=constants.BM_DEBUG_NODE_NS,
-        )
-
-        if not is_available:
-            self.ns_obj.new_project(
-                project_name=constants.BM_DEBUG_NODE_NS, policy=constants.PSA_PRIVILEGED
-            )
         self.sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
         self.storageclass = "localblock"
         self.ocp_version = version.get_semantic_ocp_version_from_config()
