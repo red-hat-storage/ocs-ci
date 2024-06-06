@@ -244,31 +244,14 @@ class Deployment(object):
         config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
 
         logger.info("Creating GitOps Operator Subscription")
-        gitops_subscription_yaml_data = templating.load_yaml(
-            constants.GITOPS_SUBSCRIPTION_YAML
-        )
-        package_manifest = PackageManifest(
-            resource_name=constants.GITOPS_OPERATOR_NAME,
-        )
-        gitops_subscription_yaml_data["spec"][
-            "startingCSV"
-        ] = package_manifest.get_current_csv(
-            channel="latest", csv_pattern=constants.GITOPS_OPERATOR_NAME
-        )
 
-        gitops_subscription_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="gitops_subscription_manifest", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            gitops_subscription_yaml_data, gitops_subscription_manifest.name
-        )
-        run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
+        run_cmd(f"oc create -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
         self.wait_for_subscription(
             constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
         )
-        logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
-        time.sleep(90)
+        logger.info("Sleeping for 120 seconds after subscribing to GitOps Operator")
+        time.sleep(120)
         subscriptions = ocp.OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             resource_name=constants.GITOPS_OPERATOR_NAME,
@@ -479,15 +462,15 @@ class Deployment(object):
                     constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
                 )
                 logger.info(
-                    "Sleeping for 90 seconds after subscribing to OADP Operator"
+                    "Sleeping for 120 seconds after subscribing to OADP Operator"
                 )
-                time.sleep(90)
+                time.sleep(120)
                 oadp_subscriptions = ocp.OCP(
                     kind=constants.SUBSCRIPTION_WITH_ACM,
                     resource_name=constants.OADP_OPERATOR_NAME,
                     namespace=constants.OADP_NAMESPACE,
                 ).get()
-                oadp_csv_name = oadp_subscriptions["spec"]["startingCSV"]
+                oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
                 csv = CSV(
                     resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
                 )
