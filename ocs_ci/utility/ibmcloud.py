@@ -630,7 +630,7 @@ def get_cluster_account_policies(cluster_name, cluster_service_ids):
         list: Account policies for cluster
 
     """
-    cmd = "ibmcloud iam account-policies --output json"
+    cmd = "ibmcloud iam access-policies --output json"
     out = run_ibmcloud_cmd(cmd)
     account_policies = json.loads(out)
     matched_account_policies = []
