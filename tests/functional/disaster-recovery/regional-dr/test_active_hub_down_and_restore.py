@@ -121,15 +121,17 @@ class TestActiveHubDownAndRestore:
 
         # Failover action via CLI
         failover_results = []
+        config.switch_ctx(get_passive_acm_index())
         with ThreadPoolExecutor() as executor:
             for wl in rdr_workload:
+                logger.info(f"Doing Fail over for Namespace {wl.workload_namespace}")
                 failover_results.append(
                     executor.submit(
                         failover,
                         failover_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
-                        workload_placement_name=rdr_workload.appset_placement_name
+                        workload_placement_name=wl.appset_placement_name
                         if wl.workload_type != constants.SUBSCRIPTION
                         else None,
                         switch_ctx=get_passive_acm_index(),
@@ -158,15 +160,17 @@ class TestActiveHubDownAndRestore:
         time.sleep(two_times_scheduling_interval * 60)
 
         relocate_results = []
+        config.switch_ctx(get_passive_acm_index())
         with ThreadPoolExecutor() as executor:
             for wl in rdr_workload:
+                logger.info(f"Doing Relocate for Namespace {wl.workload_namespace}")
                 relocate_results.append(
                     executor.submit(
                         relocate,
                         preferred_cluster=primary_cluster_name,
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
-                        workload_placement_name=rdr_workload.appset_placement_name
+                        workload_placement_name=wl.appset_placement_name
                         if wl.workload_type != constants.SUBSCRIPTION
                         else None,
                         switch_ctx=get_passive_acm_index(),
