@@ -2704,7 +2704,6 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
             f"The following subscriptions do not have toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
         )
 
-
 def run_osd_removal_job(osd_ids=None):
     """
     Run the ocs-osd-removal job

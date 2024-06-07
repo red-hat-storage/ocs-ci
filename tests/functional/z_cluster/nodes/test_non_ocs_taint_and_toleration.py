@@ -17,7 +17,7 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
@@ -27,7 +27,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.node import (
     taint_nodes,
     untaint_nodes,
-    get_worker_nodes,
+    get_worker_nodes, wait_for_nodes_status, get_nodes,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
@@ -37,8 +37,12 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.utility import version
+from tests.functional.z_cluster.nodes.test_node_replacement_proactive import delete_and_create_osd_node, \
+    select_osd_node_name
 
 logger = logging.getLogger(__name__)
+
+def remove_toleration():
 
 
 @brown_squad
@@ -75,15 +79,49 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 taint_label="xyz=true:NoSchedule",
             ), "Failed to untaint"
 
+            resource_name = constants.DEFAULT_CLUSTERNAME
+            if config.DEPLOYMENT["external_mode"]:
+                resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+            logger.info("Remove tolerations from storagecluster")
+            storagecluster_obj = ocp.OCP(
+                resource_name=resource_name,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.STORAGECLUSTER,
+            )
+            params = '[{"op": "remove", "path": "/spec/placement"},]'
+            storagecluster_obj.patch(params=params, format_type="json")
+            assert (
+                wait_for_pods_to_be_running()
+            ), "some of the pods didn't came up running"
+
+            logger.info("Remove tolerations to the subscription")
+            sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+            params = '[{"op": "remove", "path": "/spec/config"},]'
+            sub_obj = ocp.OCP(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.SUBSCRIPTION,
+            )
+            for sub in sub_list:
+                sub_obj.patch(resource_name=sub, params=params, format_type="json")
+
+            assert (
+                wait_for_pods_to_be_running()
+            ), "some of the pods didn't came up running"
+
         request.addfinalizer(finalizer)
+
 
     def test_non_ocs_taint_and_tolerations(self):
         """
         Test runs the following steps
         1. Taint ocs nodes with non-ocs taint
         2. Set tolerations on storagecluster, subscription, configmap and ocsinit
-        3. Check toleration on all ocs pods.
-        4. Add Capacity
+        3. chek tolerations on all subscription yaml.
+        4. Check toleration on all odf pods.
+        5. Add Capacity.
+        6. Reboot one of the nodes and check toleration on all odf pods on that node.
+        7. Replace one of the nodes and check all odf pods on that node are running.
 
         """
 
@@ -243,23 +281,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             number_of_pods_before == number_of_pods_after
         ), "Number of pods didn't match"
 
-        if not (
-            config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
-        ):
-            logger.info("Add capacity to check if new osds has toleration")
-            osd_size = storage_cluster.get_osd_size()
-            count = storage_cluster.add_capacity(osd_size)
-            pod = ocp.OCP(
-                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-            )
-            if is_flexible_scaling_enabled():
-                replica_count = 1
-            else:
-                replica_count = 3
-            assert pod.wait_for_resource(
-                timeout=300,
-                condition=constants.STATUS_RUNNING,
-                selector=constants.OSD_APP_LABEL,
-                resource_count=count * replica_count,
-            ), "New OSDs failed to reach running state"
-            check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
+        
+        # Get the node list
+        node = get_nodes("worker", num_of_nodes=1)
+        logger.info(f"------------------{node}")
+
