@@ -138,7 +138,7 @@ class TestActiveHubDownAndRestore:
                     )
                 )
                 time.sleep(60)
-
+        config.switch_ctx(get_passive_acm_index())
         # Wait for failover results
         for fl in failover_results:
             fl.result()
@@ -177,7 +177,7 @@ class TestActiveHubDownAndRestore:
                     )
                 )
                 time.sleep(60)
-
+        config.switch_ctx(get_passive_acm_index())
         # Wait for relocate results
         for rl in relocate_results:
             rl.result()
