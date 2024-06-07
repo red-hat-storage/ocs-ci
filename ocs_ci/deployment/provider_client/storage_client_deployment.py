@@ -123,16 +123,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         wait_for_machineconfigpool_status(node_type="all")
         log.info("All the nodes are upgraded")
 
-        platform = config.ENV_DATA.get("platform").lower()
-
-        if platform == constants.VSPHERE_PLATFORM:
-            # set control nodes as scheduleable if platform is vsphere
-            path = "/spec/mastersSchedulable"
-            params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-            self.scheduler_obj.patch(params=params, format_type="json"), (
-                "Failed to run patch command to update control nodes as scheduleable"
-            )
-
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
             resource_name=self.storageclass,

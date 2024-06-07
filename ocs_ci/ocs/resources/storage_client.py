@@ -495,7 +495,7 @@ class StorageClient:
             namespace=namespace,
         )
         storageclient_data = storageclient_obj.get()["items"]
-        log.info(f"storageclient data, {storageclient_data[0]}")
+        log.info(f"storageclient data, {storageclient_data}")
         storageclient_name = storageclient_data[0]["metadata"]["name"]
 
         # Verify storageclient is in Connected status
