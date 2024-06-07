@@ -4755,36 +4755,6 @@ def flatten_multilevel_dict(d):
     return leaves_list
 
 
-def is_rbd_default_storage_class(custom_sc=None):
-    """
-    Check if RDB is a default storageclass for the cluster
-
-    Args:
-        custom_sc: custom storageclass name.
-
-    Returns:
-        bool : True if RBD is set as the  Default storage class for the cluster, False otherwise.
-    """
-    default_rbd_sc = (
-        constants.DEFAULT_STORAGECLASS_RBD if custom_sc is None else custom_sc
-    )
-    cmd = (
-        f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
-    )
-    try:
-        check_annotations = json.loads(run_cmd(cmd))
-    except json.decoder.JSONDecodeError:
-        logger.error("Error to get annotation value from storageclass.")
-        return False
-
-    if check_annotations.get("storageclass.kubernetes.io/is-default-class") == "true":
-        logger.info(f"Storageclass {default_rbd_sc} is a default  RBD StorageClass.")
-        return True
-
-    logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
-    return False
-
-
 def odf_cli_set_recover_profile(recovery_profile):
     """
     Set the recovery profile for a Ceph service.
