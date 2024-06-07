@@ -2,6 +2,7 @@ import pytest
 import logging
 
 from ocs_ci.framework import config
+import concurrent.futures
 from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     pre_upgrade,
@@ -26,6 +27,12 @@ from ocs_ci.framework.testlib import (
     cloud_platform_required,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check_base
+from ocs_ci.helpers.managed_services import (
+    get_used_capacity,
+    verify_osd_used_capacity_greater_than_expected,
+)
+
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -35,6 +42,7 @@ from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import (
     check_ceph_health_after_add_capacity,
     is_flexible_scaling_enabled,
+    CephCluster,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     get_device_class,
@@ -50,7 +58,16 @@ from ocs_ci.utility import version
 logger = logging.getLogger(__name__)
 
 
-def add_capacity_test(ui_flag=False):
+@pytest.mark.polarion_id("OCS-XXXX")
+@pytest.mark.parametrize(
+    argnames=["recovery_profile"],
+    argvalues=[
+        pytest.param("balanced"),
+        pytest.param("high_client_ops"),
+        pytest.param("high_recovery_ops"),
+    ],
+)
+def add_capacity_test(recovery_profile, multi_pvc_factory, ui_flag=False):
     """
     Add capacity on non-lso cluster
 
@@ -58,6 +75,58 @@ def add_capacity_test(ui_flag=False):
         ui_flag(bool): add capacity via ui [true] or via cli [false]
 
     """
+    ceph_cluster = CephCluster()
+    pvc_count = 20
+    ceph_capacity = int(ceph_cluster.get_ceph_capacity())
+    size = int((ceph_capacity * 0.4) / pvc_count)
+    filesize = int(size * 0.8)
+    # Change the file size to MB for the FIO function
+    file_size = f"{filesize * constants.GB2MB}M"
+
+    pvc_objs = multi_pvc_factory(
+        interface=constants.CEPHFILESYSTEM,
+        size=size,
+        num_of_pvc=pvc_count,
+    )
+    pod_objs = list()
+
+    log.info(f"filee{size}")
+
+    for pvc_obj in pvc_objs:
+        pod_objs.append(pod_factory(pvc=pvc_obj))
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
+    futures_fio = []
+    for pod in pod_objs:
+        futures_fio.append(
+            executor.submit(
+                pod.run_io,
+                storage_type="fs",
+                size=file_size,
+                invalidate=0,
+                bs="512K",
+                runtime=2100,
+                timeout=3300,
+                jobs=1,
+                readwrite="readwrite",
+            )
+        )
+    for _ in concurrent.futures.as_completed(futures_fio):
+        log.info("Some pod submitted FIO")
+    concurrent.futures.wait(futures_fio)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
+
+    get_used_capacity("After filling up the cluster")
+    sample = TimeoutSampler(
+        timeout=3600,
+        sleep=300,
+        func=verify_osd_used_capacity_greater_than_expected,
+        expected_used_capacity=30.0,
+    )
+    if not sample.wait_for_func_status(result=True):
+        log.error("After 60 seconds the used capacity smaller than 30%")
+        raise TimeoutExpiredError
+
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
