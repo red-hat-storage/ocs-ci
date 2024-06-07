@@ -444,12 +444,6 @@ class Deployment(object):
                     resource_name=constants.OADP_OPERATOR_NAME,
                 )
                 oadp_default_channel = package_manifest.get_default_channel()
-                oadp_subscription_yaml_data["spec"][
-                    "startingCSV"
-                ] = package_manifest.get_current_csv(
-                    channel=oadp_default_channel,
-                    csv_pattern=constants.OADP_OPERATOR_NAME,
-                )
                 oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
                 oadp_subscription_manifest = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="oadp_subscription_manifest", delete=False
