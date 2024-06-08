@@ -75,6 +75,5 @@ def get_drpc_name(namespace):
         str: DRPC resource name
 
     """
-    config.switch_acm_ctx()
     drpc_obj = OCP(kind=constants.DRPC, namespace=namespace).get()["items"][0]
     return drpc_obj["metadata"]["name"]
