@@ -59,7 +59,8 @@ class StorageClient:
         channel(str): ENV_DATA:
             channel_to_client_subscription: "4.16"
 
-        client_subcription_image(str): image details for client subscription
+        client_subcription_image(str): ENV DATA
+            image details for client subscription
 
         """
         if channel_to_client_subscription is None:
@@ -74,8 +75,10 @@ class StorageClient:
         )
         if not is_available:
             if catalog_yaml:
-                # Note: Need to parameterize the image in future
-                catalog_data = templating.load_yaml(constants.OCS_CATALOGSOURCE_YAML)
+
+                catalog_data = templating.load_yaml(
+                    constants.PROVIDER_MODE_CATALOGSOURCE
+                )
                 log.info(
                     f"Updating image details for client subscription: {client_subcription_image}"
                 )

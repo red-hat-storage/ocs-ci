@@ -352,7 +352,7 @@ class Deployment(object):
         Deploy OCS/ODF and run verification as well
 
         """
-        if config.ENV_DATA.get("odf_provider_mode_deployment", True):
+        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
             logger.warning(
                 "Skipping normal ODF deployment because ODF deployment in Provider mode will be performed"
             )
@@ -593,7 +593,7 @@ class Deployment(object):
 
         # Provider-client deployment if odf_provider_mode_deployment: True
         if (
-            config.ENV_DATA.get("odf_provider_mode_deployment", True)
+            config.ENV_DATA.get("odf_provider_mode_deployment", False)
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
             storage_client_deployment_obj.provider_and_native_client_installation()
