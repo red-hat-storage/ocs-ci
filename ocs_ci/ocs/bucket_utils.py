@@ -1045,19 +1045,21 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.status.phase}'"
     )
-    retcode, backingstore_phase, stderr = exec_cmd(cmd=cmd)
-    if retcode != 0:
-        logger.error(f"Failed to fetch backingstore details\n{stderr}")
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore details\n{res.stderr}")
 
-    assert backingstore_phase == constants.STATUS_READY
+    assert (
+        res.stdout.decode() == constants.STATUS_READY
+    ), f"output is {res.stdout.decode()}, it is not as expected"
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.spec.type}'"
     )
-    retcode, backingstore_type, stderr = exec_cmd(cmd=cmd)
-    if retcode != 0:
-        logger.error(f"Failed to fetch backingstore type\n{stderr}")
-    return backingstore_type
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore type\n{res.stderr}")
+    return res.stdout.decode()
 
 
 def create_multipart_upload(s3_obj, bucketname, object_key):

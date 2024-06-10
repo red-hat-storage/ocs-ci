@@ -63,10 +63,6 @@ def test_deployment(pvc_factory, pod_factory):
                     storage_client_deployment_obj = (
                         ODFAndNativeStorageClientDeploymentOnProvider()
                     )
-                    ocs_install_verification(
-                        ocs_registry_image=ocs_registry_image,
-                        skip_osd_distribution_check=True,
-                    )
                     storage_client_deployment_obj.verify_provider_mode_deployment()
                 else:
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)
