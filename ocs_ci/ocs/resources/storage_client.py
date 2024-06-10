@@ -42,7 +42,7 @@ class StorageClient:
         channel_to_client_subscription=config.ENV_DATA.get(
             "channel_to_client_subscription"
         ),
-        client_subcription_image=config.DEPLOYMENT.get("ocs_registry_image", ""),
+        client_subcription_image=config.ENV_DATA.get("client_subscription_image"),
     ):
         """
         This method creates odf subscription on clients
@@ -62,6 +62,12 @@ class StorageClient:
         client_subcription_image(str): image details for client subscription
 
         """
+        if channel_to_client_subscription is None:
+            channel_to_client_subscription = config.DEPLOYMENT.get("ocs_csv_channel")
+
+        if client_subcription_image is None:
+            client_subcription_image = config.DEPLOYMENT.get("ocs_registry_image", "")
+
         # Check namespace for storage-client is available or not
         is_available = self.ns_obj.is_exist(
             resource_name=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
