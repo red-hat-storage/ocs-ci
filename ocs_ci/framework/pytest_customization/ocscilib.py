@@ -730,12 +730,13 @@ def pytest_runtest_makereport(item, call):
         )
         try:
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
-                collect_ocs_logs(
-                    dir_name=test_case_name,
-                    ocp=ocp_logs_collection,
-                    ocs=ocs_logs_collection,
-                    mcg=mcg_logs_collection,
-                )
+                pass
+                # collect_ocs_logs(
+                #     dir_name=test_case_name,
+                #     ocp=ocp_logs_collection,
+                #     ocs=ocs_logs_collection,
+                #     mcg=mcg_logs_collection,
+                # )
         except Exception:
             log.exception("Failed to collect OCS logs")
 
