@@ -53,6 +53,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
     MDRDeploymentException,
+    ACMObservabilityNotEnabled,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -87,6 +88,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     setup_ceph_debug,
     get_osd_count,
     StorageCluster,
+    validate_serviceexport,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -143,6 +145,7 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
+    get_default_storage_class,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
@@ -261,8 +264,8 @@ class Deployment(object):
         self.wait_for_subscription(
             constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
         )
-        logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
-        time.sleep(90)
+        logger.info("Sleeping for 180 seconds after subscribing to GitOps Operator")
+        time.sleep(180)
         subscriptions = ocp.OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             resource_name=constants.GITOPS_OPERATOR_NAME,
@@ -419,6 +422,7 @@ class Deployment(object):
                             .get("multiClusterService")
                             .get("enabled")
                         ), "Failed to update StorageCluster globalnet"
+                        validate_serviceexport()
                         ocs_install_verification(
                             timeout=2000, ocs_registry_image=ocs_registry_image
                         )
@@ -632,8 +636,8 @@ class Deployment(object):
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_gitops_deploy()
-        self.do_deploy_ocs()
         self.do_deploy_oadp()
+        self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         if config.DEPLOYMENT.get("cnv_deployment"):
@@ -2538,6 +2542,7 @@ class RBDDRDeployOps(object):
     def deploy(self):
         self.configure_rbd()
 
+    @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
         st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
         query_mirroring = (
@@ -3086,6 +3091,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         self.rbd = dr_conf.get("rbd_dr_scenario", False)
         # CephFS For future usecase
         self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
+        self.thanos_yaml_file = os.path.join(constants.THANOS_PATH)
+        self.multiclusterobservability_file = os.path.join(
+            constants.MULTICLUSTEROBSERVABILITY_PATH
+        )
 
     def deploy(self):
         """
@@ -3099,7 +3108,110 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             rbddops = RBDDRDeployOps()
             self.configure_mirror_peer()
             rbddops.deploy()
+        self.enable_acm_observability()
         self.deploy_dr_policy()
+
+    def build_bucket_name(self, acm_indexes: list):
+        """
+        Create a bucket to be used in the thanos.yaml for ACM observability
+        Args:
+            acm_indexes (list): List of acm indexes
+        """
+        self.bucket_name = ""
+        for index in acm_indexes:
+            self.bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
+        return self.bucket_name
+
+    @retry(CommandFailed, tries=10, delay=30)
+    def check_observability_status(self):
+        """
+        Check observability status
+        Returns (bool): True or False
+
+        """
+        return run_cmd(
+            "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
+        )
+
+    @retry(ACMObservabilityNotEnabled, tries=10, delay=5, backoff=5)
+    def thanos_secret(self):
+        """
+        Create thanos secret yaml by using Noobaa or AWS bucket (AWS bucket is used in this function)
+
+        """
+        secret_dict = load_auth_config().get("AUTH", {})
+        access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
+        secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+        thanos_secret_data = templating.load_yaml(self.thanos_yaml_file)
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
+            "bucket"
+        ] = self.build_bucket_name()
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
+            "endpoint"
+        ] = "https://s3.amazonaws.com"
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
+            "access_key"
+        ] = access_key
+        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
+            "secret_key"
+        ] = secret_key
+        thanos_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="thanos", delete=False
+        )
+        templating.dump_data_to_temp_yaml(thanos_secret_data, thanos_data_yaml.name)
+
+        logger.info(
+            "Creating thanos.yaml needed for ACM observability after passing required params"
+        )
+        run_cmd(f"oc create -f {thanos_data_yaml.name}")
+
+        if self.check_observability_status():
+            logger.info("ACM observability is successfully enabled")
+        else:
+            logger.error("ACM observability could not be enabled")
+
+    def enable_acm_observability(self):
+        """
+        Function to enable ACM observability for enabling DR monitoring dashboard for Regional DR on the RHACM console.
+
+        """
+        config.switch_acm_ctx()
+
+        defaultstorageclass = get_default_storage_class()
+
+        logger.info(
+            "Enabling ACM MultiClusterObservability for DR monitoring dashboard"
+        )
+
+        # load multiclusterobservability.yaml
+        multiclusterobservability_yaml_data = templating.load_yaml(
+            self.multiclusterobservability_file
+        )
+        multiclusterobservability_yaml_data["spec"]["storageConfig"][
+            "storageClass"
+        ] = defaultstorageclass[0]
+        multiclusterobservability_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multiclusterobservability", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            multiclusterobservability_yaml_data,
+            multiclusterobservability_data_yaml.name,
+        )
+
+        run_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
+
+        logger.info("Create thanos secret yaml")
+        self.thanos_secret()
+
+        logger.info("Whitelist RBD metrics by creating configmap")
+        run_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
+
+        logger.info(
+            "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert on the Hub cluster"
+        )
+        run_cmd(
+            "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
+        )
 
 
 class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
@@ -3237,7 +3349,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         resource = backupstorage.get()
         if resource["status"].get("phase") != "Available":
             raise MDRDeploymentException(
-                "Backupstoragelocation resource is no in 'Avaialble' phase"
+                "Backupstoragelocation resource is no in 'Available' phase"
             )
         logger.info("Dataprotection application successful")
 
