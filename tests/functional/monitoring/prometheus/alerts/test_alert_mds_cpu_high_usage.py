@@ -10,31 +10,26 @@ from ocs_ci.ocs import cluster
 from ocs_ci.utility import prometheus
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.utility.utils import ceph_health_check_base
-from ocs_ci.ocs.node import (
-    unschedule_nodes,
-    drain_nodes,
-    schedule_nodes,
-)
 
 log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
-def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
+def run_file_creator_io_with_cephfs(pvc_factory, dc_pod_factory):
     """
     This function facilitates
     1. Create PVC with Cephfs, access mode RWX
     2. Create dc pod with Fedora image
-    3. Copy helper_scripts/meta_data_io.py to Fedora dc pod
-    4. Run meta_data_io.py on fedora pod
+    3. Copy helper_scripts/file_creator_io.py to Fedora dc pod
+    4. Run file_creator_io.py on fedora pod
     """
     access_mode = constants.ACCESS_MODE_RWX
-    file = constants.METAIO
+    file = constants.FILE_CREATOR_IO
     interface = constants.CEPHFILESYSTEM
     log.info("Checking for Ceph Health OK")
     ceph_health_check_base()
 
-    for i in range(3):
+    for i in range(6):
         # Creating PVC with cephfs as interface
         log.info(f"Creating {interface} based PVC")
         pvc_obj = pvc_factory(interface=interface, access_mode=access_mode, size="30")
@@ -43,36 +38,37 @@ def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
         pod_obj = dc_pod_factory(
             pvc=pvc_obj, access_mode=access_mode, interface=interface
         )
-        # Copy meta_data_io.py to fedora pod
-        log.info("Copying meta_data_io.py to fedora pod ")
+        # Copy file_creator_io.py to fedora pod
+        log.info("Copying file_creator_io.py to fedora pod ")
         cmd = f"oc cp {file} {pvc_obj.namespace}/{pod_obj.name}:/"
         helpers.run_cmd(cmd=cmd)
-        log.info("meta_data_io.py copied successfully ")
+        log.info("file_creator_io.py copied successfully ")
 
-        # Run meta_data_io.py on fedora pod
-        log.info("Running meta data IO on fedora pod ")
+        # Run file_creator_io.py on fedora pod
+        log.info("Running file creator IO on fedora pod ")
         metaio_executor = ThreadPoolExecutor(max_workers=1)
-        # self.metaio_thread = metaio_executor.submit(
         metaio_executor.submit(
-            pod_obj.exec_sh_cmd_on_pod, command="python3 meta_data_io.py"
+            pod_obj.exec_sh_cmd_on_pod, command="python3 file_creator_io.py"
         )
 
 
 def active_mds_alert_values(threading_lock):
+    # This function validates the mds alerts using prometheus api
     active_mds = cluster.get_active_mds_info()["mds_daemon"]
     sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
-    cache_alert = constants.ALERT_MDSCACHEUSAGEHIGH
-    message = f"High MDS cache usage for the daemon mds.{active_mds}."
+    active_mds_pod = cluster.get_active_mds_info()["active_pod"]
+    cache_alert = constants.ALERT_MDSCPUUSAGEHIGH
+    message = f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
     description = (
-        f"MDS cache usage for the daemon mds.{active_mds} has exceeded above 95% of the requested value."
-        f" Increase the memory request for mds.{active_mds} pod."
+        f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage."
+        f" Please consider increasing the CPU request for the {active_mds_pod} pod as described in the runbook."
     )
     runbook = (
         "https://github.com/openshift/runbooks/blob/master/alerts/"
-        "openshift-container-storage-operator/CephMdsCacheUsageHigh.md"
+        "openshift-container-storage-operator/CephMdsCpuUsageHigh.md"
     )
     state = "firing"
-    severity = "critical"
+    severity = "warning"
 
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
     alerts_response = api.get("alerts", payload={"silenced": False, "inhibited": False})
@@ -95,39 +91,12 @@ def active_mds_alert_values(threading_lock):
 
 @tier2
 @magenta_squad
-class TestMdsMemoryAlerts:
-    def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
+class TestMdsCpuAlerts:
+    def test_alert_triggered(self, run_file_creator_io_with_cephfs, threading_lock):
         log.info(
-            "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
+            "File creation IO started in the background."
+            " Script will sleep for 15 minutes before validating the MDS alert"
         )
         time.sleep(900)
         log.info("Validating the alert now")
-        assert active_mds_alert_values(threading_lock)
-
-    def test_mds_cache_alert_with_active_node_drain(
-        self, run_metadata_io_with_cephfs, threading_lock
-    ):
-
-        log.info(
-            "Metadata IO started in the background. Lets wait for 15 minutes before validating the MDS alert"
-        )
-        time.sleep(900)
-        log.info("Validating the alert now")
-        assert active_mds_alert_values(threading_lock)
-
-        node_name = cluster.get_active_mds_info()["node_name"]
-
-        # Unschedule active mds running node.
-        unschedule_nodes([node_name])
-        log.info(f"node {node_name} unscheduled successfully")
-
-        # Drain node operation
-        drain_nodes([node_name])
-        log.info(f"node {node_name} drained successfully")
-
-        # Make the node schedule-able
-        schedule_nodes([node_name])
-        log.info(f"Scheduled the node {node_name}")
-        log.info("Script will sleep for 10 minutes before validating the alert")
-        time.sleep(600)
         assert active_mds_alert_values(threading_lock)
